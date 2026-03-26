@@ -884,107 +884,134 @@ export function ViewExtentCheck() {
   if (isSwipeYMode) displayB = Math.max(activeCrop.t, Math.min(activeCrop.b, topBarConfig.value));
 
   // 合成最终内部高亮图像的 clipPath
+// 合成最终内部高亮图像的 clipPath
   const innerClipPath = `polygon(${activeCrop.l}% ${activeCrop.t}%, ${displayR}% ${activeCrop.t}%, ${displayR}% ${displayB}%, ${activeCrop.l}% ${displayB}%)`;
+
+  // --- 【新增】：卷帘互斥拦截器 ---
+  // 当处于卷帘模式时，点击其他任何功能按钮，都会自动退出卷帘并恢复透明度为 100%
+  const withSwipeCancel = (action: () => void) => {
+    if (topBarConfig.mode !== 'opacity') {
+      setTopBarConfig(p => ({ ...p, mode: 'opacity', value: 1 }));
+    }
+    action();
+  };
+
+  // 专门用于处理布尔值开关的拦截器 (Mask 和 显隐开关)
+  const toggleConfigWithSwipeCancel = (key: 'showOutsideCrop' | 'showAugView') => {
+    setTopBarConfig(p => {
+      const next = { ...p, [key]: !p[key] };
+      if (next.mode !== 'opacity') {
+        next.mode = 'opacity';
+        next.value = 1;
+      }
+      return next;
+    });
+  };
 
 
   return (
     <div className="flex flex-col h-full w-full bg-neutral-950 font-sans text-neutral-200 select-none">
       
       {/* 顶部视觉控制台 (清爽布局) */}
+{/* 顶部视觉控制台 (固定布局重构版) */}
       <div className="h-14 bg-neutral-900 border-b border-neutral-800 flex items-center justify-between px-6 shrink-0 z-50 relative overflow-x-auto">
+        
+        {/* 左侧 & 中间：模式切换与固定操作区 */}
         <div className="flex items-center gap-3">
+          
+          {/* 主模式切换 */}
           <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-lg border border-neutral-800 shrink-0">
-            <Button variant={mode === 'pan' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'pan' ? "bg-blue-600" : "text-neutral-400"}`} onClick={() => setMode('pan')}>
+            {/* 加上 withSwipeCancel */}
+            <Button variant={mode === 'pan' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'pan' ? "bg-blue-600" : "text-neutral-400"}`} onClick={() => withSwipeCancel(() => setMode('pan'))}>
               <Hand className="w-3.5 h-3.5 mr-1.5"/> Pan
             </Button>
-            <Button variant={mode === 'align' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'align' ? "bg-green-600" : "text-neutral-400"}`} onClick={() => setMode('align')}>
+            <Button variant={mode === 'align' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'align' ? "bg-green-600" : "text-neutral-400"}`} onClick={() => withSwipeCancel(() => setMode('align'))}>
               <Move className="w-3.5 h-3.5 mr-1.5"/> Align
             </Button>
           </div>
 
-{/* 对齐子模式切换 */}
-{/* 对齐子模式切换 */}
+          {/* 对齐子模式切换 & 操作面板 */}
           {mode === 'align' && (
-            <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-lg border border-neutral-700 ml-4 shrink-0">
-               {/* 操作 A: 裁剪模式 */}
-{/* 操作 A: 裁剪模式 */}
-               <div className={`flex items-center gap-1 rounded ${alignSubMode === 'crop' ? 'bg-amber-500/10 px-1' : ''}`}>
+            <div className="flex items-center gap-2 ml-2 shrink-0 animate-in fade-in slide-in-from-left-4">
+               
+               <div className="flex items-center bg-neutral-950 p-1 rounded-lg border border-neutral-800">
                  <Button 
                    variant={alignSubMode === 'crop' ? 'default' : 'ghost'} size="sm" 
-                   className={`h-7 px-3 ${alignSubMode === 'crop' ? "bg-amber-600" : "text-neutral-400"}`}
-                   onClick={() => setAlignSubMode('crop')}
+                   className={`h-7 px-3 rounded-md ${alignSubMode === 'crop' ? "bg-amber-600 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
+                   onClick={() => withSwipeCancel(() => setAlignSubMode('crop'))}
                  >
                    <Square className="w-3.5 h-3.5 mr-1.5"/> Crop
                  </Button>
-                 
-                 {alignSubMode === 'crop' && (
-                   <>
-                     {/* 【恢复的 Mask 按钮】 */}
-                     <div className="flex items-center pl-1 border-l border-amber-500/20 ml-1">
-                       <Button 
-                         variant={topBarConfig.showOutsideCrop ? 'ghost' : 'secondary'} 
-                         size="sm" 
-                         className={`h-7 px-2 ${!topBarConfig.showOutsideCrop ? "bg-neutral-700 text-white" : "text-neutral-500 hover:text-neutral-200 hover:bg-amber-500/20"}`} 
-                         onClick={() => setTopBarConfig(p => ({...p, showOutsideCrop: !p.showOutsideCrop}))}
-                         title={topBarConfig.showOutsideCrop ? "Hide outside crop" : "Show outside crop"}
-                       >
-                         {topBarConfig.showOutsideCrop ? <Eye className="w-3.5 h-3.5 mr-1" /> : <EyeOff className="w-3.5 h-3.5 mr-1 text-amber-500" />}
-                         Mask
-                       </Button>
-                     </div>
-                     
-                     {/* 原有的重置按钮 */}
-                     <Button variant="ghost" size="icon" className="h-7 w-7 text-neutral-500 hover:text-white" onClick={handleResetCrop} title="Reset Crop Area">
-                       <RotateCcw className="w-3.5 h-3.5"/>
-                     </Button>
-                   </>
-                 )}
-               </div>
-
-               {/* 操作 B: 变换模式 */}
-               <div className={`flex items-center gap-1 rounded ${alignSubMode === 'transform' ? 'bg-blue-500/10 px-1' : ''}`}>
                  <Button 
                    variant={alignSubMode === 'transform' ? 'default' : 'ghost'} size="sm" 
-                   className={`h-7 px-3 ${alignSubMode === 'transform' ? "bg-blue-600" : "text-neutral-400"}`}
-                   onClick={() => setAlignSubMode('transform')}
+                   className={`h-7 px-3 rounded-md ${alignSubMode === 'transform' ? "bg-blue-600 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
+                   onClick={() => withSwipeCancel(() => setAlignSubMode('transform'))}
                  >
                    <Maximize className="w-3.5 h-3.5 mr-1.5"/> Move/Zoom
                  </Button>
-                 {alignSubMode === 'transform' && (
-                   <>
-                     <Button 
-                       variant="ghost" size="sm" 
-                       className="h-7 px-2 text-blue-400 hover:bg-blue-400/20" 
-                       onClick={handleFitToMain}
-                       title="Fit Cropped Area to Main View"
-                     >
-                       <Zap className="w-3.5 h-3.5 mr-1"/> Fit to Main
-                     </Button>
-                     <Button variant="ghost" size="icon" className="h-7 w-7 text-neutral-500 hover:text-white" onClick={handleResetTransform} title="Reset Position/Scale">
-                       <RotateCcw className="w-3.5 h-3.5"/>
-                     </Button>
-                   </>
-                 )}
+               </div>
+
+               <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-lg border border-neutral-700">
+                 
+                 {/* Crop 的专属操作 */}
+                 <div className="flex items-center gap-0.5 border-r border-neutral-700 pr-1 mr-0.5">
+                   <Button 
+                     variant={topBarConfig.showOutsideCrop ? 'ghost' : 'secondary'} 
+                     size="sm" 
+                     className={`h-7 px-2 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : (!topBarConfig.showOutsideCrop ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-amber-500/20')}`} 
+                     disabled={alignSubMode !== 'crop'}
+                     onClick={() => toggleConfigWithSwipeCancel('showOutsideCrop')}
+                     title="Toggle Mask"
+                   >
+                     {topBarConfig.showOutsideCrop ? <Eye className="w-3.5 h-3.5 mr-1" /> : <EyeOff className="w-3.5 h-3.5 mr-1 text-amber-500" />}
+                     Mask
+                   </Button>
+                   <Button 
+                     variant="ghost" size="icon" 
+                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-400 hover:text-white hover:bg-amber-500/20'}`} 
+                     disabled={alignSubMode !== 'crop'}
+                     onClick={() => withSwipeCancel(handleResetCrop)} title="Reset Crop Area"
+                   >
+                     <RotateCcw className="w-3.5 h-3.5"/>
+                   </Button>
+                 </div>
+
+                 {/* Move/Zoom 的专属操作 */}
+                 <div className="flex items-center gap-0.5">
+                   <Button 
+                     variant="ghost" size="sm" 
+                     className={`h-7 px-2 transition-opacity ${alignSubMode !== 'transform' ? 'opacity-30 cursor-not-allowed' : 'text-blue-400 hover:bg-blue-400/20'}`} 
+                     disabled={alignSubMode !== 'transform'}
+                     onClick={() => withSwipeCancel(handleFitToMain)}
+                     title="Fit Cropped Area to Main View"
+                   >
+                     <Zap className="w-3.5 h-3.5 mr-1"/> Fit to Main
+                   </Button>
+                   <Button 
+                     variant="ghost" size="icon" 
+                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'transform' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-400 hover:text-white hover:bg-blue-500/20'}`} 
+                     disabled={alignSubMode !== 'transform'}
+                     onClick={() => withSwipeCancel(handleResetTransform)} title="Reset Position/Scale"
+                   >
+                     <RotateCcw className="w-3.5 h-3.5"/>
+                   </Button>
+                 </div>
                </div>
             </div>
           )}
         </div>
 
-{/* 【修复核心】：统一互斥视觉控制面板 */}
-{/* 【修复核心】：彻底解决滑块卡死与过短问题 */}
-{/* 【修复核心】：彻底解决滑块卡死与卷帘突变问题 */}
+        {/* 右侧：视觉滑块控制面板 */}
         <div className="flex items-center gap-3 shrink-0 pl-4">
           <div className="flex items-center gap-2 bg-neutral-950 p-1.5 rounded-lg border border-neutral-800">
+            {/* 滑块部分无需包拦截器 */}
             <Select 
               value={topBarConfig.mode} 
               onValueChange={(val: any) => setTopBarConfig(p => ({
-                  ...p, 
-                  mode: val, 
-                  // 【修复 1】：切换到卷帘时，默认值为 100 (全图显示)，防止图像突然被切掉一半
-                  value: val === 'opacity' ? 0.6 : 100 
+                  ...p, mode: val, value: val === 'opacity' ? 0.6 : 100 
               }))}
             >
-              <SelectTrigger className="h-7 w-[100px] text-xs bg-transparent border-none focus:ring-0 text-neutral-300">
+              <SelectTrigger className="h-7 w-[95px] text-xs bg-transparent border-none focus:ring-0 text-neutral-300">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -994,8 +1021,7 @@ export function ViewExtentCheck() {
               </SelectContent>
             </Select>
             
-{/* 关键修复：加回 Array.isArray 检查，兼容您的 Slider 组件返回值 */}
-            <div className="w-[250px] px-3 flex items-center shrink-0">
+            <div className="w-[120px] px-2 flex items-center shrink-0">
               <Slider 
                 key={topBarConfig.mode} 
                 min={0}
@@ -1003,7 +1029,6 @@ export function ViewExtentCheck() {
                 step={topBarConfig.mode === 'opacity' ? 0.01 : 1} 
                 value={[topBarConfig.value]} 
                 onValueChange={(val) => {
-                  // 【完美修复】兼容返回数字或数组的两种情况
                   const v = Array.isArray(val) ? val[0] : (val as number);
                   setTopBarConfig(p => ({...p, value: v}));
                 }}
@@ -1011,19 +1036,16 @@ export function ViewExtentCheck() {
               />
             </div>
             
-            <span className="text-[10px] text-neutral-400 w-10 text-right font-mono select-none pr-2 shrink-0">
-              {topBarConfig.mode === 'opacity' 
-                ? `${Math.round(topBarConfig.value * 100)}%` 
-                : `${topBarConfig.value}%`}
+            <span className="text-[10px] text-neutral-400 w-9 text-right font-mono select-none pr-1 shrink-0">
+              {topBarConfig.mode === 'opacity' ? `${Math.round(topBarConfig.value * 100)}%` : `${topBarConfig.value}%`}
             </span>
           </div>
 
-{/* 【修改2】：改为手动显示/隐藏 Aug View 的总开关 */}
           <Button 
             variant={!topBarConfig.showAugView ? "default" : "outline"} 
             size="icon" 
             className="h-7 w-7 border-neutral-700 shrink-0" 
-            onClick={() => setTopBarConfig(p => ({...p, showAugView: !p.showAugView}))}
+            onClick={() => toggleConfigWithSwipeCancel('showAugView')}
             title={topBarConfig.showAugView ? "Hide Aug View" : "Show Aug View"}
           >
             {topBarConfig.showAugView ? <Eye className="w-3.5 h-3.5"/> : <EyeOff className="w-3.5 h-3.5 text-blue-400"/>}
