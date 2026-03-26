@@ -835,52 +835,7 @@ export function ViewExtentCheck() {
   const handleResetCrop = () => {
     setCrops({ ...crops, [activeAugView.id]: { t: 0, r: 100, b: 100, l: 0 } });
   };
-  // 校验逻辑
-  // const validateAndConfirm = () => {
-  //   if (!mainImgRef.current || !augImgRef.current) return;
-    
-  //   const mainRect = mainImgRef.current.getBoundingClientRect();
-  //   const augRect = augImgRef.current.getBoundingClientRect();
-    
-  //   const cropPhysical = {
-  //     top: augRect.top + (activeCrop.t / 100) * augRect.height,
-  //     bottom: augRect.top + (activeCrop.b / 100) * augRect.height,
-  //     left: augRect.left + (activeCrop.l / 100) * augRect.width,
-  //     right: augRect.left + (activeCrop.r / 100) * augRect.width,
-  //   };
-
-  //   const isAligned = 
-  //     Math.abs(cropPhysical.top - mainRect.top) < 2 &&
-  //     Math.abs(cropPhysical.bottom - mainRect.bottom) < 2 &&
-  //     Math.abs(cropPhysical.left - mainRect.left) < 2 &&
-  //     Math.abs(cropPhysical.right - mainRect.right) < 2;
-
-  //   if (isAligned) {
-  //     alert("Alignment Validated Successfully!");
-  //     setActiveModule('export');
-  //   } else {
-  //     const autoAlign = window.confirm("The current Aug View crop box does not match the Main View.\n\nAuto-snap the crop box to the Main View boundary?");
-      
-  //     if (autoAlign) {
-  //       const newCropT = ((mainRect.top - augRect.top) / augRect.height) * 100;
-  //       const newCropB = ((mainRect.bottom - augRect.top) / augRect.height) * 100;
-  //       const newCropL = ((mainRect.left - augRect.left) / augRect.width) * 100;
-  //       const newCropR = ((mainRect.right - augRect.left) / augRect.width) * 100;
-        
-  //       setCrops({
-  //         ...crops,
-  //         [activeAugView.id]: {
-  //           t: Math.max(0, Math.min(100, newCropT)),
-  //           b: Math.max(0, Math.min(100, newCropB)),
-  //           l: Math.max(0, Math.min(100, newCropL)),
-  //           r: Math.max(0, Math.min(100, newCropR)),
-  //         }
-  //       });
-  //       setAlignSubMode('crop'); 
-  //     }
-  //   }
-  // };
-// --- 预设与验证逻辑 ---
+// --- 预设、手动控制与验证逻辑 ---
 
   // 应用某个对齐参数到当前视图
   const applyAlignmentPreset = (crop: any, transform: any) => {
@@ -889,6 +844,25 @@ export function ViewExtentCheck() {
     tempTransformRef.current = { ...transform };
     updateAugDOMTransform();
     updateView(activeAugView.id, { transform });
+    setRenderTick(p => p + 1);
+  };
+
+  // 【新增】：手动输入与滑块联动逻辑
+  const handleManualCropChange = (key: 't'|'r'|'b'|'l', val: number) => {
+    if (!activeAugView) return;
+    let newCrop = { ...activeCrop };
+    if (key === 't') newCrop.t = Math.max(0, Math.min(newCrop.b - 0.1, val));
+    if (key === 'b') newCrop.b = Math.min(100, Math.max(newCrop.t + 0.1, val));
+    if (key === 'l') newCrop.l = Math.max(0, Math.min(newCrop.r - 0.1, val));
+    if (key === 'r') newCrop.r = Math.min(100, Math.max(newCrop.l + 0.1, val));
+    setCrops({ ...crops, [activeAugView.id]: newCrop });
+  };
+
+  const handleManualTransformChange = (key: 'scaleX'|'scaleY'|'offsetX'|'offsetY', val: number) => {
+    if (!activeAugView) return;
+    tempTransformRef.current = { ...tempTransformRef.current, [key]: val };
+    updateAugDOMTransform();
+    updateView(activeAugView.id, { transform: { ...tempTransformRef.current } });
     setRenderTick(p => p + 1);
   };
 
@@ -906,7 +880,6 @@ export function ViewExtentCheck() {
       right: augRect.left + (activeCrop.r / 100) * augRect.width,
     };
 
-    // 容差 2px
     const isAligned = 
       Math.abs(cropPhysical.top - mainRect.top) < 2 &&
       Math.abs(cropPhysical.bottom - mainRect.bottom) < 2 &&
@@ -914,13 +887,14 @@ export function ViewExtentCheck() {
       Math.abs(cropPhysical.right - mainRect.right) < 2;
 
     const markAsCompleteAndSave = () => {
-      // 1. 标记为完成
       setCompletedViews(prev => new Set(prev).add(activeAugView.id));
       
-      // 2. 将此参数作为复用预设保存到库中
-      const presetName = `Param Set ${savedAlignments.length + 1}`;
+      // 【修改】：将预设名称改为对应的 Aug View 名称
+      const viewIndex = augViews.findIndex(v => v.id === activeAugView.id);
+      const presetName = `Aug View ${viewIndex + 1}`;
+      
       setSavedAlignments(prev => [
-        ...prev, 
+        ...prev.filter(p => p.name !== presetName), // 覆盖同名旧记录
         { id: Math.random().toString(), name: presetName, crop: { ...activeCrop }, transform: { ...tempTransformRef.current } }
       ]);
     };
@@ -931,7 +905,6 @@ export function ViewExtentCheck() {
       const autoAlign = window.confirm("Current crop box is NOT perfectly aligned with the Main View.\n\nDo you want the system to Auto-Align (Fit to Main) and save?");
       if (autoAlign) {
         handleFitToMain(); 
-        // 延迟一帧等待 transform 生效后标记完成
         requestAnimationFrame(() => {
           markAsCompleteAndSave();
           setRenderTick(p => p + 1);
@@ -940,14 +913,50 @@ export function ViewExtentCheck() {
     }
   };
 
-  // 所有视图对齐完毕，进入下一步
-  const proceedToExport = () => {
+  // 【修改】：所有视图对齐完毕，调出保存路径并进入下一步
+  const proceedToExport = async () => {
     if (completedViews.size < augViews.length) {
       alert("Please save and confirm alignment for ALL Aug Views before proceeding.");
       return;
     }
-    setActiveModule('export');
+
+    // 整合所有需要保存的配置参数
+    const exportData = {
+      projectMeta: { folders, views },
+      extentCheck: { crops }
+    };
+    const jsonStr = JSON.stringify(exportData, null, 2);
+
+    try {
+      // 【修复报错】：使用 (window as any) 绕过 TS 的类型检查
+      if ('showSaveFilePicker' in window) {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: 'project_alignment_parameters.json',
+          types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(jsonStr);
+        await writable.close();
+      } else {
+        // 降级方案：自动下载文件
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'project_alignment_parameters.json';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      setActiveModule('export'); // 或者跳转到 'annotation'
+    } catch (err) {
+      console.warn("Save cancelled or failed", err);
+      if (window.confirm("Save cancelled. Do you still want to proceed to the next step?")) {
+         setActiveModule('export');
+      }
+    }
   };
+
+  
 // 【修改2】：在 return 之前，计算当前互斥模式下的最终参数
   const isOpacityMode = topBarConfig.mode === 'opacity';
   const isSwipeXMode = topBarConfig.mode === 'swipeX';
@@ -1250,10 +1259,11 @@ export function ViewExtentCheck() {
 
         {/* 右侧面板 (精简占位，您可根据需要保留原有滑块) */}
 {/* 右侧面板 (全新工作流层级布局) */}
+{/* 右侧面板 (全新工作流层级布局) */}
         <div className="w-[340px] bg-neutral-900 flex flex-col shrink-0 border-l border-neutral-800">
           
           {/* 1. 已存在的对齐参数库 (Presets) */}
-          <div className="p-4 border-b border-neutral-800 flex flex-col max-h-[220px] shrink-0">
+          <div className="p-4 border-b border-neutral-800 flex flex-col h-[220px] shrink-0">
              <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3">Existing Parameters</h2>
              <div className="overflow-y-auto pr-1 space-y-2 custom-scrollbar">
                 {/* 默认重置参数 */}
@@ -1264,21 +1274,27 @@ export function ViewExtentCheck() {
                      Apply
                    </Button>
                 </div>
-                {/* 动态生成的已存参数 */}
+                {/* 【修改】动态生成的已存参数：展示具体数值 */}
                 {savedAlignments.map((preset) => (
-                  <div key={preset.id} className="flex items-center justify-between bg-blue-950/20 border border-blue-900/50 p-2 rounded-md">
-                     <span className="text-xs text-blue-300 font-mono">{preset.name}</span>
-                     <Button size="sm" variant="default" className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-500" 
-                       onClick={() => applyAlignmentPreset(preset.crop, preset.transform)}>
-                       Apply
-                     </Button>
+                  <div key={preset.id} className="flex flex-col bg-blue-950/20 border border-blue-900/50 p-2 rounded-md space-y-1.5">
+                     <div className="flex items-center justify-between">
+                       <span className="text-xs text-blue-300 font-bold">{preset.name}</span>
+                       <Button size="sm" variant="default" className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-500" 
+                         onClick={() => applyAlignmentPreset(preset.crop, preset.transform)}>
+                         Apply
+                       </Button>
+                     </div>
+                     <div className="text-[10px] text-neutral-400 font-mono leading-tight">
+                       Crop: {preset.crop.t.toFixed(1)}, {preset.crop.r.toFixed(1)}, {preset.crop.b.toFixed(1)}, {preset.crop.l.toFixed(1)}<br/>
+                       Scale: {preset.transform.scaleX.toFixed(3)}, {preset.transform.scaleY.toFixed(3)}
+                     </div>
                   </div>
                 ))}
              </div>
           </div>
 
           {/* 2. Aug View 列表 (滚动选择) */}
-          <div className="p-4 border-b border-neutral-800 flex flex-col h-[200px] shrink-0">
+          <div className="p-4 border-b border-neutral-800 flex flex-col h-[180px] shrink-0">
              <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3 flex justify-between">
                <span>Active Aug Views</span>
                <span className="text-blue-500">{completedViews.size} / {augViews.length}</span>
@@ -1303,22 +1319,81 @@ export function ViewExtentCheck() {
              </div>
           </div>
           
-          {/* 3. 当前视图实时参数与保存按钮 */}
+          {/* 3. 当前视图实时参数与保存按钮 (带输入框与滑块) */}
           <div className="flex-1 p-4 flex flex-col bg-neutral-950 overflow-hidden">
             <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3">Current Parameters</h2>
-            <div className="bg-black border border-neutral-800 rounded-lg p-3 font-mono text-[11px] text-neutral-400 space-y-2 mb-4 shrink-0 shadow-inner">
-               <div className="flex justify-between">
-                 <span className="text-neutral-500">Crop (T/R/B/L):</span>
-                 <span className="text-amber-400">{activeCrop.t.toFixed(1)}%, {activeCrop.r.toFixed(1)}%, {activeCrop.b.toFixed(1)}%, {activeCrop.l.toFixed(1)}%</span>
-               </div>
-               <div className="flex justify-between">
-                 <span className="text-neutral-500">Scale (X/Y):</span>
-                 <span className="text-blue-400">{tempTransformRef.current.scaleX.toFixed(3)}, {tempTransformRef.current.scaleY.toFixed(3)}</span>
-               </div>
-               <div className="flex justify-between">
-                 <span className="text-neutral-500">Offset (X/Y):</span>
-                 <span className="text-blue-400">{tempTransformRef.current.offsetX.toFixed(0)}px, {tempTransformRef.current.offsetY.toFixed(0)}px</span>
-               </div>
+            
+            {/* 参数控制区 */}
+            <div className="overflow-y-auto pr-1 mb-4 space-y-4 custom-scrollbar">
+              
+              {/* Crop 控制 */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] text-neutral-500 font-bold mb-1">CROP (%)</div>
+                {['t', 'b', 'l', 'r'].map(edge => (
+                  <div key={edge} className="flex items-center gap-2">
+                    <span className="w-3 text-[10px] uppercase text-neutral-400">{edge}</span>
+                    <Slider 
+                      min={0} max={100} step={0.1} 
+                      value={[activeCrop[edge as 't'|'r'|'b'|'l']]} 
+                      // 【修复 1】：加入 Array.isArray 检查，防止 undefined 崩溃
+                      onValueChange={(v) => handleManualCropChange(edge as any, Array.isArray(v) ? v[0] : (v as number))} 
+                      className="flex-1" 
+                    />
+                    <Input 
+                      type="number" 
+                      // 【修复 2】：去掉了 .toFixed()，让原生浏览器接管数字输入，防止输入小数点时卡顿或光标乱跳
+                      value={activeCrop[edge as 't'|'r'|'b'|'l']} 
+                      onChange={(e) => handleManualCropChange(edge as any, parseFloat(e.target.value) || 0)} 
+                      className="w-14 h-6 text-[10px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Scale 控制 */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] text-neutral-500 font-bold mb-1">SCALE</div>
+                {['scaleX', 'scaleY'].map(axis => (
+                  <div key={axis} className="flex items-center gap-2">
+                    <span className="w-3 text-[10px] uppercase text-neutral-400">{axis.replace('scale', '')}</span>
+                    <Slider 
+                      min={0.01} max={10} step={0.01} 
+                      value={[tempTransformRef.current[axis as 'scaleX'|'scaleY']]} 
+                      onValueChange={(v) => handleManualTransformChange(axis as any, Array.isArray(v) ? v[0] : (v as number))} 
+                      className="flex-1" 
+                    />
+                    <Input 
+                      type="number" step="0.01" 
+                      value={tempTransformRef.current[axis as 'scaleX'|'scaleY']} 
+                      onChange={(e) => handleManualTransformChange(axis as any, parseFloat(e.target.value) || 1)} 
+                      className="w-16 h-6 text-[10px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {/* Offset 控制 */}
+              <div className="space-y-1.5">
+                <div className="text-[10px] text-neutral-500 font-bold mb-1">OFFSET (px)</div>
+                {['offsetX', 'offsetY'].map(axis => (
+                  <div key={axis} className="flex items-center gap-2">
+                    <span className="w-3 text-[10px] uppercase text-neutral-400">{axis.replace('offset', '')}</span>
+                    <Slider 
+                      min={-3000} max={3000} step={1} 
+                      value={[tempTransformRef.current[axis as 'offsetX'|'offsetY']]} 
+                      onValueChange={(v) => handleManualTransformChange(axis as any, Array.isArray(v) ? v[0] : (v as number))} 
+                      className="flex-1" 
+                    />
+                    <Input 
+                      type="number" step="1" 
+                      value={tempTransformRef.current[axis as 'offsetX'|'offsetY']} 
+                      onChange={(e) => handleManualTransformChange(axis as any, parseFloat(e.target.value) || 0)} 
+                      className="w-16 h-6 text-[10px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                    />
+                  </div>
+                ))}
+              </div>
+
             </div>
 
             <Button 
@@ -1337,7 +1412,7 @@ export function ViewExtentCheck() {
               onClick={proceedToExport}
               disabled={completedViews.size < augViews.length}
             >
-               Proceed to Annotation <Check className="w-4 h-4 ml-2"/>
+               Confirm & Save Config <Check className="w-4 h-4 ml-2"/>
             </Button>
           </div>
 
