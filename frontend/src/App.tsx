@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react'; // 【新增】：引入 useState
 import { useStore } from './store/useStore';
-import { DataPreload, ViewExtentCheck, SyncAnnotation, DataFormatExchange } from './components/Modules';
+// 【修改】：确保从 Modules 导入 ProjectMetaModal
+import { DataPreload, ViewExtentCheck, SyncAnnotation, DataFormatExchange, ProjectMetaDashboard } from './components/Modules';
 import { Button } from '@/components/ui/button';
 import { 
   DropdownMenu, 
@@ -14,7 +15,8 @@ import {
   DialogHeader, 
   DialogTitle 
 } from '@/components/ui/dialog';
-import { Menu, Layers, Settings, Download, FolderOpen } from 'lucide-react';
+// 【新增】：引入 Database 图标
+import { Menu, Layers, Settings, Download, FolderOpen, Database } from 'lucide-react';
 
 export default function App() {
   const { activeModule, setActiveModule, currentStem } = useStore();
@@ -25,8 +27,10 @@ export default function App() {
       <header className="flex items-center justify-between px-4 py-2 border-b border-neutral-800 bg-neutral-900 shrink-0 h-14">
         <div className="flex items-center gap-4 w-1/3">
           <DropdownMenu>
-            <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />}>
-              <Menu className="w-5 h-5" />
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="w-5 h-5" />
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
               <DropdownMenuItem onClick={() => setActiveModule('preload')}>
@@ -34,6 +38,9 @@ export default function App() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('extent')}>
                 <Settings className="w-4 h-4 mr-2" /> View Extent Check
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveModule('meta')}>
+                <Database className="w-4 h-4 mr-2" /> Project Meta
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('export')}>
                 <Download className="w-4 h-4 mr-2" /> Export Data
@@ -106,6 +113,24 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
+
+{/* 统一格式的 Project Meta 弹窗！ */}
+      <Dialog 
+        open={activeModule === 'meta'} 
+        onOpenChange={(open) => !open && setActiveModule('workspace')}
+      >
+        <DialogContent className="max-w-6xl sm:max-w-6xl w-[95vw] h-[85vh] flex flex-col p-0 bg-neutral-950 border-neutral-800 overflow-hidden">
+          <DialogHeader className="p-4 border-b border-neutral-800 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <Database className="w-5 h-5 text-blue-400"/> Project Metadata Dashboard
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-grow overflow-hidden relative">
+            <ProjectMetaDashboard />
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

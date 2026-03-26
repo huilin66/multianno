@@ -51,7 +51,7 @@ export interface Annotation {
   stem: string; // The scene group this annotation belongs to
 }
 
-export type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export';
+type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta';
 
 export interface AppState {
   projectMetadata: FolderMetadata[]; // 存储从后端拿到的分析结果

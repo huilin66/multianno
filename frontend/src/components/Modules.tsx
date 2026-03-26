@@ -14,6 +14,373 @@ import {
   Eye, EyeOff, Maximize, Move, Save, MousePointer2, Square, Hexagon, Database, Image as ImageIcon,RotateCcw,Zap,
   AlertTriangle, FileJson, FileText, Hand, Settings2, SplitSquareHorizontal // 新增这几个
 } from 'lucide-react';
+
+
+export function SyncAnnotation() {
+  const { 
+    views, 
+    folders,
+    annotations, 
+    addAnnotation, 
+    viewport, 
+    setViewport,
+    currentStem,
+    stems,
+    setCurrentStem
+  } = useStore();
+  
+  const [tool, setTool] = useState<'select' | 'bbox' | 'polygon'>('select');
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Popover state
+  const [popoverOpen, setPopoverOpen] = useState(false);
+  const [popoverPos, setPopoverPos] = useState({ x: 0, y: 0 });
+  const [pendingAnnotation, setPendingAnnotation] = useState<any>(null);
+  const [classLabel, setClassLabel] = useState('object');
+  const [classText, setClassText] = useState('');
+
+  // Grid layout calculation
+  const gridCols = Math.ceil(Math.sqrt(Math.max(1, views.length)));
+  const gridRows = Math.ceil(Math.max(1, views.length) / gridCols);
+
+  // Filter annotations for current stem
+  const currentAnnotations = annotations.filter(a => a.stem === currentStem);
+
+  const handleWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const zoomFactor = 1.1;
+    const newZoom = e.deltaY < 0 ? viewport.zoom * zoomFactor : viewport.zoom / zoomFactor;
+    setViewport(newZoom, viewport.panX, viewport.panY);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
+    if (tool === 'select') return;
+    if (popoverOpen) setPopoverOpen(false);
+
+    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+    const x = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
+    const y = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
+
+    const view = views.find(v => v.id === viewId);
+    let mainX = x;
+    let mainY = y;
+    if (view && !view.isMain) {
+      mainX = (x - view.transform.offsetX) / view.transform.scaleX;
+      mainY = (y - view.transform.offsetY) / view.transform.scaleY;
+    }
+
+    if (tool === 'bbox') {
+      setIsDrawing(true);
+      setCurrentPoints([{ x: mainX, y: mainY }, { x: mainX, y: mainY }]);
+    } else if (tool === 'polygon') {
+      setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent, viewId: string) => {
+    if (!isDrawing || tool !== 'bbox') return;
+
+    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+    const x = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
+    const y = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
+
+    const view = views.find(v => v.id === viewId);
+    let mainX = x;
+    let mainY = y;
+    if (view && !view.isMain) {
+      mainX = (x - view.transform.offsetX) / view.transform.scaleX;
+      mainY = (y - view.transform.offsetY) / view.transform.scaleY;
+    }
+
+    setCurrentPoints([currentPoints[0], { x: mainX, y: mainY }]);
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (tool === 'bbox' && isDrawing) {
+      setIsDrawing(false);
+      if (currentPoints.length === 2) {
+        setPendingAnnotation({
+          type: 'bbox',
+          points: currentPoints,
+        });
+        setPopoverPos({ x: e.clientX, y: e.clientY });
+        setPopoverOpen(true);
+      }
+      setCurrentPoints([]);
+    }
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.key === 'Enter' && tool === 'polygon' && currentPoints.length > 2) {
+      setPendingAnnotation({
+        type: 'polygon',
+        points: currentPoints,
+      });
+      // Approximate position for popover (last point)
+      const lastPoint = currentPoints[currentPoints.length - 1];
+      const screenX = (lastPoint.x * viewport.zoom) + viewport.panX;
+      const screenY = (lastPoint.y * viewport.zoom) + viewport.panY;
+      
+      setPopoverPos({ x: screenX + 300, y: screenY + 100 }); 
+      setPopoverOpen(true);
+      setCurrentPoints([]);
+    } else if (e.key === 'Escape') {
+      setCurrentPoints([]);
+      setIsDrawing(false);
+      setPopoverOpen(false);
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentPoints, tool, viewport]);
+
+  const savePendingAnnotation = () => {
+    if (pendingAnnotation && currentStem) {
+      addAnnotation({
+        id: Math.random().toString(36).substr(2, 9),
+        ...pendingAnnotation,
+        label: classLabel,
+        text: classText,
+        stem: currentStem
+      });
+      setPopoverOpen(false);
+      setPendingAnnotation(null);
+      setClassText('');
+    }
+  };
+
+  // 【必须确保这个函数在这里：在 SyncAnnotation 的大括号内部，return 的上方】
+  // 这样它才能读取到上面的 folders 和 views 变量！
+  const generateProjectMeta = () => {
+    return {
+      folders: folders.map((f, i) => {
+        return {
+          Id: i + 1,
+          path: f.path,
+          "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
+          "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
+          "files total": f.files ? f.files.length : 0,
+          "image meta": {
+            width: f.metadata?.width || 'Unknown',
+            height: f.metadata?.height || 'Unknown',
+            bands: f.metadata?.bands || 'Unknown',
+            "data type": f.metadata?.fileType || 'uint8'
+          }
+        };
+      }),
+      views: views.map((v, i) => {
+        const fIndex = folders.findIndex(f => f.id === v.folderId);
+        return {
+          id: v.isMain ? 'main view' : `aug view ${i}`, 
+          "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
+          bands: v.bands,
+          isMain: v.isMain,
+          transform: v.transform || { crop: { t: 0, r: 100, b: 100, l: 0 }, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 }
+        };
+      })
+    };
+  };
+
+  return (
+    <div className="flex h-full overflow-hidden bg-neutral-900 text-white relative">
+      {/* Left Toolbar */}
+      <div className="w-16 border-r border-neutral-800 flex flex-col items-center py-4 space-y-4 bg-neutral-950 shrink-0">
+        <Button 
+          variant={tool === 'select' ? 'default' : 'ghost'} 
+          size="icon" 
+          onClick={() => setTool('select')}
+          title="Select / Pan"
+        >
+          <MousePointer2 className="w-5 h-5" />
+        </Button>
+        <Button 
+          variant={tool === 'bbox' ? 'default' : 'ghost'} 
+          size="icon" 
+          onClick={() => setTool('bbox')}
+          title="Bounding Box"
+        >
+          <Square className="w-5 h-5" />
+        </Button>
+        <Button 
+          variant={tool === 'polygon' ? 'default' : 'ghost'} 
+          size="icon" 
+          onClick={() => setTool('polygon')}
+          title="Polygon (Press Enter to finish)"
+        >
+          <Hexagon className="w-5 h-5" />
+        </Button>
+        <div className="flex-grow" />
+        <Button variant="ghost" size="icon" title="Save to Disk">
+          <Save className="w-5 h-5" />
+        </Button>
+      </div>
+
+      {/* Grid Workspace */}
+      <div 
+        className="flex-grow p-4 overflow-hidden relative"
+        ref={containerRef}
+        onWheel={handleWheel}
+      >
+        {views.length === 0 ? (
+          <div className="w-full h-full flex items-center justify-center text-neutral-500 border-2 border-dashed border-neutral-800 rounded-lg">
+            No views configured. Please go to Data Preload to set up your project.
+          </div>
+        ) : (
+          <div 
+            className="w-full h-full grid gap-4"
+            style={{ 
+              gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
+              gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`
+            }}
+          >
+            {views.map((view, index) => (
+              <div key={view.id} className="relative border border-neutral-800 bg-black rounded-lg overflow-hidden">
+                <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300">
+                  {view.isMain ? 'Main View' : `Aug View ${index}`}
+                </div>
+                <CanvasView 
+                  view={view} 
+                  annotations={currentAnnotations}
+                  currentPoints={currentPoints}
+                  tool={tool}
+                  onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, view.id)}
+                  onMouseMove={(e: React.MouseEvent) => handleMouseMove(e, view.id)}
+                  onMouseUp={handleMouseUp}
+                />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Floating Popover for Class Selection */}
+        {popoverOpen && (
+          <div 
+            className="absolute z-50 bg-card text-card-foreground border shadow-lg rounded-lg p-4 w-64 space-y-4"
+            style={{ left: Math.min(popoverPos.x, window.innerWidth - 300), top: Math.min(popoverPos.y, window.innerHeight - 200) }}
+          >
+            <h4 className="font-semibold text-sm">Annotation Details</h4>
+            <div className="space-y-2">
+              <Label className="text-xs">Class Label</Label>
+              <Input 
+                value={classLabel} 
+                onChange={(e) => setClassLabel(e.target.value)} 
+                placeholder="e.g. car, building"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs">Additional Text (Optional)</Label>
+              <Input 
+                value={classText} 
+                onChange={(e) => setClassText(e.target.value)} 
+                placeholder="Notes..."
+                onKeyDown={(e) => e.key === 'Enter' && savePendingAnnotation()}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" onClick={() => setPopoverOpen(false)}>Cancel</Button>
+              <Button size="sm" onClick={savePendingAnnotation}>Save</Button>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Right Panel: Project Meta, Labels, Scene Groups */}
+      <div className="w-72 border-l border-neutral-800 bg-neutral-950 flex flex-col shrink-0">
+        
+      {/* Top: Project Meta */}
+        <div className="p-4 border-b border-neutral-800 space-y-3">
+          
+          {/* 重点修复：使用 flex 和 justify-between 将标题和 View JSON 按钮并排显示 */}
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-semibold text-sm text-neutral-300 flex items-center gap-2">
+              <Database className="w-4 h-4" /> Project Meta
+            </h3>
+
+          <div className="grid grid-cols-2 gap-2 text-xs text-neutral-400">
+            <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
+              <span className="block text-neutral-500 mb-1">Folders</span>
+              <span className="font-mono text-neutral-200">{folders.length}</span>
+            </div>
+            <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
+              <span className="block text-neutral-500 mb-1">Views</span>
+              <span className="font-mono text-neutral-200">{views.length}</span>
+            </div>
+          </div>
+        </div>
+          <div className="grid grid-cols-2 gap-2 text-xs text-neutral-400">
+            <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
+              <span className="block text-neutral-500 mb-1">Folders</span>
+              <span className="font-mono text-neutral-200">{folders.length}</span>
+            </div>
+            <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
+              <span className="block text-neutral-500 mb-1">Views</span>
+              <span className="font-mono text-neutral-200">{views.length}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Middle: Label Info */}
+        <div className="flex-grow flex flex-col border-b border-neutral-800 overflow-hidden">
+          <div className="p-4 pb-2">
+            <h3 className="font-semibold text-sm text-neutral-300 flex items-center gap-2">
+              <Layers className="w-4 h-4" /> Labels ({currentAnnotations.length})
+            </h3>
+          </div>
+          <div className="flex-grow overflow-y-auto p-2 space-y-2">
+            {currentAnnotations.length === 0 ? (
+              <div className="text-xs text-neutral-600 text-center py-4">No labels in this scene</div>
+            ) : (
+              currentAnnotations.map((ann, i) => (
+                <div key={ann.id} className="p-2 bg-neutral-900 rounded border border-neutral-800 text-sm flex flex-col gap-1 hover:border-primary/50 cursor-pointer transition-colors">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium text-neutral-200">{ann.label}</span>
+                    <span className="text-[10px] text-neutral-500 uppercase bg-neutral-950 px-1.5 py-0.5 rounded">{ann.type}</span>
+                  </div>
+                  {ann.text && <span className="text-xs text-neutral-400 truncate">{ann.text}</span>}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Bottom: Scene Group Stem List */}
+        <div className="h-1/3 flex flex-col overflow-hidden">
+          <div className="p-4 pb-2">
+            <h3 className="font-semibold text-sm text-neutral-300 flex items-center gap-2">
+              <ImageIcon className="w-4 h-4" /> Scene Groups
+            </h3>
+          </div>
+          <div className="flex-grow overflow-y-auto p-2 space-y-1">
+            {stems.length === 0 ? (
+              <div className="text-xs text-neutral-600 text-center py-4">No scenes loaded</div>
+            ) : (
+              stems.map((stem) => (
+                <button
+                  key={stem}
+                  onClick={() => setCurrentStem(stem)}
+                  className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
+                    currentStem === stem 
+                      ? 'bg-primary/20 text-primary border border-primary/30' 
+                      : 'text-neutral-400 hover:bg-neutral-900 border border-transparent'
+                  }`}
+                >
+                  <span className="font-mono">{stem}</span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+      </div>
+    // </div>
+  );
+}
+
 export function DataPreload() {
   // 【新增提取 setActiveModule】用于跳转界面
   const { folders, views, addFolder, removeFolder, addView, removeView, updateView, setActiveModule } = useStore();
@@ -211,6 +578,40 @@ export function DataPreload() {
 
     // 校验全部通过，跳转到 View Extent Check
     setActiveModule('extent');
+  };
+
+  // 【新增】：根据实际存储在 store 里的 metadata 生成标准元数据
+  const generateGlobalMeta = () => {
+    return {
+      folders: folders.map((f, i) => {
+        return {
+          Id: i + 1,
+          path: f.path,
+          // 直接读取 Python 后端返回并保存在 store 中的组/文件统计
+          "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
+          "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
+          "files total": f.files ? f.files.length : 0,
+          "image meta": {
+            width: f.metadata?.width || 'Unknown',
+            height: f.metadata?.height || 'Unknown',
+            bands: f.metadata?.bands || 'Unknown',
+            // dataType 对应您刚才提到的 uint8 等 dtype，它在 confirmFolders 中被存为了 fileType
+            "data type": f.metadata?.fileType || 'uint8' 
+          }
+        };
+      }),
+      views: views.map((v, i) => {
+        const fIndex = folders.findIndex(f => f.id === v.folderId);
+        return {
+          id: v.isMain ? 'main view' : `aug view ${i}`, // views[0] 是 main, views[1] 自然就是 aug view 1
+          "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
+          bands: v.bands,
+          isMain: v.isMain,
+          // 初始界面没有配准数据，默认输出
+          transform: v.transform || { crop: { t: 0, r: 100, b: 100, l: 0 }, scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 }
+        };
+      })
+    };
   };
 
   return (
@@ -439,7 +840,6 @@ export function DataPreload() {
     </div>
   );
 }
-
 
 export function ViewExtentCheck() {
   const { views, folders, updateView, setActiveModule } = useStore();
@@ -913,41 +1313,75 @@ export function ViewExtentCheck() {
     }
   };
 
-  // 【修改】：所有视图对齐完毕，调出保存路径并进入下一步
+// 【完全按照您的 JSON 结构要求重写】：在标注主界面实时提取规范化的项目元数据
+// 严格按照要求的 JSON 结构提取，并解决 TS 类型报错
+  const generateProjectMeta = () => {
+    return {
+      folders: folders.map((f, i) => ({
+        Id: i + 1,
+        path: f.path,
+        "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
+        "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
+        "files total": f.files ? f.files.length : 0,
+        "image meta": {
+          width: f.metadata?.width || 'Unknown',
+          height: f.metadata?.height || 'Unknown',
+          bands: f.metadata?.bands || 'Unknown',
+          "data type": f.metadata?.fileType || 'uint8'
+        }
+      })),
+      views: views.map((v, i) => {
+        const fIndex = folders.findIndex(f => f.id === v.folderId);
+        
+        // 【核心修复】：强制解构并补充默认的 crop 属性，彻底消除 TS 联合类型报错
+        const safeTransform = {
+          crop: (v.transform as any)?.crop || { t: 0, r: 100, b: 100, l: 0 },
+          scaleX: v.transform?.scaleX ?? 1,
+          scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
+          offsetX: v.transform?.offsetX ?? 0,
+          offsetY: v.transform?.offsetY ?? 0
+        };
+
+        return {
+          id: v.isMain ? 'main view' : `aug view ${i}`, 
+          "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
+          bands: v.bands,
+          isMain: v.isMain,
+          transform: safeTransform
+        };
+      })
+    };
+  };
+  // 【修改】：使用标准元数据并保存为 project_meta.json
   const proceedToExport = async () => {
     if (completedViews.size < augViews.length) {
       alert("Please save and confirm alignment for ALL Aug Views before proceeding.");
       return;
     }
 
-    // 整合所有需要保存的配置参数
-    const exportData = {
-      projectMeta: { folders, views },
-      extentCheck: { crops }
-    };
-    const jsonStr = JSON.stringify(exportData, null, 2);
+    // 调用规范化元数据生成器
+    const projectMeta = generateProjectMeta();
+    const jsonStr = JSON.stringify(projectMeta, null, 2);
 
     try {
-      // 【修复报错】：使用 (window as any) 绕过 TS 的类型检查
       if ('showSaveFilePicker' in window) {
         const handle = await (window as any).showSaveFilePicker({
-          suggestedName: 'project_alignment_parameters.json',
+          suggestedName: 'project_meta.json',
           types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
         });
         const writable = await handle.createWritable();
         await writable.write(jsonStr);
         await writable.close();
       } else {
-        // 降级方案：自动下载文件
         const blob = new Blob([jsonStr], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'project_alignment_parameters.json';
+        a.download = 'project_meta.json';
         a.click();
         URL.revokeObjectURL(url);
       }
-      setActiveModule('export'); // 或者跳转到 'annotation'
+      setActiveModule('export'); 
     } catch (err) {
       console.warn("Save cancelled or failed", err);
       if (window.confirm("Save cancelled. Do you still want to proceed to the next step?")) {
@@ -1006,7 +1440,8 @@ export function ViewExtentCheck() {
         
         {/* 左侧 & 中间：模式切换与固定操作区 */}
         <div className="flex items-center gap-3">
-          
+          {/* 【新增】：全局 Project Meta 查看器 */}
+
           {/* 主模式切换 */}
           <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-lg border border-neutral-800 shrink-0">
             {/* 加上 withSwipeCancel */}
@@ -1443,325 +1878,176 @@ export function ViewExtentCheck() {
   );
 }
 
+export function ProjectMetaDashboard() {
+  const { folders, views } = useStore();
 
-export function SyncAnnotation() {
-  const { 
-    views, 
-    folders,
-    annotations, 
-    addAnnotation, 
-    viewport, 
-    setViewport,
-    currentStem,
-    stems,
-    setCurrentStem
-  } = useStore();
-  
-  const [tool, setTool] = useState<'select' | 'bbox' | 'polygon'>('select');
-  const [isDrawing, setIsDrawing] = useState(false);
-  const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
-  const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Popover state
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [popoverPos, setPopoverPos] = useState({ x: 0, y: 0 });
-  const [pendingAnnotation, setPendingAnnotation] = useState<any>(null);
-  const [classLabel, setClassLabel] = useState('object');
-  const [classText, setClassText] = useState('');
+  const generateProjectMeta = () => {
+    return {
+      folders: folders.map((f, i) => ({
+        Id: i + 1,
+        path: f.path,
+        "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
+        "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
+        "files total": f.files ? f.files.length : 0,
+        "image meta": {
+          width: f.metadata?.width || 'Unknown',
+          height: f.metadata?.height || 'Unknown',
+          bands: f.metadata?.bands || 'Unknown',
+          "data type": f.metadata?.fileType || 'uint8'
+        }
+      })),
+      views: views.map((v, i) => {
+        const fIndex = folders.findIndex(f => f.id === v.folderId);
+        
+        const safeTransform = {
+          crop: (v.transform as any)?.crop || { t: 0, r: 100, b: 100, l: 0 },
+          scaleX: v.transform?.scaleX ?? 1,
+          scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
+          offsetX: v.transform?.offsetX ?? 0,
+          offsetY: v.transform?.offsetY ?? 0
+        };
 
-  // Grid layout calculation
-  const gridCols = Math.ceil(Math.sqrt(Math.max(1, views.length)));
-  const gridRows = Math.ceil(Math.max(1, views.length) / gridCols);
-
-  // Filter annotations for current stem
-  const currentAnnotations = annotations.filter(a => a.stem === currentStem);
-
-  const handleWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const zoomFactor = 1.1;
-    const newZoom = e.deltaY < 0 ? viewport.zoom * zoomFactor : viewport.zoom / zoomFactor;
-    setViewport(newZoom, viewport.panX, viewport.panY);
+        return {
+          id: v.isMain ? 'main view' : `aug view ${i}`, 
+          "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
+          bands: v.bands,
+          isMain: v.isMain,
+          transform: safeTransform
+        };
+      })
+    };
   };
 
-  const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
-    if (tool === 'select') return;
-    if (popoverOpen) setPopoverOpen(false);
+  const meta = generateProjectMeta();
 
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
-    const y = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
-
-    const view = views.find(v => v.id === viewId);
-    let mainX = x;
-    let mainY = y;
-    if (view && !view.isMain) {
-      mainX = (x - view.transform.offsetX) / view.transform.scaleX;
-      mainY = (y - view.transform.offsetY) / view.transform.scaleY;
-    }
-
-    if (tool === 'bbox') {
-      setIsDrawing(true);
-      setCurrentPoints([{ x: mainX, y: mainY }, { x: mainX, y: mainY }]);
-    } else if (tool === 'polygon') {
-      setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
-    }
-  };
-
-  const handleMouseMove = (e: React.MouseEvent, viewId: string) => {
-    if (!isDrawing || tool !== 'bbox') return;
-
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
-    const y = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
-
-    const view = views.find(v => v.id === viewId);
-    let mainX = x;
-    let mainY = y;
-    if (view && !view.isMain) {
-      mainX = (x - view.transform.offsetX) / view.transform.scaleX;
-      mainY = (y - view.transform.offsetY) / view.transform.scaleY;
-    }
-
-    setCurrentPoints([currentPoints[0], { x: mainX, y: mainY }]);
-  };
-
-  const handleMouseUp = (e: React.MouseEvent) => {
-    if (tool === 'bbox' && isDrawing) {
-      setIsDrawing(false);
-      if (currentPoints.length === 2) {
-        setPendingAnnotation({
-          type: 'bbox',
-          points: currentPoints,
-        });
-        setPopoverPos({ x: e.clientX, y: e.clientY });
-        setPopoverOpen(true);
-      }
-      setCurrentPoints([]);
-    }
-  };
-
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && tool === 'polygon' && currentPoints.length > 2) {
-      setPendingAnnotation({
-        type: 'polygon',
-        points: currentPoints,
-      });
-      // Approximate position for popover (last point)
-      const lastPoint = currentPoints[currentPoints.length - 1];
-      const screenX = (lastPoint.x * viewport.zoom) + viewport.panX;
-      const screenY = (lastPoint.y * viewport.zoom) + viewport.panY;
-      
-      setPopoverPos({ x: screenX + 300, y: screenY + 100 }); // Rough estimate, ideally relative to container
-      setPopoverOpen(true);
-      setCurrentPoints([]);
-    } else if (e.key === 'Escape') {
-      setCurrentPoints([]);
-      setIsDrawing(false);
-      setPopoverOpen(false);
-    }
-  };
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [currentPoints, tool, viewport]);
-
-  const savePendingAnnotation = () => {
-    if (pendingAnnotation && currentStem) {
-      addAnnotation({
-        id: Math.random().toString(36).substr(2, 9),
-        ...pendingAnnotation,
-        label: classLabel,
-        text: classText,
-        stem: currentStem
-      });
-      setPopoverOpen(false);
-      setPendingAnnotation(null);
-      setClassText('');
-    }
+  const handleExportJSON = () => {
+    const blob = new Blob([JSON.stringify(meta, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'project_meta.json';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="flex h-full overflow-hidden bg-neutral-900 text-white relative">
-      {/* Left Toolbar */}
-      <div className="w-16 border-r border-neutral-800 flex flex-col items-center py-4 space-y-4 bg-neutral-950 shrink-0">
-        <Button 
-          variant={tool === 'select' ? 'default' : 'ghost'} 
-          size="icon" 
-          onClick={() => setTool('select')}
-          title="Select / Pan"
-        >
-          <MousePointer2 className="w-5 h-5" />
-        </Button>
-        <Button 
-          variant={tool === 'bbox' ? 'default' : 'ghost'} 
-          size="icon" 
-          onClick={() => setTool('bbox')}
-          title="Bounding Box"
-        >
-          <Square className="w-5 h-5" />
-        </Button>
-        <Button 
-          variant={tool === 'polygon' ? 'default' : 'ghost'} 
-          size="icon" 
-          onClick={() => setTool('polygon')}
-          title="Polygon (Press Enter to finish)"
-        >
-          <Hexagon className="w-5 h-5" />
-        </Button>
-        <div className="flex-grow" />
-        <Button variant="ghost" size="icon" title="Save to Disk">
-          <Save className="w-5 h-5" />
-        </Button>
-      </div>
-
-      {/* Grid Workspace */}
-      <div 
-        className="flex-grow p-4 overflow-hidden relative"
-        ref={containerRef}
-        onWheel={handleWheel}
-      >
-        {views.length === 0 ? (
-          <div className="w-full h-full flex items-center justify-center text-neutral-500 border-2 border-dashed border-neutral-800 rounded-lg">
-            No views configured. Please go to Data Preload to set up your project.
+    <div className="flex flex-col h-full bg-neutral-950 overflow-hidden">
+      {/* 核心展示区：左右双栏布局 */}
+      <div className="flex-1 grid grid-cols-2 gap-6 p-6 overflow-hidden">
+        
+        {/* 左侧：Folders 信息 */}
+        <div className="flex flex-col h-full border border-neutral-800 bg-neutral-900 overflow-hidden rounded-xl">
+          <div className="p-4 border-b border-neutral-800 shrink-0 bg-neutral-900">
+            <h3 className="flex items-center gap-2 text-neutral-200 font-bold">
+              <FolderOpen className="w-5 h-5 text-amber-500" /> 
+              Data Folders ({meta.folders.length})
+            </h3>
           </div>
-        ) : (
-          <div 
-            className="w-full h-full grid gap-4"
-            style={{ 
-              gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`,
-              gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))`
-            }}
-          >
-            {views.map((view, index) => (
-              <div key={view.id} className="relative border border-neutral-800 bg-black rounded-lg overflow-hidden">
-                <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300">
-                  {view.isMain ? 'Main View' : `Aug View ${index}`}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            {meta.folders.map((folder) => (
+              <div key={folder.Id} className="bg-black/40 border border-neutral-800 rounded-lg p-4 space-y-3">
+                <div className="flex items-center gap-3 border-b border-neutral-800/50 pb-2">
+                  <span className="bg-neutral-800 text-neutral-300 px-2 py-0.5 rounded text-xs font-bold font-mono">ID: {folder.Id}</span>
+                  <span className="text-sm font-semibold text-neutral-200 truncate" title={folder.path}>{folder.path}</span>
                 </div>
-                <CanvasView 
-                  view={view} 
-                  annotations={currentAnnotations}
-                  currentPoints={currentPoints}
-                  tool={tool}
-                  onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, view.id)}
-                  onMouseMove={(e: React.MouseEvent) => handleMouseMove(e, view.id)}
-                  onMouseUp={handleMouseUp}
-                />
+                
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="bg-neutral-900 p-2 rounded border border-neutral-800/50 flex flex-col items-center justify-center">
+                    <span className="text-[10px] text-neutral-500 uppercase">Valid Files</span>
+                    <span className="text-lg font-mono text-green-400">{folder["files in sceneGroups"]}</span>
+                  </div>
+                  <div className="bg-neutral-900 p-2 rounded border border-neutral-800/50 flex flex-col items-center justify-center">
+                    <span className="text-[10px] text-neutral-500 uppercase">Skipped</span>
+                    <span className="text-lg font-mono text-red-400">{folder["files Skipped"]}</span>
+                  </div>
+                  <div className="bg-neutral-900 p-2 rounded border border-neutral-800/50 flex flex-col items-center justify-center">
+                    <span className="text-[10px] text-neutral-500 uppercase">Total</span>
+                    <span className="text-lg font-mono text-blue-400">{folder["files total"]}</span>
+                  </div>
+                </div>
+
+                <div className="bg-neutral-900 p-3 rounded border border-neutral-800/50 text-xs font-mono text-neutral-400 grid grid-cols-2 gap-y-2">
+                  <div><span className="text-neutral-500 mr-2">Size:</span>{folder["image meta"].width} x {folder["image meta"].height}</div>
+                  <div><span className="text-neutral-500 mr-2">Bands:</span>{folder["image meta"].bands}</div>
+                  <div className="col-span-2"><span className="text-neutral-500 mr-2">Type:</span>{folder["image meta"]["data type"]}</div>
+                </div>
               </div>
             ))}
+            {meta.folders.length === 0 && <div className="text-center text-neutral-500 py-8">No folders loaded.</div>}
           </div>
-        )}
+        </div>
 
-        {/* Floating Popover for Class Selection */}
-        {popoverOpen && (
-          <div 
-            className="absolute z-50 bg-card text-card-foreground border shadow-lg rounded-lg p-4 w-64 space-y-4"
-            style={{ left: Math.min(popoverPos.x, window.innerWidth - 300), top: Math.min(popoverPos.y, window.innerHeight - 200) }}
-          >
-            <h4 className="font-semibold text-sm">Annotation Details</h4>
-            <div className="space-y-2">
-              <Label className="text-xs">Class Label</Label>
-              <Input 
-                value={classLabel} 
-                onChange={(e) => setClassLabel(e.target.value)} 
-                placeholder="e.g. car, building"
-                autoFocus
-              />
-            </div>
-            <div className="space-y-2">
-              <Label className="text-xs">Additional Text (Optional)</Label>
-              <Input 
-                value={classText} 
-                onChange={(e) => setClassText(e.target.value)} 
-                placeholder="Notes..."
-                onKeyDown={(e) => e.key === 'Enter' && savePendingAnnotation()}
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="ghost" size="sm" onClick={() => setPopoverOpen(false)}>Cancel</Button>
-              <Button size="sm" onClick={savePendingAnnotation}>Save</Button>
-            </div>
+        {/* 右侧：Views 信息 */}
+        <div className="flex flex-col h-full border border-neutral-800 bg-neutral-900 overflow-hidden rounded-xl">
+          <div className="p-4 border-b border-neutral-800 shrink-0 bg-neutral-900">
+            <h3 className="flex items-center gap-2 text-neutral-200 font-bold">
+              <Layers className="w-5 h-5 text-blue-500" /> 
+              Configured Views ({meta.views.length})
+            </h3>
           </div>
-        )}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            {meta.views.map((view) => (
+              <div key={view.id} className="bg-black/40 border border-neutral-800 rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-neutral-800/50 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${view.isMain ? 'bg-blue-600/20 text-blue-400 border border-blue-600/30' : 'bg-amber-600/20 text-amber-400 border border-amber-600/30'}`}>
+                      {view.id}
+                    </span>
+                    {view.isMain && <span className="text-[10px] text-neutral-500 border border-neutral-700 px-1 rounded">Base Reference</span>}
+                  </div>
+                  <span className="text-xs text-neutral-400 font-mono">Folder ID: {view["folder id"]}</span>
+                </div>
+
+                <div className="bg-neutral-900 p-3 rounded border border-neutral-800/50 text-xs font-mono text-neutral-400 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-neutral-500 w-16">Bands:</span>
+                    <div className="flex gap-1">
+                      {view.bands.map((b, idx) => (
+                         <span key={idx} className={`w-5 h-5 flex items-center justify-center rounded ${b === 0 ? 'bg-neutral-800 text-neutral-600' : 'bg-neutral-700 text-white'}`}>{b}</span>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {!view.isMain && (
+                    <>
+                      <div className="h-px bg-neutral-800 my-2"></div>
+                      <div className="flex justify-between">
+                        <span className="text-neutral-500">Crop:</span>
+                        <span className="text-amber-400">
+                          {view.transform.crop.t.toFixed(1)}%, {view.transform.crop.r.toFixed(1)}%, {view.transform.crop.b.toFixed(1)}%, {view.transform.crop.l.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-neutral-500">Scale:</span>
+                        <span className="text-green-400">{view.transform.scaleX.toFixed(3)}, {view.transform.scaleY.toFixed(3)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-neutral-500">Offset:</span>
+                        <span className="text-blue-400">{view.transform.offsetX.toFixed(0)}px, {view.transform.offsetY.toFixed(0)}px</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+            {meta.views.length === 0 && <div className="text-center text-neutral-500 py-8">No views configured.</div>}
+          </div>
+        </div>
+
       </div>
       
-      {/* Right Panel: Project Meta, Labels, Scene Groups */}
-      <div className="w-72 border-l border-neutral-800 bg-neutral-950 flex flex-col shrink-0">
-        
-        {/* Top: Project Meta */}
-        <div className="p-4 border-b border-neutral-800 space-y-3">
-          <h3 className="font-semibold text-sm text-neutral-300 flex items-center gap-2">
-            <Database className="w-4 h-4" /> Project Meta
-          </h3>
-          <div className="grid grid-cols-2 gap-2 text-xs text-neutral-400">
-            <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
-              <span className="block text-neutral-500 mb-1">Folders</span>
-              <span className="font-mono text-neutral-200">{folders.length}</span>
-            </div>
-            <div className="bg-neutral-900 p-2 rounded border border-neutral-800">
-              <span className="block text-neutral-500 mb-1">Views</span>
-              <span className="font-mono text-neutral-200">{views.length}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Middle: Label Info */}
-        <div className="flex-grow flex flex-col border-b border-neutral-800 overflow-hidden">
-          <div className="p-4 pb-2">
-            <h3 className="font-semibold text-sm text-neutral-300 flex items-center gap-2">
-              <Layers className="w-4 h-4" /> Labels ({currentAnnotations.length})
-            </h3>
-          </div>
-          <div className="flex-grow overflow-y-auto p-2 space-y-2">
-            {currentAnnotations.length === 0 ? (
-              <div className="text-xs text-neutral-600 text-center py-4">No labels in this scene</div>
-            ) : (
-              currentAnnotations.map((ann, i) => (
-                <div key={ann.id} className="p-2 bg-neutral-900 rounded border border-neutral-800 text-sm flex flex-col gap-1 hover:border-primary/50 cursor-pointer transition-colors">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium text-neutral-200">{ann.label}</span>
-                    <span className="text-[10px] text-neutral-500 uppercase bg-neutral-950 px-1.5 py-0.5 rounded">{ann.type}</span>
-                  </div>
-                  {ann.text && <span className="text-xs text-neutral-400 truncate">{ann.text}</span>}
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Bottom: Scene Group Stem List */}
-        <div className="h-1/3 flex flex-col overflow-hidden">
-          <div className="p-4 pb-2">
-            <h3 className="font-semibold text-sm text-neutral-300 flex items-center gap-2">
-              <ImageIcon className="w-4 h-4" /> Scene Groups
-            </h3>
-          </div>
-          <div className="flex-grow overflow-y-auto p-2 space-y-1">
-            {stems.length === 0 ? (
-              <div className="text-xs text-neutral-600 text-center py-4">No scenes loaded</div>
-            ) : (
-              stems.map((stem) => (
-                <button
-                  key={stem}
-                  onClick={() => setCurrentStem(stem)}
-                  className={`w-full text-left px-3 py-2 text-sm rounded transition-colors ${
-                    currentStem === stem 
-                      ? 'bg-primary/20 text-primary border border-primary/30' 
-                      : 'text-neutral-400 hover:bg-neutral-900 border border-transparent'
-                  }`}
-                >
-                  <span className="font-mono">{stem}</span>
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-
+      {/* 底部操作区 */}
+      <div className="p-4 border-t border-neutral-800 bg-neutral-900 flex justify-between items-center shrink-0">
+         <span className="text-xs text-neutral-500 flex items-center gap-1">
+           <Database className="w-3 h-3"/> Live Project State
+         </span>
+         <Button onClick={handleExportJSON} variant="outline" className="border-blue-800 text-blue-400 hover:bg-blue-900/30">
+           <Download className="w-4 h-4 mr-2" /> Download JSON Config
+         </Button>
       </div>
     </div>
   );
 }
-
 // Sub-component to render individual canvas views
 function CanvasView({ view, annotations, currentPoints, tool, onMouseDown, onMouseMove, onMouseUp }: any) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
