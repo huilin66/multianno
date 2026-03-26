@@ -10,7 +10,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { Alert, AlertDescription, AlertTitle } from './ui/alert';
 
 import { 
-  Menu, Layers, Settings, Download, FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2,
+  Menu, Layers, Settings, Download, FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, CheckCircle2,
   Eye, EyeOff, Maximize, Move, Save, MousePointer2, Square, Hexagon, Database, Image as ImageIcon,RotateCcw,Zap,
   AlertTriangle, FileJson, FileText, Hand, Settings2, SplitSquareHorizontal // 新增这几个
 } from 'lucide-react';
@@ -467,6 +467,15 @@ export function ViewExtentCheck() {
 
   // 操作B：拉伸控制状态
   const [draggingTransformHandle, setDraggingTransformHandle] = useState<'t' | 'l' | 'r' | 'b' | 'br' | null>(null);
+  
+  // --- 进度与预设状态 ---
+  // 记录已完成对齐检查的视图 ID
+  const [completedViews, setCompletedViews] = useState<Set<string>>(new Set());
+  // 保存的对齐参数库 (Presets)
+  const [savedAlignments, setSavedAlignments] = useState<Array<{id: string, name: string, crop: any, transform: any}>>([]);
+  // 用于强制刷新右侧参数显示面板的 Tick
+  const [renderTick, setRenderTick] = useState(0);
+  
   // --- 【高性能重构】专用 Refs ---
   const isDraggingRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
@@ -721,6 +730,9 @@ export function ViewExtentCheck() {
         canvasRef.current.releasePointerCapture(e.pointerId);
         canvasRef.current.style.userSelect = 'auto';
     }
+
+    // 【新增】：强制刷新右侧参数面板
+    setRenderTick(p => p + 1);
   };
 
   const handleWheel = (e: React.WheelEvent) => {
@@ -824,8 +836,65 @@ export function ViewExtentCheck() {
     setCrops({ ...crops, [activeAugView.id]: { t: 0, r: 100, b: 100, l: 0 } });
   };
   // 校验逻辑
-  const validateAndConfirm = () => {
-    if (!mainImgRef.current || !augImgRef.current) return;
+  // const validateAndConfirm = () => {
+  //   if (!mainImgRef.current || !augImgRef.current) return;
+    
+  //   const mainRect = mainImgRef.current.getBoundingClientRect();
+  //   const augRect = augImgRef.current.getBoundingClientRect();
+    
+  //   const cropPhysical = {
+  //     top: augRect.top + (activeCrop.t / 100) * augRect.height,
+  //     bottom: augRect.top + (activeCrop.b / 100) * augRect.height,
+  //     left: augRect.left + (activeCrop.l / 100) * augRect.width,
+  //     right: augRect.left + (activeCrop.r / 100) * augRect.width,
+  //   };
+
+  //   const isAligned = 
+  //     Math.abs(cropPhysical.top - mainRect.top) < 2 &&
+  //     Math.abs(cropPhysical.bottom - mainRect.bottom) < 2 &&
+  //     Math.abs(cropPhysical.left - mainRect.left) < 2 &&
+  //     Math.abs(cropPhysical.right - mainRect.right) < 2;
+
+  //   if (isAligned) {
+  //     alert("Alignment Validated Successfully!");
+  //     setActiveModule('export');
+  //   } else {
+  //     const autoAlign = window.confirm("The current Aug View crop box does not match the Main View.\n\nAuto-snap the crop box to the Main View boundary?");
+      
+  //     if (autoAlign) {
+  //       const newCropT = ((mainRect.top - augRect.top) / augRect.height) * 100;
+  //       const newCropB = ((mainRect.bottom - augRect.top) / augRect.height) * 100;
+  //       const newCropL = ((mainRect.left - augRect.left) / augRect.width) * 100;
+  //       const newCropR = ((mainRect.right - augRect.left) / augRect.width) * 100;
+        
+  //       setCrops({
+  //         ...crops,
+  //         [activeAugView.id]: {
+  //           t: Math.max(0, Math.min(100, newCropT)),
+  //           b: Math.max(0, Math.min(100, newCropB)),
+  //           l: Math.max(0, Math.min(100, newCropL)),
+  //           r: Math.max(0, Math.min(100, newCropR)),
+  //         }
+  //       });
+  //       setAlignSubMode('crop'); 
+  //     }
+  //   }
+  // };
+// --- 预设与验证逻辑 ---
+
+  // 应用某个对齐参数到当前视图
+  const applyAlignmentPreset = (crop: any, transform: any) => {
+    if (!activeAugView) return;
+    setCrops({ ...crops, [activeAugView.id]: crop });
+    tempTransformRef.current = { ...transform };
+    updateAugDOMTransform();
+    updateView(activeAugView.id, { transform });
+    setRenderTick(p => p + 1);
+  };
+
+  // 检查并保存当前 View 的对齐状态
+  const handleSaveCurrentView = () => {
+    if (!mainImgRef.current || !augImgRef.current || !activeAugView) return;
     
     const mainRect = mainImgRef.current.getBoundingClientRect();
     const augRect = augImgRef.current.getBoundingClientRect();
@@ -837,38 +906,48 @@ export function ViewExtentCheck() {
       right: augRect.left + (activeCrop.r / 100) * augRect.width,
     };
 
+    // 容差 2px
     const isAligned = 
       Math.abs(cropPhysical.top - mainRect.top) < 2 &&
       Math.abs(cropPhysical.bottom - mainRect.bottom) < 2 &&
       Math.abs(cropPhysical.left - mainRect.left) < 2 &&
       Math.abs(cropPhysical.right - mainRect.right) < 2;
 
-    if (isAligned) {
-      alert("Alignment Validated Successfully!");
-      setActiveModule('export');
-    } else {
-      const autoAlign = window.confirm("The current Aug View crop box does not match the Main View.\n\nAuto-snap the crop box to the Main View boundary?");
+    const markAsCompleteAndSave = () => {
+      // 1. 标记为完成
+      setCompletedViews(prev => new Set(prev).add(activeAugView.id));
       
+      // 2. 将此参数作为复用预设保存到库中
+      const presetName = `Param Set ${savedAlignments.length + 1}`;
+      setSavedAlignments(prev => [
+        ...prev, 
+        { id: Math.random().toString(), name: presetName, crop: { ...activeCrop }, transform: { ...tempTransformRef.current } }
+      ]);
+    };
+
+    if (isAligned) {
+      markAsCompleteAndSave();
+    } else {
+      const autoAlign = window.confirm("Current crop box is NOT perfectly aligned with the Main View.\n\nDo you want the system to Auto-Align (Fit to Main) and save?");
       if (autoAlign) {
-        const newCropT = ((mainRect.top - augRect.top) / augRect.height) * 100;
-        const newCropB = ((mainRect.bottom - augRect.top) / augRect.height) * 100;
-        const newCropL = ((mainRect.left - augRect.left) / augRect.width) * 100;
-        const newCropR = ((mainRect.right - augRect.left) / augRect.width) * 100;
-        
-        setCrops({
-          ...crops,
-          [activeAugView.id]: {
-            t: Math.max(0, Math.min(100, newCropT)),
-            b: Math.max(0, Math.min(100, newCropB)),
-            l: Math.max(0, Math.min(100, newCropL)),
-            r: Math.max(0, Math.min(100, newCropR)),
-          }
+        handleFitToMain(); 
+        // 延迟一帧等待 transform 生效后标记完成
+        requestAnimationFrame(() => {
+          markAsCompleteAndSave();
+          setRenderTick(p => p + 1);
         });
-        setAlignSubMode('crop'); 
       }
     }
   };
 
+  // 所有视图对齐完毕，进入下一步
+  const proceedToExport = () => {
+    if (completedViews.size < augViews.length) {
+      alert("Please save and confirm alignment for ALL Aug Views before proceeding.");
+      return;
+    }
+    setActiveModule('export');
+  };
 // 【修改2】：在 return 之前，计算当前互斥模式下的最终参数
   const isOpacityMode = topBarConfig.mode === 'opacity';
   const isSwipeXMode = topBarConfig.mode === 'swipeX';
@@ -1170,29 +1249,98 @@ export function ViewExtentCheck() {
         </div>
 
         {/* 右侧面板 (精简占位，您可根据需要保留原有滑块) */}
-        <div className="w-80 bg-neutral-900 flex flex-col shrink-0 border-l border-neutral-800">
-          <div className="p-4 border-b border-neutral-800 bg-neutral-950">
-             <h2 className="text-sm font-semibold flex items-center gap-2 mb-3"><Settings2 className="w-4 h-4"/> Active Aug View</h2>
-             <Select value={activeAugId} onValueChange={setActiveAugId}>
-              <SelectTrigger className="w-full bg-neutral-900"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {augViews.map((v, i) => <SelectItem key={v.id} value={v.id}>Aug View {i + 1}</SelectItem>)}
-              </SelectContent>
-            </Select>
-          </div>
+{/* 右侧面板 (全新工作流层级布局) */}
+        <div className="w-[340px] bg-neutral-900 flex flex-col shrink-0 border-l border-neutral-800">
           
-          <div className="flex-1 p-5 overflow-y-auto space-y-8">
-            <div className="p-4 bg-blue-900/20 border border-blue-500/30 rounded-lg text-xs text-blue-200 leading-relaxed">
-              <Info className="w-4 h-4 mb-2 text-blue-400" />
-              Use <strong>Op A</strong> to define the crop area. Use <strong>Op B</strong> to move or stretch the image to align perfectly.
-            </div>
+          {/* 1. 已存在的对齐参数库 (Presets) */}
+          <div className="p-4 border-b border-neutral-800 flex flex-col max-h-[220px] shrink-0">
+             <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3">Existing Parameters</h2>
+             <div className="overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+                {/* 默认重置参数 */}
+                <div className="flex items-center justify-between bg-neutral-950 border border-neutral-800 p-2 rounded-md">
+                   <span className="text-xs text-neutral-300 font-mono">Default (Reset)</span>
+                   <Button size="sm" variant="secondary" className="h-6 px-2 text-[10px]" 
+                     onClick={() => applyAlignmentPreset({ t: 0, r: 100, b: 100, l: 0 }, { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 })}>
+                     Apply
+                   </Button>
+                </div>
+                {/* 动态生成的已存参数 */}
+                {savedAlignments.map((preset) => (
+                  <div key={preset.id} className="flex items-center justify-between bg-blue-950/20 border border-blue-900/50 p-2 rounded-md">
+                     <span className="text-xs text-blue-300 font-mono">{preset.name}</span>
+                     <Button size="sm" variant="default" className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-500" 
+                       onClick={() => applyAlignmentPreset(preset.crop, preset.transform)}>
+                       Apply
+                     </Button>
+                  </div>
+                ))}
+             </div>
           </div>
 
-          <div className="p-4 border-t border-neutral-800 bg-neutral-950 space-y-3 shrink-0">
-            <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={validateAndConfirm}>
-               Validate & Confirm Alignment <Check className="w-4 h-4 ml-2"/>
+          {/* 2. Aug View 列表 (滚动选择) */}
+          <div className="p-4 border-b border-neutral-800 flex flex-col h-[200px] shrink-0">
+             <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3 flex justify-between">
+               <span>Active Aug Views</span>
+               <span className="text-blue-500">{completedViews.size} / {augViews.length}</span>
+             </h2>
+             <div className="overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
+               {augViews.map((v, i) => {
+                 const isActive = v.id === activeAugId;
+                 const isCompleted = completedViews.has(v.id);
+                 return (
+                   <button 
+                     key={v.id}
+                     onClick={() => setActiveAugId(v.id)}
+                     className={`w-full flex items-center justify-between p-2.5 rounded-md text-sm transition-all border
+                       ${isActive ? 'bg-neutral-800 border-neutral-600 shadow-sm' : 'bg-transparent border-transparent hover:bg-neutral-800/50 text-neutral-400'}
+                     `}
+                   >
+                     <span className="font-medium">Aug View {i + 1}</span>
+                     {isCompleted && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                   </button>
+                 );
+               })}
+             </div>
+          </div>
+          
+          {/* 3. 当前视图实时参数与保存按钮 */}
+          <div className="flex-1 p-4 flex flex-col bg-neutral-950 overflow-hidden">
+            <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3">Current Parameters</h2>
+            <div className="bg-black border border-neutral-800 rounded-lg p-3 font-mono text-[11px] text-neutral-400 space-y-2 mb-4 shrink-0 shadow-inner">
+               <div className="flex justify-between">
+                 <span className="text-neutral-500">Crop (T/R/B/L):</span>
+                 <span className="text-amber-400">{activeCrop.t.toFixed(1)}%, {activeCrop.r.toFixed(1)}%, {activeCrop.b.toFixed(1)}%, {activeCrop.l.toFixed(1)}%</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-neutral-500">Scale (X/Y):</span>
+                 <span className="text-blue-400">{tempTransformRef.current.scaleX.toFixed(3)}, {tempTransformRef.current.scaleY.toFixed(3)}</span>
+               </div>
+               <div className="flex justify-between">
+                 <span className="text-neutral-500">Offset (X/Y):</span>
+                 <span className="text-blue-400">{tempTransformRef.current.offsetX.toFixed(0)}px, {tempTransformRef.current.offsetY.toFixed(0)}px</span>
+               </div>
+            </div>
+
+            <Button 
+              className={`w-full shrink-0 ${completedViews.has(activeAugId) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`} 
+              onClick={handleSaveCurrentView}
+            >
+               {completedViews.has(activeAugId) ? 'Aligned & Saved' : 'Save Alignment'}
+               {completedViews.has(activeAugId) ? <CheckCircle2 className="w-4 h-4 ml-2"/> : <Download className="w-4 h-4 ml-2"/>}
             </Button>
           </div>
+
+          {/* 4. 最终完成操作区 */}
+          <div className="p-4 border-t border-neutral-800 bg-neutral-900 shrink-0">
+            <Button 
+              className="w-full bg-white text-black hover:bg-neutral-200 font-bold" 
+              onClick={proceedToExport}
+              disabled={completedViews.size < augViews.length}
+            >
+               Proceed to Annotation <Check className="w-4 h-4 ml-2"/>
+            </Button>
+          </div>
+
         </div>
       </div>
       
