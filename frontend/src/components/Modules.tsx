@@ -1257,49 +1257,47 @@ export function ViewExtentCheck() {
           </div>
         </div>
 
-        {/* 右侧面板 (精简占位，您可根据需要保留原有滑块) */}
-{/* 右侧面板 (全新工作流层级布局) */}
-{/* 右侧面板 (全新工作流层级布局) */}
+        {/* 右侧面板 (极致紧凑的专业工作流布局) */}
         <div className="w-[340px] bg-neutral-900 flex flex-col shrink-0 border-l border-neutral-800">
           
-          {/* 1. 已存在的对齐参数库 (Presets) */}
-          <div className="p-4 border-b border-neutral-800 flex flex-col h-[220px] shrink-0">
-             <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3">Existing Parameters</h2>
-             <div className="overflow-y-auto pr-1 space-y-2 custom-scrollbar">
+          {/* 1. 已存在的对齐参数库 (Presets) - 【修改】：高度从 140px 增加到 190px (分配更多空间) */}
+          <div className="p-3 border-b border-neutral-800 flex flex-col h-[140px] shrink-0">
+             <h2 className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-2">Existing Parameters</h2>
+             <div className="overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
                 {/* 默认重置参数 */}
-                <div className="flex items-center justify-between bg-neutral-950 border border-neutral-800 p-2 rounded-md">
-                   <span className="text-xs text-neutral-300 font-mono">Default (Reset)</span>
-                   <Button size="sm" variant="secondary" className="h-6 px-2 text-[10px]" 
+                <div className="flex items-center justify-between bg-neutral-950 border border-neutral-800 py-1 px-2 rounded-md">
+                   <span className="text-[11px] text-neutral-300 font-mono">Default (Reset)</span>
+                   <Button size="sm" variant="secondary" className="h-5 px-2 text-[9px]" 
                      onClick={() => applyAlignmentPreset({ t: 0, r: 100, b: 100, l: 0 }, { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 })}>
                      Apply
                    </Button>
                 </div>
-                {/* 【修改】动态生成的已存参数：展示具体数值 */}
+                {/* 动态生成的已存参数 */}
                 {savedAlignments.map((preset) => (
-                  <div key={preset.id} className="flex flex-col bg-blue-950/20 border border-blue-900/50 p-2 rounded-md space-y-1.5">
+                  <div key={preset.id} className="flex flex-col bg-blue-950/20 border border-blue-900/50 p-1.5 rounded-md space-y-1">
                      <div className="flex items-center justify-between">
-                       <span className="text-xs text-blue-300 font-bold">{preset.name}</span>
-                       <Button size="sm" variant="default" className="h-6 px-2 text-[10px] bg-blue-600 hover:bg-blue-500" 
+                       <span className="text-[11px] text-blue-300 font-bold">{preset.name}</span>
+                       <Button size="sm" variant="default" className="h-5 px-2 text-[9px] bg-blue-600 hover:bg-blue-500" 
                          onClick={() => applyAlignmentPreset(preset.crop, preset.transform)}>
                          Apply
                        </Button>
                      </div>
-                     <div className="text-[10px] text-neutral-400 font-mono leading-tight">
-                       Crop: {preset.crop.t.toFixed(1)}, {preset.crop.r.toFixed(1)}, {preset.crop.b.toFixed(1)}, {preset.crop.l.toFixed(1)}<br/>
-                       Scale: {preset.transform.scaleX.toFixed(3)}, {preset.transform.scaleY.toFixed(3)}
+                     <div className="text-[9px] text-neutral-400 font-mono leading-tight flex justify-between">
+                       <span>Crop: {preset.crop.t.toFixed(1)}, {preset.crop.r.toFixed(1)}, {preset.crop.b.toFixed(1)}, {preset.crop.l.toFixed(1)}</span>
+                       <span>Scale: {preset.transform.scaleX.toFixed(2)}</span>
                      </div>
                   </div>
                 ))}
              </div>
           </div>
 
-          {/* 2. Aug View 列表 (滚动选择) */}
-          <div className="p-4 border-b border-neutral-800 flex flex-col h-[180px] shrink-0">
-             <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3 flex justify-between">
+          {/* 2. Aug View 列表 (滚动选择) - 【修改】：高度从 110px 增加到 150px */}
+          <div className="p-3 border-b border-neutral-800 flex flex-col h-[140px] shrink-0">
+             <h2 className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-2 flex justify-between">
                <span>Active Aug Views</span>
                <span className="text-blue-500">{completedViews.size} / {augViews.length}</span>
              </h2>
-             <div className="overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
+             <div className="overflow-y-auto pr-1 space-y-1 custom-scrollbar">
                {augViews.map((v, i) => {
                  const isActive = v.id === activeAugId;
                  const isCompleted = completedViews.has(v.id);
@@ -1307,55 +1305,54 @@ export function ViewExtentCheck() {
                    <button 
                      key={v.id}
                      onClick={() => setActiveAugId(v.id)}
-                     className={`w-full flex items-center justify-between p-2.5 rounded-md text-sm transition-all border
-                       ${isActive ? 'bg-neutral-800 border-neutral-600 shadow-sm' : 'bg-transparent border-transparent hover:bg-neutral-800/50 text-neutral-400'}
+                     className={`w-full flex items-center justify-between py-1.5 px-2 rounded-md text-[11px] transition-all border
+                       ${isActive ? 'bg-neutral-800 border-neutral-600 shadow-sm text-white' : 'bg-transparent border-transparent hover:bg-neutral-800/50 text-neutral-400'}
                      `}
                    >
                      <span className="font-medium">Aug View {i + 1}</span>
-                     {isCompleted && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                     {isCompleted && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
                    </button>
                  );
                })}
              </div>
           </div>
           
-          {/* 3. 当前视图实时参数与保存按钮 (带输入框与滑块) */}
-          <div className="flex-1 p-4 flex flex-col bg-neutral-950 overflow-hidden">
-            <h2 className="text-xs font-bold text-neutral-500 uppercase tracking-wider mb-3">Current Parameters</h2>
+{/* 3. 当前视图实时参数 (极致紧凑，尽量一次性显示) */}
+          {/* 【修复1】：最外层加上 min-h-0 防止被内部内容强行撑开 */}
+          <div className="flex-1 p-3 flex flex-col bg-neutral-950 overflow-hidden min-h-0">
+            <h2 className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-2 shrink-0">Current Parameters</h2>
             
-            {/* 参数控制区 */}
-            <div className="overflow-y-auto pr-1 mb-4 space-y-4 custom-scrollbar">
+            {/* 【修复2】：加上 flex-1 min-h-0，让它成为一个受限的内部滚动区域！ */}
+            <div className="flex-1 min-h-0 overflow-y-auto pr-1 space-y-2.5 custom-scrollbar pb-1">
               
               {/* Crop 控制 */}
-              <div className="space-y-1.5">
-                <div className="text-[10px] text-neutral-500 font-bold mb-1">CROP (%)</div>
+              <div className="space-y-1">
+                <div className="text-[9px] text-neutral-600 font-bold">CROP (%)</div>
                 {['t', 'b', 'l', 'r'].map(edge => (
-                  <div key={edge} className="flex items-center gap-2">
-                    <span className="w-3 text-[10px] uppercase text-neutral-400">{edge}</span>
+                  <div key={edge} className="flex items-center gap-1.5">
+                    <span className="w-3 text-[9px] uppercase text-neutral-500">{edge}</span>
                     <Slider 
                       min={0} max={100} step={0.1} 
                       value={[activeCrop[edge as 't'|'r'|'b'|'l']]} 
-                      // 【修复 1】：加入 Array.isArray 检查，防止 undefined 崩溃
                       onValueChange={(v) => handleManualCropChange(edge as any, Array.isArray(v) ? v[0] : (v as number))} 
                       className="flex-1" 
                     />
                     <Input 
                       type="number" 
-                      // 【修复 2】：去掉了 .toFixed()，让原生浏览器接管数字输入，防止输入小数点时卡顿或光标乱跳
                       value={activeCrop[edge as 't'|'r'|'b'|'l']} 
                       onChange={(e) => handleManualCropChange(edge as any, parseFloat(e.target.value) || 0)} 
-                      className="w-14 h-6 text-[10px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                      className="w-12 h-5 text-[9px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
                     />
                   </div>
                 ))}
               </div>
 
               {/* Scale 控制 */}
-              <div className="space-y-1.5">
-                <div className="text-[10px] text-neutral-500 font-bold mb-1">SCALE</div>
+              <div className="space-y-1">
+                <div className="text-[9px] text-neutral-600 font-bold">SCALE</div>
                 {['scaleX', 'scaleY'].map(axis => (
-                  <div key={axis} className="flex items-center gap-2">
-                    <span className="w-3 text-[10px] uppercase text-neutral-400">{axis.replace('scale', '')}</span>
+                  <div key={axis} className="flex items-center gap-1.5">
+                    <span className="w-3 text-[9px] uppercase text-neutral-500">{axis.replace('scale', '')}</span>
                     <Slider 
                       min={0.01} max={10} step={0.01} 
                       value={[tempTransformRef.current[axis as 'scaleX'|'scaleY']]} 
@@ -1366,18 +1363,18 @@ export function ViewExtentCheck() {
                       type="number" step="0.01" 
                       value={tempTransformRef.current[axis as 'scaleX'|'scaleY']} 
                       onChange={(e) => handleManualTransformChange(axis as any, parseFloat(e.target.value) || 1)} 
-                      className="w-16 h-6 text-[10px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                      className="w-14 h-5 text-[9px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
                     />
                   </div>
                 ))}
               </div>
 
               {/* Offset 控制 */}
-              <div className="space-y-1.5">
-                <div className="text-[10px] text-neutral-500 font-bold mb-1">OFFSET (px)</div>
+              <div className="space-y-1">
+                <div className="text-[9px] text-neutral-600 font-bold">OFFSET (px)</div>
                 {['offsetX', 'offsetY'].map(axis => (
-                  <div key={axis} className="flex items-center gap-2">
-                    <span className="w-3 text-[10px] uppercase text-neutral-400">{axis.replace('offset', '')}</span>
+                  <div key={axis} className="flex items-center gap-1.5">
+                    <span className="w-3 text-[9px] uppercase text-neutral-500">{axis.replace('offset', '')}</span>
                     <Slider 
                       min={-3000} max={3000} step={1} 
                       value={[tempTransformRef.current[axis as 'offsetX'|'offsetY']]} 
@@ -1388,7 +1385,7 @@ export function ViewExtentCheck() {
                       type="number" step="1" 
                       value={tempTransformRef.current[axis as 'offsetX'|'offsetY']} 
                       onChange={(e) => handleManualTransformChange(axis as any, parseFloat(e.target.value) || 0)} 
-                      className="w-16 h-6 text-[10px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                      className="w-14 h-5 text-[9px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
                     />
                   </div>
                 ))}
@@ -1396,23 +1393,40 @@ export function ViewExtentCheck() {
 
             </div>
 
-            <Button 
-              className={`w-full shrink-0 ${completedViews.has(activeAugId) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`} 
-              onClick={handleSaveCurrentView}
-            >
-               {completedViews.has(activeAugId) ? 'Aligned & Saved' : 'Save Alignment'}
-               {completedViews.has(activeAugId) ? <CheckCircle2 className="w-4 h-4 ml-2"/> : <Download className="w-4 h-4 ml-2"/>}
-            </Button>
+            {/* 【修复3】：加上 shrink-0，确保高级配准按钮死死地固定在底部，绝不被上面的滑块挤出屏幕 */}
+            <div className="shrink-0 flex items-center gap-2 pt-2 mt-2 border-t border-neutral-800/50">
+              <Button 
+                variant="secondary" 
+                className="flex-1 h-6 text-[9px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
+                onClick={() => alert("AI Auto Alignment feature is under development.\n\nThis will open a new workspace to automatically extract and match feature points using deep learning.")}
+              >
+                <Zap className="w-3 h-3 mr-1 text-amber-400" /> AI Auto Align
+              </Button>
+              <Button 
+                variant="secondary" 
+                className="flex-1 h-6 text-[9px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
+                onClick={() => alert("Control Point Registration (Georeferencing) is under development.\n\nThis will open a split-screen workspace for manual tie-point selection.")}
+              >
+                <MousePointer2 className="w-3 h-3 mr-1 text-blue-400" /> Tie Points
+              </Button>
+            </div>
           </div>
 
-          {/* 4. 最终完成操作区 */}
-          <div className="p-4 border-t border-neutral-800 bg-neutral-900 shrink-0">
+          {/* 4. 底部并排操作按钮 (更名且放置在同一行) */}
+          <div className="p-3 border-t border-neutral-800 bg-neutral-900 shrink-0 flex items-center gap-2">
             <Button 
-              className="w-full bg-white text-black hover:bg-neutral-200 font-bold" 
+              className={`flex-1 h-8 text-[11px] px-2 ${completedViews.has(activeAugId) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`} 
+              onClick={handleSaveCurrentView}
+            >
+               View Checked
+            </Button>
+
+            <Button 
+              className="flex-1 h-8 text-[11px] px-2 bg-white text-black hover:bg-neutral-200 font-bold" 
               onClick={proceedToExport}
               disabled={completedViews.size < augViews.length}
             >
-               Confirm & Save Config <Check className="w-4 h-4 ml-2"/>
+               Views Checked
             </Button>
           </div>
 
