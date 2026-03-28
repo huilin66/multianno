@@ -1,12 +1,13 @@
 import os
+import platform
 from pathlib import Path
 from typing import List
 
 import cv2
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from skimage import io
 
@@ -59,6 +60,86 @@ def calculate_list_stats(*lists):
     return {
         "intersection_elements": list(intersection_set),
         "list_stats": list_stats,
+    }
+
+
+# 假设你有一个 router，或者直接用 @app.get
+@app.get("/api/fs/explore")
+def explore_file_system(
+    path: str = Query(""),
+    history: List[str] = Query(default=[]),  # 🌟 新增：接收前端传来的历史记录
+):
+    # 1. 如果路径为空，返回系统盘符 + 前端传来的历史记录
+    if not path:
+        items = []
+        if platform.system() == "Windows":
+            import string
+
+            # A. 扫描本地盘符
+            drives = [
+                f"{d}:/" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\")
+            ]
+            for d in drives:
+                items.append({"name": f"本地磁盘 ({d[0]}:)", "path": d, "type": "dir"})
+
+            # B. 🌟 注入前端传来的历史记录
+            seen = set()
+            for h_path in history:
+                # 确保路径有值、未重复，且在当前后端机器上是真实存在的
+                if h_path and h_path not in seen and os.path.exists(h_path):
+                    seen.add(h_path)
+                    items.append(
+                        {
+                            "name": f"🕒 历史记录 ({h_path})",
+                            "path": h_path.replace("\\", "/"),
+                            "type": "dir",
+                        }
+                    )
+        else:
+            path = "/"
+
+        return {"current_path": "", "parent_path": "", "items": items}
+    # 2. 规范化路径
+    try:
+        path = os.path.abspath(path)
+        parent_path = os.path.dirname(path)
+
+        items = []
+        # 使用 scandir 高效遍历目录
+        with os.scandir(path) as it:
+            for entry in it:
+                # 过滤掉隐藏文件和系统文件 (以 . 开头的文件)
+                if entry.name.startswith("."):
+                    continue
+
+                is_dir = entry.is_dir()
+                items.append(
+                    {
+                        "name": entry.name,
+                        "path": entry.path.replace("\\", "/"),  # 统一使用正斜杠
+                        "type": "dir" if is_dir else "file",
+                    }
+                )
+
+    except PermissionError:
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Permission Denied (没有权限访问该文件夹)"},
+        )
+    except FileNotFoundError:
+        return JSONResponse(
+            status_code=404, content={"error": "Path not found (路径不存在)"}
+        )
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+    # 3. 排序：文件夹排在前面，然后再按字母顺序排
+    items.sort(key=lambda x: (x["type"] != "dir", x["name"].lower()))
+
+    return {
+        "current_path": path.replace("\\", "/"),
+        "parent_path": parent_path.replace("\\", "/"),
+        "items": items,
     }
 
 
