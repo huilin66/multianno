@@ -7,7 +7,7 @@ import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 
 import { 
-  FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History 
+  FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History
 } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog'; 
 
