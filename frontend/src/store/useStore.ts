@@ -36,7 +36,7 @@ export interface ViewConfig {
   bands: number[]; 
   isMain: boolean;
   opacity: number;
-  // colormap?: 'gray' | 'jet' | 'viridis' | 'plasma' | 'inferno'; // 🌟 新增
+  colormap?: 'gray' | 'jet' | 'viridis' | 'plasma' | 'inferno'; // 🌟 新增
   transform: {
     offsetX: number;
     offsetY: number;
@@ -135,7 +135,7 @@ export const useStore = create<AppState>()(
       })),
       removeFolder: (id) => set((state) => ({ folders: state.folders.filter(f => f.id !== id) })),
       clearFolders: () => set({ folders: [] }),
-      
+
       addView: (view) => set((state) => ({ views: [...state.views, view] })),
       updateView: (id, data) => set((state) => ({
         views: state.views.map(v => v.id === id ? { ...v, ...data } : v)

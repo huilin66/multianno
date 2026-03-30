@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
+import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../config/colors';
+import type { ProjectMetaContract } from '../config/contract';
 
 import { 
   FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History
@@ -100,6 +102,7 @@ export function DataPreload() {
       if (window.confirm("Are you sure you want to cancel all pending folders? (确定要取消所有未确认的路径吗？)")) {
         setPlaceholders([]);
         clearFolders();
+        clearViews();
       }
     };
   const handleResetViews = () => {
@@ -192,31 +195,99 @@ export function DataPreload() {
       transform: { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 }
     });
   };
+// 🌟 新增：处理 View Confirm 的分发逻辑
+  const handleConfirmViews = async () => {
+    if (views.length === 0) return;
 
-  const handleConfirmViews = () => {
-    if (views.length === 0) {
-      alert("请至少配置一个 View (Main View)！");
+    // 情况 A：多个视图，进入配准阶段
+    if (views.length > 1) {
+      if (window.confirm("确定要以当前的视图配置进入 View Extent Check (多图配准) 阶段吗？\n(Are you sure you want to proceed to the View Extent Check stage with the current settings?)")) {
+        setActiveModule('extent');
+      }
       return;
     }
 
-    for (let i = 0; i < views.length; i++) {
-      const view = views[i];
-      const viewName = view.isMain ? "Main View" : `Aug View ${i}`;
-
-      if (!view.folderId) {
-        alert(`[${viewName}] 尚未选择关联的 Source Folder！`);
+    // 情况 B：只有 1 个视图，跳过配准，直接生成 Meta 并进入标注
+    if (views.length === 1) {
+      if (!window.confirm("当前只配置了 1 个视图。确定要以此配置直接开始标注吗？\n(这将会跳过配准阶段，直接保存项目配置并进入工作区)")) {
         return;
       }
 
-      const activeBandsCount = view.bands.filter(b => b > 0).length;
-      if (activeBandsCount !== 1 && activeBandsCount !== 3) {
-        alert(`[${viewName}] 的波段配置无效！\n当前有效波段数：${activeBandsCount}。\n渲染器仅支持【单波段(灰度/红外)】或【三波段(RGB)】。请检查是否有不必要的通道未设置为 None。`);
-        return;
+      // 1. 生成项目元数据 (与 ViewExtentCheck 中保持一致)
+      const projectMeta: ProjectMetaContract = {
+        folders: folders.map((f, i) => ({
+          Id: i + 1,
+          path: f.path,
+          suffix: f.suffix || "",
+          "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
+          "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
+          "files total": f.files ? f.files.length : 0,
+          "image meta": {
+            width: f.metadata?.width || 'Unknown',
+            height: f.metadata?.height || 'Unknown',
+            bands: f.metadata?.bands || 'Unknown',
+            "data type": f.metadata?.fileType || 'uint8'
+          }
+        })),
+        views: views.map((v, i) => {
+          const fIndex = folders.findIndex(f => f.id === v.folderId);
+          const currentRenderMode = v.bands.length === 3 
+            ? 'rgb' 
+            : (v.colormap || 'gray');
+          return {
+            id: v.isMain ? 'main view' : `aug view ${i}`, 
+            "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
+            bands: v.bands,
+            // 🌟 核心新增：只有当波段数为 1 时，才把 colormap 写入配置
+            renderMode: currentRenderMode,
+            isMain: v.isMain,
+            // 单视图默认没有偏移和缩放
+            transform: {
+              crop: v.crop || { t: 0, r: 100, b: 100, l: 0 },
+              scaleX: v.transform?.scaleX ?? 1,
+              scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
+              offsetX: v.transform?.offsetX ?? 0,
+              offsetY: v.transform?.offsetY ?? 0
+            }
+          };
+        })
+      };
+
+      const jsonStr = JSON.stringify(projectMeta, null, 2);
+
+      // 2. 触发下载
+      try {
+        if ('showSaveFilePicker' in window) {
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName: 'project_meta.json',
+            types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(jsonStr);
+          await writable.close();
+        } else {
+          const blob = new Blob([jsonStr], { type: 'application/json' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'project_meta.json';
+          a.click();
+          URL.revokeObjectURL(url);
+        }
+        
+        // 3. 成功反馈并跳转
+        alert("✅ 导出成功！\n\nproject_meta.json 已保存到本地。\n即将为您进入标注工作区...");
+        setActiveModule('workspace'); 
+        
+      } catch (err) {
+        console.warn("Save cancelled or failed", err);
+        if (window.confirm("导出已取消或失败。是否仍要强制进入标注工作区？")) {
+           setActiveModule('workspace');
+        }
       }
     }
-    setActiveModule('extent');
   };
-
+  
   return (
     <div className="grid grid-cols-2 h-full gap-6 p-6 overflow-hidden">
       {/* 左侧：Folders Section */}
@@ -362,78 +433,216 @@ export function DataPreload() {
               </div>
             ) : (
               views.map((view, index) => (
-                <div key={view.id} className="flex flex-col gap-4 p-4 border rounded-lg bg-card">
-                  <div className="flex items-center justify-between">
-                    <span className={`px-2 py-1 text-xs font-semibold rounded-full ${view.isMain ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'}`}>
+                <div key={view.id} className="flex flex-col p-4 border rounded-xl bg-neutral-50 shadow-sm border-neutral-200">
+                  
+                  {/* 🌟 第一层：View Name 与 Source Folder 并排在同一行 */}
+                  <div className="flex items-center gap-4">
+                    {/* View Name 标签 */}
+                    <span className={`px-3 py-1 text-xs font-bold rounded-full shrink-0 ${view.isMain ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-neutral-300 text-neutral-700'}`}>
                       {view.isMain ? 'Main View' : `Aug View ${index}`}
                     </span>
-                    <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => removeView(view.id)} disabled={view.isMain && views.length > 1} >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                      <Label>Source Folder</Label>
+                    
+                    {/* Source Folder 选择框 */}
+                    <div className="flex-1 flex items-center gap-3">
+                      <Label className="text-xs font-bold text-neutral-500 uppercase tracking-wider shrink-0">Source Folder</Label>
                       <Select 
                         value={view.folderId} 
                         onValueChange={(val) => {
                           const selectedFolder = folders.find(f => f.id === val);
                           const numBands = selectedFolder?.metadata?.bands || 3;
-                          const newBands = numBands === 1 ? [1, 0, 0] : [1, 2, 3];
-                          updateView(view.id, { folderId: val, bands: newBands });
+                          const newBands = numBands >= 3 ? [1, 2, 3] : [1];
+                          updateView(view.id, { folderId: val, bands: newBands, colormap: 'gray' });
                         }}
                       >
-                        <SelectTrigger>
+                        {/* 强制白底和亮色边框 */}
+                        <SelectTrigger className="h-8 bg-white border-neutral-200 text-neutral-900 text-xs font-medium shadow-sm flex-1">
                           <SelectValue placeholder="Select folder...">
                             {view.folderId ? folders.find(f => f.id === view.folderId)?.path : "Select folder..."}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="bg-white border-neutral-200">
                           {folders.map(f => (
-                            <SelectItem key={f.id} value={f.id}>{f.path}</SelectItem>
+                            <SelectItem key={f.id} value={f.id} className="text-xs text-neutral-800 focus:bg-neutral-100">{f.path}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
-                    
-                    <div className="space-y-1">
-                      <Label>Bands (R, G, B)</Label>
-                      <div className="flex gap-2">
-                        {[0, 1, 2].map((bandIndex) => {
-                          const selectedFolder = folders.find(f => f.id === view.folderId);
-                          const numBands = selectedFolder ? (selectedFolder.metadata?.bands || 3) : 0;
-                          const availableBands = Array.from({ length: numBands }, (_, i) => i + 1);
-                          const currentBand = selectedFolder && view.bands[bandIndex] !== undefined ? view.bands[bandIndex] : 0;
-                          
-                          return (
-                            <div key={`band-${view.id}-${bandIndex}`} className="flex-1">
-                              <Select
-                                disabled={!view.folderId} 
-                                value={currentBand.toString()}
-                                onValueChange={(val) => {
-                                  const newBands = [...view.bands];
-                                  newBands[bandIndex] = parseInt(val);
-                                  while(newBands.length < 3) newBands.push(0);
-                                  updateView(view.id, { bands: newBands.slice(0, 3) });
-                                }}
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder={!view.folderId ? "-" : `B${bandIndex + 1}`} />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="0">None</SelectItem>
-                                  {availableBands.map(b => (
-                                    <SelectItem key={b} value={b.toString()}>Band {b}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
+
+                    {/* 删除按钮 */}
+                    <Button variant="ghost" size="icon" className="text-neutral-400 hover:text-red-500 hover:bg-red-50 h-8 w-8 shrink-0" onClick={() => removeView(view.id)} disabled={view.isMain && views.length > 1} >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
+                  
+                  {/* 🌟 第二层：内部配置面板 (白底，左右两栏并排) */}
+{/* 🌟 第二层：内部配置面板 (白底，左右两栏并排) */}
+                  {view.folderId && (() => {
+                    // 统一获取当前选中的 folder 数据，避免下面重复写 find
+                    const selectedFolder = folders.find(f => f.id === view.folderId);
+                    const totalBands = selectedFolder?.metadata?.bands || 0;
+                    
+                    // 判断是否为非 uint8 数据 (如 uint16, float32 等)
+                    const isNotUint8 = selectedFolder?.metadata?.fileType && 
+                                       !selectedFolder.metadata.fileType.toLowerCase().includes('uint8');
+
+                    return (
+                      <div className="mt-4 p-4 bg-white border border-neutral-200 rounded-lg shadow-sm flex flex-col gap-4">
+                        
+                        {/* 🌟 新增：非 uint8 数据的动态拉伸提示 */}
+                        {isNotUint8 && (
+                          <div className="flex items-center gap-2 text-[10px] text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-md border border-amber-200 animate-in fade-in">
+                            <Info className="w-3.5 h-3.5 shrink-0" />
+                            <span>
+                              <strong>Data Stretch Applied:</strong> Original source is <code className="bg-amber-100 px-1 rounded font-mono">{selectedFolder.metadata.fileType}</code>. The display preview has been auto-scaled to 8-bit for visualization.
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-6 items-center">
+                          
+                          {/* 左栏：Select Channels (彩色方块) */}
+                          <div className="space-y-2">
+                            <Label className="text-[10px] text-neutral-500 uppercase font-bold tracking-wider block">
+                              Select Channels (Click 1 or 3)
+                            </Label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {Array.from({ length: totalBands }, (_, i) => i + 1).map(b => {
+                                const isSelected = view.bands.includes(b);
+                                
+                                // 🌟 核心修改：极其清爽的判断逻辑，完全依赖于外部引入的配置
+                                const selectedStyle = isSelected 
+                                  ? (BAND_COLORS[(b - 1) % BAND_COLORS.length] + " border-2") 
+                                  : BAND_UNSELECTED_STYLE;
+                                
+                                return (
+                                  <button 
+                                    key={b} 
+                                    onClick={() => {
+                                      let active = [...view.bands];
+                                      if (active.includes(b)) active = active.filter(band => band !== b);
+                                      else active.push(b);
+                                      updateView(view.id, { bands: active });
+                                    }} 
+                                    className={`${BAND_BASE_STYLE} ${selectedStyle}`}
+                                  >
+                                    {b}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* 右栏：动态参数配置区 (Channel Mapping 下拉框) */}
+                          <div className="border-l border-neutral-100 pl-6 h-full flex flex-col justify-center">
+                            {view.bands.length === 1 ? (
+                              // 模式 A：单波段模式
+// 🌟 模式 A：单波段模式 (带可视化色带)
+                            <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-200">
+                              <div className="space-y-1">
+                                <Label className="text-xs text-neutral-600">Display Band</Label>
+                                <Select value={view.bands[0].toString()} onValueChange={(val) => updateView(view.id, { bands: [parseInt(val)] })}>
+                                  <SelectTrigger className="h-8 bg-neutral-50 border-neutral-200 text-neutral-900 text-xs">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-white border-neutral-200">
+                                    {Array.from({ length: totalBands }, (_, i) => i + 1).map(b => (
+                                      <SelectItem key={b} value={b.toString()} className="text-xs text-neutral-800 focus:bg-neutral-100">Band {b}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs text-amber-600 font-medium">Color Map</Label>
+                                <Select value={view.colormap || 'gray'} onValueChange={(val: any) => updateView(view.id, { colormap: val })}>
+                                  <SelectTrigger className="h-8 bg-neutral-50 border-neutral-200 text-neutral-900 text-xs">
+                                    
+                                    {/* 🌟 核心修复：强制自定义 SelectValue，确保闭合状态下色带也能完美显示 */}
+                                    <SelectValue>
+                                      {(() => {
+                                        const currentMap = COLOR_MAPS.find(cm => cm.name === (view.colormap || 'gray'));
+                                        if (currentMap) {
+                                          return (
+                                            <div className="flex items-center gap-2">
+                                              {/* 闭合时的迷你色带 */}
+                                              <div 
+                                                className="w-6 h-3 rounded-sm shadow-inner border border-neutral-300 shrink-0" 
+                                                style={{ background: currentMap.gradient }}
+                                              />
+                                              <span className="capitalize font-medium">{currentMap.name}</span>
+                                            </div>
+                                          );
+                                        }
+                                        return "Select Colormap";
+                                      })()}
+                                    </SelectValue>
+                                    
+                                  </SelectTrigger>
+                                  <SelectContent className="bg-white border-neutral-200">
+                                    {COLOR_MAPS.map(cm => (
+                                      <SelectItem key={cm.name} value={cm.name} className="text-xs text-neutral-800 focus:bg-neutral-100">
+                                        <div className="flex items-center gap-2">
+                                          {/* 展开列表时的长色带 */}
+                                          <div 
+                                            className="w-12 h-3.5 rounded-sm shadow-inner border border-neutral-300 shrink-0" 
+                                            style={{ background: cm.gradient }}
+                                          />
+                                          <span className="capitalize font-medium">{cm.name}</span>
+                                        </div>
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            ) : view.bands.length === 3 ? (
+                              // 模式 B：RGB 三波段模式
+                            <div className="space-y-2 animate-in fade-in duration-200">
+                              <Label className="text-xs text-neutral-600">RGB Channel Mapping</Label>
+                              <div className="flex gap-2">
+                                {['R', 'G', 'B'].map((channel, idx) => (
+                                  <div key={channel} className="flex-1">
+                                    <Select 
+                                      value={view.bands[idx]?.toString()} 
+                                      onValueChange={(val) => {
+                                        const newBands = [...view.bands]; 
+                                        newBands[idx] = parseInt(val);
+                                        updateView(view.id, { bands: newBands });
+                                      }}
+                                    >
+                                      <SelectTrigger className={`h-8 w-full bg-neutral-50 border-neutral-200 text-neutral-900 text-xs focus:ring-1 ${channel==='R'?'focus:ring-red-500':channel==='G'?'focus:ring-green-500':'focus:ring-blue-500'}`}>
+                                        <div className="flex items-center gap-1.5">
+                                          {/* 🌟 核心修改：用粗体彩色字母明确标示 R/G/B，并加一条浅色竖线分隔 */}
+                                          <span className={`font-black text-[11px] ${channel==='R'?'text-red-600':channel==='G'?'text-green-600':'text-blue-600'}`}>
+                                            {channel}
+                                          </span>
+                                          <span className="text-neutral-300">|</span>
+                                          <SelectValue />
+                                        </div>
+                                      </SelectTrigger>
+                                      <SelectContent className="bg-white border-neutral-200">
+                                        {Array.from({ length: totalBands }, (_, i) => i + 1).map(b => (
+                                          <SelectItem key={b} value={b.toString()} className="text-xs text-neutral-800 focus:bg-neutral-100">
+                                            Band {b}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                            ) : (
+                              // 模式 C：错误提示
+                              <div className="flex items-center justify-center gap-2 text-amber-600 text-xs py-2 animate-in fade-in bg-amber-50 rounded-md border border-amber-200 h-[56px]">
+                                Please select exactly 1 or 3 blocks.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
                 </div>
               ))
             )}
@@ -446,8 +655,13 @@ export function DataPreload() {
             <Button onClick={handleResetViews} variant="outline" disabled={views.length === 0}>
               <X className="w-4 h-4 mr-2" /> Reset
             </Button>
-            <Button onClick={handleConfirmViews} disabled={views.length === 0} className="bg-blue-600 hover:bg-blue-700">
-              <Check className="w-4 h-4 mr-2" /> Confirm & Map Extents
+            <Button 
+              onClick={handleConfirmViews} 
+              disabled={views.length === 0} 
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
+            >
+              <Check className="w-4 h-4 mr-2" /> 
+              {views.length > 1 ? "Confirm & Map Extents" : "Confirm & Start Annotation"}
             </Button>
           </div>
         </CardContent>

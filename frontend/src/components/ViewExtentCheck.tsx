@@ -5,7 +5,7 @@ import { Input } from './ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Slider } from './ui/slider';
 
-
+import type { ProjectMetaContract } from '../config/contract';
 import { 
   Layers, FolderOpen, Check,  CheckCircle2,
   Eye, EyeOff, Maximize, Move, MousePointer2, Square, RotateCcw,Zap,
@@ -43,6 +43,7 @@ export function ViewExtentCheck() {
   const [mode, setMode] = useState<'pan' | 'align'>('pan');
   const [alignSubMode, setAlignSubMode] = useState<'crop' | 'transform'>('transform');
   const [activeAugId, setActiveAugId] = useState<string>(augViews[0]?.id || '');
+  const activeAugView = augViews.find(v => v.id === activeAugId) || augViews[0];
   // const [topBarConfig, setTopBarConfig] = useState({ opacity: 0.6, curtain: 100, isBlinking: false, showOutsideCrop: true });
   // 【修改1】：将透明度、水平卷帘、垂直卷帘整合为一个互斥模式
 // 【修改1】：将 isBlinking 改为 showAugView，默认开启 (true)
@@ -54,6 +55,7 @@ export function ViewExtentCheck() {
   });
   // 操作A：裁剪范围状态
   const [crops, setCrops] = useState<Record<string, { t: number, r: number, b: number, l: number }>>({});
+  const activeCrop = activeAugView ? (crops[activeAugView.id] || { t: 0, r: 100, b: 100, l: 0 }) : { t: 0, r: 100, b: 100, l: 0 };
   const [draggingEdge, setDraggingEdge] = useState<'t' | 'r' | 'b' | 'l' | null>(null);
 
   // 操作B：拉伸控制状态
@@ -90,21 +92,21 @@ export function ViewExtentCheck() {
     }
   }, [activeAugId]);
 
-  if (views.length <= 1) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4 text-neutral-400">
-        <Layers className="w-12 h-12 text-blue-500" />
-        <h3 className="text-xl text-neutral-100 font-bold">Extent Check Skipped</h3>
-        <p>Only one view (Main View) is configured. No alignment is needed.</p>
-        <Button className="mt-4 bg-blue-600 hover:bg-blue-700" onClick={() => setActiveModule('export')}>
-          Proceed to Next Step <Check className="w-4 h-4 ml-2"/>
-        </Button>
-      </div>
-    );
-  }
+  // if (views.length <= 1) {
+  //   return (
+  //     <div className="flex flex-col items-center justify-center h-full space-y-4 text-neutral-400">
+  //       <Layers className="w-12 h-12 text-blue-500" />
+  //       <h3 className="text-xl text-neutral-100 font-bold">Extent Check Skipped</h3>
+  //       <p>Only one view (Main View) is configured. No alignment is needed.</p>
+  //       <Button className="mt-4 bg-blue-600 hover:bg-blue-700" onClick={() => setActiveModule('export')}>
+  //         Proceed to Next Step <Check className="w-4 h-4 ml-2"/>
+  //       </Button>
+  //     </div>
+  //   );
+  // }
 
-  const activeAugView = augViews.find(v => v.id === activeAugId) || augViews[0];
-  const activeCrop = crops[activeAugView.id] || { t: 0, r: 100, b: 100, l: 0 };
+  // const activeAugView = augViews.find(v => v.id === activeAugId) || augViews[0];
+  // const activeCrop = crops[activeAugView.id] || { t: 0, r: 100, b: 100, l: 0 };
 
   const getPreviewUrl = (view: typeof mainView) => {
     if (!view) return '';
@@ -517,7 +519,7 @@ export function ViewExtentCheck() {
 
 // 【完全按照您的 JSON 结构要求重写】：在标注主界面实时提取规范化的项目元数据
 // 严格按照要求的 JSON 结构提取，并解决 TS 类型报错
-  const generateProjectMeta = () => {
+  const generateProjectMeta = (): ProjectMetaContract => {
     return {
       folders: folders.map((f, i) => ({
         Id: i + 1,
@@ -530,7 +532,7 @@ export function ViewExtentCheck() {
           width: f.metadata?.width || 'Unknown',
           height: f.metadata?.height || 'Unknown',
           bands: f.metadata?.bands || 'Unknown',
-          "data type": f.metadata?.fileType || 'uint8'
+        "data type": f.metadata?.fileType || 'uint8'
         }
       })),
       views: views.map((v, i) => {
@@ -549,6 +551,7 @@ export function ViewExtentCheck() {
           id: v.isMain ? 'main view' : `aug view ${i}`, 
           "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
           bands: v.bands,
+          renderMode:v.bands.length === 3 ? 'rgb' : (v.colormap || 'gray'),
           isMain: v.isMain,
           transform: safeTransform
         };
@@ -606,7 +609,25 @@ export function ViewExtentCheck() {
     }
   };
 
-  
+  if (views.length === 1) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full space-y-4 bg-neutral-950 text-neutral-400">
+        <Layers className="w-12 h-12 text-blue-500" />
+        <h3 className="text-xl text-neutral-100 font-bold">Extent Check Skipped</h3>
+        <p>当前只配置了单源视图 (Single View)，无需进行多图层对齐配准。</p>
+        <div className="flex items-center gap-4 mt-4">
+          <Button variant="outline" className="border-neutral-700 hover:bg-neutral-800" onClick={() => setActiveModule('preload')}>
+            <FolderOpen className="w-4 h-4 mr-2" /> 返回重选
+          </Button>
+          
+          {/* 🌟 核心：直接绑定 proceedToExport，让它复用完整的导出逻辑 */}
+          <Button className="bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={proceedToExport}>
+            导出配置并开始标注 <Check className="w-4 h-4 ml-2"/>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 // 【修改2】：在 return 之前，计算当前互斥模式下的最终参数
   const isOpacityMode = topBarConfig.mode === 'opacity';
   const isSwipeXMode = topBarConfig.mode === 'swipeX';

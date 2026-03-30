@@ -3,7 +3,7 @@ import React from 'react';
 import { useStore } from '../store/useStore'; // 确认路径是否正确
 import { Button } from './ui/button';
 import { FolderOpen, Layers, Database, Download } from 'lucide-react';
-
+import type { ProjectMetaContract } from '../config/contract';
 
 export function ProjectMetaDashboard() {
   const { folders, views, setActiveModule } = useStore();
@@ -21,7 +21,7 @@ export function ProjectMetaDashboard() {
       </div>
     );
   }
-  const generateProjectMeta = () => {
+  const generateProjectMeta = (): ProjectMetaContract => {
     return {
       folders: folders.map((f, i) => ({
         Id: i + 1,
@@ -52,6 +52,8 @@ export function ProjectMetaDashboard() {
           id: v.isMain ? 'main view' : `aug view ${i}`, 
           "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
           bands: v.bands,
+          // 🌟 核心新增：只有当波段数为 1 时，才把 colormap 写入配置
+          renderMode:v.bands.length === 3 ? 'rgb' : (v.colormap || 'gray'),
           isMain: v.isMain,
           transform: safeTransform
         };
@@ -155,7 +157,16 @@ export function ProjectMetaDashboard() {
                       ))}
                     </div>
                   </div>
-                  
+                  {/* 🌟 新增：在 Dashboard 面板展示 Colormap */}
+                  {view.bands.length === 1 && (
+                    <div className="flex justify-between items-center mt-1">
+                      <span className="text-neutral-500">Color Map:</span>
+                      <span className="text-amber-400 capitalize bg-amber-400/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-400/20">
+                        {/* 注意这里从 meta 中读取，而不是从 view 中读取 */}
+                        {(meta.views.find(mv => mv.id === (view.isMain ? 'main view' : `aug view ${meta.views.findIndex(v => v === view)}`)) as any)?.colormap || 'gray'}
+                      </span>
+                    </div>
+                  )}
                   {!view.isMain && (
                     <>
                       <div className="h-px bg-neutral-800 my-2"></div>
