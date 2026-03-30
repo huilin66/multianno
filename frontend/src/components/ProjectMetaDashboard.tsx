@@ -6,7 +6,7 @@ import { FolderOpen, Layers, Database, Download } from 'lucide-react';
 import type { ProjectMetaContract } from '../config/contract';
 
 export function ProjectMetaDashboard() {
-  const { folders, views, setActiveModule } = useStore();
+  const {projectName, folders, views, setActiveModule } = useStore();
 
   // 🛡️ 这里加上我们之前讨论的防白屏兜底代码！
   if (!folders || folders.length === 0) {
@@ -23,6 +23,7 @@ export function ProjectMetaDashboard() {
   }
   const generateProjectMeta = (): ProjectMetaContract => {
     return {
+      projectName: projectName || "Untitled Project",
       folders: folders.map((f, i) => ({
         Id: i + 1,
         path: f.path,
@@ -157,13 +158,13 @@ export function ProjectMetaDashboard() {
                       ))}
                     </div>
                   </div>
-                  {/* 🌟 新增：在 Dashboard 面板展示 Colormap */}
+                  {/* 找到 Dashboard 里的这段代码进行修正 */}
                   {view.bands.length === 1 && (
                     <div className="flex justify-between items-center mt-1">
-                      <span className="text-neutral-500">Color Map:</span>
-                      <span className="text-amber-400 capitalize bg-amber-400/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-400/20">
-                        {/* 注意这里从 meta 中读取，而不是从 view 中读取 */}
-                        {(meta.views.find(mv => mv.id === (view.isMain ? 'main view' : `aug view ${meta.views.findIndex(v => v === view)}`)) as any)?.colormap || 'gray'}
+                      <span className="text-neutral-500">Render Mode:</span>
+                      <span className="text-amber-400 capitalize bg-amber-400/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-500/20">
+                        {/* 🌟 统一使用我们契约里定义的 renderMode 字段 */}
+                        {view.renderMode} 
                       </span>
                     </div>
                   )}

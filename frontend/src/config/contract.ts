@@ -7,6 +7,7 @@ import { COLOR_MAPS } from './colors';
 
 type ColormapNames = (typeof COLOR_MAPS)[number]['name'];
 export interface ProjectMetaContract {
+  projectName: string;
   folders: {
     Id: number;                  
     path: string;                

@@ -14,7 +14,7 @@ import {
 import { FileExplorerDialog } from './FileExplorerDialog'; 
 
 export function DataPreload() {
-  const { folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
+  const {projectName, folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
   
   // --- 占位符与资源管理器状态 ---
   const [placeholders, setPlaceholders] = useState<{ id: string, path: string, suffix: string }[]>([]);
@@ -215,6 +215,7 @@ export function DataPreload() {
 
       // 1. 生成项目元数据 (与 ViewExtentCheck 中保持一致)
       const projectMeta: ProjectMetaContract = {
+        projectName: projectName || "Untitled Project",
         folders: folders.map((f, i) => ({
           Id: i + 1,
           path: f.path,

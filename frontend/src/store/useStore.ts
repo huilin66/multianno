@@ -1,5 +1,7 @@
+// src/store/useStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { ProjectMetaContract } from '../config/contract';
 
 export interface FolderData {
   id: string;
@@ -36,14 +38,14 @@ export interface ViewConfig {
   bands: number[]; 
   isMain: boolean;
   opacity: number;
-  colormap?: 'gray' | 'jet' | 'viridis' | 'plasma' | 'inferno'; // 🌟 新增
+  colormap?: 'gray' | 'jet' | 'viridis' | 'plasma' | 'inferno';
   transform: {
     offsetX: number;
     offsetY: number;
     scaleX: number;
     scaleY: number;
   };
-  crop?: { t: number, r: number, b: number, l: number }; // 修复: 增加 crop 类型
+  crop?: { t: number, r: number, b: number, l: number };
 }
 
 export interface Annotation {
@@ -55,7 +57,6 @@ export interface Annotation {
   stem: string; 
 }
 
-// 🌟 新增：对齐参数快照的类型定义
 export interface SavedAlignment {
   id: string;
   name: string;
@@ -63,11 +64,12 @@ export interface SavedAlignment {
   transform: { offsetX: number; offsetY: number; scaleX: number; scaleY: number };
 }
 
-type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta';
+type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject';
 
 export interface AppState {
+  projectName: string;
+  setProjectName: (name: string) => void;
   projectMetadata: FolderMetadata[]; 
-  setProjectMetadata: (data: FolderMetadata[]) => void;
   folders: FolderData[];
   views: ViewConfig[];
   annotations: Annotation[];
@@ -81,10 +83,12 @@ export interface AppState {
   currentStem: string | null;
   stems: string[];
 
-  // 🌟 修复：在接口中声明这俩变量
   savedAlignments: SavedAlignment[];
   addSavedAlignment: (preset: SavedAlignment) => void;
-  
+
+  setProjectMetadata: (data: FolderMetadata[]) => void;
+  loadProjectMeta: (meta: ProjectMetaContract) => void; // 🌟 修复拼写错误
+
   addFolder: (folder: FolderData) => void;
   updateFolder: (id: string, data: Partial<FolderData>) => void;
   removeFolder: (id: string) => void;
@@ -108,6 +112,41 @@ export interface AppState {
 export const useStore = create<AppState>()(
   persist(
     (set) => ({
+      projectName: 'multianno project1',
+      setProjectName: (name) => set({ projectName: name }),
+      
+      // 🌟 核心新增：加载项目元数据
+      loadProjectMeta: (meta) => set({
+        projectName: meta.projectName || 'Untitled Project',
+        // 注意：JSON 里没有真实的 File[] 对象，需要你在组件层重新让用户选择文件夹，或者后端提供 URL
+        folders: meta.folders.map(f => ({
+          id: String(f.Id),
+          path: f.path,
+          suffix: f.suffix || '',
+          files: [], 
+          metadata: {
+            height: f["image meta"].height === 'Unknown' ? 0 : Number(f["image meta"].height),
+            width: f["image meta"].width === 'Unknown' ? 0 : Number(f["image meta"].width),
+            bands: f["image meta"].bands === 'Unknown' ? 0 : Number(f["image meta"].bands),
+            fileType: f["image meta"]["data type"],
+            dataType: f["image meta"]["data type"],
+            sceneGroupsLoaded: f["files in sceneGroups"],
+            sceneGroupsSkipped: f["files Skipped"],
+          }
+        })),
+        views: meta.views.map(v => ({
+          id: v.id,
+          folderId: String(v["folder id"]),
+          bands: v.bands,
+          isMain: v.isMain,
+          opacity: 1,
+          colormap: v.renderMode !== 'rgb' ? (v.renderMode as any) : 'gray',
+          transform: v.transform,
+        })),
+        currentStem: null, 
+        annotations: [] 
+      }),
+
       projectMetadata: [],
       setProjectMetadata: (data) => set({ projectMetadata: data }),
       folders: [],
@@ -120,8 +159,6 @@ export const useStore = create<AppState>()(
       stems: [],
       
       savedAlignments: [],
-      
-      // 🌟 修复：新增防重复的同名覆盖逻辑，最多保留 10 个
       addSavedAlignment: (preset) => set((state) => ({ 
         savedAlignments: [
           preset, 
@@ -142,6 +179,7 @@ export const useStore = create<AppState>()(
       })),
       removeView: (id) => set((state) => ({ views: state.views.filter(v => v.id !== id) })),
       clearViews: () => set({ views: [] }),
+      
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
       
       addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
@@ -158,13 +196,14 @@ export const useStore = create<AppState>()(
       name: 'multiAnno_workspace_state', 
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        projectName: state.projectName, // 🌟 确保持久化项目名称
         projectMetadata: state.projectMetadata,
         folders: state.folders,
         views: state.views,         
         stems: state.stems,
         currentStem: state.currentStem,
         annotations: state.annotations, 
-        savedAlignments: state.savedAlignments, // 🌟 确保持久化
+        savedAlignments: state.savedAlignments, 
       }),
     }
   )
