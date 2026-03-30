@@ -13,7 +13,8 @@ import {
 } from 'lucide-react';
 
 export function ViewExtentCheck() {
-  const { views, folders, updateView, setActiveModule } = useStore();
+  // 合并为这一行：
+  const { views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment } = useStore();
   
 // 🛡️ 兜底防线：如果没有绑定 View 或没有数据
   if (!views || views.length === 0) {
@@ -62,7 +63,8 @@ export function ViewExtentCheck() {
   // 记录已完成对齐检查的视图 ID
   const [completedViews, setCompletedViews] = useState<Set<string>>(new Set());
   // 保存的对齐参数库 (Presets)
-  const [savedAlignments, setSavedAlignments] = useState<Array<{id: string, name: string, crop: any, transform: any}>>([]);
+  // const [savedAlignments, setSavedAlignments] = useState<Array<{id: string, name: string, crop: any, transform: any}>>([]);
+
   // 用于强制刷新右侧参数显示面板的 Tick
   const [renderTick, setRenderTick] = useState(0);
   
@@ -483,10 +485,20 @@ export function ViewExtentCheck() {
       const viewIndex = augViews.findIndex(v => v.id === activeAugView.id);
       const presetName = `Aug View ${viewIndex + 1}`;
       
-      setSavedAlignments(prev => [
-        ...prev.filter(p => p.name !== presetName), // 覆盖同名旧记录
-        { id: Math.random().toString(), name: presetName, crop: { ...activeCrop }, transform: { ...tempTransformRef.current } }
-      ]);
+      const markAsCompleteAndSave = () => {
+            setCompletedViews(prev => new Set(prev).add(activeAugView.id));
+            
+            const viewIndex = augViews.findIndex(v => v.id === activeAugView.id);
+            const presetName = `Aug View ${viewIndex + 1}`;
+            
+            // 🌟 修复：直接调用 Store 的方法
+            addSavedAlignment({
+              id: Math.random().toString(), 
+              name: presetName, 
+              crop: { ...activeCrop }, 
+              transform: { ...tempTransformRef.current }
+            });
+          };
     };
 
     if (isAligned) {
@@ -571,11 +583,24 @@ export function ViewExtentCheck() {
         a.click();
         URL.revokeObjectURL(url);
       }
-      setActiveModule('export'); 
+    // 🌟 新增：阻塞式的成功交互反馈
+      alert("✅ 导出成功！\n\nproject_meta.json 已保存到本地。\n系统已为您生成当前对齐参数的快照，即将进入工作区...");
+
+      if (activeAugView) {
+        // 顺手优化了一下分钟的显示，保证个位数分钟前面补 0 (如 10:05)
+        const minutes = new Date().getMinutes().toString().padStart(2, '0');
+        addSavedAlignment({
+          id: Math.random().toString(36).substr(2, 9),
+          name: `Auto Saved ${new Date().getHours()}:${minutes}`,
+          crop: { ...activeCrop }, 
+          transform: { ...tempTransformRef.current } 
+        });
+      }
+      setActiveModule('workspace'); 
     } catch (err) {
       console.warn("Save cancelled or failed", err);
       if (window.confirm("Save cancelled. Do you still want to proceed to the next step?")) {
-         setActiveModule('export');
+         setActiveModule('workspace');
       }
     }
   };
