@@ -1,7 +1,7 @@
 import os
 import platform
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import cv2
 import numpy as np
@@ -22,8 +22,13 @@ app.add_middleware(
 )
 
 
+class FolderPayload(BaseModel):
+    path: str
+    suffix: Optional[str] = ""
+
+
 class AnalyzeRequest(BaseModel):
-    paths: List[str]
+    folders: List[FolderPayload]
 
 
 def calculate_list_stats(*lists):
@@ -146,32 +151,44 @@ def explore_file_system(
 @app.post("/api/project/analyze")
 async def analyze_project(request: AnalyzeRequest):
     analysis_results = []
-    print(f"Received paths: {request.paths}")
+    print(f"Received folders data: {request.folders}")
 
     stem_list = []
-    folder_list = request.paths
-    for folder_path in folder_list:
+
+    # 🌟 2. 遍历前端传来的 folder 对象列表
+    for item in request.folders:
+        folder_path = item.path
+        # 清理用户可能不小心输入的空格
+        suffix = item.suffix.strip() if item.suffix else ""
+
         if not os.path.exists(folder_path):
-            print(f"Folder {folder_path} not exists")
+            print(f"Folder {folder_path} does not exist")
             continue
 
-        # 提取当前文件夹下所有合法图像的 Stem（不带后缀的文件名）
-        valid_stems = [
-            Path(f).stem
-            for f in os.listdir(folder_path)
-            if f.lower().endswith((".tif", ".tiff", ".png", ".jpg"))
-        ]
+        valid_stems = []
+        valid_files = []  # 用来存真实文件名，避免原代码中遍历两次 os.listdir
+
+        # 🌟 3. 提取合法图像，并执行“切尾巴”操作
+        for f in os.listdir(folder_path):
+            if f.lower().endswith((".tif", ".tiff", ".png", ".jpg", ".jpeg")):
+                valid_files.append(f)
+
+                # 获取不带扩展名的原始文件名 (例如 "DJI_0001_T")
+                raw_stem = Path(f).stem
+
+                # 核心逻辑：如果配置了后缀(如 "_T")，且文件名以该后缀结尾，则将其剔除
+                if suffix and raw_stem.endswith(suffix):
+                    clean_stem = raw_stem[: -len(suffix)]  # 变成 "DJI_0001"
+                else:
+                    clean_stem = raw_stem
+
+                valid_stems.append(clean_stem)
 
         if not valid_stems:
             continue
 
-        # 注意：这里可能需要补全 valid_files 用于读取第一张图的宽高等元数据
-        # 假设我们只读第一张图
-        first_file = [
-            f
-            for f in os.listdir(folder_path)
-            if f.lower().endswith((".tif", ".tiff", ".png", ".jpg"))
-        ][0]
+        # 因为在上面的循环里已经收集了合法文件，这里直接取第一个即可，效率更高
+        first_file = valid_files[0]
         image_first_path = os.path.join(folder_path, first_file)
 
         stem_list.append(valid_stems)
@@ -188,7 +205,7 @@ async def analyze_project(request: AnalyzeRequest):
         }
         analysis_results.append(meta)
 
-    # 计算所有文件夹的交集统计
+    # 计算所有文件夹的交集统计 (保持你的原逻辑完全不变)
     intersection_stats = calculate_list_stats(*stem_list)
     common_stems = intersection_stats.get("intersection_elements", [])
     list_stats = intersection_stats.get("list_stats", {})
@@ -204,7 +221,6 @@ async def analyze_project(request: AnalyzeRequest):
     return {
         "status": "success",
         "data": analysis_results,
-        # 必须把实际的交集 stems 传给前端，前端才能生成下拉菜单！
         "commonStems": sorted(common_stems),
     }
 

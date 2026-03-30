@@ -26,6 +26,7 @@ export function ProjectMetaDashboard() {
       folders: folders.map((f, i) => ({
         Id: i + 1,
         path: f.path,
+        suffix: f.suffix || "",
         "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
         "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
         "files total": f.files ? f.files.length : 0,
@@ -86,9 +87,16 @@ export function ProjectMetaDashboard() {
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
             {meta.folders.map((folder) => (
               <div key={folder.Id} className="bg-black/40 border border-neutral-800 rounded-lg p-4 space-y-3">
-                <div className="flex items-center gap-3 border-b border-neutral-800/50 pb-2">
+              <div className="flex items-center gap-3 border-b border-neutral-800/50 pb-2 flex-wrap">
                   <span className="bg-neutral-800 text-neutral-300 px-2 py-0.5 rounded text-xs font-bold font-mono">ID: {folder.Id}</span>
                   <span className="text-sm font-semibold text-neutral-200 truncate" title={folder.path}>{folder.path}</span>
+                  
+                  {/* 🌟 新增：在 Dashboard 面板中显示后缀 */}
+                  {folder.suffix && (
+                    <span className="text-amber-500 font-mono font-bold bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-500/20 shrink-0">
+                      Suffix: {folder.suffix}
+                    </span>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-3 gap-2">

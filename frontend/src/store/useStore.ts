@@ -4,6 +4,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 export interface FolderData {
   id: string;
   path: string;
+  suffix: string;
   files: File[];
   metadata: {
     height: number;
@@ -35,6 +36,7 @@ export interface ViewConfig {
   bands: number[]; 
   isMain: boolean;
   opacity: number;
+  // colormap?: 'gray' | 'jet' | 'viridis' | 'plasma' | 'inferno'; // 🌟 新增
   transform: {
     offsetX: number;
     offsetY: number;
@@ -86,11 +88,13 @@ export interface AppState {
   addFolder: (folder: FolderData) => void;
   updateFolder: (id: string, data: Partial<FolderData>) => void;
   removeFolder: (id: string) => void;
-  
+  clearFolders: () => void;
+
   addView: (view: ViewConfig) => void;
   updateView: (id: string, data: Partial<ViewConfig>) => void;
   removeView: (id: string) => void;
-  
+  clearViews: () => void;
+
   setViewport: (zoom: number, panX: number, panY: number) => void;
   addAnnotation: (annotation: Annotation) => void;
   updateAnnotation: (id: string, data: Partial<Annotation>) => void;
@@ -130,13 +134,14 @@ export const useStore = create<AppState>()(
         folders: state.folders.map(f => f.id === id ? { ...f, ...data } : f)
       })),
       removeFolder: (id) => set((state) => ({ folders: state.folders.filter(f => f.id !== id) })),
+      clearFolders: () => set({ folders: [] }),
       
       addView: (view) => set((state) => ({ views: [...state.views, view] })),
       updateView: (id, data) => set((state) => ({
         views: state.views.map(v => v.id === id ? { ...v, ...data } : v)
       })),
       removeView: (id) => set((state) => ({ views: state.views.filter(v => v.id !== id) })),
-      
+      clearViews: () => set({ views: [] }),
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
       
       addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),

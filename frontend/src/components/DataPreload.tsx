@@ -12,10 +12,10 @@ import {
 import { FileExplorerDialog } from './FileExplorerDialog'; 
 
 export function DataPreload() {
-  const { folders, views, addFolder, removeFolder, addView, removeView, updateView, setActiveModule } = useStore();
+  const { folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
   
   // --- 占位符与资源管理器状态 ---
-  const [placeholders, setPlaceholders] = useState<{ id: string, path: string }[]>([]);
+  const [placeholders, setPlaceholders] = useState<{ id: string, path: string, suffix: string }[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [activePlaceholderId, setActivePlaceholderId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
@@ -52,16 +52,13 @@ export function DataPreload() {
     localStorage.setItem('multiAnno_recentPaths', JSON.stringify(newHistory));
   };
 
-  // 🚀 新增：点击历史记录直接添加为一个新的占位符
-// 🚀 修复：去除防重拦截，允许用户随意点击添加
-  const handleAddFromHistory = (path: string) => {
-    setPlaceholders(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), path }]);
-  };
-  // ==========================================
 
   // --- 占位符操作逻辑 ---
   const handleAddPlaceholder = () => {
-    setPlaceholders([...placeholders, { id: Math.random().toString(36).substr(2, 9), path: '' }]);
+    setPlaceholders([...placeholders, { id: Math.random().toString(36).substr(2, 9), path: '', suffix: '' }]);
+  };
+  const handleAddFromHistory = (path: string) => {
+    setPlaceholders(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), path, suffix: '' }]);
   };
 
   const handleRemovePlaceholder = (id: string) => {
@@ -99,8 +96,17 @@ export function DataPreload() {
     savePathsToHistory(selectedPaths);
   };
 
-  const cancelFolders = () => setPlaceholders([]);
-
+  const cancelFolders = () => {
+      if (window.confirm("Are you sure you want to cancel all pending folders? (确定要取消所有未确认的路径吗？)")) {
+        setPlaceholders([]);
+        clearFolders();
+      }
+    };
+  const handleResetViews = () => {
+      if (window.confirm("Are you sure you want to reset all View configurations? (确定要清空所有视图配置吗？)")) {
+        clearViews();
+      }
+    };
   // --- 确认并上传给后端分析 ---
   const confirmFolders = async () => {
     const validPlaceholders = placeholders.filter(p => p.path.trim() !== "");
@@ -110,12 +116,15 @@ export function DataPreload() {
     
     try {
       // 🚀 删除了 getFullPath，直接使用用户输入或选择的绝对路径
-      const pathsToAnalyze = validPlaceholders.map(p => p.path.trim());
+      const payloadData = validPlaceholders.map(p => ({
+        path: p.path.trim(),
+        suffix: p.suffix.trim()
+      }));
 
       const response = await fetch('http://localhost:8080/api/project/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paths: pathsToAnalyze }),
+        body: JSON.stringify({ folders: payloadData }), // 注意这里改成了 folders 数组
       });
 
       if (!response.ok) throw new Error("Backend analysis failed");
@@ -130,10 +139,14 @@ export function DataPreload() {
       }
 
       backendData.forEach((folderMeta: any, index: number) => {
-        const originalPath = pathsToAnalyze[index];
+        // 🌟 修改 1：从新的 payloadData 中提取 path
+        const originalPath = payloadData[index].path; 
+        const originalSuffix = payloadData[index].suffix;
+        
         addFolder({
           id: `folder-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`,
           path: folderMeta.folderPath || originalPath, 
+          suffix: originalSuffix,
           files: [], 
           metadata: {
             width: folderMeta.width || 1024,
@@ -154,8 +167,8 @@ export function DataPreload() {
         alert("警告：您选择的文件夹中没有找到任何同名图像，无法建立协同视图！");
       }
       
-      // 🌟 核心：保存这批成功的绝对路径到历史记录
-      savePathsToHistory(pathsToAnalyze);
+      // 🌟 修改 2：用 map 提取出所有的 path 字符串，传给历史记录保存函数
+      savePathsToHistory(payloadData.map(p => p.path));
       
       // 成功后清空占位符
       setPlaceholders([]);
@@ -251,6 +264,11 @@ export function DataPreload() {
                       <span>Bands: {folder.metadata.bands}</span>
                       <span className="text-green-600 dark:text-green-400">Loaded: {folder.metadata.sceneGroupsLoaded}</span>
                       {folder.metadata.sceneGroupsSkipped ? (<span className="text-destructive">Skipped: {folder.metadata.sceneGroupsSkipped}</span>) : null}
+                      {folder.suffix && (
+                        <span className="text-amber-500 font-mono font-bold bg-amber-500/10 px-1.5 rounded">
+                          Suffix: {folder.suffix}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -290,7 +308,17 @@ export function DataPreload() {
                     disabled={isConfirming}
                   />
                 </div>
-
+                {/* 🌟 新增：后缀规则输入框 */}
+                <div className="w-24 shrink-0">
+                  <Input 
+                    value={item.suffix} 
+                    onChange={(e) => setPlaceholders(placeholders.map(p => p.id === item.id ? { ...p, suffix: e.target.value } : p))}
+                    placeholder="Suffix (e.g. _T)"
+                    className="font-mono text-xs bg-background h-8"
+                    title="Optional: String to ignore at the end of filenames for alignment"
+                    disabled={isConfirming}
+                  />
+                </div>
                 <Button variant="ghost" size="icon" onClick={() => handleRemovePlaceholder(item.id)} className="text-destructive flex-shrink-0" disabled={isConfirming}>
                   <X className="w-4 h-4" />
                 </Button>
@@ -301,7 +329,11 @@ export function DataPreload() {
 
           <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t shrink-0">
             <span className="text-sm text-muted-foreground mr-auto">{placeholders.length} folder(s) pending</span>
-            <Button onClick={cancelFolders} variant="outline" disabled={placeholders.length === 0 || isConfirming}>
+            <Button 
+              onClick={cancelFolders} 
+              variant="outline" 
+              disabled={(placeholders.length === 0 && folders.length === 0) || isConfirming}
+            >
               <X className="w-4 h-4 mr-2" /> Cancel All
             </Button>
             <Button onClick={confirmFolders} disabled={placeholders.length === 0 || isConfirming}>
@@ -411,7 +443,7 @@ export function DataPreload() {
             <span className="text-sm text-muted-foreground mr-auto">
               {views.length} view(s) configured
             </span>
-            <Button onClick={() => { /* 预留重置逻辑 */ }} variant="outline" disabled={views.length === 0}>
+            <Button onClick={handleResetViews} variant="outline" disabled={views.length === 0}>
               <X className="w-4 h-4 mr-2" /> Reset
             </Button>
             <Button onClick={handleConfirmViews} disabled={views.length === 0} className="bg-blue-600 hover:bg-blue-700">

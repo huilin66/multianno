@@ -522,6 +522,7 @@ export function ViewExtentCheck() {
       folders: folders.map((f, i) => ({
         Id: i + 1,
         path: f.path,
+        suffix: f.suffix || "",
         "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
         "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
         "files total": f.files ? f.files.length : 0,
