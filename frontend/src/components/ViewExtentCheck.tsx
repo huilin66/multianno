@@ -668,13 +668,24 @@ export function ViewExtentCheck() {
         <div className="flex items-center gap-3">
           {/* 【新增】：全局 Project Meta 查看器 */}
 
-          {/* 主模式切换 */}
+          {/* 主模式切换：红绿阵营 */}
           <div className="flex items-center gap-1 bg-neutral-50 dark:bg-neutral-950 p-1 rounded-lg border border-neutral-200 dark:border-neutral-800 shrink-0">
-            {/* 加上 withSwipeCancel */}
-            <Button variant={mode === 'pan' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'pan' ? "bg-blue-600" : "text-neutral-500 dark:text-neutral-400"}`} onClick={() => withSwipeCancel(() => setMode('pan'))}>
+            <Button 
+              variant={mode === 'pan' ? 'default' : 'ghost'} 
+              size="sm" 
+              // 🌟 Pan: 激活时显示红色底色 (bg-red-500)
+              className={`h-7 px-3 ${mode === 'pan' ? "bg-red-500 hover:bg-red-600 text-white" : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100"}`} 
+              onClick={() => withSwipeCancel(() => setMode('pan'))}
+            >
               <Hand className="w-3.5 h-3.5 mr-1.5"/> {t('viewExtent.topBar.pan')}
             </Button>
-            <Button variant={mode === 'align' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'align' ? "bg-green-600" : "text-neutral-500 dark:text-neutral-400"}`} onClick={() => withSwipeCancel(() => setMode('align'))}>
+            <Button 
+              variant={mode === 'align' ? 'default' : 'ghost'} 
+              size="sm" 
+              // 🌟 Align: 激活时显示绿色底色 (bg-green-600)
+              className={`h-7 px-3 ${mode === 'align' ? "bg-green-600 hover:bg-green-700 text-white" : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100"}`} 
+              onClick={() => withSwipeCancel(() => setMode('align'))}
+            >
               <Move className="w-3.5 h-3.5 mr-1.5"/> {t('viewExtent.topBar.align')}
             </Button>
           </div>
@@ -683,17 +694,19 @@ export function ViewExtentCheck() {
           {mode === 'align' && (
             <div className="flex items-center gap-2 ml-2 shrink-0 animate-in fade-in slide-in-from-left-4">
                
-               <div className="flex items-center bg-neutral-50 dark:bg-neutral-950 p-1 rounded-lg border border-neutral-200 dark:border-neutral-800">
+              <div className="flex items-center bg-neutral-50 dark:bg-neutral-950 p-1 rounded-lg border border-neutral-200 dark:border-neutral-800">
                  <Button 
                    variant={alignSubMode === 'crop' ? 'default' : 'ghost'} size="sm" 
-                   className={`h-7 px-3 rounded-md ${alignSubMode === 'crop' ? "bg-amber-600 text-neutral-900 dark:text-neutral-100" : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100"}`}
+                   // 🌟 Crop: 激活时显示橙色底色 (bg-amber-500)
+                   className={`h-7 px-3 rounded-md ${alignSubMode === 'crop' ? "bg-amber-500 hover:bg-amber-600 text-white" : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100"}`}
                    onClick={() => withSwipeCancel(() => setAlignSubMode('crop'))}
                  >
                    <Square className="w-3.5 h-3.5 mr-1.5"/> {t('viewExtent.topBar.crop')}
                  </Button>
                  <Button 
                    variant={alignSubMode === 'transform' ? 'default' : 'ghost'} size="sm" 
-                   className={`h-7 px-3 rounded-md ${alignSubMode === 'transform' ? "bg-blue-600 text-neutral-900 dark:text-neutral-100" : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100"}`}
+                   // 🌟 Move/Zoom: 激活时显示蓝色底色 (bg-blue-600)
+                   className={`h-7 px-3 rounded-md ${alignSubMode === 'transform' ? "bg-blue-600 hover:bg-blue-700 text-white" : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100"}`}
                    onClick={() => withSwipeCancel(() => setAlignSubMode('transform'))}
                  >
                    <Maximize className="w-3.5 h-3.5 mr-1.5"/> {t('viewExtent.topBar.moveZoom')}
@@ -702,22 +715,32 @@ export function ViewExtentCheck() {
 
                <div className="flex items-center gap-1 bg-white dark:bg-neutral-900 p-1 rounded-lg border border-neutral-700">
                  
-                 {/* Crop 的专属操作 */}
+                {/* Crop 的专属操作：统一橙色系 (Amber) */}
                  <div className="flex items-center gap-0.5 border-r border-neutral-700 pr-1 mr-0.5">
                    <Button 
-                     variant={topBarConfig.showOutsideCrop ? 'ghost' : 'secondary'} 
+                     variant="ghost" 
                      size="sm" 
-                     className={`h-7 px-2 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : (!topBarConfig.showOutsideCrop ? 'bg-neutral-700 text-neutral-900 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100 hover:bg-amber-500/20')}`} 
+                     // 🌟 核心修复：只有在 crop 模式下才是橙色；其他模式下变灰并降低透明度
+                     className={`h-7 px-2 transition-opacity ${
+                       alignSubMode === 'crop' 
+                         ? 'text-amber-600 dark:text-amber-500 hover:bg-amber-500/10' 
+                         : 'text-neutral-500 dark:text-neutral-400 opacity-30 cursor-not-allowed'
+                     }`} 
                      disabled={alignSubMode !== 'crop'}
                      onClick={() => toggleConfigWithSwipeCancel('showOutsideCrop')}
                      title={t('viewExtent.topBar.toggleMask')}
                    >
-                     {topBarConfig.showOutsideCrop ? <Eye className="w-3.5 h-3.5 mr-1" /> : <EyeOff className="w-3.5 h-3.5 mr-1 text-amber-500" />}
-                     {t('viewExtent.topBar.toggleMask')}
+                     {topBarConfig.showOutsideCrop ? (
+                       <Eye className="w-3.5 h-3.5 mr-1" />
+                     ) : (
+                       <EyeOff className="w-3.5 h-3.5 mr-1 opacity-50" /> 
+                     )}
+                     {t('viewExtent.topBar.mask')}
                    </Button>
                    <Button 
                      variant="ghost" size="icon" 
-                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100 hover:bg-amber-500/20'}`} 
+                     // 🌟 Reset Crop: 悬停时变为橙色
+                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-500 dark:text-neutral-400 hover:text-amber-600 dark:hover:text-amber-500 hover:bg-amber-500/10'}`} 
                      disabled={alignSubMode !== 'crop'}
                      onClick={() => withSwipeCancel(handleResetCrop)} title={t('viewExtent.topBar.resetCrop')}
                    >
@@ -725,11 +748,12 @@ export function ViewExtentCheck() {
                    </Button>
                  </div>
 
-                 {/* Move/Zoom 的专属操作 */}
+                 {/* Move/Zoom 的专属操作：统一蓝色系 (Blue) */}
                  <div className="flex items-center gap-0.5">
                    <Button 
                      variant="ghost" size="sm" 
-                     className={`h-7 px-2 transition-opacity ${alignSubMode !== 'transform' ? 'opacity-30 cursor-not-allowed' : 'text-blue-400 hover:bg-blue-400/20'}`} 
+                     // 🌟 Fit to Main: 蓝色字，悬停蓝色底
+                     className={`h-7 px-2 transition-opacity ${alignSubMode !== 'transform' ? 'opacity-30 cursor-not-allowed' : 'text-blue-600 dark:text-blue-400 hover:bg-blue-500/20'}`} 
                      disabled={alignSubMode !== 'transform'}
                      onClick={() => withSwipeCancel(handleFitToMain)}
                      title={t('viewExtent.topBar.fitMainTitle')}
@@ -738,7 +762,8 @@ export function ViewExtentCheck() {
                    </Button>
                    <Button 
                      variant="ghost" size="icon" 
-                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'transform' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100 hover:bg-blue-500/20'}`} 
+                     // 🌟 Reset Transform: 蓝色字，悬停蓝色底
+                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'transform' ? 'opacity-30 cursor-not-allowed' : 'text-blue-600 dark:text-blue-400 hover:bg-blue-500/20'}`} 
                      disabled={alignSubMode !== 'transform'}
                      onClick={() => withSwipeCancel(handleResetTransform)} title={t('viewExtent.topBar.resetTransform')}
                    >
