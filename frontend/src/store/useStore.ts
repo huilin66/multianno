@@ -71,6 +71,8 @@ export interface AppState {
   setProjectName: (name: string) => void;
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
+  language: 'en' | 'zh';
+  setLanguage: (lang: 'en' | 'zh') => void;
   projectMetadata: FolderMetadata[]; 
   folders: FolderData[];
   views: ViewConfig[];
@@ -120,6 +122,9 @@ export const useStore = create<AppState>()(
       setProjectName: (name) => set({ projectName: name }),
       theme: 'dark', // 默认深色
       setTheme: (theme) => set({ theme }),
+      // 🌟 2. 初始化语言为英文
+      language: 'en',
+      setLanguage: (lang) => set({ language: lang }),
       // 🌟 核心新增：加载项目元数据
       loadProjectMeta: (meta) => set({
         projectName: meta.projectName || 'Untitled Project',
@@ -196,6 +201,7 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         projectName: state.projectName, 
         theme: state.theme,
+        language: state.language, // 🌟 3. 把语言存进 localStorage
         projectMetadata: state.projectMetadata,
         folders: state.folders,
         views: state.views,         
@@ -242,6 +248,7 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         projectName: state.projectName, // 🌟 确保持久化项目名称
         theme: state.theme,
+        language: state.language, // 🌟 3. 把语言存进 localStorage
         projectMetadata: state.projectMetadata,
         folders: state.folders,
         views: state.views,         

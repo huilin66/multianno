@@ -1,3 +1,5 @@
+import './i18n'; 
+import { useTranslation } from 'react-i18next';
 import React, { useState, useEffect } from 'react'; 
 import { useStore } from './store/useStore';
 import { 
@@ -23,10 +25,17 @@ import {
   DialogTitle 
 } from '@/components/ui/dialog';
 // 🌟 引入新的图标: FolderPlus 和 Upload
-import { Menu, Settings, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon } from 'lucide-react';
+import { Menu, Settings, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe } from 'lucide-react';
 
 export default function App() {
-  const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme} = useStore();
+  const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage} = useStore();
+  // 🌟 拿到翻译函数 t，和 i18n 实例
+  const { t, i18n } = useTranslation();
+
+  // 🌟 监听 Store 里的语言变化，同步给 i18next 引擎
+  useEffect(() => {
+    i18n.changeLanguage(language);
+  }, [language, i18n]);
 
   // 🌟 4. 核心逻辑：监听 theme 变化，动态切换 HTML 根节点的 class
   useEffect(() => {
@@ -50,25 +59,25 @@ export default function App() {
               
               {/* 🌟 1. 修复菜单栏：创建新项目 */}
               <DropdownMenuItem onClick={() => setActiveModule('createproject')}>
-                <FolderPlus className="w-4 h-4 mr-2" /> Create New Project
+                <FolderPlus className="w-4 h-4 mr-2" /> {t('menu.createProject')}
               </DropdownMenuItem>
               
               {/* 🌟 2. 修复菜单栏：加载现有项目 */}
               <DropdownMenuItem onClick={() => setActiveModule('loadproject')}>
-                <Upload className="w-4 h-4 mr-2" /> Load Project
+                <Upload className="w-4 h-4 mr-2" /> {t('menu.loadProject')}
               </DropdownMenuItem>
               
               <DropdownMenuItem onClick={() => setActiveModule('preload')}>
-                <FolderOpen className="w-4 h-4 mr-2" /> Data Preload
+                <FolderOpen className="w-4 h-4 mr-2" /> {t('menu.dataPreload')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('extent')}>
-                <Settings className="w-4 h-4 mr-2" /> View Extent Check
+                <Settings className="w-4 h-4 mr-2" /> {t('menu.viewExtentCheck')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('meta')}>
-                <Database className="w-4 h-4 mr-2" /> Project Meta
+                <Database className="w-4 h-4 mr-2" /> {t('menu.projectMeta')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('export')}>
-                <Download className="w-4 h-4 mr-2" /> Export Data
+                <Download className="w-4 h-4 mr-2" /> {t('menu.exportData')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -107,22 +116,27 @@ export default function App() {
         {/* 右侧区域：放置主题切换按钮 */}
         <div className="w-1/3 flex justify-end items-center gap-2">
           
-          {/* 🌟 6. 主题切换按钮本尊 */}
+          {/* 语言切换按钮 */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
+            className="text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white rounded-full font-bold text-xs"
+            title={t('header.switchLang')} // 🌟 替换这里
+          >
+            {language === 'en' ? '中' : 'EN'}
+          </Button>
+
+          {/* 主题切换按钮 */}
           <Button 
             variant="ghost" 
             size="icon" 
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white rounded-full"
-            title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
+            title={theme === 'dark' ? t('header.themeLight') : t('header.themeDark')} // 🌟 替换这里
           >
-            {/* 根据当前状态渲染不同的图标 */}
-            {theme === 'dark' ? (
-              <Sun className="w-5 h-5 transition-all" /> 
-            ) : (
-              <Moon className="w-5 h-5 transition-all" />
-            )}
+            {theme === 'dark' ? <Sun className="w-5 h-5 transition-all" /> : <Moon className="w-5 h-5 transition-all" />}
           </Button>
-
         </div>
       </header>
 
@@ -142,7 +156,7 @@ export default function App() {
         <DialogContent className="max-w-md w-[95vw] h-auto flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <FolderPlus className="w-5 h-5 text-primary"/> Create New Project
+              <FolderPlus className="w-5 h-5 text-primary"/> {t('dialog.createProject')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
@@ -161,7 +175,7 @@ export default function App() {
         <DialogContent className="max-w-md w-[95vw] h-auto flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-primary"/> Load Project
+              <Upload className="w-5 h-5 text-primary"/> {t('dialog.loadProject')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
@@ -179,7 +193,7 @@ export default function App() {
       >
         <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-            <DialogTitle>Data Preload</DialogTitle>
+            <DialogTitle>{t('dialog.dataPreload')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <DataPreload />
@@ -194,7 +208,7 @@ export default function App() {
       >
         <DialogContent className="max-w-6xl sm:max-w-6xl h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-            <DialogTitle>View Extent Check</DialogTitle>
+            <DialogTitle>{t('dialog.viewExtentCheck')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <ViewExtentCheck />
@@ -209,7 +223,7 @@ export default function App() {
       >
         <DialogContent className="max-w-3xl sm:max-w-3xl h-[70vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-            <DialogTitle>Export Data</DialogTitle>
+            <DialogTitle>{t('dialog.exportData')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <DataFormatExchange />
@@ -225,7 +239,7 @@ export default function App() {
         <DialogContent className="max-w-6xl sm:max-w-6xl w-[95vw] h-[85vh] flex flex-col p-0 bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-800 overflow-hidden">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-              <Database className="w-5 h-5 text-blue-400"/> Project Metadata Dashboard
+              <Database className="w-5 h-5 text-blue-400"/> {t('dialog.projectMeta')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">

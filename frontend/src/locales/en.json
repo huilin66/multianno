@@ -1,0 +1,206 @@
+{
+    "createProject": {
+        "defaultName": "multianno project1",
+        "nameLabel": "Project Name",
+        "namePlaceholder": "Enter project name...",
+        "importLabel": "Optional: Import Parameters",
+        "importDesc": "You can reuse folder paths, view settings, and alignments from an existing project.",
+        "paramsLoaded": "Parameters Loaded",
+        "loadJson": "Load existing JSON...",
+        "cancel": "Cancel",
+        "submit": "Create Project",
+        "invalidJson": "Invalid JSON file"
+    },
+    "loadProject": {
+        "descPre": "Select a ",
+        "descPost": " file to restore your workspace, folders, and view configurations.",
+        "failLoad": "Failed to load project",
+        "browse": "Browse JSON File"
+    },
+    "dataPreload": {
+    "folders": {
+      "title": "Data Folders",
+      "add": "Add Folder",
+      "recent": "Recent:",
+      "size": "Size:",
+      "bands": "Bands:",
+      "loaded": "Loaded:",
+      "skipped": "Skipped:",
+      "suffix": "Suffix:",
+      "emptyHint": "Click \"Add Folder\" to start configuring",
+      "pathPlaceholder": "Enter absolute path or click icon to browse...",
+      "suffixPlaceholder": "Suffix (e.g. _T)",
+      "pendingCount": "folder(s) pending",
+      "cancelAll": "Cancel All",
+      "analyzing": "Analyzing...",
+      "confirmUpload": "Confirm Upload"
+    },
+    "views": {
+      "title": "View Configuration",
+      "addView": "Add View",
+      "max9": "(Max 9)",
+      "emptyHint": "No views configured. Add a view to start mapping data.",
+      "mainView": "Main View",
+      "augView": "Aug View",
+      "sourceFolder": "Source Folder",
+      "selectFolder": "Select folder...",
+      "stretchTitle": "Data Stretch Applied:",
+      "stretchDesc1": "Original source is",
+      "stretchDesc2": "The display preview has been auto-scaled to 8-bit for visualization.",
+      "selectChannels": "Select Channels (Click 1 or 3)",
+      "displayBand": "Display Band",
+      "band": "Band",
+      "colorMap": "Color Map",
+      "selectColormap": "Select Colormap",
+      "rgbMapping": "RGB Channel Mapping",
+      "select1or3": "Please select exactly 1 or 3 blocks.",
+      "configuredCount": "view(s) configured",
+      "reset": "Reset",
+      "confirmMap": "Confirm & Map Extents",
+      "confirmStart": "Confirm & Start Annotation"
+    },
+    "alerts": {
+      "cancelFolders": "Are you sure you want to cancel all pending folders?",
+      "resetViews": "Are you sure you want to reset all View configurations?",
+      "noImagesFound": "Python could not find any image data in this path. Please check the path.",
+      "noCommonStems": "Warning: No images with matching names were found in the selected folders. Sync views cannot be established!",
+      "backendFailed": "Failed to connect to Python backend. Please ensure FastAPI is running.",
+      "confirmExtent": "Are you sure you want to proceed to the View Extent Check (Multi-view Alignment) stage with the current settings?",
+      "confirmSingleView": "Only 1 view is configured. Are you sure you want to start annotation directly with this configuration?\n(This will skip the alignment stage, save the project config, and enter the workspace)",
+      "exportSuccess": "✅ Export Successful!\n\nproject_meta.json has been saved locally.\nEntering annotation workspace...",
+      "exportCancelled": "Export cancelled or failed. Do you still want to force enter the annotation workspace?"
+    }
+  },
+  "viewExtent": {
+    "errors": {
+      "missingConfig": "Missing View Configuration",
+      "missingDesc": "You must specify a Main View and load at least one scene group before alignment.",
+      "goPreload": "Go to Data Preload"
+    },
+    "skipped": {
+      "title": "Extent Check Skipped",
+      "desc": "Only a single view is configured. Multi-layer alignment is not required.",
+      "back": "Back to Select",
+      "exportAndStart": "Export & Start Annotation"
+    },
+    "topBar": {
+      "pan": "Pan",
+      "align": "Align",
+      "crop": "Crop",
+      "moveZoom": "Move/Zoom",
+      "mask": "Mask",
+      "toggleMask": "Toggle Mask",
+      "resetCrop": "Reset Crop Area",
+      "fitMain": "Fit to Main",
+      "fitMainTitle": "Fit Cropped Area to Main View",
+      "resetTransform": "Reset Position/Scale",
+      "opacity": "Opacity",
+      "hSwipe": "H-Swipe",
+      "vSwipe": "V-Swipe",
+      "hideAug": "Hide Aug View",
+      "showAug": "Show Aug View"
+    },
+    "canvas": {
+    "mainBorder": "MAIN VIEW BORDER",
+      "mainViewBase": "MAIN VIEW BASE",
+      "augRange": "AUG RANGE (Drag edges to crop)",
+      "augContent": "AUG CONTENT (Drag any edge to stretch/snap)"
+    },
+    "panel": {
+      "deleteParams": "Delete Parameters",
+      "existingParams": "Existing Parameters",
+      "defaultReset": "Default (Reset)",
+      "apply": "Apply",
+      "metaAugView": "Meta: Aug View",
+      "activeAugViews": "Active Aug Views",
+      "augView": "Aug View",
+      "currentParams": "Current Parameters",
+      "crop": "CROP (%)",
+      "scale": "SCALE",
+      "offset": "OFFSET (px)",
+      "aiAutoAlign": "AI Auto Align",
+      "tiePoints": "Tie Points",
+      "viewChecked": "View Checked",
+      "viewsChecked": "Views Checked"
+    },
+    "alerts": {
+      "saveAllFirst": "Please save and confirm alignment for ALL Aug Views before proceeding.",
+      "exportSuccess": "✅ Export Successful!\n\nproject_meta.json has been saved locally.\nA snapshot of the current alignment parameters has been generated. Entering workspace...",
+      "saveCancelled": "Save cancelled. Do you still want to proceed to the next step?",
+      "notAligned": "Current crop box is NOT perfectly aligned with the Main View.\n\nDo you want the system to Auto-Align (Fit to Main) and save?",
+      "underDevAI": "AI Auto Alignment feature is under development...",
+      "underDevTie": "Control Point Registration (Georeferencing) is under development..."
+    }
+  },
+  "projectMeta": {
+    "empty": {
+      "title": "No Project Meta",
+      "desc": "Please load data folders first.",
+      "goPreload": "Go to Data Preload"
+    },
+    "folders": {
+      "title": "Data Folders",
+      "id": "ID",
+      "suffix": "Suffix",
+      "validFiles": "Valid Files",
+      "skipped": "Skipped",
+      "total": "Total",
+      "size": "Size",
+      "bands": "Bands",
+      "type": "Type",
+      "noFolders": "No folders loaded."
+    },
+    "views": {
+      "title": "Configured Views",
+      "baseRef": "Base Reference",
+      "folderId": "Folder ID",
+      "bands": "Bands",
+      "renderMode": "Render Mode",
+      "crop": "Crop",
+      "scale": "Scale",
+      "offset": "Offset",
+      "noViews": "No views configured."
+    },
+    "bottom": {
+      "liveState": "Live Project State",
+      "downloadJson": "Download JSON Config"
+    }
+  },
+  "menu": {
+    "createProject": "Create New Project",
+    "loadProject": "Load Project",
+    "dataPreload": "Data Preload",
+    "viewExtentCheck": "View Extent Check",
+    "projectMeta": "Project Meta",
+    "exportData": "Export Data"
+  },
+  "header": {
+    "themeLight": "Switch to Light Mode",
+    "themeDark": "Switch to Dark Mode",
+    "switchLang": "切换为中文"
+  },
+  "dialog": {
+    "createProject": "Create New Project",
+    "loadProject": "Load Project",
+    "dataPreload": "Data Preload",
+    "viewExtentCheck": "View Extent Check",
+    "exportData": "Export Data",
+    "projectMeta": "Project Metadata Dashboard"
+  },
+  "workspace": {
+    "projectMeta": "Project Meta",
+    "viewLayers": "View Layers",
+    "objects": "Objects",
+    "scenes": "Scenes",
+    "mainView": "Main View",
+    "augView": "Aug View",
+    "noObjects": "No objects in this scene",
+    "noViews": "No views configured. Please go to Data Preload to set up your project.",
+    "folders": "FOLDERS",
+    "views": "VIEWS"
+  },
+  "common": {
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  }
+}

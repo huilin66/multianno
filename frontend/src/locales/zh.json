@@ -1,0 +1,206 @@
+{
+  "createProject": {
+    "defaultName": "multianno 项目1",
+    "nameLabel": "项目名称",
+    "namePlaceholder": "请输入项目名称...",
+    "importLabel": "可选：导入已有参数",
+    "importDesc": "您可以复用已有项目中的文件夹路径、视图配置以及对齐参数。",
+    "paramsLoaded": "参数已成功导入",
+    "loadJson": "加载已有的 JSON 配置...",
+    "cancel": "取消",
+    "submit": "创建项目",
+    "invalidJson": "非法的 JSON 配置文件"
+  },
+  "loadProject": {
+    "descPre": "请选择一个 ",
+    "descPost": " 文件，以恢复您的工作区、文件夹及视图配置。",
+    "failLoad": "项目加载失败",
+    "browse": "浏览并选择 JSON 文件"
+  },
+  "dataPreload": {
+    "folders": {
+      "title": "数据源文件夹",
+      "add": "添加文件夹",
+      "recent": "最近使用:",
+      "size": "尺寸:",
+      "bands": "波段数:",
+      "loaded": "成功加载:",
+      "skipped": "跳过:",
+      "suffix": "后缀规则:",
+      "emptyHint": "点击“添加文件夹”开始配置数据源",
+      "pathPlaceholder": "输入绝对路径或点击图标浏览本地文件...",
+      "suffixPlaceholder": "过滤后缀 (如 _T)",
+      "pendingCount": "个文件夹待确认",
+      "cancelAll": "取消所有",
+      "analyzing": "分析中...",
+      "confirmUpload": "确认并读取"
+    },
+    "views": {
+      "title": "多视图同步配置",
+      "addView": "添加视图",
+      "max9": "(最多 9 个)",
+      "emptyHint": "暂无视图配置。请添加视图以建立数据映射关系。",
+      "mainView": "主视图",
+      "augView": "辅助视图",
+      "sourceFolder": "数据来源",
+      "selectFolder": "请选择文件夹...",
+      "stretchTitle": "数据动态拉伸:",
+      "stretchDesc1": "原始数据格式为",
+      "stretchDesc2": "，系统已自动将显示预览拉伸至 8-bit 以便可视化操作。",
+      "selectChannels": "波段选择 (请选择 1 或 3 个)",
+      "displayBand": "显示波段",
+      "band": "波段",
+      "colorMap": "伪彩色映射",
+      "selectColormap": "选择色带",
+      "rgbMapping": "RGB 通道映射",
+      "select1or3": "请准确选择 1 个或 3 个波段。",
+      "configuredCount": "个视图已配置",
+      "reset": "重置",
+      "confirmMap": "确认并进入视图对齐",
+      "confirmStart": "确认并开始标注"
+    },
+    "alerts": {
+      "cancelFolders": "确定要取消所有未确认的路径吗？",
+      "resetViews": "确定要清空所有视图配置吗？",
+      "noImagesFound": "Python 未能在该路径下找到图片数据，请检查路径是否正确。",
+      "noCommonStems": "警告：您选择的文件夹中没有找到任何同名图像，无法建立协同视图！",
+      "backendFailed": "连接 Python 后端失败，请确认 FastAPI 正在运行。",
+      "confirmExtent": "确定要以当前的视图配置进入 View Extent Check (多图配准) 阶段吗？",
+      "confirmSingleView": "当前只配置了 1 个视图。确定要以此配置直接开始标注吗？\n(这将会跳过配准阶段，直接保存项目配置并进入工作区)",
+      "exportSuccess": "✅ 导出成功！\n\nproject_meta.json 已保存到本地。\n即将为您进入标注工作区...",
+      "exportCancelled": "导出已取消或失败。是否仍要强制进入标注工作区？"
+    }
+  },
+  "viewExtent": {
+    "errors": {
+      "missingConfig": "缺少视图配置",
+      "missingDesc": "必须先指定 Main View 并加载至少一个场景组才能进行对齐操作。",
+      "goPreload": "前往 Data Preload 加载数据"
+    },
+    "skipped": {
+      "title": "跳过视图对齐",
+      "desc": "当前只配置了单源视图 (Single View)，无需进行多图层对齐配准。",
+      "back": "返回重选",
+      "exportAndStart": "导出配置并开始标注"
+    },
+    "topBar": {
+      "pan": "漫游",
+      "align": "对齐",
+      "crop": "裁剪",
+      "moveZoom": "移动/缩放",
+      "mask": "蒙版",
+      "toggleMask": "切换蒙版",
+      "resetCrop": "重置裁剪区域",
+      "fitMain": "适配主视图",
+      "fitMainTitle": "将裁剪区域自动适配到主视图",
+      "resetTransform": "重置位置/缩放",
+      "opacity": "透明度",
+      "hSwipe": "水平卷帘",
+      "vSwipe": "垂直卷帘",
+      "hideAug": "隐藏辅助视图",
+      "showAug": "显示辅助视图"
+    },
+    "canvas": {
+      "mainBorder": "主视图边界 (MAIN VIEW)",
+      "mainViewBase": "主视图基础 (MAIN VIEW BASE)",
+      "augRange": "辅助视图裁剪区 (拖拽边缘进行裁剪)",
+      "augContent": "辅助视图内容区 (拖拽边缘拉伸/吸附)"
+    },
+    "panel": {
+      "deleteParams": "删除参数",
+      "existingParams": "已有对齐参数",
+      "defaultReset": "默认参数 (重置)",
+      "apply": "应用",
+      "metaAugView": "元数据: 辅助视图",
+      "activeAugViews": "当前待处理视图",
+      "augView": "辅助视图",
+      "currentParams": "当前实时参数",
+      "crop": "裁剪 CROP (%)",
+      "scale": "缩放 SCALE",
+      "offset": "偏移 OFFSET (px)",
+      "aiAutoAlign": "AI 自动对齐",
+      "tiePoints": "控制点配准",
+      "viewChecked": "确认当前视图",
+      "viewsChecked": "完成所有对齐"
+    },
+    "alerts": {
+      "saveAllFirst": "请在继续之前保存并确认所有辅助视图 (Aug Views) 的对齐参数。",
+      "exportSuccess": "✅ 导出成功！\n\nproject_meta.json 已保存到本地。\n系统已为您生成当前对齐参数的快照，即将进入工作区...",
+      "saveCancelled": "导出已取消。是否仍要强制进入下一步（工作区）？",
+      "notAligned": "当前裁剪框与主视图（Main View）未完全对齐。\n\n是否需要系统自动对齐 (适配主视图) 并保存？",
+      "underDevAI": "AI 自动对齐功能正在开发中...",
+      "underDevTie": "控制点配准功能正在开发中..."
+    }
+  },
+  "projectMeta": {
+    "empty": {
+      "title": "暂无项目元数据",
+      "desc": "请先加载数据源文件夹。",
+      "goPreload": "前往数据预加载"
+    },
+    "folders": {
+      "title": "数据源文件夹",
+      "id": "ID",
+      "suffix": "后缀",
+      "validFiles": "有效文件",
+      "skipped": "跳过",
+      "total": "总计",
+      "size": "尺寸",
+      "bands": "波段",
+      "type": "类型",
+      "noFolders": "当前未加载任何文件夹。"
+    },
+    "views": {
+      "title": "已配置视图",
+      "baseRef": "基准视图",
+      "folderId": "文件夹 ID",
+      "bands": "波段",
+      "renderMode": "渲染模式",
+      "crop": "裁剪",
+      "scale": "缩放",
+      "offset": "偏移",
+      "noViews": "当前未配置任何视图。"
+    },
+    "bottom": {
+      "liveState": "实时项目状态",
+      "downloadJson": "下载 JSON 配置"
+    }
+  },
+  "menu": {
+    "createProject": "创建新项目",
+    "loadProject": "加载项目",
+    "dataPreload": "数据预处理",
+    "viewExtentCheck": "视图对齐校验",
+    "projectMeta": "项目元数据",
+    "exportData": "导出数据"
+  },
+  "header": {
+    "themeLight": "切换为浅色模式",
+    "themeDark": "切换为深色模式",
+    "switchLang": "Switch to English"
+  },
+  "dialog": {
+    "createProject": "创建新项目",
+    "loadProject": "加载项目",
+    "dataPreload": "数据预加载",
+    "viewExtentCheck": "视图对齐校验",
+    "exportData": "导出数据",
+    "projectMeta": "项目元数据看板"
+  },
+  "workspace": {
+    "projectMeta": "项目元数据",
+    "viewLayers": "图层管理",
+    "objects": "标注对象",
+    "scenes": "切片场景",
+    "mainView": "主视图",
+    "augView": "辅助视图",
+    "noObjects": "当前场景暂无对象",
+    "noViews": "未配置视图。请前往数据预处理模块设置项目。",
+    "folders": "文件夹",
+    "views": "视图"
+  },
+  "common": {
+    "confirm": "确认",
+    "cancel": "取消"
+  }
+}

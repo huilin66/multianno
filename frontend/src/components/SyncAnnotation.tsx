@@ -11,9 +11,10 @@ import {
 import { ProjectMetaDashboard } from './ProjectMetaDashboard'; // 🌟 确保路径正确
 
 import type { ProjectMetaContract } from '../config/contract';
-
+import { useTranslation } from 'react-i18next'; // 🌟 引入翻译钩子
 
 export function SyncAnnotation() {
+  const { t } = useTranslation(); // 🌟 初始化 t 函数
   const { 
     projectName,
     views, 
@@ -196,7 +197,7 @@ export function SyncAnnotation() {
       >
         {views.length === 0 ? (
           <div className="w-full h-full flex items-center justify-center text-neutral-500 border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">
-            No views configured. Please go to Data Preload to set up your project.
+            {t('workspace.noViews')}
           </div>
         ) : (
           <div 
@@ -210,7 +211,7 @@ export function SyncAnnotation() {
               // {/* 🌟 修改点：边框和背景色适配日夜间，加入 transition-colors 保证切换丝滑 */}
               <div key={view.id} className="relative border border-neutral-200 dark:border-neutral-800 bg-neutral-200 dark:bg-black rounded-lg overflow-hidden transition-colors duration-300">
                 <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300">
-                  {view.isMain ? 'Main View' : `Aug View ${index}`}
+                  {view.isMain ? t('workspace.mainView') : `${t('workspace.augView')} ${index}`}
                 </div>
                 <CanvasView 
                   view={view} 
@@ -271,7 +272,7 @@ export function SyncAnnotation() {
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform" />
             <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 group-hover:text-blue-400">
-              Project Meta
+              {t('workspace.projectMeta')}
             </span>
           </div>
           
@@ -279,10 +280,10 @@ export function SyncAnnotation() {
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-[10px] font-mono text-neutral-500 dark:text-neutral-400 group-hover:border-primary/30 transition-colors">
               <span className="text-blue-400 font-bold">{folders.length}</span>
-              <span className="opacity-50 text-[9px]">FOLDERS</span>
+              <span className="opacity-50 text-[9px]">{t('workspace.folders')}</span>
               <div className="w-[1px] h-2 bg-neutral-700 mx-0.5" />
               <span className="text-emerald-400 font-bold">{views.length}</span>
-              <span className="opacity-50 text-[9px]">VIEWS</span>
+              <span className="opacity-50 text-[9px]">{t('workspace.views')}</span>
             </div>
             <ChevronRight className="w-3 h-3 text-neutral-600 group-hover:text-blue-400 transition-colors" />
           </div>
@@ -291,7 +292,7 @@ export function SyncAnnotation() {
         {/* 🌟 2. View Layers (图层管理区) */}
         <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
           <h3 className="font-semibold text-[11px] uppercase tracking-wider text-neutral-500 flex items-center gap-2 mb-3">
-            <Layers className="w-3.5 h-3.5" /> View Layers
+            <Layers className="w-3.5 h-3.5" /> {t('workspace.viewLayers')}
           </h3>
           <div className="space-y-1.5">
             {views.map((v, idx) => (
@@ -299,7 +300,7 @@ export function SyncAnnotation() {
                 <div className="flex items-center gap-2">
                   <div className={`w-1.5 h-1.5 rounded-full ${v.isMain ? 'bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]' : 'bg-emerald-500'}`} />
                   <span className={v.isMain ? "text-blue-400 font-bold" : "text-neutral-300"}>
-                    {v.isMain ? "Main View" : `Aug View ${idx}`}
+                    {v.isMain ? t('workspace.mainView') : `${t('workspace.augView')} ${idx}`}
                   </span>
                 </div>
                 <div className="flex items-center gap-3">
@@ -319,12 +320,12 @@ export function SyncAnnotation() {
         <div className="flex-grow flex flex-col border-b border-neutral-200 dark:border-neutral-800 overflow-hidden min-h-[150px]">
           <div className="p-4 pb-2 flex items-center justify-between">
             <h3 className="font-semibold text-[11px] uppercase tracking-wider text-neutral-500 flex items-center gap-2">
-              <Square className="w-3.5 h-3.5" /> Objects ({currentAnnotations.length})
+              <Square className="w-3.5 h-3.5" /> {t('workspace.objects')} ({currentAnnotations.length})
             </h3>
           </div>
           <div className="flex-grow overflow-y-auto p-2 pt-0 space-y-1 custom-scrollbar">
             {currentAnnotations.length === 0 ? (
-              <div className="text-[10px] text-neutral-700 text-center py-8 italic">No objects in this scene</div>
+              <div className="text-[10px] text-neutral-700 text-center py-8 italic">{t('workspace.noObjects')}</div>
             ) : (
               currentAnnotations.map((ann) => (
                 <div key={ann.id} className="group p-2 bg-white dark:bg-neutral-900/30 rounded border border-neutral-200 dark:border-neutral-800/50 text-[11px] flex items-center justify-between hover:border-primary/30 hover:bg-white dark:bg-neutral-900 cursor-pointer transition-all">
@@ -343,7 +344,7 @@ export function SyncAnnotation() {
         <div className="h-1/3 flex flex-col overflow-hidden bg-black/20">
           <div className="p-4 pb-2">
             <h3 className="font-semibold text-[11px] uppercase tracking-wider text-neutral-500 flex items-center gap-2">
-              <ImageIcon className="w-3.5 h-3.5" /> Scenes
+              <ImageIcon className="w-3.5 h-3.5" /> {t('workspace.scenes')}
             </h3>
           </div>
           <div className="flex-grow overflow-y-auto p-2 pt-0 space-y-1 custom-scrollbar">
