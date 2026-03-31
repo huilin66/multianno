@@ -33,7 +33,8 @@
       "pendingCount": "folder(s) pending",
       "cancelAll": "Cancel All",
       "analyzing": "Analyzing...",
-      "confirmUpload": "Confirm Upload"
+      "confirmUpload": "Confirm Upload",
+      "clickToAdd": "Click to Add"
     },
     "views": {
       "title": "View Configuration",
@@ -166,6 +167,22 @@
       "downloadJson": "Download JSON Config"
     }
   },
+  "fileExplorer": {
+    "title": "Select Data Folders",
+    "placeholderRoot": "System Root (Drives)",
+    "placeholderPath": "e.g. D:/Datasets",
+    "go": "Go",
+    "tip": "Tip: Double-click row to enter folder, click checkbox to select.",
+    "reading": "Reading Directory...",
+    "empty": "Empty Directory",
+    "selectedCount": "folder(s) selected",
+    "confirm": "Confirm Selection",
+    "errorUnknown": "Unknown Error",
+    "errorRead": "Read failed: ",
+    "errorConnect": "Cannot connect to Python backend. Please check if FastAPI is running.",
+    "localDrive": "Local Disk",
+    "historyRecord": "History"  
+},
   "menu": {
     "createProject": "Create New Project",
     "loadProject": "Load Project",

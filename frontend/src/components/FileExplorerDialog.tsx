@@ -3,11 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Folder, ChevronRight, CheckSquare, Square, ArrowLeft, File, Info } from 'lucide-react';
+import { useTranslation } from 'react-i18next'; // 🌟 引入翻译钩子
 
 interface ExplorerItem {
   name: string;
   path: string;
   type: 'dir' | 'file';
+  tag?: 'drive' | 'history';
 }
 
 interface FileExplorerDialogProps {
@@ -18,13 +20,13 @@ interface FileExplorerDialogProps {
 }
 
 export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: FileExplorerDialogProps) {
+  const { t } = useTranslation(); // 🌟 激活翻译钩子
   const [currentPath, setCurrentPath] = useState(initialPath || '');
   const [parentPath, setParentPath] = useState(''); 
   const [items, setItems] = useState<ExplorerItem[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
-  // 🚀 核心逻辑 100% 还原自你的 _src 版本
   const fetchDirectory = async (targetPath: string) => {
     setLoading(true);
     try {
@@ -46,8 +48,9 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
       
       if (!res.ok) {
         const errorData = await res.json();
-        const errorMsg = errorData.error || errorData.detail || "未知错误";
-        alert(`读取失败: ${errorMsg}`);
+        // 🌟 错误提示翻译
+        const errorMsg = errorData.error || errorData.detail || t('fileExplorer.errorUnknown');
+        alert(`${t('fileExplorer.errorRead')}${errorMsg}`);
         setLoading(false);
         return;
       }
@@ -58,13 +61,13 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
       
     } catch (e) {
       console.error(e);
-      alert("无法连接到 Python 后端，请检查 FastAPI 服务状态。");
+      // 🌟 后端断联提示翻译
+      alert(t('fileExplorer.errorConnect'));
     } finally {
       setLoading(false);
     }
   };
 
-  // 🚀 逻辑 100% 还原自你的 _src 版本
   useEffect(() => {
     if (open) {
       fetchDirectory(initialPath || ''); 
@@ -79,7 +82,6 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
     setSelectedPaths(next);
   };
 
-  // 🚀 逻辑 100% 还原自你的 _src 版本，完美处理 C: / E: 这种盘符情况
   const handleNavigateUp = () => {
     if (!currentPath || currentPath === '/') {
       fetchDirectory('');
@@ -108,13 +110,11 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      {/* 🌟 UI 更新：自适应的背景色和边框 */}
       <DialogContent className="max-w-3xl bg-background border-border text-foreground">
         <DialogHeader>
-          <DialogTitle>Select Data Folders</DialogTitle>
+          <DialogTitle>{t('fileExplorer.title')}</DialogTitle> {/* 🌟 弹窗标题 */}
         </DialogHeader>
 
-        {/* 顶部：地址栏与返回按钮 */}
         <div className="flex items-center gap-2 mt-2">
           <Button variant="outline" size="icon" onClick={handleNavigateUp} disabled={loading} className="h-9 w-9 shrink-0">
             <ArrowLeft className="w-4 h-4" />
@@ -124,33 +124,34 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
             onChange={(e) => setCurrentPath(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && fetchDirectory(currentPath)}
             className="flex-1 font-mono text-sm bg-background border-input"
-            placeholder={currentPath === "" ? "System Root (Drives)" : "e.g. D:/Datasets"}
+            // 🌟 输入框占位符提示
+            placeholder={currentPath === "" ? t('fileExplorer.placeholderRoot') : t('fileExplorer.placeholderPath')}
           />
-          <Button onClick={() => fetchDirectory(currentPath)} disabled={loading} variant="secondary">Go</Button>
+          <Button onClick={() => fetchDirectory(currentPath)} disabled={loading} variant="secondary">
+            {t('fileExplorer.go')} {/* 🌟 Go按钮 */}
+          </Button>
         </div>
 
-        {/* 🌟 提示区 */}
         <div className="flex items-center mt-1 mb-0.5 px-1">
            <span className="text-xs text-muted-foreground flex items-center gap-1.5 font-medium">
              <Info className="w-3.5 h-3.5 text-primary"/> 
-             Tip: Double-click row to enter folder, click checkbox to select. (双击进入，单击勾选)
+             {t('fileExplorer.tip')} {/* 🌟 提示文字 */}
            </span>
         </div>
 
-        {/* 主体：文件夹列表 */}
-        {/* 🌟 UI 更新：去除了原先的死黑背景，改为柔和内嵌的 bg-muted/30 */}
         <div className="h-[50vh] border border-border rounded-md bg-muted/30 overflow-y-auto p-2 custom-scrollbar shadow-inner">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground space-y-2">
                <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
-               <span>Reading Directory...</span>
+               <span>{t('fileExplorer.reading')}</span> {/* 🌟 加载中提示 */}
             </div>
           ) : items.length === 0 ? (
-            <div className="flex items-center justify-center h-full text-muted-foreground">Empty Directory</div>
+            <div className="flex items-center justify-center h-full text-muted-foreground">
+              {t('fileExplorer.empty')} {/* 🌟 空目录提示 */}
+            </div>
           ) : (
             <div className="space-y-1">
 
-              {/* 返回上一级 */}
               {currentPath !== "" && currentPath !== "/" && (
                 <div 
                   className="flex items-center gap-3 p-1.5 rounded cursor-pointer hover:bg-muted transition-colors border border-transparent"
@@ -167,11 +168,16 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
               {items.map((item) => {
                 const isSelected = selectedPaths.has(item.path);
                 const isDir = item.type === 'dir';
-                
+                let displayName = item.name;
+                if (item.tag === 'drive') {
+                  displayName = `${t('fileExplorer.localDrive')} (${item.name})`;
+                } else if (item.tag === 'history') {
+                  displayName = `${t('fileExplorer.historyRecord')} (${item.name})`;
+                }
+
                 return (
                   <div 
                     key={item.path} 
-                    // 🌟 UI 更新：晶莹剔透的选中背景
                     className={`flex items-center gap-3 p-1.5 rounded cursor-pointer transition-colors ${isSelected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted border border-transparent'}`}
                   >
                     <div className="px-2" onClick={(e) => { e.stopPropagation(); if (isDir) toggleSelect(item.path); }}>
@@ -187,7 +193,7 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
                       onDoubleClick={() => { if (isDir) fetchDirectory(item.path); }}
                     >
                       {isDir ? <Folder className="w-4 h-4 text-amber-500" /> : <File className="w-4 h-4 text-muted-foreground" />}
-                      <span className="text-sm font-medium">{item.name}</span>
+                      <span className="text-sm font-medium">{displayName}</span>
                     </div>
                     
                     {isDir && (
@@ -204,16 +210,16 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
 
         <DialogFooter className="flex items-center justify-between mt-4">
           <span className="text-sm text-muted-foreground">
-            {selectedPaths.size} folder(s) selected
+            {selectedPaths.size} {t('fileExplorer.selectedCount')} {/* 🌟 选中数量提示 */}
           </span>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={onClose}>Cancel</Button>
+            <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button> {/* 🌟 复用之前定义好的全局 common.cancel */}
             <Button 
               variant="default"
               onClick={() => onConfirm(Array.from(selectedPaths))}
               disabled={selectedPaths.size === 0}
             >
-              Confirm Selection
+              {t('fileExplorer.confirm')} {/* 🌟 确认按钮 */}
             </Button>
           </div>
         </DialogFooter>

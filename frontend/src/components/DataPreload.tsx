@@ -264,7 +264,7 @@ export function DataPreload() {
                     key={path}
                     onClick={() => handleAddFromHistory(path)}
                     className="text-[10px] bg-secondary hover:bg-secondary/80 text-secondary-foreground px-2 py-1 rounded border border-border transition-colors truncate max-w-[200px]"
-                    title={`Click to add: ${path}`}
+                    title={`${t('dataPreload.folders.clickToAdd')} ${path}`} // 🌟 完美翻译
                   >
                     + {path}
                   </button>

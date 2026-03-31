@@ -33,7 +33,8 @@
       "pendingCount": "个文件夹待确认",
       "cancelAll": "取消所有",
       "analyzing": "分析中...",
-      "confirmUpload": "确认并读取"
+      "confirmUpload": "确认并读取",
+      "clickToAdd": "点击添加"
     },
     "views": {
       "title": "多视图同步配置",
@@ -131,6 +132,22 @@
       "underDevAI": "AI 自动对齐功能正在开发中...",
       "underDevTie": "控制点配准功能正在开发中..."
     }
+  },
+  "fileExplorer": {
+    "title": "选择数据源文件夹",
+    "placeholderRoot": "系统根目录 (盘符)",
+    "placeholderPath": "例如: D:/Datasets",
+    "go": "前往",
+    "tip": "提示：双击行进入文件夹，单击左侧复选框进行勾选。",
+    "reading": "正在读取目录...",
+    "empty": "该目录下暂无内容",
+    "selectedCount": "个文件夹已选中",
+    "confirm": "确认选择",
+    "errorUnknown": "未知错误",
+    "errorRead": "读取失败: ",
+    "errorConnect": "无法连接到 Python 后端，请检查 FastAPI 服务是否正常运行。",
+    "localDrive": "本地磁盘",
+    "historyRecord": "历史记录"
   },
   "projectMeta": {
     "empty": {

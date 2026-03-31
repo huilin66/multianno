@@ -89,18 +89,23 @@ def explore_file_system(
                     drives.append(f"{letter}:/")
 
             for d in drives:
-                items.append({"name": f"本地磁盘 ({d[0]}:)", "path": d, "type": "dir"})
+                # 🌟 改动：name 只传盘符，增加 tag="drive"
+                items.append(
+                    {"name": f"{d[0]}:", "path": d, "type": "dir", "tag": "drive"}
+                )
+
             # B. 🌟 注入前端传来的历史记录
             seen = set()
             for h_path in history:
-                # 确保路径有值、未重复，且在当前后端机器上是真实存在的
                 if h_path and h_path not in seen and os.path.exists(h_path):
                     seen.add(h_path)
                     items.append(
                         {
-                            "name": f"🕒 历史记录 ({h_path})",
+                            # 🌟 改动：name 只传路径，增加 tag="history"
+                            "name": h_path,
                             "path": h_path.replace("\\", "/"),
                             "type": "dir",
+                            "tag": "history",
                         }
                     )
         else:
