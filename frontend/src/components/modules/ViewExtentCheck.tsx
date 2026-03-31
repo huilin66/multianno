@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useStore } from '../store/useStore';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Slider } from './ui/slider';
+import { useStore } from '../../store/useStore';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Slider } from '../ui/slider';
 
-import type { ProjectMetaContract } from '../config/contract';
+import type { ProjectMetaContract } from '../../config/contract';
 import { 
   Layers, FolderOpen, Check,  CheckCircle2,
   Eye, EyeOff, Maximize, Move, MousePointer2, Square, RotateCcw,Zap,

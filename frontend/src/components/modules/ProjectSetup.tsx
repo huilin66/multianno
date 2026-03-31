@@ -1,11 +1,11 @@
 // src/components/modals/ProjectSetupModals.tsx
 import React, { useState, useRef } from 'react';
-import { useStore } from '../store/useStore';
+import { useStore } from '../../store/useStore';
 import { X, FolderPlus, Upload, FileJson, Check, AlertCircle } from 'lucide-react';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { readProjectJsonFile } from '../lib/projectUtils';
-import type { ProjectMetaContract } from '../config/contract';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { readProjectJsonFile } from '../../lib/projectUtils';
+import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入国际化钩子
 
 // ==========================================

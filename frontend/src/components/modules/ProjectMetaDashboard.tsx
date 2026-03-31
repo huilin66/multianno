@@ -1,9 +1,9 @@
 // src/components/ProjectMetaDashboard.tsx
 import React from 'react';
-import { useStore } from '../store/useStore'; // 确认路径是否正确
-import { Button } from './ui/button';
+import { useStore } from '../../store/useStore'; // 确认路径是否正确
+import { Button } from '../ui/button';
 import { FolderOpen, Layers, Database, Download } from 'lucide-react';
-import type { ProjectMetaContract } from '../config/contract';
+import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入
 
 // 🌟 1. 新增：定义组件接收的参数

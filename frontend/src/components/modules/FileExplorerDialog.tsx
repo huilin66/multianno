@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from './ui/dialog';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
 import { Folder, ChevronRight, CheckSquare, Square, ArrowLeft, File, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next'; // 🌟 引入翻译钩子
 

@@ -1,12 +1,12 @@
 // src/components/Modules.tsx
 
 // 从各个独立文件中导入组件
-import { LoadProject, CreateProject} from './ProjectSetup';
-import { SyncAnnotation } from './SyncAnnotation';
-import { DataPreload } from './DataPreload';
-import { ViewExtentCheck } from './ViewExtentCheck';
-import { ProjectMetaDashboard } from './ProjectMetaDashboard';
-import { DataFormatExchange } from './DataFormatExchange';
+import { LoadProject, CreateProject} from './modules/ProjectSetup';
+import { SyncAnnotation } from './modules/SyncAnnotation';
+import { DataPreload } from './modules/DataPreload';
+import { ViewExtentCheck } from './modules/ViewExtentCheck';
+import { ProjectMetaDashboard } from './modules/ProjectMetaDashboard';
+import { DataFormatExchange } from './modules/DataFormatExchange';
 
 // 统一导出给 App.tsx 使用
 export {

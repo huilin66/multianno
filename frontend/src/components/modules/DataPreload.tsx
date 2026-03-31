@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { useStore } from '../store/useStore';
-import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../config/colors';
-import type { ProjectMetaContract } from '../config/contract';
+import { useStore } from '../../store/useStore';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../../config/colors';
+import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入国际化钩子
 
 import { 
   FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History
 } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog'; 
-import { Alert, AlertDescription } from './ui/alert';
+import { Alert, AlertDescription } from '../ui/alert';
 
 export function DataPreload() {
   const { t } = useTranslation(); // 🌟 初始化 t 函数

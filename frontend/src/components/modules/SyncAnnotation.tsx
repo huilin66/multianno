@@ -1,16 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useStore, Annotation } from '../store/useStore';
-import { Button } from './ui/button';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { UI_THEMES } from '../config/colors';
+import { useStore, Annotation } from '../../store/useStore';
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { UI_THEMES } from '../../config/colors';
 import { 
   Layers, Save, MousePointer2, Square, Hexagon, 
   Database, Image as ImageIcon, X, ChevronRight, Eye // 🌟 补充这些
 } from 'lucide-react';
 import { ProjectMetaDashboard } from './ProjectMetaDashboard'; // 🌟 确保路径正确
 
-import type { ProjectMetaContract } from '../config/contract';
+import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入翻译钩子
 
 export function SyncAnnotation() {

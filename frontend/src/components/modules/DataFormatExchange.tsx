@@ -1,13 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useStore, Annotation } from '../store/useStore';
-import { Button } from './ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
-import { Input } from './ui/input';
-import { Label } from './ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Slider } from './ui/slider';
-import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
-import { Alert, AlertDescription, AlertTitle } from './ui/alert';
+import { useStore, Annotation } from '../../store/useStore';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Slider } from '../ui/slider';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Alert, AlertDescription, AlertTitle } from '../ui/alert';
 
 import { 
   Menu, Layers, Settings, Download, FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, CheckCircle2,
