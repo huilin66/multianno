@@ -11,6 +11,9 @@ const alertVariants = cva(
         default: "bg-card text-card-foreground",
         destructive:
           "bg-card text-destructive *:data-[slot=alert-description]:text-destructive/90 *:[svg]:text-current",
+        // 🌟 新增 warning 语义化变体，一次性搞定日夜间模式的配色
+        warning:
+          "bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-500/20 *:[svg]:text-amber-600 dark:*:[svg]:text-amber-400",
       },
     },
     defaultVariants: {

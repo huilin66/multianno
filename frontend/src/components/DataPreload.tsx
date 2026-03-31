@@ -12,6 +12,7 @@ import {
   FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History
 } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog'; 
+import { Alert, AlertDescription } from './ui/alert';
 
 export function DataPreload() {
   const {projectName, folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
@@ -307,7 +308,8 @@ export function DataPreload() {
             
             {/* 🌟 改造完毕：快捷历史记录现在变成了一个“一键添加”面板 */}
             {recentPaths.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/20 rounded-lg border border-neutral-800 border-dashed mb-4">
+            // {/* 🌟 边框改为 border-border */}
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/20 rounded-lg border border-border border-dashed mb-4">
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
                   <History className="w-3 h-3"/> Recent:
                 </span>
@@ -315,7 +317,8 @@ export function DataPreload() {
                   <button
                     key={path}
                     onClick={() => handleAddFromHistory(path)}
-                    className="text-[10px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300 px-2 py-1 rounded border border-neutral-700 transition-colors truncate max-w-[200px]"
+                    // {/* 🌟 使用 secondary 语义，日间是柔和的浅灰，夜间是深灰 */}
+                    className="text-[10px] bg-secondary hover:bg-secondary/80 text-secondary-foreground px-2 py-1 rounded border border-border transition-colors truncate max-w-[200px]"
                     title={`Click to add: ${path}`}
                   >
                     + {path}
@@ -408,7 +411,8 @@ export function DataPreload() {
             >
               <X className="w-4 h-4 mr-2" /> Cancel All
             </Button>
-            <Button onClick={confirmFolders} disabled={placeholders.length === 0 || isConfirming}>
+            {/* 🌟 强制追加 text-white */}
+            <Button onClick={confirmFolders} variant="default" className="text-white" disabled={placeholders.length === 0 || isConfirming}>
               {isConfirming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing...</> : <><Check className="w-4 h-4 mr-2" /> Confirm Upload</>}
             </Button>
           </div>
@@ -434,15 +438,14 @@ export function DataPreload() {
               </div>
             ) : (
               views.map((view, index) => (
-                <div key={view.id} className="flex flex-col p-4 border rounded-xl bg-neutral-50 shadow-sm border-neutral-200">
+                // {/* 🌟 1. 卡片底色改为 bg-card，边框改为 border-border */}
+                <div key={view.id} className="flex flex-col p-4 border rounded-xl bg-card shadow-sm border-border">
                   
-                  {/* 🌟 第一层：View Name 与 Source Folder 并排在同一行 */}
                   <div className="flex items-center gap-4">
-                    {/* View Name 标签 */}
-                    <span className={`px-3 py-1 text-xs font-bold rounded-full shrink-0 ${view.isMain ? 'bg-blue-600 text-white shadow-md' : 'bg-white border border-neutral-300 text-neutral-700'}`}>
+                    {/* 🌟 2. 标签改为 bg-primary 和强制 text-white，副视图改为自适应颜色 */}
+                    <span className={`px-3 py-1 text-xs font-bold rounded-full shrink-0 ${view.isMain ? 'bg-primary text-white shadow-md' : 'bg-background border border-border text-muted-foreground'}`}>
                       {view.isMain ? 'Main View' : `Aug View ${index}`}
                     </span>
-                    
                     {/* Source Folder 选择框 */}
                     <div className="flex-1 flex items-center gap-3">
                       <Label className="text-xs font-bold text-neutral-500 uppercase tracking-wider shrink-0">Source Folder</Label>
@@ -470,7 +473,7 @@ export function DataPreload() {
                     </div>
 
                     {/* 删除按钮 */}
-                    <Button variant="ghost" size="icon" className="text-neutral-400 hover:text-red-500 hover:bg-red-50 h-8 w-8 shrink-0" onClick={() => removeView(view.id)} disabled={view.isMain && views.length > 1} >
+                    <Button variant="ghost" size="icon" className="text-neutral-500 dark:text-neutral-400 hover:text-red-500 hover:bg-red-50 h-8 w-8 shrink-0" onClick={() => removeView(view.id)} disabled={view.isMain && views.length > 1} >
                       <Trash2 className="w-4 h-4" />
                     </Button>
                   </div>
@@ -487,16 +490,19 @@ export function DataPreload() {
                                        !selectedFolder.metadata.fileType.toLowerCase().includes('uint8');
 
                     return (
-                      <div className="mt-4 p-4 bg-white border border-neutral-200 rounded-lg shadow-sm flex flex-col gap-4">
-                        
+                      // <div className="mt-4 p-4 bg-white border border-neutral-200 rounded-lg shadow-sm flex flex-col gap-4">
+                      <div className="mt-4 p-4 bg-background border border-border rounded-lg shadow-sm flex flex-col gap-4">
                         {/* 🌟 新增：非 uint8 数据的动态拉伸提示 */}
                         {isNotUint8 && (
-                          <div className="flex items-center gap-2 text-[10px] text-amber-600 bg-amber-50 px-2.5 py-1.5 rounded-md border border-amber-200 animate-in fade-in">
-                            <Info className="w-3.5 h-3.5 shrink-0" />
-                            <span>
-                              <strong>Data Stretch Applied:</strong> Original source is <code className="bg-amber-100 px-1 rounded font-mono">{selectedFolder.metadata.fileType}</code>. The display preview has been auto-scaled to 8-bit for visualization.
-                            </span>
-                          </div>
+                          // 🌟 1. 加上 [&>svg]:translate-y-0 强制取消底层的图标下沉，并加上 [&>svg]:mt-[1px] 手动完美对齐第一行
+                          <Alert variant="warning" className="py-2 px-3 animate-in fade-in [&>svg]:translate-y-0 [&>svg]:mt-[1px]">
+                            {/* 🌟 2. 缩小图标尺寸 (w-3.5 h-3.5)，使其和 10px 的文字比例更协调 */}
+                            <Info className="w-3.5 h-3.5" />
+                            {/* 🌟 3. 加上 leading-relaxed，让拥挤的多行小字呼吸感更好 */}
+                            <AlertDescription className="text-[10px] leading-relaxed">
+                              <strong>Data Stretch Applied:</strong> Original source is <code className="bg-black/5 dark:bg-white/10 px-1 rounded font-mono">{selectedFolder.metadata.fileType}</code>. The display preview has been auto-scaled to 8-bit for visualization.
+                            </AlertDescription>
+                          </Alert>
                         )}
 
                         <div className="grid grid-cols-2 gap-6 items-center">
@@ -634,9 +640,14 @@ export function DataPreload() {
                             </div>
                             ) : (
                               // 模式 C：错误提示
-                              <div className="flex items-center justify-center gap-2 text-amber-600 text-xs py-2 animate-in fade-in bg-amber-50 rounded-md border border-amber-200 h-[56px]">
-                                Please select exactly 1 or 3 blocks.
-                              </div>
+                              // 🌟 加上 [&>svg]:translate-y-0 取消平移
+                              <Alert variant="warning" className="flex items-center justify-center py-2 h-[56px] animate-in fade-in [&>svg]:translate-y-0">
+                                {/* 图标也稍微改小一点点匹配 text-xs */}
+                                <Info className="w-4 h-4 mr-2" />
+                                <AlertDescription className="text-xs m-0 font-medium">
+                                  Please select exactly 1 or 3 blocks.
+                                </AlertDescription>
+                              </Alert>
                             )}
                           </div>
                         </div>
@@ -656,10 +667,12 @@ export function DataPreload() {
             <Button onClick={handleResetViews} variant="outline" disabled={views.length === 0}>
               <X className="w-4 h-4 mr-2" /> Reset
             </Button>
+            {/* 🌟 改用 variant="default" 并追加 text-white，去除硬编码的 blue */}
             <Button 
               onClick={handleConfirmViews} 
               disabled={views.length === 0} 
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
+              variant="default"
+              className="text-white font-medium"
             >
               <Check className="w-4 h-4 mr-2" /> 
               {views.length > 1 ? "Confirm & Map Extents" : "Confirm & Start Annotation"}

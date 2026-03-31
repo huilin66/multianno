@@ -9,19 +9,19 @@ import type { ProjectMetaContract } from '../config/contract';
 import { 
   Layers, FolderOpen, Check,  CheckCircle2,
   Eye, EyeOff, Maximize, Move, MousePointer2, Square, RotateCcw,Zap,
-  Hand,  AlertCircle
+  Hand,  AlertCircle, Database, Trash2
 } from 'lucide-react';
 
 export function ViewExtentCheck() {
   // 合并为这一行：
-  const { views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment } = useStore();
-  
+  // const { projectName, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment } = useStore();
+  const { projectName, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
 // 🛡️ 兜底防线：如果没有绑定 View 或没有数据
   if (!views || views.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[400px] bg-neutral-950 text-neutral-400 space-y-4">
+      <div className="flex flex-col items-center justify-center h-full min-h-[400px] bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400 space-y-4">
         <AlertCircle className="w-12 h-12 text-yellow-500/80 mb-2" />
-        <h2 className="text-xl font-semibold text-neutral-200">缺少视图配置</h2>
+        <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">缺少视图配置</h2>
         <p>必须先指定 Main View 并加载至少一个场景组才能进行对齐操作。</p>
         <Button 
           onClick={() => setActiveModule('preload')} 
@@ -61,11 +61,6 @@ export function ViewExtentCheck() {
   // 操作B：拉伸控制状态
   const [draggingTransformHandle, setDraggingTransformHandle] = useState<'t' | 'l' | 'r' | 'b' | 'br' | null>(null);
   
-  // --- 进度与预设状态 ---
-  // 记录已完成对齐检查的视图 ID
-  const [completedViews, setCompletedViews] = useState<Set<string>>(new Set());
-  // 保存的对齐参数库 (Presets)
-  // const [savedAlignments, setSavedAlignments] = useState<Array<{id: string, name: string, crop: any, transform: any}>>([]);
 
   // 用于强制刷新右侧参数显示面板的 Tick
   const [renderTick, setRenderTick] = useState(0);
@@ -92,21 +87,6 @@ export function ViewExtentCheck() {
     }
   }, [activeAugId]);
 
-  // if (views.length <= 1) {
-  //   return (
-  //     <div className="flex flex-col items-center justify-center h-full space-y-4 text-neutral-400">
-  //       <Layers className="w-12 h-12 text-blue-500" />
-  //       <h3 className="text-xl text-neutral-100 font-bold">Extent Check Skipped</h3>
-  //       <p>Only one view (Main View) is configured. No alignment is needed.</p>
-  //       <Button className="mt-4 bg-blue-600 hover:bg-blue-700" onClick={() => setActiveModule('export')}>
-  //         Proceed to Next Step <Check className="w-4 h-4 ml-2"/>
-  //       </Button>
-  //     </div>
-  //   );
-  // }
-
-  // const activeAugView = augViews.find(v => v.id === activeAugId) || augViews[0];
-  // const activeCrop = crops[activeAugView.id] || { t: 0, r: 100, b: 100, l: 0 };
 
   const getPreviewUrl = (view: typeof mainView) => {
     if (!view) return '';
@@ -481,26 +461,32 @@ export function ViewExtentCheck() {
       Math.abs(cropPhysical.right - mainRect.right) < 2;
 
     const markAsCompleteAndSave = () => {
-      setCompletedViews(prev => new Set(prev).add(activeAugView.id));
+      // 1. 打绿勾
+      if (!completedViews.includes(activeAugView.id)) {
+        setCompletedViews([...completedViews, activeAugView.id]);
+      }
       
-      // 【修改】：将预设名称改为对应的 Aug View 名称
-      const viewIndex = augViews.findIndex(v => v.id === activeAugView.id);
-      const presetName = `Aug View ${viewIndex + 1}`;
+      // 2. 生成带时间戳的名字
+      const now = new Date();
+      const timeString = `${now.getHours()}:${now.getMinutes().toString().padStart(2, '0')}`;
+      const presetName = `Auto Saved ${timeString}`;
       
-      const markAsCompleteAndSave = () => {
-            setCompletedViews(prev => new Set(prev).add(activeAugView.id));
-            
-            const viewIndex = augViews.findIndex(v => v.id === activeAugView.id);
-            const presetName = `Aug View ${viewIndex + 1}`;
-            
-            // 🌟 修复：直接调用 Store 的方法
-            addSavedAlignment({
-              id: Math.random().toString(), 
-              name: presetName, 
-              crop: { ...activeCrop }, 
-              transform: { ...tempTransformRef.current }
-            });
-          };
+      // 3. 保存到下面的蓝色快照
+      addSavedAlignment({
+        id: Math.random().toString(), 
+        name: presetName, 
+        crop: { ...activeCrop }, 
+        transform: { ...tempTransformRef.current }
+      });
+
+      // 🌟 4. 核心修复：把现在的裁剪和拉伸状态，直接覆盖更新到图层本身的数据里！
+      // 这样无论你怎么刷新，黄色的 Meta 卡片都会读取到真实的、被保存过的参数，再也不会消失了！
+      updateView(activeAugView.id, { 
+        transform: { 
+          ...tempTransformRef.current,
+          crop: { ...activeCrop } 
+        } as any // 使用 as any 绕过可选类型的强校验
+      });
     };
 
     if (isAligned) {
@@ -521,6 +507,7 @@ export function ViewExtentCheck() {
 // 严格按照要求的 JSON 结构提取，并解决 TS 类型报错
   const generateProjectMeta = (): ProjectMetaContract => {
     return {
+      projectName: projectName,
       folders: folders.map((f, i) => ({
         Id: i + 1,
         path: f.path,
@@ -560,7 +547,7 @@ export function ViewExtentCheck() {
   };
   // 【修改】：使用标准元数据并保存为 project_meta.json
   const proceedToExport = async () => {
-    if (completedViews.size < augViews.length) {
+    if (completedViews.length < augViews.length) {
       alert("Please save and confirm alignment for ALL Aug Views before proceeding.");
       return;
     }
@@ -611,7 +598,7 @@ export function ViewExtentCheck() {
 
   if (views.length === 1) {
     return (
-      <div className="flex flex-col items-center justify-center h-full space-y-4 bg-neutral-950 text-neutral-400">
+      <div className="flex flex-col items-center justify-center h-full space-y-4 bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400">
         <Layers className="w-12 h-12 text-blue-500" />
         <h3 className="text-xl text-neutral-100 font-bold">Extent Check Skipped</h3>
         <p>当前只配置了单源视图 (Single View)，无需进行多图层对齐配准。</p>
@@ -621,7 +608,7 @@ export function ViewExtentCheck() {
           </Button>
           
           {/* 🌟 核心：直接绑定 proceedToExport，让它复用完整的导出逻辑 */}
-          <Button className="bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={proceedToExport}>
+          <Button className="bg-blue-600 hover:bg-blue-700 text-neutral-900 dark:text-neutral-100 font-bold" onClick={proceedToExport}>
             导出配置并开始标注 <Check className="w-4 h-4 ml-2"/>
           </Button>
         </div>
@@ -669,23 +656,23 @@ export function ViewExtentCheck() {
 
 
   return (
-    <div className="flex flex-col h-full w-full bg-neutral-950 font-sans text-neutral-200 select-none">
-      
+    // {/* 🌟 适配全局日夜主题 */}
+    <div className="flex flex-col h-full w-full bg-neutral-50 dark:bg-neutral-950 font-sans text-neutral-900 dark:text-neutral-200 select-none transition-colors duration-300">
       {/* 顶部视觉控制台 (清爽布局) */}
 {/* 顶部视觉控制台 (固定布局重构版) */}
-      <div className="h-14 bg-neutral-900 border-b border-neutral-800 flex items-center justify-between px-6 shrink-0 z-50 relative overflow-x-auto">
+      <div className="h-14 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 flex items-center justify-between px-6 shrink-0 z-50 relative overflow-x-auto">
         
         {/* 左侧 & 中间：模式切换与固定操作区 */}
         <div className="flex items-center gap-3">
           {/* 【新增】：全局 Project Meta 查看器 */}
 
           {/* 主模式切换 */}
-          <div className="flex items-center gap-1 bg-neutral-950 p-1 rounded-lg border border-neutral-800 shrink-0">
+          <div className="flex items-center gap-1 bg-neutral-50 dark:bg-neutral-950 p-1 rounded-lg border border-neutral-200 dark:border-neutral-800 shrink-0">
             {/* 加上 withSwipeCancel */}
-            <Button variant={mode === 'pan' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'pan' ? "bg-blue-600" : "text-neutral-400"}`} onClick={() => withSwipeCancel(() => setMode('pan'))}>
+            <Button variant={mode === 'pan' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'pan' ? "bg-blue-600" : "text-neutral-500 dark:text-neutral-400"}`} onClick={() => withSwipeCancel(() => setMode('pan'))}>
               <Hand className="w-3.5 h-3.5 mr-1.5"/> Pan
             </Button>
-            <Button variant={mode === 'align' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'align' ? "bg-green-600" : "text-neutral-400"}`} onClick={() => withSwipeCancel(() => setMode('align'))}>
+            <Button variant={mode === 'align' ? 'default' : 'ghost'} size="sm" className={`h-7 px-3 ${mode === 'align' ? "bg-green-600" : "text-neutral-500 dark:text-neutral-400"}`} onClick={() => withSwipeCancel(() => setMode('align'))}>
               <Move className="w-3.5 h-3.5 mr-1.5"/> Align
             </Button>
           </div>
@@ -694,31 +681,31 @@ export function ViewExtentCheck() {
           {mode === 'align' && (
             <div className="flex items-center gap-2 ml-2 shrink-0 animate-in fade-in slide-in-from-left-4">
                
-               <div className="flex items-center bg-neutral-950 p-1 rounded-lg border border-neutral-800">
+               <div className="flex items-center bg-neutral-50 dark:bg-neutral-950 p-1 rounded-lg border border-neutral-200 dark:border-neutral-800">
                  <Button 
                    variant={alignSubMode === 'crop' ? 'default' : 'ghost'} size="sm" 
-                   className={`h-7 px-3 rounded-md ${alignSubMode === 'crop' ? "bg-amber-600 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
+                   className={`h-7 px-3 rounded-md ${alignSubMode === 'crop' ? "bg-amber-600 text-neutral-900 dark:text-neutral-100" : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100"}`}
                    onClick={() => withSwipeCancel(() => setAlignSubMode('crop'))}
                  >
                    <Square className="w-3.5 h-3.5 mr-1.5"/> Crop
                  </Button>
                  <Button 
                    variant={alignSubMode === 'transform' ? 'default' : 'ghost'} size="sm" 
-                   className={`h-7 px-3 rounded-md ${alignSubMode === 'transform' ? "bg-blue-600 text-white" : "text-neutral-400 hover:text-neutral-200"}`}
+                   className={`h-7 px-3 rounded-md ${alignSubMode === 'transform' ? "bg-blue-600 text-neutral-900 dark:text-neutral-100" : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100"}`}
                    onClick={() => withSwipeCancel(() => setAlignSubMode('transform'))}
                  >
                    <Maximize className="w-3.5 h-3.5 mr-1.5"/> Move/Zoom
                  </Button>
                </div>
 
-               <div className="flex items-center gap-1 bg-neutral-900 p-1 rounded-lg border border-neutral-700">
+               <div className="flex items-center gap-1 bg-white dark:bg-neutral-900 p-1 rounded-lg border border-neutral-700">
                  
                  {/* Crop 的专属操作 */}
                  <div className="flex items-center gap-0.5 border-r border-neutral-700 pr-1 mr-0.5">
                    <Button 
                      variant={topBarConfig.showOutsideCrop ? 'ghost' : 'secondary'} 
                      size="sm" 
-                     className={`h-7 px-2 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : (!topBarConfig.showOutsideCrop ? 'bg-neutral-700 text-white' : 'text-neutral-400 hover:text-white hover:bg-amber-500/20')}`} 
+                     className={`h-7 px-2 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : (!topBarConfig.showOutsideCrop ? 'bg-neutral-700 text-neutral-900 dark:text-neutral-100' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100 hover:bg-amber-500/20')}`} 
                      disabled={alignSubMode !== 'crop'}
                      onClick={() => toggleConfigWithSwipeCancel('showOutsideCrop')}
                      title="Toggle Mask"
@@ -728,7 +715,7 @@ export function ViewExtentCheck() {
                    </Button>
                    <Button 
                      variant="ghost" size="icon" 
-                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-400 hover:text-white hover:bg-amber-500/20'}`} 
+                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'crop' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100 hover:bg-amber-500/20'}`} 
                      disabled={alignSubMode !== 'crop'}
                      onClick={() => withSwipeCancel(handleResetCrop)} title="Reset Crop Area"
                    >
@@ -749,7 +736,7 @@ export function ViewExtentCheck() {
                    </Button>
                    <Button 
                      variant="ghost" size="icon" 
-                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'transform' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-400 hover:text-white hover:bg-blue-500/20'}`} 
+                     className={`h-7 w-7 transition-opacity ${alignSubMode !== 'transform' ? 'opacity-30 cursor-not-allowed' : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-900 dark:text-neutral-100 hover:bg-blue-500/20'}`} 
                      disabled={alignSubMode !== 'transform'}
                      onClick={() => withSwipeCancel(handleResetTransform)} title="Reset Position/Scale"
                    >
@@ -763,7 +750,7 @@ export function ViewExtentCheck() {
 
         {/* 右侧：视觉滑块控制面板 */}
         <div className="flex items-center gap-3 shrink-0 pl-4">
-          <div className="flex items-center gap-2 bg-neutral-950 p-1.5 rounded-lg border border-neutral-800">
+          <div className="flex items-center gap-2 bg-neutral-50 dark:bg-neutral-950 p-1.5 rounded-lg border border-neutral-200 dark:border-neutral-800">
             {/* 滑块部分无需包拦截器 */}
             <Select 
               value={topBarConfig.mode} 
@@ -796,7 +783,7 @@ export function ViewExtentCheck() {
               />
             </div>
             
-            <span className="text-[10px] text-neutral-400 w-9 text-right font-mono select-none pr-1 shrink-0">
+            <span className="text-[10px] text-neutral-500 dark:text-neutral-400 w-9 text-right font-mono select-none pr-1 shrink-0">
               {topBarConfig.mode === 'opacity' ? `${Math.round(topBarConfig.value * 100)}%` : `${topBarConfig.value}%`}
             </span>
           </div>
@@ -815,9 +802,11 @@ export function ViewExtentCheck() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* 左侧主体：对齐工作区 */}
+        {/* 🌟 背景从 bg-black 改为支持日夜间的 bg-neutral-200 dark:bg-black */}
         <div 
           ref={canvasRef}
-          className={`flex-1 relative overflow-hidden bg-black flex items-center justify-center ${mode === 'pan' ? 'cursor-grab active:cursor-grabbing' : (alignSubMode === 'crop' ? 'cursor-default' : 'cursor-move')}`}
+          // 🌟 把 bg-black 改成了 bg-neutral-100 dark:bg-neutral-900
+          className={`flex-1 relative overflow-hidden bg-neutral-100 dark:bg-neutral-900 transition-colors duration-300 flex items-center justify-center ${mode === 'pan' ? 'cursor-grab active:cursor-grabbing' : (alignSubMode === 'crop' ? 'cursor-default' : 'cursor-move')}`}
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
@@ -827,8 +816,9 @@ export function ViewExtentCheck() {
         >
           <div style={{ transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`, transformOrigin: 'center center' }} className="relative">
             
-            <div className={`relative transition-all duration-300 ${mode === 'pan' ? 'shadow-[0_0_0_9999px_rgba(0,0,0,0.85)] border-2 border-dashed border-red-500 z-10' : 'z-0'}`}>
-              
+            {/* 🌟 核心修复：日间模式阴影透明度降为 0.15，夜间模式保持 0.7 */}
+            <div className={`relative transition-all duration-300 ${mode === 'pan' ? 'shadow-[0_0_0_9999px_rgba(0,0,0,0.15)] dark:shadow-[0_0_0_9999px_rgba(0,0,0,0.7)] border-2 border-dashed border-red-500 z-10' : 'z-0'}`}>
+
               {mode === 'pan' && <span className="absolute -top-6 left-0 text-[10px] text-red-500 font-mono bg-black/50 px-1">MAIN VIEW BORDER</span>}
               
               <img ref={mainImgRef} src={getPreviewUrl(mainView!)} alt="Main View Base" className="pointer-events-none block max-w-none" />
@@ -896,7 +886,7 @@ export function ViewExtentCheck() {
                      {/* 操作B：高亮范围虚线框 (赋予拉伸能力) */}
                     {/* 操作B：高亮范围虚线框 (全方位拉伸) */}
                      {mode === 'align' && alignSubMode === 'transform' && (
-                        <div className="absolute border-2 border-blue-500 pointer-events-none dashed-border"
+                        <div className="absolute border-2 border-primary pointer-events-none dashed-border"
                              style={{ top: `${activeCrop.t}%`, bottom: `${100-activeCrop.b}%`, left: `${activeCrop.l}%`, right: `${100-activeCrop.r}%` }}>
                             
                             {/* 八向拉伸控制手柄 */}
@@ -917,7 +907,7 @@ export function ViewExtentCheck() {
                             <div className="absolute -bottom-2 -right-2 w-4 h-4 bg-white border-2 border-blue-600 rounded-full shadow-md cursor-nwse-resize pointer-events-auto hover:scale-125 transition-transform" 
                                  onPointerDown={(e) => startTransformDrag(e, 'br')} />
 
-                          <span className="absolute -top-6 left-0 text-[10px] text-blue-400 font-bold bg-black/80 px-1.5 py-0.5 border border-blue-500 whitespace-nowrap">
+                          <span className="absolute -top-6 left-0 text-[10px] text-blue-400 font-bold bg-black/80 px-1.5 py-0.5 border border-primary whitespace-nowrap">
                             AUG CONTENT (Drag any edge to stretch/snap)
                           </span>
                         </div>
@@ -930,59 +920,105 @@ export function ViewExtentCheck() {
         </div>
 
         {/* 右侧面板 (极致紧凑的专业工作流布局) */}
-        <div className="w-[340px] bg-neutral-900 flex flex-col shrink-0 border-l border-neutral-800">
+        <div className="w-[340px] bg-white dark:bg-neutral-900 flex flex-col shrink-0 border-l border-neutral-200 dark:border-neutral-800">
           
           {/* 1. 已存在的对齐参数库 (Presets) - 【修改】：高度从 140px 增加到 190px (分配更多空间) */}
-          <div className="p-3 border-b border-neutral-800 flex flex-col h-[140px] shrink-0">
-             <h2 className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-2">Existing Parameters</h2>
-             <div className="overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
-                {/* 默认重置参数 */}
-                <div className="flex items-center justify-between bg-neutral-950 border border-neutral-800 py-1 px-2 rounded-md">
-                   <span className="text-[11px] text-neutral-300 font-mono">Default (Reset)</span>
-                   <Button size="sm" variant="secondary" className="h-5 px-2 text-[9px]" 
-                     onClick={() => applyAlignmentPreset({ t: 0, r: 100, b: 100, l: 0 }, { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 })}>
-                     Apply
-                   </Button>
-                </div>
-                {/* 动态生成的已存参数 */}
+
+
+          <div className="p-3 border-b border-border flex flex-col h-[140px] shrink-0">
+            <h2 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2">Existing Parameters</h2>
+            <div className="overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
+              
+              {/* 1. 默认重置 */}
+              <div className="flex items-center justify-between bg-muted/50 border border-border py-1 px-2 rounded-md shrink-0">
+                <span className="text-[11px] text-foreground font-mono">Default (Reset)</span>
+                <Button size="sm" variant="secondary" className="h-5 px-2 text-[9px]" 
+                  onClick={() => applyAlignmentPreset({ t: 0, r: 100, b: 100, l: 0 }, { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 })}>
+                  Apply
+                </Button>
+              </div>
+
+              {/* 2. 🌟 关键修复：从 views 中提取已经 Check 过的参数 (即 Project Meta 内容) */}
+              {augViews.map((v, i) => {
+                const t = v.transform;
+                if (!t) return null;
+                const crop = (t as any).crop || { t: 0, r: 100, b: 100, l: 0 };
+                
+                // 只有被勾选过 (completed) 或者参数不是默认值的才显示
+                const isDefault = t.offsetX === 0 && t.offsetY === 0 && t.scaleX === 1 && crop.t === 0;
+                if (isDefault && !completedViews.includes(v.id)) return null;
+
+                return (
+                  <div key={`meta-${v.id}`} className="flex flex-col bg-amber-500/5 dark:bg-amber-500/10 border border-amber-500/20 p-1.5 rounded-md space-y-1 shrink-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-foreground font-bold flex items-center gap-1.5">
+                        <Database className="w-3 h-3 text-amber-500" />
+                        Meta: Aug View {i + 1}
+                      </span>
+                      <Button size="sm" variant="outline" className="h-5 px-2 text-[9px] bg-background" 
+                        onClick={() => applyAlignmentPreset(crop, { offsetX: t.offsetX, offsetY: t.offsetY, scaleX: t.scaleX, scaleY: t.scaleY || t.scaleX })}>
+                        Apply
+                      </Button>
+                    </div>
+                    <div className="text-[9px] text-muted-foreground font-mono flex justify-between">
+                      <span>Crop: {crop.t.toFixed(1)},{crop.r.toFixed(1)}...</span>
+                      <span>Scale: {t.scaleX.toFixed(2)}</span>
+                    </div>
+                  </div>
+                );
+              })}
+
+            {/* 3. 历史快照 (Auto Saved) */}
                 {savedAlignments.map((preset) => (
-                  <div key={preset.id} className="flex flex-col bg-blue-950/20 border border-blue-900/50 p-1.5 rounded-md space-y-1">
-                     <div className="flex items-center justify-between">
-                       <span className="text-[11px] text-blue-300 font-bold">{preset.name}</span>
-                       <Button size="sm" variant="default" className="h-5 px-2 text-[9px] bg-blue-600 hover:bg-blue-500" 
-                         onClick={() => applyAlignmentPreset(preset.crop, preset.transform)}>
-                         Apply
-                       </Button>
-                     </div>
-                     <div className="text-[9px] text-neutral-400 font-mono leading-tight flex justify-between">
-                       <span>Crop: {preset.crop.t.toFixed(1)}, {preset.crop.r.toFixed(1)}, {preset.crop.b.toFixed(1)}, {preset.crop.l.toFixed(1)}</span>
-                       <span>Scale: {preset.transform.scaleX.toFixed(2)}</span>
-                     </div>
+                  <div key={preset.id} className="group flex flex-col bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50 p-1.5 rounded-md space-y-1 shrink-0 transition-all">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-blue-600 dark:text-blue-400 font-bold">{preset.name}</span>
+                      <div className="flex items-center gap-1">
+                        <Button 
+                          size="icon" 
+                          variant="ghost" 
+                          className="h-5 w-5 text-neutral-400 hover:text-red-500 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-opacity" 
+                          onClick={() => removeSavedAlignment(preset.id)}
+                          title="Delete parameter"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                        
+                        <Button size="sm" variant="default" className="h-5 px-2 text-[9px] bg-blue-600 hover:bg-blue-500 text-white" 
+                          onClick={() => applyAlignmentPreset(preset.crop, preset.transform)}>
+                          Apply
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="text-[9px] text-neutral-500 dark:text-neutral-400 font-mono leading-tight flex justify-between">
+                      <span>Crop: {preset.crop.t.toFixed(1)}, {preset.crop.r.toFixed(1)}, {preset.crop.b.toFixed(1)}, {preset.crop.l.toFixed(1)}</span>
+                      <span>Scale: {preset.transform.scaleX.toFixed(2)}</span>
+                    </div>
                   </div>
                 ))}
-             </div>
+            </div>
           </div>
 
           {/* 2. Aug View 列表 (滚动选择) - 【修改】：高度从 110px 增加到 150px */}
-          <div className="p-3 border-b border-neutral-800 flex flex-col h-[140px] shrink-0">
+          <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 flex flex-col h-[140px] shrink-0">
              <h2 className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-2 flex justify-between">
                <span>Active Aug Views</span>
-               <span className="text-blue-500">{completedViews.size} / {augViews.length}</span>
+               <span className="text-blue-500">{completedViews.length} / {augViews.length}</span>
              </h2>
              <div className="overflow-y-auto pr-1 space-y-1 custom-scrollbar">
                {augViews.map((v, i) => {
                  const isActive = v.id === activeAugId;
-                 const isCompleted = completedViews.has(v.id);
+                 const isCompleted = completedViews.includes(v.id);
                  return (
-                   <button 
+                  <button 
                      key={v.id}
                      onClick={() => setActiveAugId(v.id)}
                      className={`w-full flex items-center justify-between py-1.5 px-2 rounded-md text-[11px] transition-all border
-                       ${isActive ? 'bg-neutral-800 border-neutral-600 shadow-sm text-white' : 'bg-transparent border-transparent hover:bg-neutral-800/50 text-neutral-400'}
+                       ${isActive ? 'bg-primary border-primary shadow-sm text-primary-foreground font-bold' : 'bg-transparent border-transparent hover:bg-muted text-muted-foreground hover:text-foreground'}
                      `}
                    >
                      <span className="font-medium">Aug View {i + 1}</span>
-                     {isCompleted && <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />}
+                     {isCompleted && <CheckCircle2 className={`w-3.5 h-3.5 ${isActive ? 'text-primary-foreground' : 'text-green-500'}`} />}
                    </button>
                  );
                })}
@@ -991,7 +1027,7 @@ export function ViewExtentCheck() {
           
 {/* 3. 当前视图实时参数 (极致紧凑，尽量一次性显示) */}
           {/* 【修复1】：最外层加上 min-h-0 防止被内部内容强行撑开 */}
-          <div className="flex-1 p-3 flex flex-col bg-neutral-950 overflow-hidden min-h-0">
+          <div className="flex-1 p-3 flex flex-col bg-neutral-50 dark:bg-neutral-950 overflow-hidden min-h-0">
             <h2 className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider mb-2 shrink-0">Current Parameters</h2>
             
             {/* 【修复2】：加上 flex-1 min-h-0，让它成为一个受限的内部滚动区域！ */}
@@ -1013,7 +1049,8 @@ export function ViewExtentCheck() {
                       type="number" 
                       value={activeCrop[edge as 't'|'r'|'b'|'l']} 
                       onChange={(e) => handleManualCropChange(edge as any, parseFloat(e.target.value) || 0)} 
-                      className="w-12 h-5 text-[9px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                      className="w-12 h-5 text-[9px] px-1 bg-background border-input text-foreground font-mono focus-visible:ring-1"
+                      // 宽度是 w-14 的那几个保持 w-14 不变，只改颜色部分
                     />
                   </div>
                 ))}
@@ -1035,7 +1072,7 @@ export function ViewExtentCheck() {
                       type="number" step="0.01" 
                       value={tempTransformRef.current[axis as 'scaleX'|'scaleY']} 
                       onChange={(e) => handleManualTransformChange(axis as any, parseFloat(e.target.value) || 1)} 
-                      className="w-14 h-5 text-[9px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                      className="w-14 h-5 text-[9px] px-1 bg-white dark:bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
                     />
                   </div>
                 ))}
@@ -1057,7 +1094,7 @@ export function ViewExtentCheck() {
                       type="number" step="1" 
                       value={tempTransformRef.current[axis as 'offsetX'|'offsetY']} 
                       onChange={(e) => handleManualTransformChange(axis as any, parseFloat(e.target.value) || 0)} 
-                      className="w-14 h-5 text-[9px] px-1 bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
+                      className="w-14 h-5 text-[9px] px-1 bg-white dark:bg-neutral-900 border-neutral-700 font-mono focus-visible:ring-1" 
                     />
                   </div>
                 ))}
@@ -1066,37 +1103,40 @@ export function ViewExtentCheck() {
             </div>
 
             {/* 【修复3】：加上 shrink-0，确保高级配准按钮死死地固定在底部，绝不被上面的滑块挤出屏幕 */}
-            <div className="shrink-0 flex items-center gap-2 pt-2 mt-2 border-t border-neutral-800/50">
-              <Button 
-                variant="secondary" 
-                className="flex-1 h-6 text-[9px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
-                onClick={() => alert("AI Auto Alignment feature is under development.\n\nThis will open a new workspace to automatically extract and match feature points using deep learning.")}
-              >
-                <Zap className="w-3 h-3 mr-1 text-amber-400" /> AI Auto Align
-              </Button>
-              <Button 
-                variant="secondary" 
-                className="flex-1 h-6 text-[9px] bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
-                onClick={() => alert("Control Point Registration (Georeferencing) is under development.\n\nThis will open a split-screen workspace for manual tie-point selection.")}
-              >
-                <MousePointer2 className="w-3 h-3 mr-1 text-blue-400" /> Tie Points
-              </Button>
+            <div className="shrink-0 flex items-center gap-2 pt-2 mt-2 border-t border-border">
+                <Button 
+                  variant="outline" 
+                  className="flex-1 h-6 text-[9px] bg-background hover:bg-muted"
+                  onClick={() => alert("AI Auto Alignment feature is under development...")}
+                >
+                  <Zap className="w-3 h-3 mr-1 text-amber-500" /> AI Auto Align
+                </Button>
+                <Button 
+                  variant="outline" 
+                  className="flex-1 h-6 text-[9px] bg-background hover:bg-muted"
+                  onClick={() => alert("Control Point Registration (Georeferencing) is under development...")}
+                >
+                  <MousePointer2 className="w-3 h-3 mr-1 text-primary" /> Tie Points
+                </Button>
+              </div>
             </div>
-          </div>
 
           {/* 4. 底部并排操作按钮 (更名且放置在同一行) */}
-          <div className="p-3 border-t border-neutral-800 bg-neutral-900 shrink-0 flex items-center gap-2">
+          <div className="p-3 border-t border-border bg-muted/30 shrink-0 flex items-center gap-2">
             <Button 
-              className={`flex-1 h-8 text-[11px] px-2 ${completedViews.has(activeAugId) ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`} 
+              // 🌟 缺了 text-white，现在补上，并优先使用 primary
+              className={`flex-1 h-8 text-[11px] px-2 text-white ${completedViews.includes(activeAugId) ? 'bg-green-600 hover:bg-green-700' : 'bg-primary hover:bg-primary/90'}`} 
               onClick={handleSaveCurrentView}
             >
                View Checked
             </Button>
 
             <Button 
-              className="flex-1 h-8 text-[11px] px-2 bg-white text-black hover:bg-neutral-200 font-bold" 
+              // 🌟 去掉写死的白底黑字，改为标准的 outline，自动适配日夜间
+              variant="outline"
+              className="flex-1 h-8 text-[11px] px-2 font-bold bg-background hover:bg-muted" 
               onClick={proceedToExport}
-              disabled={completedViews.size < augViews.length}
+              disabled={completedViews.length < augViews.length}
             >
                Views Checked
             </Button>

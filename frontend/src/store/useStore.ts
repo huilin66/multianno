@@ -69,6 +69,8 @@ type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'cr
 export interface AppState {
   projectName: string;
   setProjectName: (name: string) => void;
+  theme: 'dark' | 'light';
+  setTheme: (theme: 'dark' | 'light') => void;
   projectMetadata: FolderMetadata[]; 
   folders: FolderData[];
   views: ViewConfig[];
@@ -85,7 +87,9 @@ export interface AppState {
 
   savedAlignments: SavedAlignment[];
   addSavedAlignment: (preset: SavedAlignment) => void;
-
+  removeSavedAlignment: (id: string) => void;
+  completedViews: string[];
+  setCompletedViews: (views: string[]) => void;
   setProjectMetadata: (data: FolderMetadata[]) => void;
   loadProjectMeta: (meta: ProjectMetaContract) => void; // 🌟 修复拼写错误
 
@@ -114,7 +118,8 @@ export const useStore = create<AppState>()(
     (set) => ({
       projectName: 'multianno project1',
       setProjectName: (name) => set({ projectName: name }),
-      
+      theme: 'dark', // 默认深色
+      setTheme: (theme) => set({ theme }),
       // 🌟 核心新增：加载项目元数据
       loadProjectMeta: (meta) => set({
         projectName: meta.projectName || 'Untitled Project',
@@ -144,7 +149,8 @@ export const useStore = create<AppState>()(
           transform: v.transform,
         })),
         currentStem: null, 
-        annotations: [] 
+        annotations: [],
+        completedViews: [],
       }),
 
       projectMetadata: [],
@@ -157,13 +163,51 @@ export const useStore = create<AppState>()(
       activeModule: 'workspace', 
       currentStem: null,
       stems: [],
-      
+
+      // 🌟 1. 新增：全局记录已 Check 的视图 ID
+      completedViews: [],
+      setCompletedViews: (views) => set({ completedViews: views }),
       savedAlignments: [],
-      addSavedAlignment: (preset) => set((state) => ({ 
-        savedAlignments: [
-          preset, 
-          ...state.savedAlignments.filter(p => p.name !== preset.name)
-        ].slice(0, 10) 
+      // 🌟 升级版：添加对齐参数（带自动去重功能）
+      addSavedAlignment: (newAlignment) => set((state) => {
+        // 1. 过滤掉参数完全一致的旧记录
+        const filteredAlignments = state.savedAlignments.filter(a => {
+          const isSameCrop = 
+            a.crop.t === newAlignment.crop.t && 
+            a.crop.r === newAlignment.crop.r && 
+            a.crop.b === newAlignment.crop.b && 
+            a.crop.l === newAlignment.crop.l;
+            
+          const isSameTransform = 
+            a.transform.scaleX === newAlignment.transform.scaleX && 
+            a.transform.scaleY === newAlignment.transform.scaleY && 
+            a.transform.offsetX === newAlignment.transform.offsetX && 
+            a.transform.offsetY === newAlignment.transform.offsetY;
+            
+          // 如果裁剪和拉伸参数都一模一样，就判定为重复，将其剔除
+          return !(isSameCrop && isSameTransform);
+        });
+
+        // 2. 将最新的记录放在最前面（保证时间戳是最新的）
+        return { savedAlignments: [newAlignment, ...filteredAlignments] };
+      }),
+
+      // 🌟 3. 找到最后的 partialize，确保持久化
+      partialize: (state) => ({
+        projectName: state.projectName, 
+        theme: state.theme,
+        projectMetadata: state.projectMetadata,
+        folders: state.folders,
+        views: state.views,         
+        stems: state.stems,
+        currentStem: state.currentStem,
+        annotations: state.annotations, 
+        savedAlignments: state.savedAlignments, 
+        completedViews: state.completedViews, // 👈 确保持久化打勾状态
+      }),
+      // 🌟 新增：手动删除指定的对齐参数
+      removeSavedAlignment: (id) => set((state) => ({
+        savedAlignments: state.savedAlignments.filter(a => a.id !== id)
       })),
 
       addFolder: (folder) => set((state) => ({ folders: [...state.folders, folder] })),
@@ -197,6 +241,7 @@ export const useStore = create<AppState>()(
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
         projectName: state.projectName, // 🌟 确保持久化项目名称
+        theme: state.theme,
         projectMetadata: state.projectMetadata,
         folders: state.folders,
         views: state.views,         
@@ -204,6 +249,7 @@ export const useStore = create<AppState>()(
         currentStem: state.currentStem,
         annotations: state.annotations, 
         savedAlignments: state.savedAlignments, 
+        completedViews: state.completedViews,
       }),
     }
   )

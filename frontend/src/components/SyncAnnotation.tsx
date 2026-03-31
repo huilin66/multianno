@@ -3,7 +3,7 @@ import { useStore, Annotation } from '../store/useStore';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-
+import { UI_THEMES } from '../config/colors';
 import { 
   Layers, Save, MousePointer2, Square, Hexagon, 
   Database, Image as ImageIcon, X, ChevronRight, Eye // 🌟 补充这些
@@ -24,7 +24,8 @@ export function SyncAnnotation() {
     setViewport,
     currentStem,
     stems,
-    setCurrentStem
+    setCurrentStem,
+    theme
   } = useStore();
   
   const [tool, setTool] = useState<'select' | 'bbox' | 'polygon'>('select');
@@ -152,49 +153,11 @@ export function SyncAnnotation() {
     }
   };
 
-  // 修改内部的 generateProjectMeta 函数
-  const generateProjectMeta = (): ProjectMetaContract => {
-    return {
-      projectName: projectName || "Untitled Project",
-      folders: folders.map((f, i) => ({
-        Id: i + 1,
-        path: f.path,
-        suffix: f.suffix || "", // 补充缺失字段
-        "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
-        "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
-        "files total": f.files ? f.files.length : 0,
-        "image meta": {
-          width: f.metadata?.width || 0,
-          height: f.metadata?.height || 0,
-          bands: f.metadata?.bands || 0,
-          "data type": f.metadata?.dataType || 'uint8'
-        }
-      })),
-      views: views.map((v, i) => {
-        const fIndex = folders.findIndex(f => f.id === v.folderId);
-        return {
-          id: v.isMain ? 'main view' : `aug view ${i + 1}`, // 统一从 1 开始
-          "folder id": fIndex >= 0 ? fIndex + 1 : 1,
-          bands: v.bands,
-          // 🌟 关键：接入 renderMode
-          renderMode: v.bands.length === 3 ? 'rgb' : (v.colormap || 'gray'),
-          isMain: v.isMain,
-          transform: {
-            crop: v.crop || { t: 0, r: 100, b: 100, l: 0 },
-            scaleX: v.transform?.scaleX ?? 1,
-            scaleY: v.transform?.scaleY ?? 1,
-            offsetX: v.transform?.offsetX ?? 0,
-            offsetY: v.transform?.offsetY ?? 0
-          }
-        };
-      })
-    };
-  };
   return (
-    <div className="flex h-full overflow-hidden bg-neutral-900 text-white relative">
+    <div className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative">
       
       {/* Left Toolbar */}
-      <div className="w-16 border-r border-neutral-800 flex flex-col items-center py-4 space-y-4 bg-neutral-950 shrink-0">
+      <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-4 bg-neutral-50 dark:bg-neutral-950 shrink-0">
         <Button 
           variant={tool === 'select' ? 'default' : 'ghost'} 
           size="icon" 
@@ -232,7 +195,7 @@ export function SyncAnnotation() {
         onWheel={handleWheel}
       >
         {views.length === 0 ? (
-          <div className="w-full h-full flex items-center justify-center text-neutral-500 border-2 border-dashed border-neutral-800 rounded-lg">
+          <div className="w-full h-full flex items-center justify-center text-neutral-500 border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">
             No views configured. Please go to Data Preload to set up your project.
           </div>
         ) : (
@@ -244,7 +207,8 @@ export function SyncAnnotation() {
             }}
           >
             {views.map((view, index) => (
-              <div key={view.id} className="relative border border-neutral-800 bg-black rounded-lg overflow-hidden">
+              // {/* 🌟 修改点：边框和背景色适配日夜间，加入 transition-colors 保证切换丝滑 */}
+              <div key={view.id} className="relative border border-neutral-200 dark:border-neutral-800 bg-neutral-200 dark:bg-black rounded-lg overflow-hidden transition-colors duration-300">
                 <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300">
                   {view.isMain ? 'Main View' : `Aug View ${index}`}
                 </div>
@@ -253,6 +217,7 @@ export function SyncAnnotation() {
                   annotations={currentAnnotations}
                   currentPoints={currentPoints}
                   tool={tool}
+                  theme={theme}
                   onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, view.id)}
                   onMouseMove={(e: React.MouseEvent) => handleMouseMove(e, view.id)}
                   onMouseUp={handleMouseUp}
@@ -296,23 +261,23 @@ export function SyncAnnotation() {
       </div>
       
 {/* Right Panel: Project Meta, Layers, Labels, Scene Groups */}
-      <div className="w-80 border-l border-neutral-800 bg-neutral-950 flex flex-col shrink-0 overflow-hidden">
+      <div className="w-80 border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col shrink-0 overflow-hidden">
         
         {/* 🌟 1. 精简的 Project Meta 行 (点击打开窗口) */}
         <div 
           onClick={() => setShowMetaModal(true)}
-          className="p-3 border-b border-neutral-800 hover:bg-neutral-800/50 cursor-pointer transition-all group flex items-center justify-between shrink-0"
+          className="p-3 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-800/50 cursor-pointer transition-all group flex items-center justify-between shrink-0"
         >
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-blue-400 group-hover:scale-110 transition-transform" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 group-hover:text-blue-400">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400 group-hover:text-blue-400">
               Project Meta
             </span>
           </div>
           
           {/* 仅显示主视图关联的数量信息 */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-neutral-900 border border-neutral-800 text-[10px] font-mono text-neutral-400 group-hover:border-blue-500/30 transition-colors">
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-[10px] font-mono text-neutral-500 dark:text-neutral-400 group-hover:border-primary/30 transition-colors">
               <span className="text-blue-400 font-bold">{folders.length}</span>
               <span className="opacity-50 text-[9px]">FOLDERS</span>
               <div className="w-[1px] h-2 bg-neutral-700 mx-0.5" />
@@ -324,13 +289,13 @@ export function SyncAnnotation() {
         </div>
 
         {/* 🌟 2. View Layers (图层管理区) */}
-        <div className="p-4 border-b border-neutral-800 shrink-0">
+        <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
           <h3 className="font-semibold text-[11px] uppercase tracking-wider text-neutral-500 flex items-center gap-2 mb-3">
             <Layers className="w-3.5 h-3.5" /> View Layers
           </h3>
           <div className="space-y-1.5">
             {views.map((v, idx) => (
-              <div key={v.id} className="flex items-center justify-between bg-neutral-900/50 p-2 rounded border border-neutral-800/50 text-[11px] hover:bg-neutral-900 transition-colors">
+              <div key={v.id} className="flex items-center justify-between bg-white dark:bg-neutral-900/50 p-2 rounded border border-neutral-200 dark:border-neutral-800/50 text-[11px] hover:bg-white dark:bg-neutral-900 transition-colors">
                 <div className="flex items-center gap-2">
                   <div className={`w-1.5 h-1.5 rounded-full ${v.isMain ? 'bg-blue-500 shadow-[0_0_5px_rgba(59,130,246,0.5)]' : 'bg-emerald-500'}`} />
                   <span className={v.isMain ? "text-blue-400 font-bold" : "text-neutral-300"}>
@@ -351,7 +316,7 @@ export function SyncAnnotation() {
         </div>
 
         {/* 🌟 3. Labels (标注对象列表) */}
-        <div className="flex-grow flex flex-col border-b border-neutral-800 overflow-hidden min-h-[150px]">
+        <div className="flex-grow flex flex-col border-b border-neutral-200 dark:border-neutral-800 overflow-hidden min-h-[150px]">
           <div className="p-4 pb-2 flex items-center justify-between">
             <h3 className="font-semibold text-[11px] uppercase tracking-wider text-neutral-500 flex items-center gap-2">
               <Square className="w-3.5 h-3.5" /> Objects ({currentAnnotations.length})
@@ -362,7 +327,7 @@ export function SyncAnnotation() {
               <div className="text-[10px] text-neutral-700 text-center py-8 italic">No objects in this scene</div>
             ) : (
               currentAnnotations.map((ann) => (
-                <div key={ann.id} className="group p-2 bg-neutral-900/30 rounded border border-neutral-800/50 text-[11px] flex items-center justify-between hover:border-blue-500/30 hover:bg-neutral-900 cursor-pointer transition-all">
+                <div key={ann.id} className="group p-2 bg-white dark:bg-neutral-900/30 rounded border border-neutral-200 dark:border-neutral-800/50 text-[11px] flex items-center justify-between hover:border-primary/30 hover:bg-white dark:bg-neutral-900 cursor-pointer transition-all">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-sm bg-blue-500/50" />
                     <span className="font-medium text-neutral-300">{ann.label}</span>
@@ -388,7 +353,7 @@ export function SyncAnnotation() {
                 onClick={() => setCurrentStem(stem)}
                 className={`w-full text-left px-3 py-1.5 text-[11px] rounded transition-all flex items-center justify-between group ${
                   currentStem === stem 
-                    ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-[inset_0_0_10px_rgba(59,130,246,0.05)]' 
+                    ? 'bg-blue-600/10 text-blue-400 border border-primary/20 shadow-[inset_0_0_10px_rgba(59,130,246,0.05)]' 
                     : 'text-neutral-500 hover:text-neutral-300 hover:bg-neutral-800/50 border border-transparent'
                 }`}
               >
@@ -404,10 +369,10 @@ export function SyncAnnotation() {
     {showMetaModal && (
       <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-10">
         {/* 🌟 这是一个干净的容器，专门承载你的 Dashboard 组件 */}
-        <div className="relative w-full max-w-6xl h-full bg-neutral-900 rounded-2xl border border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
+        <div className="relative w-full max-w-6xl h-full bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
           
           {/* 统一的头部，带有关闭按钮 */}
-          <div className="flex items-center justify-between p-4 border-b border-neutral-800 bg-neutral-950 shrink-0">
+          <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 shrink-0">
             <div className="flex items-center gap-2">
               <Database className="w-5 h-5 text-blue-400" />
               <span className="font-bold uppercase tracking-widest text-sm">Project Metadata Control</span>
@@ -419,7 +384,7 @@ export function SyncAnnotation() {
 
           {/* 🌟 直接放入组件：它会自动填充剩余空间并处理内部滚动 */}
           <div className="flex-1 overflow-hidden">
-            <ProjectMetaDashboard />
+            <ProjectMetaDashboard onClose={() => setShowMetaModal(false)} />
           </div>
         </div>
       </div>
@@ -429,7 +394,7 @@ export function SyncAnnotation() {
 }
 
 
-function CanvasView({ view, annotations, currentPoints, tool, onMouseDown, onMouseMove, onMouseUp }: any) {
+function CanvasView({ view, annotations, currentPoints, tool, theme, onMouseDown, onMouseMove, onMouseUp }: any) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport } = useStore();
 
@@ -438,6 +403,8 @@ function CanvasView({ view, annotations, currentPoints, tool, onMouseDown, onMou
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const colors = UI_THEMES[theme as 'dark' | 'light'] || UI_THEMES.dark;
 
     // Resize canvas to match container
     const parent = canvas.parentElement;
@@ -460,17 +427,17 @@ function CanvasView({ view, annotations, currentPoints, tool, onMouseDown, onMou
     }
 
     // Draw Mock Image Data
-    ctx.fillStyle = view.isMain ? '#333' : 'rgba(255,100,100,0.2)';
+    ctx.fillStyle = view.isMain ? colors.canvasMainBg : colors.canvasAugBg;
     ctx.fillRect(100, 100, 400, 400);
-    ctx.strokeStyle = '#555';
+    ctx.strokeStyle = colors.mockBorder;
     ctx.lineWidth = 1 / viewport.zoom;
     ctx.strokeRect(100, 100, 400, 400);
 
     // Draw Annotations
     annotations.forEach((ann: Annotation) => {
-      ctx.strokeStyle = '#0f0';
+      ctx.strokeStyle = colors.annoDoneStroke;
       ctx.lineWidth = 2 / viewport.zoom;
-      ctx.fillStyle = 'rgba(0, 255, 0, 0.2)';
+      ctx.fillStyle = colors.annoDoneFill;
 
       if (ann.type === 'bbox' && ann.points.length === 2) {
         const [p1, p2] = ann.points;
@@ -482,7 +449,7 @@ function CanvasView({ view, annotations, currentPoints, tool, onMouseDown, onMou
         ctx.fillRect(x, y, w, h);
         
         // Draw label
-        ctx.fillStyle = '#0f0';
+        ctx.fillStyle = colors.annoDoneText;;
         ctx.font = `${12 / viewport.zoom}px Arial`;
         ctx.fillText(ann.label, x, y - 4 / viewport.zoom);
       } else if (ann.type === 'polygon' && ann.points.length > 0) {
@@ -496,7 +463,7 @@ function CanvasView({ view, annotations, currentPoints, tool, onMouseDown, onMou
         ctx.fill();
         
         // Draw label
-        ctx.fillStyle = '#0f0';
+        ctx.fillStyle = colors.annoDoneText;
         ctx.font = `${12 / viewport.zoom}px Arial`;
         ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 4 / viewport.zoom);
       }
@@ -504,7 +471,8 @@ function CanvasView({ view, annotations, currentPoints, tool, onMouseDown, onMou
 
     // Draw Current Drawing
     if (currentPoints.length > 0) {
-      ctx.strokeStyle = '#ff0';
+      ctx.strokeStyle = colors.annoDrawingStroke;
+      ctx.fillStyle = colors.annoDrawingFill;
       ctx.lineWidth = 2 / viewport.zoom;
       
       if (tool === 'bbox' && currentPoints.length === 2) {

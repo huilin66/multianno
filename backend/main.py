@@ -78,15 +78,18 @@ def explore_file_system(
     if not path:
         items = []
         if platform.system() == "Windows":
+            import ctypes
             import string
 
-            # A. 扫描本地盘符
-            drives = [
-                f"{d}:/" for d in string.ascii_uppercase if os.path.exists(f"{d}:\\")
-            ]
+            # A. 扫描本地盘符 (极其快速且安全，瞬间返回，绝不卡死)
+            drives = []
+            bitmask = ctypes.windll.kernel32.GetLogicalDrives()
+            for i, letter in enumerate(string.ascii_uppercase):
+                if bitmask & (1 << i):
+                    drives.append(f"{letter}:/")
+
             for d in drives:
                 items.append({"name": f"本地磁盘 ({d[0]}:)", "path": d, "type": "dir"})
-
             # B. 🌟 注入前端传来的历史记录
             seen = set()
             for h_path in history:

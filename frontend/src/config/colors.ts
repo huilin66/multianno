@@ -27,7 +27,7 @@ export const COLOR_MAPS: ColormapConfig[] = [
 export const BAND_COLORS: string[] = [
   'bg-red-50 border-red-500 text-red-600 shadow-[0_0_5px_rgba(239,68,68,0.3)]',       // 波段 1 (红)
   'bg-green-50 border-green-500 text-green-600 shadow-[0_0_5px_rgba(34,197,94,0.3)]',   // 波段 2 (绿)
-  'bg-blue-50 border-blue-500 text-blue-600 shadow-[0_0_5px_rgba(59,130,246,0.3)]',    // 波段 3 (蓝)
+  'bg-blue-50 border-primary text-blue-600 shadow-[0_0_5px_rgba(59,130,246,0.3)]',    // 波段 3 (蓝)
   'bg-purple-50 border-purple-500 text-purple-600 shadow-[0_0_5px_rgba(168,85,247,0.3)]', // 波段 4 (紫)
   'bg-amber-50 border-amber-500 text-amber-600 shadow-[0_0_5px_rgba(245,158,11,0.3)]',  // 波段 5 (黄/琥珀)
   'bg-cyan-50 border-cyan-500 text-cyan-600 shadow-[0_0_5px_rgba(6,182,212,0.3)]',      // 波段 6 (青)
@@ -37,26 +37,55 @@ export const BAND_COLORS: string[] = [
 
 // 波段方块【未选中】时的默认基础样式
 export const BAND_BASE_STYLE = "w-7 h-7 rounded border flex items-center justify-center text-xs font-bold transition-all duration-150";
-export const BAND_UNSELECTED_STYLE = "bg-neutral-50 border-neutral-200 text-neutral-400 hover:border-neutral-300 hover:bg-neutral-100";
-
+export const BAND_UNSELECTED_STYLE = "bg-neutral-50 border-neutral-200 text-neutral-500 dark:text-neutral-400 hover:border-neutral-300 hover:bg-neutral-100";
+export const BRAND_COLOR = {
+  light: '#2563eb', // 对应上面的日间蓝色
+  dark: '#3b82f6',  // 对应上面的夜间蓝色
+};
 
 // ==========================================
 // 3. 全局 UI 主题配置 (🌟 预留坑位，暂不接管系统)
 // ==========================================
 // 未来可以通过这组配置，配合 Context 或 CSS 变量来实现一键切换 深/浅/护眼 模式
+// src/config/colors.ts
 export const UI_THEMES = {
   light: {
-    background: '#ffffff',
-    cardBg: '#f8fafc',
-    textPrimary: '#0f172a',
-    textSecondary: '#64748b',
-    border: '#e2e8f0',
+    // 画布背景色
+    canvasMainBg: '#f1f5f9', // 浅灰色底
+    canvasAugBg: 'rgba(239, 68, 68, 0.05)', // 非常淡的红色底
+    mockBorder: '#cbd5e1', // 浅色边框
+    
+    // 标注完成的颜色 (原来是纯绿色 #0f0)
+    annoDoneStroke: '#16a34a', // 柔和的深绿
+    annoDoneFill: 'rgba(34, 197, 94, 0.15)',
+    annoDoneText: '#15803d',
+    
+    // 正在绘制的颜色 (原来是纯黄色 #ff0)
+    // annoDrawingStroke: '#eab308', // 柔和的琥珀黄
+    // annoDrawingFill: 'rgba(234, 179, 8, 0.2)',
+
+    // 🌟 将主交互色应用到绘制中（比如正在拉伸的框、激活的点等）
+    interactivePrimary: BRAND_COLOR.light, 
+    annoDrawingStroke: BRAND_COLOR.light,
+    annoDrawingFill: 'rgba(37, 99, 235, 0.2)', // 蓝色半透明
   },
   dark: {
-    background: '#0a0a0a',
-    cardBg: '#171717',
-    textPrimary: '#f8fafc',
-    textSecondary: '#a1a1aa',
-    border: '#262626',
+    // 画布背景色
+    canvasMainBg: '#171717', // 深黑灰底 (原来的 #333)
+    canvasAugBg: 'rgba(255, 100, 100, 0.15)', 
+    mockBorder: '#555555',
+    
+    // 标注完成的颜色
+    annoDoneStroke: '#4ade80', // 亮绿色
+    annoDoneFill: 'rgba(74, 222, 128, 0.2)',
+    annoDoneText: '#4ade80',
+    
+    // 正在绘制的颜色
+    // annoDrawingStroke: '#facc15', // 亮黄色
+    // annoDrawingFill: 'rgba(250, 204, 21, 0.2)',
+
+    interactivePrimary: BRAND_COLOR.dark,
+    annoDrawingStroke: BRAND_COLOR.dark,
+    annoDrawingFill: 'rgba(59, 130, 246, 0.2)', // 蓝色半透明
   }
 };
