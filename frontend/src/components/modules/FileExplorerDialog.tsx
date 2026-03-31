@@ -4,6 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Folder, ChevronRight, CheckSquare, Square, ArrowLeft, File, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next'; // 🌟 引入翻译钩子
+import { API_BASE_URL } from '../../api/client';
 
 interface ExplorerItem {
   name: string;
@@ -43,7 +44,7 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
         }
       }
       
-      const url = `http://localhost:8080/api/fs/explore?path=${encodeURIComponent(targetPath)}${historyParams}`;
+      const url = `${API_BASE_URL}/fs/explore?path=${encodeURIComponent(targetPath)}${historyParams}`;
       const res = await fetch(url);
       
       if (!res.ok) {

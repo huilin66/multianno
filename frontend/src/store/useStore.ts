@@ -119,16 +119,33 @@ export const useStore = create<AppState>()(
   persist(
     (set) => ({
       projectName: 'multianno project1',
-      setProjectName: (name) => set({ projectName: name }),
       theme: 'dark', // 默认深色
-      setTheme: (theme) => set({ theme }),
-      // 🌟 2. 初始化语言为英文
       language: 'en',
+      projectMetadata: [],
+      folders: [],
+      views: [],
+      annotations: [],
+      viewport: { zoom: 1, panX: 0, panY: 0 },
+      activeModule: 'workspace', 
+      currentStem: null,
+      stems: [],
+      completedViews: [],
+      savedAlignments: [],
+
+
+      setProjectName: (name) => set({ projectName: name }),
+      setTheme: (theme) => set({ theme }),
       setLanguage: (lang) => set({ language: lang }),
-      // 🌟 核心新增：加载项目元数据
+      setProjectMetadata: (data) => set({ projectMetadata: data }),
+      setCompletedViews: (views) => set({ completedViews: views }),
+      setActiveModule: (module) => set({ activeModule: module }),
+      setCurrentStem: (stem) => set({ currentStem: stem }),
+      setStems: (stems) => set({ stems }),
+      setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
+
+
       loadProjectMeta: (meta) => set({
         projectName: meta.projectName || 'Untitled Project',
-        // 注意：JSON 里没有真实的 File[] 对象，需要你在组件层重新让用户选择文件夹，或者后端提供 URL
         folders: meta.folders.map(f => ({
           id: String(f.Id),
           path: f.path,
@@ -157,98 +174,45 @@ export const useStore = create<AppState>()(
         annotations: [],
         completedViews: [],
       }),
-
-      projectMetadata: [],
-      setProjectMetadata: (data) => set({ projectMetadata: data }),
-      folders: [],
-      views: [],
-      annotations: [],
-      viewport: { zoom: 1, panX: 0, panY: 0 },
-      
-      activeModule: 'workspace', 
-      currentStem: null,
-      stems: [],
-
-      // 🌟 1. 新增：全局记录已 Check 的视图 ID
-      completedViews: [],
-      setCompletedViews: (views) => set({ completedViews: views }),
-      savedAlignments: [],
-      // 🌟 升级版：添加对齐参数（带自动去重功能）
       addSavedAlignment: (newAlignment) => set((state) => {
-        // 1. 过滤掉参数完全一致的旧记录
         const filteredAlignments = state.savedAlignments.filter(a => {
           const isSameCrop = 
             a.crop.t === newAlignment.crop.t && 
             a.crop.r === newAlignment.crop.r && 
             a.crop.b === newAlignment.crop.b && 
             a.crop.l === newAlignment.crop.l;
-            
           const isSameTransform = 
             a.transform.scaleX === newAlignment.transform.scaleX && 
             a.transform.scaleY === newAlignment.transform.scaleY && 
             a.transform.offsetX === newAlignment.transform.offsetX && 
             a.transform.offsetY === newAlignment.transform.offsetY;
-            
-          // 如果裁剪和拉伸参数都一模一样，就判定为重复，将其剔除
           return !(isSameCrop && isSameTransform);
         });
-
-        // 2. 将最新的记录放在最前面（保证时间戳是最新的）
         return { savedAlignments: [newAlignment, ...filteredAlignments] };
       }),
-
-      // 🌟 3. 找到最后的 partialize，确保持久化
-      partialize: (state) => ({
-        projectName: state.projectName, 
-        theme: state.theme,
-        language: state.language, // 🌟 3. 把语言存进 localStorage
-        projectMetadata: state.projectMetadata,
-        folders: state.folders,
-        views: state.views,         
-        stems: state.stems,
-        currentStem: state.currentStem,
-        annotations: state.annotations, 
-        savedAlignments: state.savedAlignments, 
-        completedViews: state.completedViews, // 👈 确保持久化打勾状态
-      }),
-      // 🌟 新增：手动删除指定的对齐参数
-      removeSavedAlignment: (id) => set((state) => ({
-        savedAlignments: state.savedAlignments.filter(a => a.id !== id)
-      })),
+      removeSavedAlignment: (id) => set((state) => ({savedAlignments: state.savedAlignments.filter(a => a.id !== id)})),
 
       addFolder: (folder) => set((state) => ({ folders: [...state.folders, folder] })),
-      updateFolder: (id, data) => set((state) => ({
-        folders: state.folders.map(f => f.id === id ? { ...f, ...data } : f)
-      })),
+      updateFolder: (id, data) => set((state) => ({folders: state.folders.map(f => f.id === id ? { ...f, ...data } : f)})),
       removeFolder: (id) => set((state) => ({ folders: state.folders.filter(f => f.id !== id) })),
       clearFolders: () => set({ folders: [] }),
 
       addView: (view) => set((state) => ({ views: [...state.views, view] })),
-      updateView: (id, data) => set((state) => ({
-        views: state.views.map(v => v.id === id ? { ...v, ...data } : v)
-      })),
+      updateView: (id, data) => set((state) => ({views: state.views.map(v => v.id === id ? { ...v, ...data } : v)})),
       removeView: (id) => set((state) => ({ views: state.views.filter(v => v.id !== id) })),
       clearViews: () => set({ views: [] }),
-      
-      setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
-      
+
       addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
-      updateAnnotation: (id, data) => set((state) => ({
-        annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)
-      })),
+      updateAnnotation: (id, data) => set((state) => ({annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)})),
       removeAnnotation: (id) => set((state) => ({ annotations: state.annotations.filter(a => a.id !== id) })),
-      
-      setActiveModule: (module) => set({ activeModule: module }),
-      setCurrentStem: (stem) => set({ currentStem: stem }),
-      setStems: (stems) => set({ stems }),
     }),
     {
       name: 'multiAnno_workspace_state', 
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        projectName: state.projectName, // 🌟 确保持久化项目名称
+        projectName: state.projectName,
         theme: state.theme,
-        language: state.language, // 🌟 3. 把语言存进 localStorage
+        language: state.language,
         projectMetadata: state.projectMetadata,
         folders: state.folders,
         views: state.views,         

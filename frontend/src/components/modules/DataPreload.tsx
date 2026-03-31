@@ -7,17 +7,19 @@ import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../../config/colors';
 import type { ProjectMetaContract } from '../../config/contract';
-import { useTranslation } from 'react-i18next'; // 🌟 引入国际化钩子
+import { useTranslation } from 'react-i18next';
 
 import { 
   FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History
 } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog'; 
 import { Alert, AlertDescription } from '../ui/alert';
+import { generateProjectMetaConfig } from '../../lib/projectUtils';
+import { API_BASE_URL } from '../../api/client';
 
 export function DataPreload() {
-  const { t } = useTranslation(); // 🌟 初始化 t 函数
-  const {projectName, folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
+  const { t } = useTranslation();
+  const {folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
   
   const [placeholders, setPlaceholders] = useState<{ id: string, path: string, suffix: string }[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
@@ -95,7 +97,7 @@ export function DataPreload() {
     
     try {
       const payloadData = validPlaceholders.map(p => ({ path: p.path.trim(), suffix: p.suffix.trim() }));
-      const response = await fetch('http://localhost:8080/api/project/analyze', {
+      const response = await fetch(`${API_BASE_URL}/project/analyze`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ folders: payloadData }),
@@ -172,44 +174,9 @@ export function DataPreload() {
 
     if (views.length === 1) {
       if (!window.confirm(t('dataPreload.alerts.confirmSingleView'))) return; // 🌟
-
-      const projectMeta: ProjectMetaContract = {
-        projectName: projectName || "Untitled Project",
-        folders: folders.map((f, i) => ({
-          Id: i + 1,
-          path: f.path,
-          suffix: f.suffix || "",
-          "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
-          "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
-          "files total": f.files ? f.files.length : 0,
-          "image meta": {
-            width: f.metadata?.width || 'Unknown',
-            height: f.metadata?.height || 'Unknown',
-            bands: f.metadata?.bands || 'Unknown',
-            "data type": f.metadata?.fileType || 'uint8'
-          }
-        })),
-        views: views.map((v, i) => {
-          const fIndex = folders.findIndex(f => f.id === v.folderId);
-          return {
-            id: v.isMain ? 'main view' : `aug view ${i}`, 
-            "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
-            bands: v.bands,
-            renderMode: v.bands.length === 3 ? 'rgb' : (v.colormap || 'gray'),
-            isMain: v.isMain,
-            transform: {
-              crop: v.crop || { t: 0, r: 100, b: 100, l: 0 },
-              scaleX: v.transform?.scaleX ?? 1,
-              scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
-              offsetX: v.transform?.offsetX ?? 0,
-              offsetY: v.transform?.offsetY ?? 0
-            }
-          };
-        })
-      };
+      const projectMeta: ProjectMetaContract = generateProjectMetaConfig(useStore.getState())
 
       const jsonStr = JSON.stringify(projectMeta, null, 2);
-
       try {
         if ('showSaveFilePicker' in window) {
           const handle = await (window as any).showSaveFilePicker({

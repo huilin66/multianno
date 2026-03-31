@@ -12,12 +12,11 @@ import {
   Hand,  AlertCircle, Database, Trash2
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next'; // 🌟 引入
+import { generateProjectMetaConfig } from '../../lib/projectUtils';
 
 export function ViewExtentCheck() {
   const { t } = useTranslation();
-  // 合并为这一行：
-  // const { projectName, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment } = useStore();
-  const { projectName, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
+  const {views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
 // 🛡️ 兜底防线：如果没有绑定 View 或没有数据
   if (!views || views.length === 0) {
     return (
@@ -487,7 +486,7 @@ export function ViewExtentCheck() {
         transform: { 
           ...tempTransformRef.current,
           crop: { ...activeCrop } 
-        } as any // 使用 as any 绕过可选类型的强校验
+        }
       });
     };
 
@@ -505,48 +504,6 @@ export function ViewExtentCheck() {
     }
   };
 
-// 【完全按照您的 JSON 结构要求重写】：在标注主界面实时提取规范化的项目元数据
-// 严格按照要求的 JSON 结构提取，并解决 TS 类型报错
-  const generateProjectMeta = (): ProjectMetaContract => {
-    return {
-      projectName: projectName,
-      folders: folders.map((f, i) => ({
-        Id: i + 1,
-        path: f.path,
-        suffix: f.suffix || "",
-        "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
-        "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
-        "files total": f.files ? f.files.length : 0,
-        "image meta": {
-          width: f.metadata?.width || 'Unknown',
-          height: f.metadata?.height || 'Unknown',
-          bands: f.metadata?.bands || 'Unknown',
-        "data type": f.metadata?.fileType || 'uint8'
-        }
-      })),
-      views: views.map((v, i) => {
-        const fIndex = folders.findIndex(f => f.id === v.folderId);
-        
-        // 【核心修复】：强制解构并补充默认的 crop 属性，彻底消除 TS 联合类型报错
-        const safeTransform = {
-          crop: (v.transform as any)?.crop || { t: 0, r: 100, b: 100, l: 0 },
-          scaleX: v.transform?.scaleX ?? 1,
-          scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
-          offsetX: v.transform?.offsetX ?? 0,
-          offsetY: v.transform?.offsetY ?? 0
-        };
-
-        return {
-          id: v.isMain ? 'main view' : `aug view ${i}`, 
-          "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
-          bands: v.bands,
-          renderMode:v.bands.length === 3 ? 'rgb' : (v.colormap || 'gray'),
-          isMain: v.isMain,
-          transform: safeTransform
-        };
-      })
-    };
-  };
   // 【修改】：使用标准元数据并保存为 project_meta.json
   const proceedToExport = async () => {
     if (completedViews.length < augViews.length) {
@@ -555,7 +512,7 @@ export function ViewExtentCheck() {
     }
 
     // 调用规范化元数据生成器
-    const projectMeta = generateProjectMeta();
+    const projectMeta: ProjectMetaContract = generateProjectMetaConfig(useStore.getState())
     const jsonStr = JSON.stringify(projectMeta, null, 2);
 
     try {

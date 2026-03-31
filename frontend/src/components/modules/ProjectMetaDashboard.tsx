@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { FolderOpen, Layers, Database, Download } from 'lucide-react';
 import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入
+import { generateProjectMetaConfig } from '../../lib/projectUtils';
 
 // 🌟 1. 新增：定义组件接收的参数
 interface ProjectMetaDashboardProps {
@@ -28,48 +29,8 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
       </div>
     );
   }
-  const generateProjectMeta = (): ProjectMetaContract => {
-    return {
-      projectName: projectName || "Untitled Project",
-      folders: folders.map((f, i) => ({
-        Id: i + 1,
-        path: f.path,
-        suffix: f.suffix || "",
-        "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
-        "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
-        "files total": f.files ? f.files.length : 0,
-        "image meta": {
-          width: f.metadata?.width || 'Unknown',
-          height: f.metadata?.height || 'Unknown',
-          bands: f.metadata?.bands || 'Unknown',
-          "data type": f.metadata?.fileType || 'uint8'
-        }
-      })),
-      views: views.map((v, i) => {
-        const fIndex = folders.findIndex(f => f.id === v.folderId);
-        
-        const safeTransform = {
-          crop: (v.transform as any)?.crop || { t: 0, r: 100, b: 100, l: 0 },
-          scaleX: v.transform?.scaleX ?? 1,
-          scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
-          offsetX: v.transform?.offsetX ?? 0,
-          offsetY: v.transform?.offsetY ?? 0
-        };
 
-        return {
-          id: v.isMain ? 'main view' : `aug view ${i}`, 
-          "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
-          bands: v.bands,
-          // 🌟 核心新增：只有当波段数为 1 时，才把 colormap 写入配置
-          renderMode:v.bands.length === 3 ? 'rgb' : (v.colormap || 'gray'),
-          isMain: v.isMain,
-          transform: safeTransform
-        };
-      })
-    };
-  };
-
-  const meta = generateProjectMeta();
+  const meta: ProjectMetaContract = generateProjectMetaConfig(useStore.getState());
 
   const handleExportJSON = () => {
     const blob = new Blob([JSON.stringify(meta, null, 2)], { type: 'application/json' });
