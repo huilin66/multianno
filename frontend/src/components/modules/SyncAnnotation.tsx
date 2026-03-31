@@ -8,15 +8,11 @@ import {
   Layers, Save, MousePointer2, Square, Hexagon, 
   Database, Image as ImageIcon, X, ChevronRight, Eye // 🌟 补充这些
 } from 'lucide-react';
-import { ProjectMetaDashboard } from './ProjectMetaDashboard'; // 🌟 确保路径正确
-
-import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入翻译钩子
 
 export function SyncAnnotation() {
   const { t } = useTranslation(); // 🌟 初始化 t 函数
-  const { 
-    projectName,
+  const {
     views, 
     folders,
     annotations, 
@@ -26,14 +22,14 @@ export function SyncAnnotation() {
     currentStem,
     stems,
     setCurrentStem,
-    theme
+    theme,
+    setActiveModule
   } = useStore();
   
   const [tool, setTool] = useState<'select' | 'bbox' | 'polygon'>('select');
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [showMetaModal, setShowMetaModal] = useState(false);
 
   // Popover state
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -266,7 +262,7 @@ export function SyncAnnotation() {
         
         {/* 🌟 1. 精简的 Project Meta 行 (点击打开窗口) */}
         <div 
-          onClick={() => setShowMetaModal(true)}
+          onClick={() => setActiveModule('meta')} // 👈 🌟 换成这句！直接呼叫全局的 meta 弹窗
           className="p-3 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-800/50 cursor-pointer transition-all group flex items-center justify-between shrink-0"
         >
           <div className="flex items-center gap-2">
@@ -365,31 +361,6 @@ export function SyncAnnotation() {
           </div>
         </div>
       </div>
-    {/* 🌟 4. Project Meta Modal - 放在最外层容器内，确保 z-index 生效 */}
-    {/* 在 SyncAnnotation.tsx 底部 */}
-    {showMetaModal && (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md p-10">
-        {/* 🌟 这是一个干净的容器，专门承载你的 Dashboard 组件 */}
-        <div className="relative w-full max-w-6xl h-full bg-white dark:bg-neutral-900 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-2xl overflow-hidden flex flex-col">
-          
-          {/* 统一的头部，带有关闭按钮 */}
-          <div className="flex items-center justify-between p-4 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 shrink-0">
-            <div className="flex items-center gap-2">
-              <Database className="w-5 h-5 text-blue-400" />
-              <span className="font-bold uppercase tracking-widest text-sm">Project Metadata Control</span>
-            </div>
-            <Button variant="ghost" size="icon" onClick={() => setShowMetaModal(false)} className="hover:bg-white/10">
-              <X className="w-5 h-5" />
-            </Button>
-          </div>
-
-          {/* 🌟 直接放入组件：它会自动填充剩余空间并处理内部滚动 */}
-          <div className="flex-1 overflow-hidden">
-            <ProjectMetaDashboard onClose={() => setShowMetaModal(false)} />
-          </div>
-        </div>
-      </div>
-    )}
     </div> // 🌟 这是整个 SyncAnnotation 的最后一个闭合标签
   );
 }
