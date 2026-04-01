@@ -688,15 +688,24 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
                 >
                   <div className="flex items-center gap-2">
                     <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
-                    <span className="font-medium">{ann.label} {ann.difficult && <AlertTriangle className="w-3 h-3 inline text-red-500"/>}</span>
+                    <span className="font-medium">
+                      {ann.label} {ann.difficult && <AlertTriangle className="w-3 h-3 inline text-red-500"/>}
+                    </span>
                   </div>
+
+                  {/* 🌟 核心修改：删除按钮 */}
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    className="w-5 h-5 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 transition-opacity"
-                    onClick={(e) => { e.stopPropagation(); removeAnnotation(ann.id); if(isActive) setActiveAnnotationId(null); }}
+                    // 使用 group-hover 实现鼠标悬放时才显示，保持界面简洁
+                    className="w-6 h-6 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                    onClick={(e) => { 
+                      e.stopPropagation(); // 🔴 必须阻止冒泡，否则点击删除也会触发上面的选中逻辑
+                      removeAnnotation(ann.id); 
+                      if(isActive) setActiveAnnotationId(null); 
+                    }}
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </Button>
                 </div>
               );
