@@ -21,6 +21,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from typing import Any, Dict, List, Optional
+
+# 确保顶部有导入 Dict 和 Any
+
+
+# ==========================================
+# 🌟 新增：标注与体系库 (Taxonomy) 相关的请求模型
+# ==========================================
+class SaveAnnotationRequest(BaseModel):
+    save_dir: str  # 保存的文件夹路径
+    file_name: str  # 文件名，例如 DJI_0001.json
+    content: Dict[str, Any]  # 完整的 JSON 数据字典
+
+
+class BatchMergeClassRequest(BaseModel):
+    save_dirs: List[str]  # 项目可能包含多个文件夹，需要传一个列表
+    old_names: List[str]  # 需要被替换的旧类别名列表（支持多个合并为一个）
+    new_name: str  # 新的类别名
+
+
+class BatchDeleteClassRequest(BaseModel):
+    save_dirs: List[str]
+    class_name: str
+    hard_delete: bool  # True: 彻底删除该框; False: 软删除，改为 'Uncategorized'
+
+
+class BatchDeleteAttributeRequest(BaseModel):
+    save_dirs: List[str]
+    attribute_name: str  # 需要从所有框中抹除的属性名
+
 
 class FolderPayload(BaseModel):
     path: str
@@ -303,6 +333,155 @@ async def get_preview(folderPath: str, bands: str):
     except Exception as e:
         print(f"Preview Gen Error: {e}")
         return Response(status_code=500)
+
+
+# ==========================================
+# 🌟 新增：单文件静默保存接口 (供前端防抖调用)
+# ==========================================
+@app.post("/api/annotations/save")
+async def save_annotation(request: SaveAnnotationRequest):
+    try:
+        os.makedirs(request.save_dir, exist_ok=True)
+        file_path = os.path.join(request.save_dir, request.file_name)
+
+        # 极速覆盖写入本地 JSON
+        with open(file_path, "w", encoding="utf-8") as f:
+            import json
+
+            json.dump(request.content, f, indent=2, ensure_ascii=False)
+
+        return {"status": "success", "file": file_path}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+# ==========================================
+# 🌟 新增：批量合并/重命名类别接口
+# ==========================================
+@app.post("/api/taxonomy/merge_class")
+async def batch_merge_class(request: BatchMergeClassRequest):
+    modified_count = 0
+    import json
+
+    for folder in request.save_dirs:
+        if not os.path.exists(folder):
+            continue
+
+        for file_name in os.listdir(folder):
+            if not file_name.endswith(".json") or file_name.endswith("_meta.json"):
+                continue
+
+            file_path = os.path.join(folder, file_name)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    anno_data = json.load(f)
+
+                changed = False
+                # 遍历修改匹配的 label
+                for shape in anno_data.get("shapes", []):
+                    if shape.get("label") in request.old_names:
+                        shape["label"] = request.new_name
+                        changed = True
+
+                # 只有发生实质修改，才重新写入，最大化节省硬盘 I/O
+                if changed:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump(anno_data, f, indent=2, ensure_ascii=False)
+                    modified_count += 1
+            except Exception as e:
+                print(f"Error processing {file_path}: {e}")
+
+    return {"status": "success", "modified_files": modified_count}
+
+
+# ==========================================
+# 🌟 新增：批量删除类别接口 (支持软硬删除)
+# ==========================================
+@app.post("/api/taxonomy/delete_class")
+async def batch_delete_class(request: BatchDeleteClassRequest):
+    modified_count = 0
+    import json
+
+    for folder in request.save_dirs:
+        if not os.path.exists(folder):
+            continue
+
+        for file_name in os.listdir(folder):
+            if not file_name.endswith(".json") or file_name.endswith("_meta.json"):
+                continue
+
+            file_path = os.path.join(folder, file_name)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    anno_data = json.load(f)
+
+                original_len = len(anno_data.get("shapes", []))
+
+                if request.hard_delete:
+                    # 硬删除：过滤掉该类别的框
+                    anno_data["shapes"] = [
+                        s
+                        for s in anno_data.get("shapes", [])
+                        if s.get("label") != request.class_name
+                    ]
+                    changed = len(anno_data["shapes"]) != original_len
+                else:
+                    # 软删除：把类别名改成 'Uncategorized'
+                    changed = False
+                    for shape in anno_data.get("shapes", []):
+                        if shape.get("label") == request.class_name:
+                            shape["label"] = "Uncategorized"
+                            changed = True
+
+                if changed:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump(anno_data, f, indent=2, ensure_ascii=False)
+                    modified_count += 1
+            except Exception as e:
+                pass
+
+    return {"status": "success", "modified_files": modified_count}
+
+
+# ==========================================
+# 🌟 新增：批量删除属性接口
+# ==========================================
+@app.post("/api/taxonomy/delete_attribute")
+async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
+    modified_count = 0
+    import json
+
+    for folder in request.save_dirs:
+        if not os.path.exists(folder):
+            continue
+
+        for file_name in os.listdir(folder):
+            if not file_name.endswith(".json") or file_name.endswith("_meta.json"):
+                continue
+
+            file_path = os.path.join(folder, file_name)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    anno_data = json.load(f)
+
+                changed = False
+                for shape in anno_data.get("shapes", []):
+                    # 如果该框存在 attributes 字典，并且包含了我们要删的属性
+                    if (
+                        "attributes" in shape
+                        and request.attribute_name in shape["attributes"]
+                    ):
+                        del shape["attributes"][request.attribute_name]
+                        changed = True
+
+                if changed:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump(anno_data, f, indent=2, ensure_ascii=False)
+                    modified_count += 1
+            except Exception as e:
+                pass
+
+    return {"status": "success", "modified_files": modified_count}
 
 
 if __name__ == "__main__":

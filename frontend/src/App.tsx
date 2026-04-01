@@ -25,7 +25,8 @@ import {
   DialogTitle 
 } from '@/components/ui/dialog';
 // 🌟 引入新的图标: FolderPlus 和 Upload
-import { Menu, Settings, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe } from 'lucide-react';
+import { Menu, Settings, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags } from 'lucide-react';
+import { TaxonomyDashboard } from './components/modules/TaxonomyDashboard';
 
 export default function App() {
   const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage} = useStore();
@@ -76,6 +77,10 @@ export default function App() {
               <DropdownMenuItem onClick={() => setActiveModule('meta')}>
                 <Database className="w-4 h-4 mr-2" /> {t('menu.projectMeta')}
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveModule('taxonomy')}>
+                <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
+              </DropdownMenuItem>
+
               <DropdownMenuItem onClick={() => setActiveModule('export')}>
                 <Download className="w-4 h-4 mr-2" /> {t('menu.exportData')}
               </DropdownMenuItem>
@@ -83,7 +88,6 @@ export default function App() {
           </DropdownMenu>
         </div>
         
-        {/* 中间区域：Logo + 软件名 + 项目名 + 当前切片 */}
         {/* 中间区域：Logo + 软件名 + 项目名 + 当前切片 */}
         <div className="flex items-center justify-center gap-3 w-1/2 shrink-0">
           <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold shadow-sm">
@@ -247,7 +251,25 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
-
+      {/* 🌟 新增：Taxonomy Manager 弹窗 */}
+      <Dialog 
+        open={activeModule === 'taxonomy'} 
+        onOpenChange={(open) => !open && setActiveModule('workspace')}
+      >
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-800 overflow-hidden">
+          {/* 🌟 1. 补齐缺失的标准头部 (DialogHeader) */}
+          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
+            <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
+              <Tags className="w-5 h-5 text-primary"/> {t('dialog.taxonomyManager')}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-grow overflow-hidden relative">
+            {/* 🌟 2. 传入标准的 onClose 回调 */}
+            <TaxonomyDashboard onClose={() => setActiveModule('workspace')} />
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next'; // 🌟 引入
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
+import { getPreviewImageUrl } from '../../api/client';
 
 export function ViewExtentCheck() {
   const { t } = useTranslation();
@@ -93,7 +94,9 @@ export function ViewExtentCheck() {
     if (!view) return '';
     const folder = folders.find(f => f.id === view.folderId);
     if (!folder) return '';
-    return `http://localhost:8080/api/project/preview?folderPath=${encodeURIComponent(folder.path)}&bands=${view.bands.join(',')}`;
+    
+    // 🌟 统一调用 client.ts，fileName 传 undefined，并顺手补上 colormap 参数
+    return getPreviewImageUrl(folder.path, undefined, view.bands, view.colormap || 'gray');
   };
 
   const updateAugDOMTransform = () => {

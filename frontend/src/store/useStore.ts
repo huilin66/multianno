@@ -55,6 +55,8 @@ export interface Annotation {
   label: string;
   text?: string;
   stem: string; 
+  difficult: boolean;
+  attributes: Record<string, string | number | boolean>;
 }
 
 export interface SavedAlignment {
@@ -64,7 +66,23 @@ export interface SavedAlignment {
   transform: { offsetX: number; offsetY: number; scaleX: number; scaleY: number };
 }
 
-type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject';
+export interface TaxonomyClass {
+  id: string;          // 唯一ID
+  name: string;        // 类别名称，如 "building"
+  color: string;       // BBox/Polygon 渲染颜色，如 "#FF5733"
+  description?: string;// 类别定义说明
+}
+
+export interface TaxonomyAttribute {
+  id: string;
+  name: string;        // 属性名，如 "occluded" 或 "material"
+  type: 'boolean' | 'select' | 'text'; // 属性值类型
+  options?: string[];  // 如果是 select 类型，枚举的可选项
+  applyToAll: boolean; // 是否全局通用 (如果不通用，可以绑定到特定 Class 上)
+}
+
+
+type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy';
 
 export interface AppState {
   projectName: string;
@@ -77,15 +95,16 @@ export interface AppState {
   folders: FolderData[];
   views: ViewConfig[];
   annotations: Annotation[];
-  viewport: {
-    zoom: number;
-    panX: number;
-    panY: number;
-  };
+  viewport: {zoom: number;panX: number;panY: number;};
   
   activeModule: ActiveModule;
   currentStem: string | null;
   stems: string[];
+  activeAnnotationId: string | null;
+
+  taxonomyClasses: TaxonomyClass[];
+  taxonomyAttributes: TaxonomyAttribute[];
+
 
   savedAlignments: SavedAlignment[];
   addSavedAlignment: (preset: SavedAlignment) => void;
@@ -113,6 +132,17 @@ export interface AppState {
   setActiveModule: (module: ActiveModule) => void;
   setCurrentStem: (stem: string | null) => void;
   setStems: (stems: string[]) => void;
+  setActiveAnnotationId: (id: string | null) => void;
+
+
+  addTaxonomyClass: (cls: TaxonomyClass) => void;
+  updateTaxonomyClass: (id: string, updates: Partial<TaxonomyClass>) => void;
+  deleteTaxonomyClass: (id: string, deleteAnnotations: boolean) => void;
+  mergeTaxonomyClasses: (sourceIds: string[], targetId: string) => void;
+
+  addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
+  updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
+  deleteTaxonomyAttribute: (id: string) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -131,7 +161,14 @@ export const useStore = create<AppState>()(
       stems: [],
       completedViews: [],
       savedAlignments: [],
+      activeAnnotationId: null,
 
+      taxonomyClasses: [
+        { id: 'class-default', name: 'object', color: '#3B82F6', description: 'Default generic object' }
+      ],
+      taxonomyAttributes: [
+        { id: 'attr-default', name: 'occluded', type: 'boolean', applyToAll: true }
+      ],
 
       setProjectName: (name) => set({ projectName: name }),
       setTheme: (theme) => set({ theme }),
@@ -142,7 +179,7 @@ export const useStore = create<AppState>()(
       setCurrentStem: (stem) => set({ currentStem: stem }),
       setStems: (stems) => set({ stems }),
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
-
+      setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
 
       loadProjectMeta: (meta) => set({
         projectName: meta.projectName || 'Untitled Project',
@@ -205,6 +242,71 @@ export const useStore = create<AppState>()(
       addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
       updateAnnotation: (id, data) => set((state) => ({annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)})),
       removeAnnotation: (id) => set((state) => ({ annotations: state.annotations.filter(a => a.id !== id) })),
+
+      // --- 🌟 体系库核心逻辑：分类管理 (带级联更新) ---
+      addTaxonomyClass: (cls) => set((state) => ({ taxonomyClasses: [...state.taxonomyClasses, cls] })),
+      
+      updateTaxonomyClass: (id, updates) => set((state) => {
+        const oldClass = state.taxonomyClasses.find(c => c.id === id);
+        const newClasses = state.taxonomyClasses.map(c => c.id === id ? { ...c, ...updates } : c);
+        
+        // 🌟 级联更新：如果改了类别名，同步更新所有属于该类别的标注
+        let newAnnotations = state.annotations;
+        if (oldClass && updates.name && oldClass.name !== updates.name) {
+          newAnnotations = state.annotations.map(a => 
+            a.label === oldClass.name ? { ...a, label: updates.name as string } : a
+          );
+        }
+        return { taxonomyClasses: newClasses, annotations: newAnnotations };
+      }),
+
+      deleteTaxonomyClass: (id, deleteAnnotations) => set((state) => {
+        const classToDelete = state.taxonomyClasses.find(c => c.id === id);
+        if (!classToDelete) return state;
+
+        const newClasses = state.taxonomyClasses.filter(c => c.id !== id);
+        let newAnnotations = state.annotations;
+
+        if (deleteAnnotations) {
+          // 硬删除：直接连带删除所有该类别的标注框
+          newAnnotations = state.annotations.filter(a => a.label !== classToDelete.name);
+        } else {
+          // 软删除：框保留，但标记为 'Uncategorized' 并在界面飘红警告
+          newAnnotations = state.annotations.map(a => 
+            a.label === classToDelete.name ? { ...a, label: 'Uncategorized' } : a
+          );
+        }
+        return { taxonomyClasses: newClasses, annotations: newAnnotations };
+      }),
+
+      mergeTaxonomyClasses: (sourceNames, targetName) => set((state) => {
+        // 1. 删除源类别
+        const newClasses = state.taxonomyClasses.filter(c => !sourceNames.includes(c.name));
+        // 2. 将所有旧类别的标注，全部替换为新目标类别
+        const newAnnotations = state.annotations.map(a => 
+          sourceNames.includes(a.label) ? { ...a, label: targetName } : a
+        );
+        return { taxonomyClasses: newClasses, annotations: newAnnotations };
+      }),
+
+      // --- 🌟 体系库核心逻辑：属性管理 (带级联更新) ---
+      addTaxonomyAttribute: (attr) => set((state) => ({ taxonomyAttributes: [...state.taxonomyAttributes, attr] })),
+      updateTaxonomyAttribute: (id, updates) => set((state) => ({ 
+        taxonomyAttributes: state.taxonomyAttributes.map(a => a.id === id ? { ...a, ...updates } : a) 
+      })),
+      deleteTaxonomyAttribute: (id) => set((state) => {
+        const attrToDelete = state.taxonomyAttributes.find(a => a.id === id);
+        const newAttrs = state.taxonomyAttributes.filter(a => a.id !== id);
+        if (!attrToDelete) return { taxonomyAttributes: newAttrs };
+
+        // 🌟 级联更新：遍历所有标注，把这个属性字段从中抹除
+        const newAnnotations = state.annotations.map(a => {
+          const newAttributes = { ...a.attributes };
+          delete newAttributes[attrToDelete.name];
+          return { ...a, attributes: newAttributes };
+        });
+        return { taxonomyAttributes: newAttrs, annotations: newAnnotations };
+      }),
     }),
     {
       name: 'multiAnno_workspace_state', 
@@ -221,6 +323,8 @@ export const useStore = create<AppState>()(
         annotations: state.annotations, 
         savedAlignments: state.savedAlignments, 
         completedViews: state.completedViews,
+        taxonomyClasses: state.taxonomyClasses,
+        taxonomyAttributes: state.taxonomyAttributes,
       }),
     }
   )
