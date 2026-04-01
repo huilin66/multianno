@@ -8,7 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { UI_THEMES } from '../../config/colors';
 import { 
   Layers, Save, MousePointer2, Square, Hexagon, 
-  Database, Image as ImageIcon, X, ChevronRight, Eye, AlertTriangle, Cloud, CloudCog, CloudLightning, Trash2, Maximize, Crop
+  Database, Image as ImageIcon, X, ChevronRight, Eye, AlertTriangle, 
+  Cloud, CloudCog, CloudLightning, Trash2, Maximize, Crop,
+  Hand, CircleDot, Pencil, Activity, Circle
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -29,7 +31,8 @@ export function SyncAnnotation() {
     setActiveAnnotationId = () => {} // 兜底空函数
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
   
-  const [tool, setTool] = useState<'select' | 'bbox' | 'polygon'>('select');
+  type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' |'circle' | 'lasso';
+  const [tool, setTool] = useState<ToolType>('select');
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -81,6 +84,7 @@ export function SyncAnnotation() {
       try {
         const mainViewFolder = folders.find((f: any) => f.id === views.find((v: any) => v.isMain)?.folderId);
         
+
         // 组装标准 Scene JSON 数据格式
         const payload = {
           version: "1.0.0",
@@ -96,7 +100,15 @@ export function SyncAnnotation() {
             text: ann.text || "",
             points: ann.points.map((p: any) => [p.x, p.y]), 
             group_id: null,
-            shape_type: ann.type === 'bbox' ? 'rectangle' : 'polygon',
+            shape_type: (() => {
+                if (ann.type === 'bbox') return 'rectangle';
+                if (ann.type === 'point') return 'point';
+                if (ann.type === 'line') return 'linestrip';
+                if (ann.type === 'ellipse') return 'ellipse';
+                if (ann.type === 'circle') return 'circle';
+                if (ann.type === 'lasso') return 'lasso';
+                return 'polygon';
+              })(),
             flags: {},
             attributes: ann.attributes || {},
             difficult: ann.difficult || false
@@ -144,28 +156,13 @@ export function SyncAnnotation() {
     setViewport(newZoom, newPanX, newPanY);
   };
 
-  const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
-    // 🌟 1. 触发漫游逻辑：如果是“鼠标中键” 或 “当前是选择工具且按了左键”
-    if (e.button === 1 || (e.button === 0 && tool === 'select')) {
-      e.preventDefault();
-      setIsPanning(true);
-      setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
-      
-      // 如果是选择工具下的左键点击，清空当前选中的对象和弹窗
-      if (e.button === 0 && tool === 'select') {
-        setActiveAnnotationId(null);
-        setPopoverOpen(false);
-      }
-      return;
-    }
-
-    // 2. 触发画图逻辑
+const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
+    // 1. 🌟 第一步：先把坐标算出来！(因为选择工具也要用坐标来判断有没有点中东西)
     if (popoverOpen) setPopoverOpen(false);
-
+    
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
     const x = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const y = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
-
     const view = views.find((v: any) => v.id === viewId);
     let mainX = x, mainY = y;
     if (view && !view.isMain) {
@@ -173,30 +170,78 @@ export function SyncAnnotation() {
       mainY = (y - view.transform.offsetY) / view.transform.scaleY;
     }
 
-    if (tool === 'bbox') {
+    // 2. 🌟 第二步：处理 Select (选择) 工具的精准碰撞检测
+    if (e.button === 0 && tool === 'select') {
+      let clickedId = null;
+      // 倒序遍历，保证点中视觉上最上层的标注
+      for (let i = currentAnnotations.length - 1; i >= 0; i--) {
+        const ann = currentAnnotations[i];
+        if (ann.type === 'bbox' || ann.type === 'ellipse' || ann.type === 'circle') {
+          // 矩形/圆/椭圆的碰撞判断：只要在最小x和最大x之间就行
+          const [p1, p2] = ann.points;
+          const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
+          const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
+          if (mainX >= minX && mainX <= maxX && mainY >= minY && mainY <= maxY) {
+            clickedId = ann.id; break;
+          }
+        } else if (ann.type === 'polygon') {
+          // 多边形碰撞判断：射线法
+          let inside = false;
+          for (let j = 0, k = ann.points.length - 1; j < ann.points.length; k = j++) {
+            const xi = ann.points[j].x, yi = ann.points[j].y;
+            const xj = ann.points[k].x, yj = ann.points[k].y;
+            const intersect = ((yi > mainY) !== (yj > mainY)) && (mainX < (xj - xi) * (mainY - yi) / (yj - yi) + xi);
+            if (intersect) inside = !inside;
+          }
+          if (inside) { clickedId = ann.id; break; }
+        }
+      }
+      
+      setActiveAnnotationId(clickedId);
+      
+      // 如果没点中任何东西，直接把鼠标当成漫游拖拽
+      if (!clickedId) {
+        setIsPanning(true);
+        setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
+      }
+      return; // 选择工具处理完毕，强制返回
+    }
+
+    // 3. 🌟 处理强制漫游 (按了鼠标中键 或 明确选了 Pan 工具)
+    if (e.button === 1 || tool === 'pan') {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
+      return;
+    }
+
+    // 4. 🌟 处理所有画图工具的起手式 (注意加上了 circle)
+    if (tool === 'bbox' || tool === 'ellipse' || tool === 'circle') {
       setIsDrawing(true);
       setCurrentPoints([{ x: mainX, y: mainY }, { x: mainX, y: mainY }]);
-    } else if (tool === 'polygon') {
+    } else if (tool === 'polygon' || tool === 'line') {
       setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
+    } else if (tool === 'lasso') {
+      setIsDrawing(true);
+      setCurrentPoints([{ x: mainX, y: mainY }]);
+    } else if (tool === 'point') {
+      setPendingAnnotation({ type: 'point', points: [{ x: mainX, y: mainY }] });
+      setPopoverPos({ x: e.clientX, y: e.clientY });
+      setPopoverOpen(true);
     }
   };
 
   const handleMouseMove = (e: React.MouseEvent, viewId: string) => {
-    // 🌟 1. 执行漫游平移
     if (isPanning) {
       const dx = e.clientX - panStart.mouseX;
       const dy = e.clientY - panStart.mouseY;
       setViewport(viewport.zoom, panStart.panX + dx, panStart.panY + dy);
       return;
     }
-
-    // 2. 执行画框逻辑
-    if (!isDrawing || tool !== 'bbox') return;
-
+    if (!isDrawing) return;
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
     const x = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const y = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
-
     const view = views.find((v: any) => v.id === viewId);
     let mainX = x, mainY = y;
     if (view && !view.isMain) {
@@ -204,47 +249,94 @@ export function SyncAnnotation() {
       mainY = (y - view.transform.offsetY) / view.transform.scaleY;
     }
 
-    setCurrentPoints([currentPoints[0], { x: mainX, y: mainY }]);
+    if (tool === 'bbox' || tool === 'ellipse'|| tool === 'circle') {
+      setCurrentPoints([currentPoints[0], { x: mainX, y: mainY }]);
+    } else if (tool === 'lasso') {
+      const lastP = currentPoints[currentPoints.length - 1];
+      const dist = Math.hypot(mainX - lastP.x, mainY - lastP.y);
+      if (dist * viewport.zoom > 5) {
+        setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
+      }
+    }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
-    // 🌟 1. 结束漫游
-    if (isPanning) {
-      setIsPanning(false);
-      return;
-    }
+    if (isPanning) { setIsPanning(false); return; }
+    if (!isDrawing) return;
 
-    // 2. 结束画图
-    if (tool === 'bbox' && isDrawing) {
-      setIsDrawing(false);
-      if (currentPoints.length === 2) {
-        setPendingAnnotation({ type: 'bbox', points: currentPoints });
+    // 🌟 修改点 1：只有“一次性拖拽”工具才在这里结束绘制状态并清空点
+    if (tool === 'bbox' || tool === 'ellipse' || tool === 'circle' || tool === 'lasso') {
+      setIsDrawing(false); // 结束绘制状态
+
+      const isShape = tool === 'bbox' || tool === 'ellipse' || tool === 'circle';
+      
+      if (isShape) {
+        const [p1, p2] = currentPoints;
+        const screenW = Math.abs(p2.x - p1.x) * viewport.zoom;
+        const screenH = Math.abs(p2.y - p1.y) * viewport.zoom;
+        
+        // 防误触：宽或高大于 5 像素才有效
+        if (screenW > 5 || screenH > 5) {
+          setPendingAnnotation({ type: tool, points: currentPoints });
+          setPopoverPos({ x: e.clientX, y: e.clientY });
+          setPopoverOpen(true);
+        }
+      } else if (tool === 'lasso' && currentPoints.length > 5) {
+        // 套索工具
+        setPendingAnnotation({ type: 'polygon', points: currentPoints });
         setPopoverPos({ x: e.clientX, y: e.clientY });
         setPopoverOpen(true);
       }
+      
+      setCurrentPoints([]); // 清空临时点
+    }
+    
+    // 🌟 注意：polygon 和 line 的 setIsDrawing(false) 应该在 handleDoubleClick 中处理
+    // 所以这里不做任何处理，保证连续点击有效
+  };
+  
+// 🌟 新增：双击完成多边形/多段线
+  const handleDoubleClick = (e: React.MouseEvent) => {
+    // 只有在绘制多边形或线段，且有点的情况下才触发
+    if ((tool === 'polygon' || tool === 'line') && currentPoints.length > 1) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      // 如果点数太少（比如多边形少于3个点），则不触发保存
+      if (tool === 'polygon' && currentPoints.length < 3) return;
+
+      setPendingAnnotation({ type: tool, points: currentPoints });
+      setPopoverPos({ x: e.clientX, y: e.clientY });
+      setPopoverOpen(true);
+      
+      // 清空状态
       setCurrentPoints([]);
+      setIsDrawing(false);
     }
   };
 
-  // 🌟 增加全局快捷键绑定
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'v' || e.key === 'V') setTool('select');
+    if (e.key === 'h' || e.key === 'H') setTool('pan');
     if (e.key === 'r' || e.key === 'R') setTool('bbox');
     if (e.key === 'p' || e.key === 'P') setTool('polygon');
+    if (e.key === 'o' || e.key === 'O') setTool('ellipse');
+    if (e.key === 'c' || e.key === 'C') setTool('circle');
+    if (e.key === 't' || e.key === 'T') setTool('point');
+    if (e.key === 'l' || e.key === 'L') setTool('line');
+    if (e.key === 'f' || e.key === 'F') setTool('lasso');
     
-    // 快捷删除
     if ((e.key === 'Delete' || e.key === 'Backspace') && activeAnnotationId) {
       removeAnnotation(activeAnnotationId);
       setActiveAnnotationId(null);
     }
-
-    if (e.key === 'Enter' && tool === 'polygon' && currentPoints.length > 2) {
-      setPendingAnnotation({ type: 'polygon', points: currentPoints });
+    if (e.key === 'Enter' && (tool === 'polygon' || tool === 'line') && currentPoints.length > 1) {
+      if (tool === 'polygon' && currentPoints.length < 3) return;
+      setPendingAnnotation({ type: tool, points: currentPoints });
       const lastPoint = currentPoints[currentPoints.length - 1];
       const screenX = (lastPoint.x * viewport.zoom) + viewport.panX;
       const screenY = (lastPoint.y * viewport.zoom) + viewport.panY;
-      
-      setPopoverPos({ x: screenX + 150, y: screenY + 50 }); 
+      setPopoverPos({ x: screenX + 100, y: screenY + 50 }); 
       setPopoverOpen(true);
       setCurrentPoints([]);
     } else if (e.key === 'Escape') {
@@ -254,7 +346,6 @@ export function SyncAnnotation() {
       setActiveAnnotationId(null);
     }
   }, [currentPoints, tool, viewport, activeAnnotationId, removeAnnotation, setActiveAnnotationId]);
-
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -291,7 +382,7 @@ export function SyncAnnotation() {
     <div className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative">
       
       {/* 👈 Left Toolbar */}
-      <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-4 bg-neutral-50 dark:bg-neutral-950 shrink-0 z-10">
+      {/* <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-4 bg-neutral-50 dark:bg-neutral-950 shrink-0 z-10">
         <Button variant={tool === 'select' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('select')} title={t('workspace.toolSelect')}>
           <MousePointer2 className="w-5 h-5" />
         </Button>
@@ -301,8 +392,39 @@ export function SyncAnnotation() {
         <Button variant={tool === 'polygon' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('polygon')} title={t('workspace.toolPolygon')}>
           <Hexagon className="w-5 h-5" />
         </Button>
+      </div> */}
+      <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-2 bg-neutral-50 dark:bg-neutral-950 shrink-0 z-10 overflow-y-auto custom-scrollbar">
+        <Button variant={tool === 'select' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('select')} title="Select (V)">
+          <MousePointer2 className="w-5 h-5" />
+        </Button>
+        <Button variant={tool === 'pan' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('pan')} title="Pan (H)">
+          <Hand className="w-5 h-5" />
+        </Button>
+        <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
+        <Button variant={tool === 'bbox' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('bbox')} title="Bounding Box (R)">
+          <Square className="w-5 h-5" />
+        </Button>
+        <Button variant={tool === 'polygon' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('polygon')} title="Polygon (P)">
+          <Hexagon className="w-5 h-5" />
+        </Button>
+        <Button variant={tool === 'ellipse' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('ellipse')} title="Ellipse (O)">
+          {/* 用 CSS 压扁一个圆来表示椭圆 */}
+          <Circle className="w-5 h-5 scale-y-75" />
+        </Button>
+        <Button variant={tool === 'circle' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('circle')} title="Circle (C)">
+          <Circle className="w-5 h-5" />
+        </Button>
+        <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
+        <Button variant={tool === 'point' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('point')} title="Point (T)">
+          <CircleDot className="w-5 h-5" />
+        </Button>
+        <Button variant={tool === 'line' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('line')} title="Polyline (L)">
+          <Activity className="w-5 h-5" />
+        </Button>
+        <Button variant={tool === 'lasso' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('lasso')} title="Freehand Lasso (F)">
+          <Pencil className="w-5 h-5" />
+        </Button>
       </div>
-
       {/* 🎯 Grid Workspace */}
       <div className="flex-grow p-4 overflow-hidden relative" ref={containerRef} onWheel={handleWheel}>
         
@@ -338,6 +460,9 @@ export function SyncAnnotation() {
                   mainWidth={mainWidth}
                   mainHeight={mainHeight}
                   isFullExtent={!!showFullExtent[view.id]}
+                  formLabel={formLabel}
+                  pendingAnnotation={pendingAnnotation}
+                  onDoubleClick={handleDoubleClick}
                   onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, view.id)}
                   onMouseMove={(e: React.MouseEvent) => handleMouseMove(e, view.id)}
                   onMouseUp={handleMouseUp}
@@ -617,7 +742,8 @@ function CanvasView({
   view, annotations, activeAnnotationId, taxonomyClasses, currentPoints, 
   tool, theme, folders, currentStem, isPanning,// 🌟 确保父组件传了 folders 和 currentStem 进来
   mainWidth, mainHeight, isFullExtent,
-  onMouseDown, onMouseMove, onMouseUp 
+  onMouseDown, onMouseMove, onMouseUp,
+  formLabel, pendingAnnotation, onDoubleClick,
 }: any) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport } = useStore();
@@ -775,37 +901,117 @@ function CanvasView({
         ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
         ctx.font = `bold ${14 / viewport.zoom}px Arial`;
         ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom);
+      } else if (ann.type === 'line' && ann.points.length > 0) {
+        ctx.beginPath(); ctx.moveTo(ann.points[0].x, ann.points[0].y);
+        for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
+        ctx.stroke();
+        ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom);
+      // 🌟 同时支持椭圆和正圆的正式渲染
+      } else if ((ann.type === 'ellipse' || ann.type === 'circle') && ann.points.length === 2) {
+        const [p1, p2] = ann.points;
+        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+        
+        ctx.beginPath();
+        if (ann.type === 'circle') {
+          const radius = Math.max(w, h) / 2;
+          ctx.arc(x + w/2, y + h/2, radius, 0, Math.PI * 2);
+        } else {
+          ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2);
+        }
+        ctx.fill(); ctx.stroke();
+        
+        ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; 
+        ctx.font = `bold ${14 / viewport.zoom}px Arial`; 
+        ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
+      } else if (ann.type === 'point' && ann.points.length > 0) {
+        const p = ann.points[0];
+        ctx.beginPath(); ctx.arc(p.x, p.y, 6 / viewport.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; ctx.fill(); ctx.stroke();
+        ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, p.x + 8 / viewport.zoom, p.y - 8 / viewport.zoom);
       }
     });
 
-    // Draw Current Drawing
+// =====================================
+    // 🌟 绘制中的过程状态 (带动态颜色掩膜)
+    // =====================================
+    // 获取当前准备打标的颜色
+    const activeClassDef = taxonomyClasses?.find((c: any) => c.name === formLabel);
+    const activeColor = activeClassDef?.color || '#3B82F6';
+
     if (currentPoints.length > 0) {
-      ctx.strokeStyle = colors.annoDrawingStroke;
-      ctx.fillStyle = colors.annoDrawingFill;
+      ctx.strokeStyle = activeColor;
+      ctx.fillStyle = `${activeColor}40`; // 🌟 动态颜色的 25% 半透明掩膜
       ctx.lineWidth = 2 / viewport.zoom;
       
       if (tool === 'bbox' && currentPoints.length === 2) {
         const [p1, p2] = currentPoints;
-        const x = Math.min(p1.x, p2.x);
-        const y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x);
-        const h = Math.abs(p2.y - p1.y);
-        ctx.strokeRect(x, y, w, h);
-      } else if (tool === 'polygon') {
-        ctx.beginPath();
-        ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
-        for (let i = 1; i < currentPoints.length; i++) {
-          ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
+        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+        ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h); // 🌟 加了 fillRect
+      } else if (tool === 'ellipse' && currentPoints.length === 2) {
+        const [p1, p2] = currentPoints;
+        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+        ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); 
+        ctx.fill(); ctx.stroke(); // 🌟 加了 fill
+      } else if (tool === 'circle' && currentPoints.length === 2) {
+        const [p1, p2] = currentPoints;
+        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+        const radius = Math.max(w, h) / 2; // 正圆取长边的一半为半径
+        ctx.beginPath(); ctx.arc(x + w/2, y + h/2, radius, 0, Math.PI * 2); 
+        ctx.fill(); ctx.stroke();
+      } else if (tool === 'polygon' || tool === 'line' || tool === 'lasso') {
+        ctx.beginPath(); ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
+        for (let i = 1; i < currentPoints.length; i++) ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
+        if (tool === 'polygon') {
+          ctx.closePath();
+          ctx.fill(); // 🌟 多边形画图过程也加入掩膜
         }
         ctx.stroke();
         
-        ctx.fillStyle = '#ff0';
-        currentPoints.forEach((p: any) => {
-          ctx.beginPath();
-          ctx.arc(p.x, p.y, 4 / viewport.zoom, 0, Math.PI * 2);
-          ctx.fill();
-        });
+        if (tool !== 'lasso') {
+          ctx.fillStyle = activeColor; // 顶点原点颜色也同步
+          currentPoints.forEach((p: any) => {
+            ctx.beginPath(); ctx.arc(p.x, p.y, 4 / viewport.zoom, 0, Math.PI * 2); ctx.fill();
+          });
+        }
       }
+    }
+
+    // =====================================
+    // 🌟 绘制 Pending (待确认) 虚线状态
+    // =====================================
+    if (pendingAnnotation) {
+      ctx.strokeStyle = activeColor;
+      ctx.fillStyle = `${activeColor}40`; 
+      ctx.lineWidth = 2 / viewport.zoom;
+      ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]); // 🌟 开启虚线
+
+      if (pendingAnnotation.type === 'bbox' || pendingAnnotation.type === 'ellipse' || pendingAnnotation.type === 'circle') {
+        const [p1, p2] = pendingAnnotation.points;
+        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+        
+        if (pendingAnnotation.type === 'bbox') {
+          ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h);
+        } else if (pendingAnnotation.type === 'ellipse') {
+          ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        } else if (pendingAnnotation.type === 'circle') {
+          const radius = Math.max(w, h) / 2;
+          ctx.beginPath(); ctx.arc(x + w/2, y + h/2, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+      } else if (pendingAnnotation.type === 'polygon') {
+        ctx.beginPath(); ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
+        for (let i = 1; i < pendingAnnotation.points.length; i++) ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      } else if (pendingAnnotation.type === 'line') {
+        ctx.beginPath(); ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
+        for (let i = 1; i < pendingAnnotation.points.length; i++) ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
+        ctx.stroke();
+      }
+      ctx.setLineDash([]); // 🌟 恢复实线
     }
 
     ctx.restore();
@@ -817,11 +1023,12 @@ function CanvasView({
     <canvas
       ref={canvasRef}
       className={`absolute inset-0 w-full h-full ${
-        isPanning ? 'cursor-grabbing' :
+        isPanning || tool === 'pan' ? 'cursor-grab' :
         tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'}`}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
+      onDoubleClick={onDoubleClick}
       onMouseLeave={onMouseUp}
       onContextMenu={(e) => e.preventDefault()}
     />
