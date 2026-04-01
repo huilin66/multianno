@@ -50,7 +50,8 @@ export function SyncAnnotation() {
   const [formLabel, setFormLabel] = useState(taxonomyClasses[0]?.name || 'object');
   const [formText, setFormText] = useState('');
   const [formDifficult, setFormDifficult] = useState(false);
-
+  const [formGroupId, setFormGroupId] = useState(''); 
+  const [formTrackId, setFormTrackId] = useState('');
   // 🌟 自动保存状态
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
 
@@ -157,7 +158,6 @@ export function SyncAnnotation() {
   };
 
 const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
-    // 1. 🌟 第一步：先把坐标算出来！(因为选择工具也要用坐标来判断有没有点中东西)
     if (popoverOpen) setPopoverOpen(false);
     
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
@@ -167,17 +167,15 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
     let mainX = x, mainY = y;
     if (view && !view.isMain) {
       mainX = (x - view.transform.offsetX) / view.transform.scaleX;
-      mainY = (y - view.transform.offsetY) / view.transform.scaleY;
+      mainY = (y - view.transform.offsetY) / (view.transform.scaleY || view.transform.scaleX);
     }
 
-    // 2. 🌟 第二步：处理 Select (选择) 工具的精准碰撞检测
+    // 1. Select 工具精准碰撞检测
     if (e.button === 0 && tool === 'select') {
       let clickedId = null;
-      // 倒序遍历，保证点中视觉上最上层的标注
       for (let i = currentAnnotations.length - 1; i >= 0; i--) {
         const ann = currentAnnotations[i];
         if (ann.type === 'bbox' || ann.type === 'ellipse' || ann.type === 'circle') {
-          // 矩形/圆/椭圆的碰撞判断：只要在最小x和最大x之间就行
           const [p1, p2] = ann.points;
           const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
           const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
@@ -185,7 +183,6 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
             clickedId = ann.id; break;
           }
         } else if (ann.type === 'polygon') {
-          // 多边形碰撞判断：射线法
           let inside = false;
           for (let j = 0, k = ann.points.length - 1; j < ann.points.length; k = j++) {
             const xi = ann.points[j].x, yi = ann.points[j].y;
@@ -196,18 +193,15 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
           if (inside) { clickedId = ann.id; break; }
         }
       }
-      
       setActiveAnnotationId(clickedId);
-      
-      // 如果没点中任何东西，直接把鼠标当成漫游拖拽
       if (!clickedId) {
         setIsPanning(true);
         setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
       }
-      return; // 选择工具处理完毕，强制返回
+      return;
     }
 
-    // 3. 🌟 处理强制漫游 (按了鼠标中键 或 明确选了 Pan 工具)
+    // 2. 漫游拦截
     if (e.button === 1 || tool === 'pan') {
       e.preventDefault();
       setIsPanning(true);
@@ -215,13 +209,33 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
       return;
     }
 
-    // 4. 🌟 处理所有画图工具的起手式 (注意加上了 circle)
+    // 3. 各种画图工具的逻辑分支
     if (tool === 'bbox' || tool === 'ellipse' || tool === 'circle') {
-      setIsDrawing(true);
-      setCurrentPoints([{ x: mainX, y: mainY }, { x: mainX, y: mainY }]);
+      if (!isDrawing) {
+        // 🌟 第一次点击：开启绘制，记录起点
+        setIsDrawing(true);
+        setCurrentPoints([{ x: mainX, y: mainY }, { x: mainX, y: mainY }]);
+      } else {
+        // 🌟 第二次点击：结束绘制，弹窗保存
+        setIsDrawing(false);
+        // 加个安全保护，防止 currentPoints 异常
+        if (currentPoints.length > 0 && currentPoints[0]) {
+          const [p1] = currentPoints;
+          const screenW = Math.abs(mainX - p1.x) * viewport.zoom;
+          const screenH = Math.abs(mainY - p1.y) * viewport.zoom;
+          if (screenW > 5 || screenH > 5) {
+            setPendingAnnotation({ type: tool, points: [p1, { x: mainX, y: mainY }] });
+            setPopoverPos({ x: e.clientX, y: e.clientY });
+            setPopoverOpen(true);
+          }
+        }
+        setCurrentPoints([]); // 清空草图
+      }
     } else if (tool === 'polygon' || tool === 'line') {
+      // 🌟 Polygon: 仅存点，不设 isDrawing
       setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
     } else if (tool === 'lasso') {
+      // 🌟 Lasso: 按下左键开启连续采样
       setIsDrawing(true);
       setCurrentPoints([{ x: mainX, y: mainY }]);
     } else if (tool === 'point') {
@@ -231,70 +245,54 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent, viewId: string) => {
+const handleMouseMove = (e: React.MouseEvent, viewId: string) => {
     if (isPanning) {
       const dx = e.clientX - panStart.mouseX;
       const dy = e.clientY - panStart.mouseY;
       setViewport(viewport.zoom, panStart.panX + dx, panStart.panY + dy);
       return;
     }
-    if (!isDrawing) return;
+
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
-    const y = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
+    const rawX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
+    const rawY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
     const view = views.find((v: any) => v.id === viewId);
-    let mainX = x, mainY = y;
+    let mainX = rawX, mainY = rawY;
     if (view && !view.isMain) {
-      mainX = (x - view.transform.offsetX) / view.transform.scaleX;
-      mainY = (y - view.transform.offsetY) / view.transform.scaleY;
+      mainX = (rawX - view.transform.offsetX) / view.transform.scaleX;
+      mainY = (rawY - view.transform.offsetY) / (view.transform.scaleY || view.transform.scaleX);
     }
 
-    if (tool === 'bbox' || tool === 'ellipse'|| tool === 'circle') {
-      setCurrentPoints([currentPoints[0], { x: mainX, y: mainY }]);
-    } else if (tool === 'lasso') {
+    // 严密保护的预览逻辑
+    if (isDrawing && (tool === 'bbox' || tool === 'ellipse' || tool === 'circle')) {
+      if (currentPoints.length > 0 && currentPoints[0]) {
+        setCurrentPoints([currentPoints[0], { x: mainX, y: mainY }]);
+      }
+    } else if (isDrawing && tool === 'lasso') {
       const lastP = currentPoints[currentPoints.length - 1];
-      const dist = Math.hypot(mainX - lastP.x, mainY - lastP.y);
-      if (dist * viewport.zoom > 5) {
+      if (lastP && Math.hypot(mainX - lastP.x, mainY - lastP.y) * viewport.zoom > 5) {
         setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
       }
     }
   };
 
-  const handleMouseUp = (e: React.MouseEvent) => {
+const handleMouseUp = (e: React.MouseEvent) => {
     if (isPanning) { setIsPanning(false); return; }
-    if (!isDrawing) return;
-
-    // 🌟 修改点 1：只有“一次性拖拽”工具才在这里结束绘制状态并清空点
-    if (tool === 'bbox' || tool === 'ellipse' || tool === 'circle' || tool === 'lasso') {
-      setIsDrawing(false); // 结束绘制状态
-
-      const isShape = tool === 'bbox' || tool === 'ellipse' || tool === 'circle';
-      
-      if (isShape) {
-        const [p1, p2] = currentPoints;
-        const screenW = Math.abs(p2.x - p1.x) * viewport.zoom;
-        const screenH = Math.abs(p2.y - p1.y) * viewport.zoom;
-        
-        // 防误触：宽或高大于 5 像素才有效
-        if (screenW > 5 || screenH > 5) {
-          setPendingAnnotation({ type: tool, points: currentPoints });
-          setPopoverPos({ x: e.clientX, y: e.clientY });
-          setPopoverOpen(true);
-        }
-      } else if (tool === 'lasso' && currentPoints.length > 5) {
-        // 套索工具
+    
+    // 🌟 在这套体系下，只有 Lasso 是靠“松开鼠标”来结束绘制的
+    if (tool === 'lasso' && isDrawing) {
+      setIsDrawing(false);
+      if (currentPoints.length > 5) {
         setPendingAnnotation({ type: 'polygon', points: currentPoints });
         setPopoverPos({ x: e.clientX, y: e.clientY });
         setPopoverOpen(true);
       }
-      
-      setCurrentPoints([]); // 清空临时点
+      setCurrentPoints([]); 
     }
-    
-    // 🌟 注意：polygon 和 line 的 setIsDrawing(false) 应该在 handleDoubleClick 中处理
-    // 所以这里不做任何处理，保证连续点击有效
+    // 注意：bbox 等工具的结束移交给了 handleMouseDown 的第二次点击
+    // Polygon 等工具的结束移交给了 handleDoubleClick / Enter 键
   };
-  
+
 // 🌟 新增：双击完成多边形/多段线
   const handleDoubleClick = (e: React.MouseEvent) => {
     // 只有在绘制多边形或线段，且有点的情况下才触发
@@ -364,6 +362,8 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
         ...pendingAnnotation,
         label: formLabel,
         text: formText,
+        group_id: formGroupId || null,
+        track_id: formTrackId ? Number(formTrackId) : null,
         stem: currentStem,
         difficult: formDifficult,
         attributes: defaultAttrs
@@ -373,6 +373,8 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
       setPendingAnnotation(null);
       setFormText('');
       setFormDifficult(false);
+      setFormGroupId('');
+      setFormTrackId('');
       setActiveAnnotationId(newId);
       setTool('select');
     }
@@ -497,7 +499,23 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
                   </SelectContent>
                 </Select>
               </div>
+              {/* 👇 插入的新表单项 */}
+              <div>
+                <Label className="text-[10px] text-neutral-500 uppercase font-bold">Text (Description)</Label>
+                <Input value={formText} onChange={(e) => setFormText(e.target.value)} className="h-7 text-xs mt-1 bg-white dark:bg-neutral-950" placeholder="e.g. 烂尾楼" />
+              </div>
               
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-[10px] text-neutral-500 uppercase font-bold">Group ID</Label>
+                  <Input value={formGroupId} onChange={(e) => setFormGroupId(e.target.value)} className="h-7 text-xs mt-1 bg-white dark:bg-neutral-950" placeholder="Optional" />
+                </div>
+                <div>
+                  <Label className="text-[10px] text-neutral-500 uppercase font-bold">Track ID</Label>
+                  <Input type="number" value={formTrackId} onChange={(e) => setFormTrackId(e.target.value)} className="h-7 text-xs mt-1 bg-white dark:bg-neutral-950" placeholder="Optional" />
+                </div>
+              </div>
+              {/* 👆 插入结束 */}
               <div className="flex items-center justify-between bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30">
                 <Label className="text-xs text-red-600 dark:text-red-400 font-medium flex items-center gap-1 cursor-pointer">
                   <AlertTriangle className="w-3.5 h-3.5" /> {t('workspace.difficult')}

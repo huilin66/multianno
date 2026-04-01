@@ -11,11 +11,13 @@ export interface AnnotationShape {
   text: string;
   points: number[][]; // 例如: [[x1, y1], [x2, y2], ...]
   group_id: number | null;
+  track_id: number | null;
   shape_type: 'polygon' | 'rectangle' | 'point' | 'line';
   flags: Record<string, boolean>;
   // 🌟 核心新增：灵活的属性字典与困难样本标记
   attributes: Record<string, string | number | boolean>;
   difficult: boolean;
+  occluded: boolean;
 }
 export interface SceneAnnotationJSON {
   version: string;

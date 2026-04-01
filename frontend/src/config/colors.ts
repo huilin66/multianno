@@ -89,3 +89,19 @@ export const UI_THEMES = {
     annoDrawingFill: 'rgba(59, 130, 246, 0.2)', // 蓝色半透明
   }
 };
+
+// ==========================================
+// 4. 类别标签预设颜色配置 (Taxonomy Colors)
+// ==========================================
+export const TAXONOMY_COLORS: string[] = [
+  '#ef4444', // Red
+  '#22c55e', // Green
+  '#3b82f6', // Blue
+  '#a855f7', // Purple
+  '#f59e0b', // Amber
+  '#06b6d4', // Cyan
+  '#ec4899', // Pink
+  '#84cc16', // Lime
+  '#f97316', // Orange
+  '#14b8a6', // Teal
+];

@@ -181,12 +181,8 @@ export const useStore = create<AppState>()(
       savedAlignments: [],
       activeAnnotationId: null,
 
-      taxonomyClasses: [
-        { id: 'class-default', name: 'object', color: '#3B82F6', description: 'Default generic object' }
-      ],
-      taxonomyAttributes: [
-        { id: 'attr-default', name: 'occluded', type: 'boolean', applyToAll: true }
-      ],
+      taxonomyClasses: [],
+      taxonomyAttributes: [],
 
       setProjectName: (name) => set({ projectName: name }),
       setTheme: (theme) => set({ theme }),
