@@ -19,7 +19,7 @@ import { API_BASE_URL } from '../../api/client';
 
 export function DataPreload() {
   const { t } = useTranslation();
-  const {folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
+  const {projectName, folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
   
   const [placeholders, setPlaceholders] = useState<{ id: string, path: string, suffix: string }[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
@@ -180,7 +180,7 @@ export function DataPreload() {
       try {
         if ('showSaveFilePicker' in window) {
           const handle = await (window as any).showSaveFilePicker({
-            suggestedName: 'project_meta.json',
+            suggestedName: `${projectName}_meta.json`,
             types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
           });
           const writable = await handle.createWritable();
@@ -191,7 +191,7 @@ export function DataPreload() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = 'project_meta.json';
+          a.download = `${projectName}_meta.json`,
           a.click();
           URL.revokeObjectURL(url);
         }

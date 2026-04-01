@@ -16,7 +16,7 @@ import { generateProjectMetaConfig } from '../../lib/projectUtils';
 
 export function ViewExtentCheck() {
   const { t } = useTranslation();
-  const {views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
+  const {projectName, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
 // 🛡️ 兜底防线：如果没有绑定 View 或没有数据
   if (!views || views.length === 0) {
     return (
@@ -518,7 +518,7 @@ export function ViewExtentCheck() {
     try {
       if ('showSaveFilePicker' in window) {
         const handle = await (window as any).showSaveFilePicker({
-          suggestedName: 'project_meta.json',
+          suggestedName: `${projectName}_meta.json`,
           types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
         });
         const writable = await handle.createWritable();
@@ -529,7 +529,7 @@ export function ViewExtentCheck() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'project_meta.json';
+        a.download = `${projectName}_meta.json`;
         a.click();
         URL.revokeObjectURL(url);
       }

@@ -37,7 +37,7 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'project_meta.json';
+    a.download = `${projectName}_meta.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
