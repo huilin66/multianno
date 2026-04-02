@@ -10,7 +10,7 @@ import {
   Layers, Save, MousePointer2, Square, Hexagon, 
   Database, Image as ImageIcon, X, ChevronRight, Eye, AlertTriangle, 
   Cloud, CloudCog, CloudLightning, Trash2, Maximize, Crop,
-  Hand, CircleDot, Pencil, Activity, Circle
+  Hand, CircleDot, Pencil, Activity, Circle, Undo2
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -157,18 +157,14 @@ export function SyncAnnotation() {
     setViewport(newZoom, newPanX, newPanY);
   };
 
-const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
+// 🌟 将这个函数完整替换，注意参数里连 viewId 都不要了
+  const handleMouseDown = (e: React.MouseEvent) => {
     if (popoverOpen) setPopoverOpen(false);
     
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const x = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
-    const y = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
-    const view = views.find((v: any) => v.id === viewId);
-    let mainX = x, mainY = y;
-    if (view && !view.isMain) {
-      mainX = (x - view.transform.offsetX) / view.transform.scaleX;
-      mainY = (y - view.transform.offsetY) / (view.transform.scaleY || view.transform.scaleX);
-    }
+    // 🌟 核心：直接获取纯正的 Main View 坐标，绝对不要区分辅视图！
+    const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
+    const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
 
     // 1. Select 工具精准碰撞检测
     if (e.button === 0 && tool === 'select') {
@@ -212,13 +208,10 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
     // 3. 各种画图工具的逻辑分支
     if (tool === 'bbox' || tool === 'ellipse' || tool === 'circle') {
       if (!isDrawing) {
-        // 🌟 第一次点击：开启绘制，记录起点
         setIsDrawing(true);
         setCurrentPoints([{ x: mainX, y: mainY }, { x: mainX, y: mainY }]);
       } else {
-        // 🌟 第二次点击：结束绘制，弹窗保存
         setIsDrawing(false);
-        // 加个安全保护，防止 currentPoints 异常
         if (currentPoints.length > 0 && currentPoints[0]) {
           const [p1] = currentPoints;
           const screenW = Math.abs(mainX - p1.x) * viewport.zoom;
@@ -232,10 +225,8 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
         setCurrentPoints([]); // 清空草图
       }
     } else if (tool === 'polygon' || tool === 'line') {
-      // 🌟 Polygon: 仅存点，不设 isDrawing
       setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
     } else if (tool === 'lasso') {
-      // 🌟 Lasso: 按下左键开启连续采样
       setIsDrawing(true);
       setCurrentPoints([{ x: mainX, y: mainY }]);
     } else if (tool === 'point') {
@@ -245,7 +236,8 @@ const handleMouseDown = (e: React.MouseEvent, viewId: string) => {
     }
   };
 
-const handleMouseMove = (e: React.MouseEvent, viewId: string) => {
+// 🌟 将这个函数完整替换，同样不需要 viewId
+  const handleMouseMove = (e: React.MouseEvent) => {
     if (isPanning) {
       const dx = e.clientX - panStart.mouseX;
       const dy = e.clientY - panStart.mouseY;
@@ -254,14 +246,9 @@ const handleMouseMove = (e: React.MouseEvent, viewId: string) => {
     }
 
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
-    const rawX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
-    const rawY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
-    const view = views.find((v: any) => v.id === viewId);
-    let mainX = rawX, mainY = rawY;
-    if (view && !view.isMain) {
-      mainX = (rawX - view.transform.offsetX) / view.transform.scaleX;
-      mainY = (rawY - view.transform.offsetY) / (view.transform.scaleY || view.transform.scaleX);
-    }
+    // 🌟 核心：永远只获取纯正的主视图坐标系
+    const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
+    const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
 
     // 严密保护的预览逻辑
     if (isDrawing && (tool === 'bbox' || tool === 'ellipse' || tool === 'circle')) {
@@ -313,6 +300,8 @@ const handleMouseUp = (e: React.MouseEvent) => {
     }
   };
 
+
+  
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'v' || e.key === 'V') setTool('select');
     if (e.key === 'h' || e.key === 'H') setTool('pan');
@@ -465,8 +454,8 @@ const handleMouseUp = (e: React.MouseEvent) => {
                   formLabel={formLabel}
                   pendingAnnotation={pendingAnnotation}
                   onDoubleClick={handleDoubleClick}
-                  onMouseDown={(e: React.MouseEvent) => handleMouseDown(e, view.id)}
-                  onMouseMove={(e: React.MouseEvent) => handleMouseMove(e, view.id)}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}
                 />
               </div>
@@ -962,7 +951,7 @@ function CanvasView({
     });
 
 // =====================================
-    // 🌟 绘制中的过程状态 (带动态颜色掩膜)
+    // 🌟 绘制中的过程状态 (带动态颜色掩膜 + 虚线边界)
     // =====================================
     // 获取当前准备打标的颜色
     const activeClassDef = taxonomyClasses?.find((c: any) => c.name === formLabel);
@@ -970,20 +959,23 @@ function CanvasView({
 
     if (currentPoints.length > 0) {
       ctx.strokeStyle = activeColor;
-      ctx.fillStyle = `${activeColor}40`; // 🌟 动态颜色的 25% 半透明掩膜
+      ctx.fillStyle = `${activeColor}40`; // 动态颜色的 25% 半透明掩膜
       ctx.lineWidth = 2 / viewport.zoom;
+      
+      // 🌟 新增：开启虚线模式 (虚线长 6px，间距 4px，并随缩放自适应)
+      ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]); 
       
       if (tool === 'bbox' && currentPoints.length === 2) {
         const [p1, p2] = currentPoints;
         const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
         const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-        ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h); // 🌟 加了 fillRect
+        ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h);
       } else if (tool === 'ellipse' && currentPoints.length === 2) {
         const [p1, p2] = currentPoints;
         const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
         const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
         ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); 
-        ctx.fill(); ctx.stroke(); // 🌟 加了 fill
+        ctx.fill(); ctx.stroke();
       } else if (tool === 'circle' && currentPoints.length === 2) {
         const [p1, p2] = currentPoints;
         const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
@@ -996,17 +988,22 @@ function CanvasView({
         for (let i = 1; i < currentPoints.length; i++) ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
         if (tool === 'polygon') {
           ctx.closePath();
-          ctx.fill(); // 🌟 多边形画图过程也加入掩膜
+          ctx.fill();
         }
         ctx.stroke();
         
         if (tool !== 'lasso') {
           ctx.fillStyle = activeColor; // 顶点原点颜色也同步
+          // 🌟 绘制控制点时临时恢复实线，否则圆点边缘也会变成虚线
+          ctx.setLineDash([]); 
           currentPoints.forEach((p: any) => {
             ctx.beginPath(); ctx.arc(p.x, p.y, 4 / viewport.zoom, 0, Math.PI * 2); ctx.fill();
           });
         }
       }
+
+      // 🌟 新增：绘制结束后恢复实线，防止污染后续渲染
+      ctx.setLineDash([]); 
     }
 
     // =====================================
