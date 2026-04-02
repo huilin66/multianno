@@ -405,27 +405,22 @@ export function SyncAnnotation() {
 
   const savePendingAnnotationToStore = () => {
     if (pendingAnnotation && currentStem) {
-      const defaultAttrs: Record<string, any> = {};
-      taxonomyAttributes?.forEach((attr: any) => {
-        if (attr.applyToAll) defaultAttrs[attr.name] = attr.type === 'boolean' ? false : '';
-      });
-
       const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+      
       const fullAnno = {
-      id: newId,
-      ...pendingAnnotation,
-      label: formLabel,
-      text: formText,
-      group_id: formGroupId || null,
-      track_id: formTrackId ? Number(formTrackId) : null,
-      stem: currentStem,
-      difficult: formDifficult,
-      attributes: defaultAttrs
-    };
+        id: newId,
+        ...pendingAnnotation,
+        label: formLabel,
+        text: formText, // 🌟 对象的描述
+        group_id: formGroupId ? Number(formGroupId) : null, // 🌟 确保转换为数字或 null
+        track_id: formTrackId ? Number(formTrackId) : null, // 🌟 确保转换为数字或 null
+        stem: currentStem,
+        difficult: formDifficult,
+        attributes: formAttributes // 🌟 核心修正：使用弹窗中实际修改的属性，而不是 defaultAttrs
+      };
 
-    addAnnotation(fullAnno);
-
-    pushAction({ type: 'add', anno: fullAnno });
+      addAnnotation(fullAnno);
+      pushAction({ type: 'add', anno: fullAnno });
     // 3. 安全清理草图点位 (确保你没删掉 const [undonePoints, setUndonePoints] = useState([]))
         if (typeof setUndonePoints === 'function') {
           setUndonePoints([]);
@@ -514,6 +509,8 @@ export function SyncAnnotation() {
           formText={formText} setFormText={setFormText} formGroupId={formGroupId} 
           setFormGroupId={setFormGroupId} formTrackId={formTrackId} setFormTrackId={setFormTrackId}
           formDifficult={formDifficult} setFormDifficult={setFormDifficult}
+          formAttributes={formAttributes} 
+          setFormAttributes={setFormAttributes}
           handleCancelDrawing={handleCancelDrawing} savePendingAnnotationToStore={savePendingAnnotationToStore}
           taxonomyClasses={taxonomyClasses}
         />

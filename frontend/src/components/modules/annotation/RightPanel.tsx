@@ -27,7 +27,7 @@ export function RightPanel({
   const { 
     folders, views, annotations, updateAnnotation, removeAnnotation, 
     stems, currentStem, setCurrentStem, taxonomyClasses, taxonomyAttributes, 
-    activeAnnotationId, setActiveAnnotationId, setActiveModule
+    activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta
   } = useStore() as any;
 
   // 过滤出当前图片的标注
@@ -103,7 +103,31 @@ export function RightPanel({
           ))}
         </div>
       </div>
-
+      {/* 🌟 新增：1. 全局图像描述 (VLM Support) */}
+      {currentStem && (
+        <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-[11px] uppercase tracking-wider text-neutral-500">Image Description (VLM)</h3>
+          </div>
+          <textarea 
+            className="w-full h-16 text-xs p-2 rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 focus:ring-1 focus:ring-primary resize-none custom-scrollbar"
+            placeholder="Describe the entire scene for Vision-Language Models..."
+            value={currentMeta?.text || ''}
+            onChange={(e) => updateStemMetadata(currentStem, { text: e.target.value })}
+          />
+          <div className="mt-2">
+            <Input 
+              className="h-7 text-xs" 
+              placeholder="Tags (comma separated, e.g. city, sunny)"
+              value={currentMeta?.tags?.join(', ') || ''}
+              onChange={(e) => {
+                const tags = e.target.value.split(',').map(t => t.trim()).filter(t => t);
+                updateStemMetadata(currentStem, { tags });
+              }}
+            />
+          </div>
+        </div>
+      )}
       {/* 🌟 3. Active Object Editor (动态属性编辑器) */}
       <div className="flex flex-col border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-blue-50/50 dark:bg-blue-900/10 transition-all">
         <div className="p-3 pb-2 flex items-center justify-between border-b border-neutral-200/50 dark:border-neutral-800/50">
