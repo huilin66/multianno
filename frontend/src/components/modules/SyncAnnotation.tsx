@@ -31,8 +31,8 @@ export function SyncAnnotation() {
     setActiveAnnotationId = () => {} // 兜底空函数
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
   
-  type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' |'circle' | 'lasso';
-  const [tool, setTool] = useState<ToolType>('select');
+  type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' | 'circle' | 'lasso' | 'freemask';
+  const [tool, setTool] = useState<ToolType>('pan');
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -243,9 +243,10 @@ export function SyncAnnotation() {
       setIsDrawing(true); // 🌟 极其关键：激活绘制状态，否则撤销逻辑无法捕获
       setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
       setUndonePoints([]); // 只要点下了新点，就清空重做栈，断开之前的未来
-    } else if (tool === 'lasso') {
+    } else if (tool === 'lasso'|| tool === 'freemask') {
       setIsDrawing(true);
       setCurrentPoints([{ x: mainX, y: mainY }]);
+      setUndonePoints([]); // 顺手清空重做栈
     } else if (tool === 'point') {
       setPendingAnnotation({ type: 'point', points: [{ x: mainX, y: mainY }] });
       setPopoverPos({ x: e.clientX, y: e.clientY });
@@ -272,7 +273,7 @@ export function SyncAnnotation() {
       if (currentPoints.length > 0 && currentPoints[0]) {
         setCurrentPoints([currentPoints[0], { x: mainX, y: mainY }]);
       }
-    } else if (isDrawing && tool === 'lasso') {
+    } else if (isDrawing && (tool === 'lasso' || tool === 'freemask')) {
       const lastP = currentPoints[currentPoints.length - 1];
       if (lastP && Math.hypot(mainX - lastP.x, mainY - lastP.y) * viewport.zoom > 5) {
         setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
@@ -283,11 +284,13 @@ export function SyncAnnotation() {
 const handleMouseUp = (e: React.MouseEvent) => {
     if (isPanning) { setIsPanning(false); return; }
     
-    // 🌟 在这套体系下，只有 Lasso 是靠“松开鼠标”来结束绘制的
-    if (tool === 'lasso' && isDrawing) {
+    // 🌟 在这套体系下，只有 Lasso, freemask 是靠“松开鼠标”来结束绘制的
+    if ((tool === 'lasso' || tool === 'freemask') && isDrawing) {
       setIsDrawing(false);
       if (currentPoints.length > 5) {
-        setPendingAnnotation({ type: 'polygon', points: currentPoints });
+        // 🌟 核心修复：如果是 lasso 则保存为线(line)，freemask 存为多边形(polygon)
+        const saveType = tool === 'lasso' ? 'line' : 'polygon';
+        setPendingAnnotation({ type: saveType, points: currentPoints });
         setPopoverPos({ x: e.clientX, y: e.clientY });
         setPopoverOpen(true);
       }
@@ -328,11 +331,12 @@ const handleCancelDrawing = useCallback(() => {
     setFormTrackId('');
     setFormDifficult(false);
     setUndonePoints([]); // 取消绘制时清空点的重做栈
+    setTool('pan');
   }, []);
 
   const handleUndo = useCallback(() => {
     // 场景 A1：精确撤销多边形/线段/Lasso 的单个点
-    if (currentPoints.length > 0 && (tool === 'polygon' || tool === 'line' || tool === 'lasso')) {
+    if (currentPoints.length > 0 && (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask')) {
       const lastPoint = currentPoints[currentPoints.length - 1];
       setUndonePoints(prev => [...prev, lastPoint]); // 存入点的重做栈
       
@@ -374,7 +378,7 @@ const handleCancelDrawing = useCallback(() => {
 
   const handleRedo = useCallback(() => {
     // 场景 A：重做多边形/线段的点
-    if ((tool === 'polygon' || tool === 'line' || tool === 'lasso') && undonePoints.length > 0) {
+    if ((tool === 'polygon' || tool === 'line' || tool === 'lasso'|| tool === 'freemask') && undonePoints.length > 0) {
       const pointToRestore = undonePoints[undonePoints.length - 1];
       setUndonePoints(prev => prev.slice(0, -1));
       setCurrentPoints(prev => [...prev, pointToRestore]);
@@ -487,7 +491,6 @@ const handleCancelDrawing = useCallback(() => {
       setFormGroupId('');
       setFormTrackId('');
       setActiveAnnotationId(newId);
-      setTool('select');
     }
   };
 
@@ -496,13 +499,13 @@ const handleCancelDrawing = useCallback(() => {
       
       {/* 👈 Left Toolbar */}
       <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-2 bg-neutral-50 dark:bg-neutral-950 shrink-0 z-10 overflow-y-auto custom-scrollbar">
-        <Button variant={tool === 'select' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('select')} title="Select (V)">
-          <MousePointer2 className="w-5 h-5" />
-        </Button>
+        {/* 1. 默认工具 */}
         <Button variant={tool === 'pan' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('pan')} title="Pan (H)">
           <Hand className="w-5 h-5" />
         </Button>
         <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
+        
+        {/* 2. 绘制工具 */}
         <Button variant={tool === 'bbox' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('bbox')} title="Bounding Box (R)">
           <Square className="w-5 h-5" />
         </Button>
@@ -510,30 +513,37 @@ const handleCancelDrawing = useCallback(() => {
           <Hexagon className="w-5 h-5" />
         </Button>
         <Button variant={tool === 'ellipse' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('ellipse')} title="Ellipse (O)">
-          {/* 用 CSS 压扁一个圆来表示椭圆 */}
           <Circle className="w-5 h-5 scale-y-75" />
         </Button>
         <Button variant={tool === 'circle' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('circle')} title="Circle (C)">
           <Circle className="w-5 h-5" />
         </Button>
-        <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
         <Button variant={tool === 'point' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('point')} title="Point (T)">
           <CircleDot className="w-5 h-5" />
         </Button>
         <Button variant={tool === 'line' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('line')} title="Polyline (L)">
           <Activity className="w-5 h-5" />
         </Button>
-        <Button variant={tool === 'lasso' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('lasso')} title="Freehand Lasso (F)">
+        {/* 🌟 拆分出的自由线 */}
+        <Button variant={tool === 'lasso' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('lasso')} title="Freehand Line">
           <Pencil className="w-5 h-5" />
         </Button>
+        {/* 🌟 拆分出的自由 Mask */}
+        <Button variant={tool === 'freemask' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('freemask')} title="Freehand Mask">
+          <Cloud className="w-5 h-5" />
+        </Button>
+        
         <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
         
-        {/* 🌟 撤销与重做按钮组 */}
-        <Button variant="ghost" size="icon" onClick={handleUndo} title="Undo (Ctrl+Z)">
-          <Undo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100" />
+        {/* 🌟 3. 编辑与撤销工具组：把 Select 移到这里 */}
+        <Button variant={tool === 'select' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('select')} title="Select & Edit (V)">
+          <MousePointer2 className="w-5 h-5" />
         </Button>
-        <Button variant="ghost" size="icon" onClick={handleRedo} title="Redo (Ctrl+Y / Ctrl+Shift+Z)">
-          <Redo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100" />
+        <Button variant="ghost" size="icon" onClick={handleUndo} title="Undo (Ctrl+Z)">
+          <Undo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={handleRedo} title="Redo (Ctrl+Y)">
+          <Redo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900" />
         </Button>
 
         <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
@@ -1072,9 +1082,44 @@ function CanvasView({
         ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
       } else if (ann.type === 'point' && ann.points.length > 0) {
         const p = ann.points[0];
-        ctx.beginPath(); ctx.arc(p.x, p.y, 6 / viewport.zoom, 0, Math.PI * 2);
+        ctx.beginPath(); ctx.arc(p.x, p.y, 3 / viewport.zoom, 0, Math.PI * 2);
         ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; ctx.fill(); ctx.stroke();
         ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, p.x + 8 / viewport.zoom, p.y - 8 / viewport.zoom);
+      }
+
+      // ... (前面绘制各类实线和文字的逻辑) ...
+      
+      // 🌟 新增：如果当前是 Select 模式，且该对象被选中，则在关键节点上绘制“编辑控制点”
+      if (isActive && tool === 'select') {
+        ctx.fillStyle = '#FFFFFF'; // 控制点白心
+        ctx.strokeStyle = baseColor; // 控制点描边用类别颜色
+        ctx.lineWidth = 1.5 / viewport.zoom;
+        const handleRadius = 4 / viewport.zoom;
+
+        const drawHandle = (x: number, y: number) => {
+          ctx.beginPath();
+          ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
+          ctx.fill(); ctx.stroke();
+        };
+
+        if (ann.type === 'bbox' && ann.points.length === 2) {
+          const [p1, p2] = ann.points;
+          const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
+          const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
+          // 绘制四角控制点
+          drawHandle(minX, minY); drawHandle(maxX, minY);
+          drawHandle(minX, maxY); drawHandle(maxX, maxY);
+        } else if (ann.type === 'polygon' || ann.type === 'line' || ann.type === 'lasso' || ann.type === 'freemask') {
+          // 绘制多边形/线段的所有顶点
+          ann.points.forEach((p: any) => drawHandle(p.x, p.y));
+        } else if (ann.type === 'ellipse' || ann.type === 'circle') {
+          // 绘制边界控制点
+          const [p1, p2] = ann.points;
+          const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
+          const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
+          drawHandle(x + w/2, y); drawHandle(x + w/2, y + h);
+          drawHandle(x, y + h/2); drawHandle(x + w, y + h/2);
+        }
       }
     });
 
@@ -1111,23 +1156,28 @@ function CanvasView({
         const radius = Math.max(w, h) / 2; // 正圆取长边的一半为半径
         ctx.beginPath(); ctx.arc(x + w/2, y + h/2, radius, 0, Math.PI * 2); 
         ctx.fill(); ctx.stroke();
-      } else if (tool === 'polygon' || tool === 'line' || tool === 'lasso') {
+      } else if (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask') {
         ctx.beginPath(); ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
         for (let i = 1; i < currentPoints.length; i++) ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
-        if (tool === 'polygon') {
+        if (tool === 'polygon' || tool === 'freemask') {
           ctx.closePath();
           ctx.fill();
         }
         ctx.stroke();
         
-        if (tool !== 'lasso') {
-          ctx.fillStyle = activeColor; // 顶点原点颜色也同步
-          // 🌟 绘制控制点时临时恢复实线，否则圆点边缘也会变成虚线
+        // 🌟 自由绘制工具由于点太密集，绘制时屏蔽控制小圆点
+        if (tool !== 'lasso' && tool !== 'freemask') {
+          ctx.fillStyle = activeColor; 
           ctx.setLineDash([]); 
           currentPoints.forEach((p: any) => {
             ctx.beginPath(); ctx.arc(p.x, p.y, 4 / viewport.zoom, 0, Math.PI * 2); ctx.fill();
           });
         }
+      } else if (tool === 'point' && currentPoints.length > 0) {
+        ctx.beginPath(); 
+        // 🌟 半径从 6 缩小到 3，精致一点
+        ctx.arc(currentPoints[0].x, currentPoints[0].y, 3 / viewport.zoom, 0, Math.PI * 2); 
+        ctx.stroke();
       }
 
       // 🌟 新增：绘制结束后恢复实线，防止污染后续渲染
@@ -1164,7 +1214,11 @@ function CanvasView({
         ctx.beginPath(); ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
         for (let i = 1; i < pendingAnnotation.points.length; i++) ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
         ctx.stroke();
-      }
+      } else if (pendingAnnotation.type === 'point') {
+          const p = pendingAnnotation.points[0];
+          ctx.beginPath(); ctx.arc(p.x, p.y, 3 / viewport.zoom, 0, Math.PI * 2); 
+          ctx.stroke(); // 只有虚线框，没有填充
+        }
       ctx.setLineDash([]); // 🌟 恢复实线
     }
 
@@ -1177,8 +1231,10 @@ function CanvasView({
     <canvas
       ref={canvasRef}
       className={`absolute inset-0 w-full h-full ${
-        isPanning || tool === 'pan' ? 'cursor-grab' :
-        tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'}`}
+        isPanning ? 'cursor-grabbing' : 
+        tool === 'pan' ? 'cursor-default' :
+        tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'
+      }`}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
       onMouseUp={onMouseUp}
