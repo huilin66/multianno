@@ -124,6 +124,58 @@ export function getPreviewImageUrl(
   
   return `${API_BASE_URL}/project/preview?${params.toString()}`;
 }
+// 🌟 请求流式统计接口，支持实时回调
+export const fetchProjectStatisticsStream = async (
+  saveDirs: string[],
+  targetClass: string,
+  onProgress: (current: number, total: number) => void,
+  onComplete: (data: any) => void,
+  onError: (err: Error) => void
+) => {
+  try {
+    const response = await fetch('/api/stats/project', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ save_dirs: saveDirs, target_class: targetClass })
+    });
+
+    if (!response.body) throw new Error('ReadableStream not supported.');
+    
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      // 将二进制块解码为字符串，并拼接到缓冲区
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      
+      // 最后一行可能是不完整的 JSON，保留在缓冲区等下一次读取
+      buffer = lines.pop() || ''; 
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          if (msg.type === 'progress') {
+            onProgress(msg.current, msg.total);
+          } else if (msg.type === 'result') {
+            onComplete(msg.data);
+          }
+        } catch (e) {
+          console.error("JSON parse error on stream chunk:", line);
+        }
+      }
+    }
+  } catch (error: any) {
+    onError(error);
+  }
+};
+
+
 // 💡 进阶建议：以后你甚至可以把 DataPreload 和 FileExplorerDialog 里的 fetch
 // 也封装成类似上面的函数（例如 exploreFileSystem, analyzeProject）全放在这里，
 // 然后在组件里直接调用函数，这样 UI 组件和网络请求就彻底解耦了！

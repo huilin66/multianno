@@ -7,6 +7,7 @@ import { DataPreload } from './modules/DataPreload';
 import { ViewExtentCheck } from './modules/ViewExtentCheck';
 import { ProjectMetaDashboard } from './modules/ProjectMetaDashboard';
 import { DataFormatExchange } from './modules/DataFormatExchange';
+import { TaxonomyDashboard } from './modules/TaxonomyDashboard';
 
 // 统一导出给 App.tsx 使用
 export {
@@ -16,5 +17,6 @@ export {
   DataPreload,
   ViewExtentCheck,
   ProjectMetaDashboard,
-  DataFormatExchange
+  DataFormatExchange,
+  TaxonomyDashboard
 };

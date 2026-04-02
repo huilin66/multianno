@@ -24,7 +24,7 @@ export function SyncAnnotation() {
   const state = useStore();
   const {
     projectName, views, folders, annotations, addAnnotation, updateAnnotation, removeAnnotation,
-    viewport, setViewport, currentStem, stems, setCurrentStem, theme, setActiveModule,
+    viewport, setViewport, currentStem, stems, setCurrentStem, theme, setActiveModule, sceneGroups,
     taxonomyClasses = [{ id: 'default', name: 'object', color: '#3B82F6' }], // 兜底默认值
     taxonomyAttributes = [],
     activeAnnotationId = null,
@@ -93,7 +93,7 @@ export function SyncAnnotation() {
           stem: currentStem,
           projectName: projectName || 'Untitled Project',
           imageDescription: "",
-          imageNameMain: `${currentStem}${mainViewFolder?.suffix || '.tif'}`,
+          imageNameMain: sceneGroups?.[currentStem]?.[mainViewFolder?.path] || `${currentStem}.tif`,
           imageHeight: mainViewFolder?.metadata?.height || 1024,
           imageWidth: mainViewFolder?.metadata?.width || 1024,
           shapes: currentAnnotations.map((ann: any) => ({
@@ -773,7 +773,7 @@ function CanvasView({
   formLabel, pendingAnnotation, onDoubleClick,
 }: any) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { viewport } = useStore();
+  const { viewport, sceneGroups } = useStore();
   
   // 🌟 1. 新增：存储当前视图加载完毕的图片对象
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
@@ -784,8 +784,10 @@ function CanvasView({
     const folder = folders.find((f: any) => f.id === view.folderId);
     if (!folder) return;
 
-    // 拼接文件名 (例如: DJI_0001.tif)
-    const fileName = `${currentStem}${folder.suffix || '.tif'}`;
+    // 🌟 2. 核心大换血：直接去字典里拿真实文件名，绝不猜测！
+    // 如果万一没拿到（兜底），才退化为拼接
+    const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
+    const fileName = exactFileName || `${currentStem}${folder.suffix || '.tif'}`;
     
     // 拼接后端请求 URL
     const url = getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap);

@@ -17,7 +17,7 @@ import { getPreviewImageUrl } from '../../api/client';
 
 export function ViewExtentCheck() {
   const { t } = useTranslation();
-  const {projectName, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
+  const {projectName, stems, sceneGroups, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
 // 🛡️ 兜底防线：如果没有绑定 View 或没有数据
   if (!views || views.length === 0) {
     return (
@@ -36,6 +36,13 @@ export function ViewExtentCheck() {
       </div>
     );
   }
+  // const previewStem = stems[0];
+  // 假设正在渲染 folderId 对应的视图
+  // const exactFileName = sceneGroups?.[previewStem]?.[folder.path];
+  // const fileName = exactFileName || `${previewStem}${folder.suffix || '.tif'}`; // 兜底
+
+  // // 生成带明确 fileName 的 URL
+  // const url = getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap);
 
   const mainView = views.find(v => v.isMain);
   const augViews = views.filter(v => !v.isMain);
@@ -90,13 +97,21 @@ export function ViewExtentCheck() {
   }, [activeAugId]);
 
 
-  const getPreviewUrl = (view: typeof mainView) => {
+const getPreviewUrl = (view: typeof mainView) => {
     if (!view) return '';
     const folder = folders.find(f => f.id === view.folderId);
     if (!folder) return '';
     
-    // 🌟 统一调用 client.ts，fileName 传 undefined，并顺手补上 colormap 参数
-    return getPreviewImageUrl(folder.path, undefined, view.bands, view.colormap || 'gray');
+    // 🌟 1. 获取第一组有效场景的 Stem
+    const previewStem = stems[0];
+    if (!previewStem) return '';
+
+    // 🌟 2. 从 sceneGroups 字典中精准获取真实的 fileName
+    const exactFileName = sceneGroups?.[previewStem]?.[folder.path];
+    const fileName = exactFileName || `${previewStem}${folder.suffix || '.tif'}`; // 兜底防崩溃
+    
+    // 🌟 3. 传入带真实文件名的参数，彻底解决对齐画面不一致的问题！
+    return getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap || 'gray');
   };
 
   const updateAugDOMTransform = () => {

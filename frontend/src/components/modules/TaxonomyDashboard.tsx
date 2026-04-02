@@ -3,12 +3,12 @@ import React, { useState } from 'react';
 import { useStore, TaxonomyClass } from '../../store/useStore';
 import { 
   Tags, Settings, Trash2, Edit3, GitMerge, AlertTriangle, 
-  Plus, Check, X, Loader2, Search, ArrowRight, Upload
+  Plus, Check, X, Loader2, Search, ArrowRight, Upload, Database, Activity
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { batchMergeClass, batchDeleteClass } from '../../api/client';
+import { batchMergeClass, batchDeleteClass, fetchProjectStatisticsStream } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 
@@ -36,9 +36,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [colorDialogOpen, setColorDialogOpen] = useState(false);
   const [colorValue, setColorValue] = useState('');
 
-  const [showAddClass, setShowAddClass] = useState(false);
-  const [newClassName, setNewClassName] = useState('');
-  const [newClassColor, setNewClassColor] = useState('#3B82F6');
+  // 🌟 新增：全局统计数据的状态管理
+  const [statsStatus, setStatsStatus] = useState<'idle' | 'loading' | 'done'>('idle');
+  const [statsProgress, setStatsProgress] = useState<{ current: number, total: number }>({ current: 0, total: 0 });
+  const [statsData, setStatsData] = useState<any>(null); // 存储后端返回的统计结果
+  const [shapeFilter, setShapeFilter] = useState<string | null>(null); // 点击柱状图/列表进行筛选
+
 
   const activeClass = taxonomyClasses.find(c => c.id === selectedClassId);
   const getActiveClassCount = () => {
@@ -51,6 +54,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         setColorValue(activeClass.color);
         setRenameDialogOpen(false);
         setColorDialogOpen(false);
+        
+        // 👇 切换类别时，重置统计面板
+        setStatsStatus('idle');
+        setStatsData(null);
+        setShapeFilter(null);
         }
     }, [activeClass]);
 
@@ -150,6 +158,34 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+// 🌟 真实调用后端流式接口，获取进度与统计数据
+  const fetchGlobalStatistics = () => {
+    if (!activeClass || folders.length === 0) return;
+    
+    setStatsStatus('loading');
+    setStatsProgress({ current: 0, total: 100 }); // 初始化防闪烁
+
+    const saveDirs = folders.map(f => f.path);
+
+    fetchProjectStatisticsStream(
+      saveDirs,
+      activeClass.name,
+      (current, total) => {
+        // 实时更新进度条
+        setStatsProgress({ current, total });
+      },
+      (data) => {
+        // 数据接收完成，渲染图表与列表
+        setStatsData(data);
+        setStatsStatus('done');
+      },
+      (error) => {
+        alert(`Failed to fetch statistics: ${error.message}`);
+        setStatsStatus('idle');
+      }
+    );
   };
 
   // 🌟 2. 外层容器重构：采用 Flex 列布局，完美衔接底部 Footer
@@ -295,15 +331,120 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
               </div>
 
-              {/* 🌟 2. 下方主体：统计信息展示区（留白） */}
-              <div className="flex-1 p-8 overflow-y-auto custom-scrollbar bg-neutral-50 dark:bg-neutral-950">
-                <div className="grid grid-cols-3 gap-6">
-                  <div className="bg-white dark:bg-neutral-900 p-6 rounded-2xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-                    <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{t('taxonomy.activeObjects', 'Active Objects')}</p>
-                    <p className="text-4xl font-black mt-2 text-primary">{getActiveClassCount()}</p>
+              {/* 🌟 2. 下方主体：全局异步统计区 */}
+              <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-neutral-50 dark:bg-neutral-950/50">
+                
+                {statsStatus === 'idle' && (
+                  <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-2xl bg-white dark:bg-neutral-900/50">
+                    <Database className="w-12 h-12 text-neutral-300 dark:text-neutral-700 mb-4" />
+                    <h3 className="text-lg font-bold text-neutral-700 dark:text-neutral-300">{t('taxonomy.globalStats', 'Global Project Statistics')}</h3>
+                    <p className="text-sm text-neutral-500 mt-2 mb-6 max-w-sm text-center">
+                      Calculate the distribution of shapes and locate all files containing <strong className="text-primary">'{activeClass.name}'</strong> across the entire project.
+                    </p>
+                    <Button onClick={fetchGlobalStatistics} className="bg-primary text-white shadow-md">
+                      <Activity className="w-4 h-4 mr-2" /> {t('taxonomy.calcStats', 'Calculate Statistics')}
+                    </Button>
                   </div>
-                  {/* 留白：后续可以在这里加更多卡片 */}
-                </div>
+                )}
+
+                {statsStatus === 'loading' && (
+                  <div className="h-full flex flex-col items-center justify-center border border-neutral-200 dark:border-neutral-800 rounded-2xl bg-white dark:bg-neutral-900 shadow-sm">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+                    <h3 className="text-base font-bold">Scanning JSON Files...</h3>
+                    <p className="text-sm text-muted-foreground mt-2 font-mono">
+                      {statsProgress.current} / {statsProgress.total} Files Processed
+                    </p>
+                    <div className="w-64 h-2 bg-neutral-100 dark:bg-neutral-800 rounded-full mt-4 overflow-hidden">
+                      <div className="h-full bg-primary transition-all duration-300" style={{ width: `${Math.min(100, (statsProgress.current / statsProgress.total) * 100)}%` }} />
+                    </div>
+                  </div>
+                )}
+
+                {statsStatus === 'done' && statsData && (
+                  <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                    {/* 顶部总览卡片 */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex items-center justify-between">
+                        <div>
+                          <p className="text-xs font-medium text-muted-foreground uppercase">Total Objects</p>
+                          <p className="text-3xl font-black mt-1 text-primary">{statsData.total}</p>
+                        </div>
+                        <Database className="w-8 h-8 text-primary/20" />
+                      </div>
+                    </div>
+
+                    {/* 图表与竖列统计区 */}
+                    <div className="grid grid-cols-3 gap-4 h-64">
+                      {/* 左侧：竖列分类统计 */}
+                      <div className="col-span-1 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 flex flex-col">
+                        <h4 className="text-xs font-bold uppercase text-neutral-500 mb-3">Shape Distribution</h4>
+                        <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar pr-2">
+                          {Object.entries(statsData.shapesCount).map(([shape, count]) => (
+                            <div 
+                              key={shape} 
+                              onClick={() => setShapeFilter(shapeFilter === shape ? null : shape)}
+                              className={`flex justify-between items-center p-2 rounded text-sm cursor-pointer transition-colors border ${
+                                shapeFilter === shape 
+                                  ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' 
+                                  : 'border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                              }`}
+                            >
+                              <span className="capitalize">{shape}</span>
+                              <span className="font-mono font-bold">{count as number}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* 中间：图表占位区 (后续引入 Recharts 或 ECharts) */}
+                      <div className="col-span-2 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 flex items-center justify-center">
+                        <div className="text-center text-neutral-400">
+                          <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">Bar Chart & Pie Chart Area</p>
+                          <p className="text-xs mt-1">Ready for Recharts/ECharts integration</p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 底部：对应文件列表 */}
+                    <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden flex flex-col h-64">
+                      <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 flex items-center justify-between">
+                        <h4 className="text-xs font-bold uppercase text-neutral-500">
+                          Files Containing '{activeClass.name}' {shapeFilter && `(${shapeFilter})`}
+                        </h4>
+                        {shapeFilter && (
+                          <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setShapeFilter(null)}>Clear Filter</Button>
+                        )}
+                      </div>
+                      <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                        <table className="w-full text-left text-sm">
+                          <thead className="text-xs text-neutral-400 border-b border-neutral-200 dark:border-neutral-800">
+                            <tr>
+                              <th className="pb-2 font-medium">Stem Name</th>
+                              <th className="pb-2 font-medium">Shape Type</th>
+                              <th className="pb-2 font-medium text-right">Count</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {statsData.fileList
+                              .filter((item: any) => shapeFilter ? item.shape === shapeFilter : true)
+                              .map((item: any, idx: number) => (
+                                <tr key={idx} className="border-b border-neutral-100 dark:border-neutral-800/50 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                                  <td className="py-2 font-mono text-primary cursor-pointer hover:underline">{item.stem}</td>
+                                  <td className="py-2 text-neutral-600 dark:text-neutral-400 capitalize">{item.shape}</td>
+                                  <td className="py-2 text-right font-mono">{item.count}</td>
+                                </tr>
+                              ))}
+                            {statsData.fileList.filter((item: any) => shapeFilter ? item.shape === shapeFilter : true).length === 0 && (
+                              <tr><td colSpan={3} className="text-center py-4 text-neutral-400">No files match the current filter.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
               </div>
 
             </div>

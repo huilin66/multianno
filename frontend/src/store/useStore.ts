@@ -110,7 +110,8 @@ export interface AppState {
   // 🌟 3. 新增：状态中维护全局图像属性映射
   stemMetadata: Record<string, StemMetadata>; 
   updateStemMetadata: (stem: string, data: Partial<StemMetadata>) => void;
-
+  sceneGroups: Record<string, Record<string, string>>;
+  setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
   viewport: {zoom: number;panX: number;panY: number;};
   
   activeModule: ActiveModule;
@@ -183,7 +184,9 @@ export const useStore = create<AppState>()(
 
       taxonomyClasses: [],
       taxonomyAttributes: [],
+      sceneGroups: {},
 
+      setSceneGroups: (groups) => set({ sceneGroups: groups }),
       setProjectName: (name) => set({ projectName: name }),
       setTheme: (theme) => set({ theme }),
       setLanguage: (lang) => set({ language: lang }),
@@ -209,6 +212,7 @@ export const useStore = create<AppState>()(
 
       loadProjectMeta: (meta) => set({
         projectName: meta.projectName || 'Untitled Project',
+        sceneGroups: meta.sceneGroups || {}, // 🌟 加载时读取
         folders: meta.folders.map(f => ({
           id: String(f.Id),
           path: f.path,
@@ -333,6 +337,7 @@ export const useStore = create<AppState>()(
       partialize: (state) => ({
         projectName: state.projectName,
         theme: state.theme,
+        sceneGroups: state.sceneGroups,
         language: state.language,
         projectMetadata: state.projectMetadata,
         folders: state.folders,

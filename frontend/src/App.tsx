@@ -9,7 +9,8 @@ import {
   ViewExtentCheck, 
   SyncAnnotation, 
   DataFormatExchange, 
-  ProjectMetaDashboard 
+  ProjectMetaDashboard,
+  TaxonomyDashboard
 } from './components/Modules';
 import { Button } from '@/components/ui/button';
 import { 
@@ -26,7 +27,6 @@ import {
 } from '@/components/ui/dialog';
 // 🌟 引入新的图标: FolderPlus 和 Upload
 import { Menu, Settings, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags } from 'lucide-react';
-import { TaxonomyDashboard } from './components/modules/TaxonomyDashboard';
 
 export default function App() {
   const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage} = useStore();
