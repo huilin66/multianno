@@ -57,6 +57,7 @@ export interface Annotation {
   text?: string;
   stem: string; 
   difficult: boolean;
+  occluded: boolean;
   attributes: Record<string, string | number | boolean>;
   group_id?: string | number | null; // 🌟 新增：组合ID / 视觉定位ID
   track_id?: string | number | null; // 🌟 新增：追踪ID

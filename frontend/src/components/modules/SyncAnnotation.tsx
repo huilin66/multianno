@@ -44,6 +44,7 @@ export function SyncAnnotation() {
   const [formLabel, setFormLabel] = useState(taxonomyClasses[0]?.name || 'object');
   const [formText, setFormText] = useState('');
   const [formDifficult, setFormDifficult] = useState(false);
+  const [formOccluded, setFormOccluded] = useState(false);
   const [formGroupId, setFormGroupId] = useState(''); 
   const [formTrackId, setFormTrackId] = useState('');
   const [undonePoints, setUndonePoints] = useState<{x: number, y: number}[]>([]);
@@ -271,6 +272,7 @@ export function SyncAnnotation() {
     setFormGroupId('');
     setFormTrackId('');
     setFormDifficult(false);
+    setFormOccluded(false);
     setFormAttributes({});
     setUndonePoints([]); // 取消绘制时清空点的重做栈
     setTool('pan');
@@ -416,6 +418,7 @@ export function SyncAnnotation() {
         track_id: formTrackId ? Number(formTrackId) : null, // 🌟 确保转换为数字或 null
         stem: currentStem,
         difficult: formDifficult,
+        occluded: formOccluded,
         attributes: formAttributes // 🌟 核心修正：使用弹窗中实际修改的属性，而不是 defaultAttrs
       };
 
@@ -431,6 +434,7 @@ export function SyncAnnotation() {
       setPendingAnnotation(null);
       setFormText('');
       setFormDifficult(false);
+      setFormOccluded(false);
       setFormGroupId('');
       setFormTrackId('');
       setFormAttributes({});
@@ -509,6 +513,7 @@ export function SyncAnnotation() {
           formText={formText} setFormText={setFormText} formGroupId={formGroupId} 
           setFormGroupId={setFormGroupId} formTrackId={formTrackId} setFormTrackId={setFormTrackId}
           formDifficult={formDifficult} setFormDifficult={setFormDifficult}
+          formOccluded={formOccluded} setFormOccluded={setFormOccluded}
           formAttributes={formAttributes} 
           setFormAttributes={setFormAttributes}
           handleCancelDrawing={handleCancelDrawing} savePendingAnnotationToStore={savePendingAnnotationToStore}

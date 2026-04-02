@@ -112,13 +112,16 @@ export function RightPanel({
           <textarea 
             className="w-full h-16 text-xs p-2 rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 focus:ring-1 focus:ring-primary resize-none custom-scrollbar"
             placeholder="Describe the entire scene for Vision-Language Models..."
+            // 🌟 确保对应 JSON 中的 text 字段
             value={currentMeta?.text || ''}
             onChange={(e) => updateStemMetadata(currentStem, { text: e.target.value })}
           />
           <div className="mt-2">
+            <Label className="text-[10px] text-neutral-400 mb-1 block">Image Tags</Label>
             <Input 
               className="h-7 text-xs" 
-              placeholder="Tags (comma separated, e.g. city, sunny)"
+              placeholder="city, sunny, crowded..."
+              // 🌟 对应 JSON 中的 image_tags 字段
               value={currentMeta?.tags?.join(', ') || ''}
               onChange={(e) => {
                 const tags = e.target.value.split(',').map(t => t.trim()).filter(t => t);
@@ -129,6 +132,7 @@ export function RightPanel({
         </div>
       )}
       {/* 🌟 3. Active Object Editor (动态属性编辑器) */}
+{/* 🌟 3. Active Object Editor (动态属性编辑器) */}
       <div className="flex flex-col border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-blue-50/50 dark:bg-blue-900/10 transition-all">
         <div className="p-3 pb-2 flex items-center justify-between border-b border-neutral-200/50 dark:border-neutral-800/50">
           <h3 className="font-bold text-[11px] uppercase tracking-wider text-blue-600 dark:text-blue-400">
@@ -143,13 +147,11 @@ export function RightPanel({
             
             return (
               <div className="space-y-3 animate-in fade-in">
+                {/* 标签与描述 */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <Label className="text-[10px] text-neutral-500">{t('workspace.label')}</Label>
-                    <Select 
-                      value={activeAnno.label} 
-                      onValueChange={(val) => updateAnnotation(activeAnno.id, { label: val })}
-                    >
+                    <Select value={activeAnno.label} onValueChange={(val) => updateAnnotation(activeAnno.id, { label: val })}>
                       <SelectTrigger className="h-7 text-xs bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {taxonomyClasses.map((c: any) => <SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>)}
@@ -157,13 +159,45 @@ export function RightPanel({
                     </Select>
                   </div>
                   <div>
-                    <Label className="text-[10px] text-neutral-500">{t('workspace.note')}</Label>
+                    <Label className="text-[10px] text-neutral-500">Shape Text</Label>
                     <Input 
                       value={activeAnno.text || ''} 
                       onChange={(e) => updateAnnotation(activeAnno.id, { text: e.target.value })} 
                       className="h-7 text-xs bg-white dark:bg-neutral-900" 
-                      placeholder="Optional..."
+                      placeholder="Object text..."
                     />
+                  </div>
+                </div>
+
+                {/* 🌟 新增：ID 管理 (Group & Track) */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-[10px] text-neutral-500">Group ID</Label>
+                    <Input 
+                      type="number" className="h-7 text-xs bg-white dark:bg-neutral-900" 
+                      value={activeAnno.group_id || ''} 
+                      onChange={(e) => updateAnnotation(activeAnno.id, { group_id: e.target.value ? Number(e.target.value) : null })}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[10px] text-neutral-500">Track ID</Label>
+                    <Input 
+                      type="number" className="h-7 text-xs bg-white dark:bg-neutral-900" 
+                      value={activeAnno.track_id || ''} 
+                      onChange={(e) => updateAnnotation(activeAnno.id, { track_id: e.target.value ? Number(e.target.value) : null })}
+                    />
+                  </div>
+                </div>
+
+                {/* 🌟 新增：标志位管理 (Difficult & Occluded) */}
+                <div className="grid grid-cols-2 gap-2 p-2 bg-white dark:bg-neutral-900 rounded border border-neutral-200 dark:border-neutral-800">
+                  <div className="flex items-center gap-2">
+                    <Switch checked={!!activeAnno.difficult} onCheckedChange={(val) => updateAnnotation(activeAnno.id, { difficult: val })} />
+                    <Label className="text-[10px]">Difficult</Label>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Switch checked={!!activeAnno.occluded} onCheckedChange={(val) => updateAnnotation(activeAnno.id, { occluded: val })} />
+                    <Label className="text-[10px]">Occluded</Label>
                   </div>
                 </div>
 
@@ -175,13 +209,19 @@ export function RightPanel({
                       {taxonomyAttributes.map((attr: any) => (
                         <div key={attr.id} className="flex items-center justify-between">
                           <span className="text-xs text-neutral-700 dark:text-neutral-300">{attr.name}</span>
-                          {attr.type === 'boolean' ? (
-                            <Switch 
-                              checked={activeAnno.attributes?.[attr.name] as boolean || false}
-                              onCheckedChange={(val) => updateAnnotation(activeAnno.id, { 
+                          {/* 🌟 核心修改：如果是枚举属性则显示下拉框 */}
+                          {attr.options ? (
+                            <Select 
+                              value={activeAnno.attributes?.[attr.name] as string || attr.defaultValue} 
+                              onValueChange={(val) => updateAnnotation(activeAnno.id, { 
                                 attributes: { ...(activeAnno.attributes || {}), [attr.name]: val } 
                               })}
-                            />
+                            >
+                              <SelectTrigger className="w-28 h-6 text-[10px] bg-neutral-50 dark:bg-neutral-950"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                {attr.options.map((opt: string) => <SelectItem key={opt} value={opt} className="text-xs">{opt}</SelectItem>)}
+                              </SelectContent>
+                            </Select>
                           ) : (
                             <Input 
                               value={activeAnno.attributes?.[attr.name] as string || ''}

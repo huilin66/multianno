@@ -20,6 +20,8 @@ interface ClassFormPopoverProps {
   setFormTrackId: (v: string) => void;
   formDifficult: boolean;
   setFormDifficult: (v: boolean) => void;
+  formOccluded: boolean;
+  setFormOccluded: (v: boolean) => void;
   formAttributes: boolean;
   setFormAttributes: (v: boolean) => void;
   handleCancelDrawing: () => void;
@@ -30,7 +32,8 @@ interface ClassFormPopoverProps {
 export function ClassFormPopover({ 
   popoverPos, formLabel, setFormLabel, 
   formText, setFormText, formGroupId, setFormGroupId, 
-  formTrackId, setFormTrackId, formDifficult, setFormDifficult,
+  formTrackId, setFormTrackId, formDifficult, setFormDifficult, 
+  formOccluded, setFormOccluded,
   formAttributes, setFormAttributes, // 🌟 务必确保 SyncAnnotation 传了这两个 props 进来
   handleCancelDrawing, savePendingAnnotationToStore, taxonomyClasses 
 }: any) {
@@ -128,14 +131,22 @@ export function ClassFormPopover({
           </div>
         )}
 
-        {/* 5. Difficult Flag & Save Button */}
-        <div className="flex items-center justify-between pt-2 border-t border-neutral-100 dark:border-neutral-800 mt-2">
-          <div className="flex items-center gap-2">
-            <Switch checked={formDifficult} onCheckedChange={setFormDifficult} />
-            <Label className="text-xs text-neutral-600">Difficult</Label>
+
+        {/* 5. Flags (Difficult & Occluded) */}
+        <div className="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 mt-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Switch checked={formDifficult} onCheckedChange={setFormDifficult} />
+              <Label className="text-xs text-neutral-600">Difficult</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={formOccluded} onCheckedChange={setFormOccluded} />
+              <Label className="text-xs text-neutral-600">Occluded</Label>
+            </div>
           </div>
-          <Button onClick={savePendingAnnotationToStore} size="sm" className="h-8 bg-blue-600 hover:bg-blue-700 text-white">
-            <Check className="w-4 h-4 mr-1" /> Save
+          
+          <Button onClick={savePendingAnnotationToStore} className="w-full h-8 bg-blue-600 hover:bg-blue-700 text-white mt-2">
+            <Check className="w-4 h-4 mr-1" /> Save Object
           </Button>
         </div>
       </div>
