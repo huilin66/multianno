@@ -10,6 +10,7 @@ import { CanvasView } from './annotation/CanvasView';
 
 export function SyncAnnotation() {
   const { t } = useTranslation();
+  const [formAttributes, setFormAttributes] = useState<Record<string, any>>({});
   const { pushAction, performGlobalUndo, performGlobalRedo, undoCount, redoCount } = useActionHistory();
   // 🌟 安全解构：使用 default value 防止 useStore 还没有彻底更新导致报错
   const state = useStore();
@@ -155,8 +156,7 @@ export function SyncAnnotation() {
           const screenW = Math.abs(mainX - p1.x) * viewport.zoom;
           const screenH = Math.abs(mainY - p1.y) * viewport.zoom;
           if (screenW > 5 || screenH > 5) {
-            setPendingAnnotation({ type: tool, points: [p1, { x: mainX, y: mainY }] });
-            openSmartPopover(e.clientX, e.clientY);
+            openSmartPopover(e.clientX, e.clientY, tool, [p1, { x: mainX, y: mainY }]);
           }
         }
         setCurrentPoints([]); // 清空草图
@@ -170,8 +170,7 @@ export function SyncAnnotation() {
       setCurrentPoints([{ x: mainX, y: mainY }]);
       setUndonePoints([]); // 顺手清空重做栈
     } else if (tool === 'point') {
-      setPendingAnnotation({ type: 'point', points: [{ x: mainX, y: mainY }] });
-      openSmartPopover(e.clientX, e.clientY);
+      openSmartPopover(e.clientX, e.clientY, 'point', [{ x: mainX, y: mainY }]);
     }
   };
 
@@ -225,8 +224,7 @@ export function SyncAnnotation() {
       if (currentPoints.length > 5) {
         // 🌟 核心修复：如果是 lasso 则保存为线(line)，freemask 存为多边形(polygon)
         const saveType = tool === 'lasso' ? 'line' : 'polygon';
-        setPendingAnnotation({ type: saveType, points: currentPoints });
-        openSmartPopover(e.clientX, e.clientY);
+        openSmartPopover(e.clientX, e.clientY, saveType, currentPoints);
       }
       setCurrentPoints([]); 
     }
@@ -243,6 +241,7 @@ export function SyncAnnotation() {
 
       // 如果点数太少（比如多边形少于3个点），则不触发保存
       if (tool === 'polygon' && currentPoints.length < 3) return;
+      openSmartPopover(e.clientX, e.clientY, tool, currentPoints);
 
       setPendingAnnotation({ type: tool, points: currentPoints });
       openSmartPopover(e.clientX, e.clientY);
@@ -272,35 +271,44 @@ export function SyncAnnotation() {
     setFormGroupId('');
     setFormTrackId('');
     setFormDifficult(false);
+    setFormAttributes({});
     setUndonePoints([]); // 取消绘制时清空点的重做栈
     setTool('pan');
   }, []);
 // 🌟 新增：智能计算弹窗位置，防止超出屏幕边界
 
-  const openSmartPopover = useCallback((clientX: number, clientY: number) => {
-    const popoverW = 300; // 弹窗预估宽度
-    const popoverH = 400; // 弹窗预估高度
-    const padding = 20;   // 留出安全边距
+// 🌟 升级版：统一处理属性初始化、保存草稿、以及智能计算坐标
+  const openSmartPopover = useCallback((
+    clientX: number, 
+    clientY: number, 
+    annoType: string, 
+    points: {x: number, y: number}[]
+  ) => {
+    // 1. 统一初始化默认属性
+    const initialAttrs: Record<string, any> = {};
+    taxonomyAttributes?.forEach((attr: any) => {
+      initialAttrs[attr.name] = attr.defaultValue || (attr.options?.[0] || '');
+    });
+    setFormAttributes(initialAttrs);
 
-    // 默认在鼠标右下方一点点出现
+    // 2. 统一设置待确认状态
+    setPendingAnnotation({ type: annoType, points });
+
+    // 3. 智能避让坐标计算
+    const popoverW = 300; 
+    const popoverH = 400; 
+    const padding = 20;   
     let safeX = clientX + 15; 
     let safeY = clientY + 15;
 
-    // 碰壁检测：如果超出右边界，往左推
-    if (safeX + popoverW > window.innerWidth) {
-      safeX = window.innerWidth - popoverW - padding;
-    }
-    // 碰壁检测：如果超出下边界，往上推
-    if (safeY + popoverH > window.innerHeight) {
-      safeY = window.innerHeight - popoverH - padding;
-    }
-    // 左上角极限保护
+    if (safeX + popoverW > window.innerWidth) safeX = window.innerWidth - popoverW - padding;
+    if (safeY + popoverH > window.innerHeight) safeY = window.innerHeight - popoverH - padding;
     if (safeX < padding) safeX = padding;
     if (safeY < padding) safeY = padding;
 
     setPopoverPos({ x: safeX, y: safeY });
     setPopoverOpen(true);
-  }, []);
+  }, [taxonomyAttributes]); // 🌟 注意依赖项里加了 taxonomyAttributes
 
   const handleUndo = useCallback(() => {
     // 场景 A：精确撤销多边形/线段/Lasso 的单个点
@@ -375,11 +383,12 @@ export function SyncAnnotation() {
     }
     if (e.key === 'Enter' && (tool === 'polygon' || tool === 'line') && currentPoints.length > 1) {
       if (tool === 'polygon' && currentPoints.length < 3) return;
-      setPendingAnnotation({ type: tool, points: currentPoints });
+  
       const lastPoint = currentPoints[currentPoints.length - 1];
       const screenX = (lastPoint.x * viewport.zoom) + viewport.panX;
       const screenY = (lastPoint.y * viewport.zoom) + viewport.panY;
-      openSmartPopover(screenX, screenY);
+      
+      openSmartPopover(screenX, screenY, tool, currentPoints);
       setCurrentPoints([]);
     } else if (e.key === 'Escape') {
       handleCancelDrawing();
@@ -429,6 +438,7 @@ export function SyncAnnotation() {
       setFormDifficult(false);
       setFormGroupId('');
       setFormTrackId('');
+      setFormAttributes({});
       setActiveAnnotationId(newId);
     }
   };
