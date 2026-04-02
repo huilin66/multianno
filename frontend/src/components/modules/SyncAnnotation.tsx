@@ -20,8 +20,7 @@ import { getPreviewImageUrl } from '../../api/client';
 export function SyncAnnotation() {
   const { t } = useTranslation();
   const { saveStatus } = useAutoSave();
-  const { pushAction, performGlobalUndo, performGlobalRedo } = useActionHistory();
-  
+  const { pushAction, performGlobalUndo, performGlobalRedo, undoCount, redoCount } = useActionHistory();
   // 🌟 安全解构：使用 default value 防止 useStore 还没有彻底更新导致报错
   const state = useStore();
   const {
@@ -414,6 +413,9 @@ const handleUndo = useCallback(() => {
       <LeftToolbar 
       tool={tool} setTool={setTool} 
       handleUndo={handleUndo} handleRedo={handleRedo} 
+      // 🌟 传下去，加上 currentPoints 的长度判断（用于撤销点）
+      canUndo={undoCount > 0 || currentPoints.length > 0}
+      canRedo={redoCount > 0 || undonePoints.length > 0}
     />
       {/* 🎯 Grid Workspace */}
       <div className="flex-grow p-4 overflow-hidden relative" ref={containerRef} onWheel={handleWheel}>

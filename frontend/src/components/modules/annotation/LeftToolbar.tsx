@@ -10,9 +10,11 @@ interface LeftToolbarProps {
   setTool: (tool: any) => void;
   handleUndo: () => void;
   handleRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
-export function LeftToolbar({ tool, setTool, handleUndo, handleRedo }: LeftToolbarProps) {
+export function LeftToolbar({ tool, setTool, handleUndo, handleRedo, canUndo, canRedo, }: LeftToolbarProps) {
   return (
     <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-2 bg-neutral-50 dark:bg-neutral-950 shrink-0 z-10 overflow-y-auto custom-scrollbar">
       {/* 1. 默认工具 */}
@@ -55,11 +57,28 @@ export function LeftToolbar({ tool, setTool, handleUndo, handleRedo }: LeftToolb
       <Button variant={tool === 'select' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('select')} title="Select & Edit (V)">
         <MousePointer2 className="w-5 h-5" />
       </Button>
-      <Button variant="ghost" size="icon" onClick={handleUndo} title="Undo (Ctrl+Z)">
-        <Undo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900" />
+      {/* 🌟 撤销按钮：增加 disabled 和动态颜色 */}
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        onClick={handleUndo} 
+        disabled={!canUndo}
+        title="Undo (Ctrl+Z)"
+        className={!canUndo ? "opacity-30 cursor-not-allowed" : ""}
+      >
+        <Undo2 className={`w-5 h-5 ${canUndo ? "text-neutral-700 dark:text-neutral-200" : "text-neutral-400"}`} />
       </Button>
-      <Button variant="ghost" size="icon" onClick={handleRedo} title="Redo (Ctrl+Y)">
-        <Redo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900" />
+
+      {/* 🌟 重做按钮：增加 disabled 和动态颜色 */}
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        onClick={handleRedo} 
+        disabled={!canRedo}
+        title="Redo (Ctrl+Y)"
+        className={!canRedo ? "opacity-30 cursor-not-allowed" : ""}
+      >
+        <Redo2 className={`w-5 h-5 ${canRedo ? "text-neutral-700 dark:text-neutral-200" : "text-neutral-400"}`} />
       </Button>
 
       <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />

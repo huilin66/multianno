@@ -54,5 +54,11 @@ export function useActionHistory() {
     }
   }, [redoHistory, addAnnotation, removeAnnotation, setActiveAnnotationId]);
 
-  return { pushAction, performGlobalUndo, performGlobalRedo };
+  return { 
+    pushAction, 
+    performGlobalUndo, 
+    performGlobalRedo,
+    undoCount: actionHistory.length,
+    redoCount: redoHistory.length
+   };
 }
