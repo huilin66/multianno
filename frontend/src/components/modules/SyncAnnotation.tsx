@@ -1,30 +1,32 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore, Annotation } from '../../store/useStore';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Switch } from '../ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { UI_THEMES } from '../../config/colors';
-import { 
-  Layers, Save, MousePointer2, Square, Hexagon, 
-  Database, Image as ImageIcon, X, ChevronRight, Eye, AlertTriangle, 
-  Cloud, CloudCog, CloudLightning, Trash2, Maximize, Crop,
-  Hand, CircleDot, Pencil, Activity, Circle, Undo2, Redo2
+
+import {  Image as ImageIcon,
+  Cloud, CloudCog, CloudLightning, 
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-
+import { ClassFormPopover } from './annotation/ClassFormPopover';
+import { LeftToolbar } from './annotation/LeftToolbar';
+import { RightPanel } from './annotation/RightPanel';
+import { useAutoSave } from '../../hooks/useAutoSave';
+import { useActionHistory } from '../../hooks/useActionHistory';
+import { renderCanvasScene } from '../../lib/canvasRenderer'; // 注意相对路径
 // 🌟 尝试引入后端保存接口 (如果文件不存在，后续只需创建即可)
-import { saveAnnotation, getPreviewImageUrl } from '../../api/client';
+import { getPreviewImageUrl } from '../../api/client';
+
+
+
 
 export function SyncAnnotation() {
   const { t } = useTranslation();
+  const { saveStatus } = useAutoSave();
+  const { pushAction, performGlobalUndo, performGlobalRedo } = useActionHistory();
   
   // 🌟 安全解构：使用 default value 防止 useStore 还没有彻底更新导致报错
   const state = useStore();
   const {
-    projectName, views, folders, annotations, addAnnotation, updateAnnotation, removeAnnotation,
-    viewport, setViewport, currentStem, stems, setCurrentStem, theme, setActiveModule, sceneGroups,
+    views, folders, annotations, addAnnotation, removeAnnotation,
+    viewport, setViewport, currentStem,  theme,
     taxonomyClasses = [{ id: 'default', name: 'object', color: '#3B82F6' }], // 兜底默认值
     taxonomyAttributes = [],
     activeAnnotationId = null,
@@ -53,20 +55,18 @@ export function SyncAnnotation() {
   const [formGroupId, setFormGroupId] = useState(''); 
   const [formTrackId, setFormTrackId] = useState('');
   // 🌟 自动保存状态
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
+  // const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
 
   // ==========================
   // 🌟 新增：全局撤销与重做历史栈 (Action History)
   // ==========================
   type Action = { type: 'add' | 'delete', anno: any };
-  const [actionHistory, setActionHistory] = useState<Action[]>([]);
-  const [redoHistory, setRedoHistory] = useState<Action[]>([]);
+  // const [actionHistory, setActionHistory] = useState<Action[]>([]);
+  // const [redoHistory, setRedoHistory] = useState<Action[]>([]);
   const [undonePoints, setUndonePoints] = useState<{x: number, y: number}[]>([]);
 
   // 当切换图片(Stem)时，清空历史栈，防止跨图像撤销产生 Bug
   useEffect(() => {
-    setActionHistory([]);
-    setRedoHistory([]);
     setUndonePoints([]);
   }, [currentStem]);
 
@@ -89,64 +89,6 @@ export function SyncAnnotation() {
   const mainHeight = mainViewFolder?.metadata?.height || 1024;
 
 
-  // ==========================================
-  // 🚀 1. 核心网络请求：静默防抖保存
-  // ==========================================
-  useEffect(() => {
-    if (!currentStem || currentAnnotations.length === 0) return;
-
-    const timer = setTimeout(async () => {
-      setSaveStatus('saving');
-      try {
-        const mainViewFolder = folders.find((f: any) => f.id === views.find((v: any) => v.isMain)?.folderId);
-        
-
-        // 组装标准 Scene JSON 数据格式
-        const payload = {
-          version: "1.0.0",
-          flags: {},
-          stem: currentStem,
-          projectName: projectName || 'Untitled Project',
-          imageDescription: "",
-          imageNameMain: sceneGroups?.[currentStem]?.[mainViewFolder?.path] || `${currentStem}.tif`,
-          imageHeight: mainViewFolder?.metadata?.height || 1024,
-          imageWidth: mainViewFolder?.metadata?.width || 1024,
-          shapes: currentAnnotations.map((ann: any) => ({
-            label: ann.label,
-            text: ann.text || "",
-            points: ann.points.map((p: any) => [p.x, p.y]), 
-            group_id: null,
-            shape_type: (() => {
-                if (ann.type === 'bbox') return 'rectangle';
-                if (ann.type === 'point') return 'point';
-                if (ann.type === 'line') return 'linestrip';
-                if (ann.type === 'ellipse') return 'ellipse';
-                if (ann.type === 'circle') return 'circle';
-                if (ann.type === 'lasso') return 'lasso';
-                return 'polygon';
-              })(),
-            flags: {},
-            attributes: ann.attributes || {},
-            difficult: ann.difficult || false
-          }))
-        };
-
-        const saveDir = mainViewFolder?.path || '';
-        const fileName = `${currentStem}.json`;
-
-        // 调用后端接口
-        if (typeof saveAnnotation === 'function') {
-           await saveAnnotation({ save_dir: saveDir, file_name: fileName, content: payload });
-        }
-        setSaveStatus('idle');
-      } catch (error) {
-        console.error("Auto-save failed:", error);
-        setSaveStatus('error');
-      }
-    }, 1000); // 1秒防抖时间
-
-    return () => clearTimeout(timer);
-  }, [currentAnnotations, currentStem, projectName, folders, views]);
 
 
   // ==========================================
@@ -334,73 +276,41 @@ const handleCancelDrawing = useCallback(() => {
     setTool('pan');
   }, []);
 
-  const handleUndo = useCallback(() => {
-    // 场景 A1：精确撤销多边形/线段/Lasso 的单个点
+const handleUndo = useCallback(() => {
+    // 场景 A：精确撤销多边形/线段/Lasso 的单个点
     if (currentPoints.length > 0 && (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask')) {
       const lastPoint = currentPoints[currentPoints.length - 1];
-      setUndonePoints(prev => [...prev, lastPoint]); // 存入点的重做栈
+      setUndonePoints(prev => [...prev, lastPoint]); 
       
       if (currentPoints.length === 1) {
-        setCurrentPoints([]);
-        setIsDrawing(false); // 回退完最后一个点，退出绘制状态
+        setCurrentPoints([]); setIsDrawing(false); 
       } else {
         setCurrentPoints(prev => prev.slice(0, -1));
       }
       return;
     }
-
-    // 场景 A2：撤销正在拖拽的 框/圆
-    if (isDrawing && (tool === 'bbox' || tool === 'ellipse' || tool === 'circle')) {
+    // 场景 B：撤销正在拖拽的框、或者取消待确认的蓝色弹窗
+    if (isDrawing || pendingAnnotation || popoverOpen) {
       handleCancelDrawing();
       return;
     }
-
-    // 场景 B：取消待确认的蓝色虚线弹窗
-    if (pendingAnnotation || popoverOpen) {
-      handleCancelDrawing();
-      return;
-    }
-
-    // 场景 C：全局级撤销 (通过 Action 历史栈，可恢复被误删的对象！)
-    if (actionHistory.length > 0) {
-      const lastAction = actionHistory[actionHistory.length - 1];
-      setActionHistory(prev => prev.slice(0, -1));
-      setRedoHistory(prev => [...prev, lastAction]); // 推入对象级重做栈
-      
-      if (lastAction.type === 'add') {
-        removeAnnotation(lastAction.anno.id);
-        if (activeAnnotationId === lastAction.anno.id) setActiveAnnotationId(null);
-      } else if (lastAction.type === 'delete') {
-        addAnnotation(lastAction.anno); // 撤销删除 = 恢复对象
-      }
-    }
-  }, [isDrawing, currentPoints, tool, pendingAnnotation, popoverOpen, actionHistory, removeAnnotation, addAnnotation, activeAnnotationId, setActiveAnnotationId, handleCancelDrawing]);
+    // 场景 C：交给 Hook 执行全局级撤销
+    performGlobalUndo();
+  }, [currentPoints, tool, isDrawing, pendingAnnotation, popoverOpen, handleCancelDrawing, performGlobalUndo]);
 
   const handleRedo = useCallback(() => {
     // 场景 A：重做多边形/线段的点
-    if ((tool === 'polygon' || tool === 'line' || tool === 'lasso'|| tool === 'freemask') && undonePoints.length > 0) {
+    if ((tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask') && undonePoints.length > 0) {
       const pointToRestore = undonePoints[undonePoints.length - 1];
       setUndonePoints(prev => prev.slice(0, -1));
       setCurrentPoints(prev => [...prev, pointToRestore]);
       setIsDrawing(true);
       return;
     }
-
-    // 场景 B：全局级重做 (利用 Redo 栈)
-    if (redoHistory.length > 0) {
-      const redoAction = redoHistory[redoHistory.length - 1];
-      setRedoHistory(prev => prev.slice(0, -1));
-      setActionHistory(prev => [...prev, redoAction]);
-      
-      if (redoAction.type === 'add') {
-        addAnnotation(redoAction.anno);
-        setActiveAnnotationId(redoAction.anno.id);
-      } else if (redoAction.type === 'delete') {
-        removeAnnotation(redoAction.anno.id);
-        if (activeAnnotationId === redoAction.anno.id) setActiveAnnotationId(null);
-      }
-    }
-  }, [tool, undonePoints, redoHistory, addAnnotation, removeAnnotation, setActiveAnnotationId]);
+    // 场景 B：交给 Hook 执行全局级重做
+    performGlobalRedo();
+  }, [tool, undonePoints, performGlobalRedo]);
+  
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'v' || e.key === 'V') setTool('select');
     if (e.key === 'h' || e.key === 'H') setTool('pan');
@@ -432,8 +342,7 @@ const handleCancelDrawing = useCallback(() => {
     if ((e.key === 'Delete' || e.key === 'Backspace') && activeAnnotationId) {
       const targetAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
       if (targetAnno) {
-        setActionHistory(prev => [...prev, { type: 'delete', anno: targetAnno }]);
-        setRedoHistory([]);
+        pushAction({ type: 'delete', anno: targetAnno }); // 🌟 使用 Hook 提供的方法
       }
       removeAnnotation(activeAnnotationId);
       setActiveAnnotationId(null);
@@ -451,7 +360,9 @@ const handleCancelDrawing = useCallback(() => {
       handleCancelDrawing();
       setActiveAnnotationId(null);
     }
-  }, [currentPoints, tool, viewport, activeAnnotationId, removeAnnotation, setActiveAnnotationId]);
+  }, [currentPoints, tool, viewport, activeAnnotationId, 
+    removeAnnotation, setActiveAnnotationId, 
+    currentAnnotations, pushAction, handleUndo, handleRedo, handleCancelDrawing]);
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -478,11 +389,13 @@ const handleCancelDrawing = useCallback(() => {
     };
 
     addAnnotation(fullAnno);
+
+    pushAction({ type: 'add', anno: fullAnno });
+    // 3. 安全清理草图点位 (确保你没删掉 const [undonePoints, setUndonePoints] = useState([]))
+        if (typeof setUndonePoints === 'function') {
+          setUndonePoints([]);
+        }
     
-    // 🌟 将新增操作记入历史栈
-    setActionHistory(prev => [...prev, { type: 'add', anno: fullAnno }]);
-    setRedoHistory([]);
-    setUndonePoints([]);
 
       setPopoverOpen(false);
       setPendingAnnotation(null);
@@ -498,56 +411,10 @@ const handleCancelDrawing = useCallback(() => {
     <div className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative">
       
       {/* 👈 Left Toolbar */}
-      <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-2 bg-neutral-50 dark:bg-neutral-950 shrink-0 z-10 overflow-y-auto custom-scrollbar">
-        {/* 1. 默认工具 */}
-        <Button variant={tool === 'pan' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('pan')} title="Pan (H)">
-          <Hand className="w-5 h-5" />
-        </Button>
-        <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
-        
-        {/* 2. 绘制工具 */}
-        <Button variant={tool === 'bbox' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('bbox')} title="Bounding Box (R)">
-          <Square className="w-5 h-5" />
-        </Button>
-        <Button variant={tool === 'polygon' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('polygon')} title="Polygon (P)">
-          <Hexagon className="w-5 h-5" />
-        </Button>
-        <Button variant={tool === 'ellipse' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('ellipse')} title="Ellipse (O)">
-          <Circle className="w-5 h-5 scale-y-75" />
-        </Button>
-        <Button variant={tool === 'circle' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('circle')} title="Circle (C)">
-          <Circle className="w-5 h-5" />
-        </Button>
-        <Button variant={tool === 'point' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('point')} title="Point (T)">
-          <CircleDot className="w-5 h-5" />
-        </Button>
-        <Button variant={tool === 'line' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('line')} title="Polyline (L)">
-          <Activity className="w-5 h-5" />
-        </Button>
-        {/* 🌟 拆分出的自由线 */}
-        <Button variant={tool === 'lasso' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('lasso')} title="Freehand Line">
-          <Pencil className="w-5 h-5" />
-        </Button>
-        {/* 🌟 拆分出的自由 Mask */}
-        <Button variant={tool === 'freemask' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('freemask')} title="Freehand Mask">
-          <Cloud className="w-5 h-5" />
-        </Button>
-        
-        <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
-        
-        {/* 🌟 3. 编辑与撤销工具组：把 Select 移到这里 */}
-        <Button variant={tool === 'select' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('select')} title="Select & Edit (V)">
-          <MousePointer2 className="w-5 h-5" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleUndo} title="Undo (Ctrl+Z)">
-          <Undo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900" />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={handleRedo} title="Redo (Ctrl+Y)">
-          <Redo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900" />
-        </Button>
-
-        <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
-      </div>
+      <LeftToolbar 
+      tool={tool} setTool={setTool} 
+      handleUndo={handleUndo} handleRedo={handleRedo} 
+    />
       {/* 🎯 Grid Workspace */}
       <div className="flex-grow p-4 overflow-hidden relative" ref={containerRef} onWheel={handleWheel}>
         
@@ -596,295 +463,25 @@ const handleCancelDrawing = useCallback(() => {
         )}
 
         {/* 🎈 Floating Popover for Class Selection */}
-        {popoverOpen && (
-          <div 
-            className="absolute z-50 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 shadow-2xl rounded-lg p-3 w-64 animate-in zoom-in-95 duration-200"
-            style={{ left: Math.min(popoverPos.x, window.innerWidth - 300), top: Math.min(popoverPos.y, window.innerHeight - 200) }}
-          >
-            <div className="space-y-3">
-              <div>
-                <Label className="text-[10px] text-neutral-500 uppercase font-bold">{t('workspace.classLabel')}</Label>
-                <Select value={formLabel} onValueChange={setFormLabel}>
-                  <SelectTrigger className="h-8 mt-1 border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-950">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {taxonomyClasses.map((c: any) => (
-                      <SelectItem key={c.id} value={c.name}>
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: c.color }} />
-                          {c.name}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              {/* 👇 插入的新表单项 */}
-              <div>
-                <Label className="text-[10px] text-neutral-500 uppercase font-bold">Text (Description)</Label>
-                <Input value={formText} onChange={(e) => setFormText(e.target.value)} className="h-7 text-xs mt-1 bg-white dark:bg-neutral-950" placeholder="e.g. 烂尾楼" />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-[10px] text-neutral-500 uppercase font-bold">Group ID</Label>
-                  <Input value={formGroupId} onChange={(e) => setFormGroupId(e.target.value)} className="h-7 text-xs mt-1 bg-white dark:bg-neutral-950" placeholder="Optional" />
-                </div>
-                <div>
-                  <Label className="text-[10px] text-neutral-500 uppercase font-bold">Track ID</Label>
-                  <Input type="number" value={formTrackId} onChange={(e) => setFormTrackId(e.target.value)} className="h-7 text-xs mt-1 bg-white dark:bg-neutral-950" placeholder="Optional" />
-                </div>
-              </div>
-              {/* 👆 插入结束 */}
-              <div className="flex items-center justify-between bg-red-50 dark:bg-red-900/10 p-2 rounded border border-red-100 dark:border-red-900/30">
-                <Label className="text-xs text-red-600 dark:text-red-400 font-medium flex items-center gap-1 cursor-pointer">
-                  <AlertTriangle className="w-3.5 h-3.5" /> {t('workspace.difficult')}
-                </Label>
-                <Switch checked={formDifficult} onCheckedChange={setFormDifficult} />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                {/* 找到这行代码： */}
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleCancelDrawing}>{t('common.cancel')}</Button>
-                <Button size="sm" className="h-7 text-xs bg-primary" onClick={savePendingAnnotationToStore}>{t('workspace.saveObject')}</Button>
-              </div>
-            </div>
-          </div>
-        )}
+        {/* 2. 悬浮弹窗 */}
+      {popoverOpen && (
+        <ClassFormPopover 
+          popoverPos={popoverPos} formLabel={formLabel} setFormLabel={setFormLabel}
+          formText={formText} setFormText={setFormText} formGroupId={formGroupId} 
+          setFormGroupId={setFormGroupId} formTrackId={formTrackId} setFormTrackId={setFormTrackId}
+          formDifficult={formDifficult} setFormDifficult={setFormDifficult}
+          handleCancelDrawing={handleCancelDrawing} savePendingAnnotationToStore={savePendingAnnotationToStore}
+          taxonomyClasses={taxonomyClasses}
+        />
+      )}
       </div>
       
       {/* 👉 Right Panel */}
-      <div className="w-80 border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-xl z-10">
-        
-        {/* 1. Project Meta */}
-        <div onClick={() => setActiveModule('meta')} className="p-3 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 cursor-pointer transition-all group flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2">
-            <Database className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 group-hover:text-blue-500">
-              {t('workspace.projectMeta')}
-            </span>
-          </div>
-          
-          {/* 🌟 补回你丢失的精美数据药丸标签 */}
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-[10px] font-mono text-neutral-500 dark:text-neutral-400 group-hover:border-blue-500/30 transition-colors shadow-sm">
-              <span className="text-blue-500 font-bold">{folders?.length || 0}</span>
-              <span className="opacity-60 text-[9px] uppercase tracking-wider">{t('workspace.folders', 'Folders')}</span>
-              <div className="w-[1px] h-2.5 bg-neutral-300 dark:bg-neutral-700 mx-0.5" />
-              <span className="text-emerald-500 font-bold">{views?.length || 0}</span>
-              <span className="opacity-60 text-[9px] uppercase tracking-wider">{t('workspace.views', 'Views')}</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-neutral-400 group-hover:text-blue-500 transition-colors" />
-          </div>
-        </div>
-
-        {/* 2. View Layers (图层管理区) - 极致压缩高度 */}
-        <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-          <h3 className="font-semibold text-[11px] uppercase tracking-wider text-neutral-500 flex items-center gap-2 mb-2">
-            <Layers className="w-3.5 h-3.5" /> {t('workspace.viewLayers', 'View Layers')}
-          </h3>
-          <div className="space-y-1">
-            {views.map((v: any, idx: number) => (
-              <div key={v.id} className="flex items-center justify-between bg-white dark:bg-neutral-900/50 p-1.5 rounded border border-neutral-200 dark:border-neutral-800/50 text-[10px]">
-                <div className="flex items-center gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full ${v.isMain ? 'bg-blue-500' : 'bg-emerald-500'}`} />
-                  <span className={v.isMain ? "text-blue-500 font-bold" : "text-neutral-500 dark:text-neutral-300"}>
-                    {v.isMain ? 'Main View' : `Aug View ${idx}`}
-                  </span>
-                </div>
-                
-                {/* 🌟 新增：右侧控制按钮区 */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-mono text-neutral-400 uppercase mr-1">
-                    {v.bands?.length === 3 ? 'RGB' : (v.colormap || 'GRAY')}
-                  </span>
-                  
-                  {/* 全景切换按钮 (主视图不需要该按钮，因为主视图本身就是基准) */}
-                  {!v.isMain && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); toggleFullExtent(v.id); }}
-                      title={showFullExtent[v.id] ? "Crop to Main View" : "Show Full Extent"}
-                      className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${
-                        showFullExtent[v.id] 
-                          ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' 
-                          : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'
-                      }`}
-                    >
-                      {showFullExtent[v.id] ? <Crop className="w-3 h-3" /> : <Maximize className="w-3 h-3" />}
-                    </button>
-                  )}
-                  
-                  {/* 保留的小眼睛图标 */}
-                  <button className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
-                    <Eye className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* 🌟 3. Active Object Editor (动态属性编辑器) */}
-        <div className="flex flex-col border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-blue-50/50 dark:bg-blue-900/10 transition-all">
-          <div className="p-3 pb-2 flex items-center justify-between border-b border-neutral-200/50 dark:border-neutral-800/50">
-            <h3 className="font-bold text-[11px] uppercase tracking-wider text-blue-600 dark:text-blue-400">
-              {t('workspace.editorTitle')}
-            </h3>
-          </div>
-          
-          <div className="p-3 space-y-3 min-h-[100px]">
-            {activeAnnotationId ? (() => {
-              const activeAnno = annotations.find((a: any) => a.id === activeAnnotationId);
-              if (!activeAnno) return <div className="text-xs text-neutral-500">{t('workspace.notFound')}</div>;
-              
-              return (
-                <div className="space-y-3 animate-in fade-in">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-[10px] text-neutral-500">{t('workspace.label')}</Label>
-                      <Select 
-                        value={activeAnno.label} 
-                        onValueChange={(val) => updateAnnotation(activeAnno.id, { label: val })}
-                      >
-                        <SelectTrigger className="h-7 text-xs bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {taxonomyClasses.map((c: any) => <SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label className="text-[10px] text-neutral-500">{t('workspace.note')}</Label>
-                      <Input 
-                        value={activeAnno.text || ''} 
-                        onChange={(e) => updateAnnotation(activeAnno.id, { text: e.target.value })} 
-                        className="h-7 text-xs bg-white dark:bg-neutral-900" 
-                        placeholder="Optional..."
-                      />
-                    </div>
-                  </div>
-
-                  {/* 动态 Attributes 渲染 */}
-                  {taxonomyAttributes && taxonomyAttributes.length > 0 && (
-                    <div className="bg-white dark:bg-neutral-900 p-2 rounded border border-neutral-200 dark:border-neutral-800">
-                      <Label className="text-[10px] text-neutral-500 mb-2 block uppercase tracking-wider">{t('workspace.attributes')}</Label>
-                      <div className="space-y-2.5">
-                        {taxonomyAttributes.map((attr: any) => (
-                          <div key={attr.id} className="flex items-center justify-between">
-                            <span className="text-xs text-neutral-700 dark:text-neutral-300">{attr.name}</span>
-                            {attr.type === 'boolean' ? (
-                              <Switch 
-                                checked={activeAnno.attributes?.[attr.name] as boolean || false}
-                                onCheckedChange={(val) => updateAnnotation(activeAnno.id, { 
-                                  attributes: { ...(activeAnno.attributes || {}), [attr.name]: val } 
-                                })}
-                              />
-                            ) : (
-                              <Input 
-                                value={activeAnno.attributes?.[attr.name] as string || ''}
-                                onChange={(e) => updateAnnotation(activeAnno.id, { 
-                                  attributes: { ...(activeAnno.attributes || {}), [attr.name]: e.target.value } 
-                                })}
-                                className="w-24 h-6 text-xs bg-white dark:bg-neutral-950"
-                              />
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })() : (
-              <div className="text-center py-4 text-[11px] text-neutral-400 dark:text-neutral-600 italic">
-                {t('workspace.unselected')}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* 4. Objects List */}
-        <div className="flex-grow flex flex-col border-b border-neutral-200 dark:border-neutral-800 overflow-hidden min-h-[120px]">
-          <div className="p-3 pb-2 flex items-center justify-between shrink-0 bg-neutral-100 dark:bg-neutral-900/50">
-            <h3 className="font-bold text-[11px] uppercase tracking-wider text-neutral-500 flex items-center gap-2">
-              <Square className="w-3.5 h-3.5" /> {t('workspace.objects')} ({currentAnnotations.length})
-            </h3>
-          </div>
-          <div className="flex-grow overflow-y-auto p-2 pt-0 space-y-1 custom-scrollbar">
-            {currentAnnotations.map((ann: any) => {
-              const clsDef = taxonomyClasses.find((c: any) => c.name === ann.label);
-              const color = clsDef?.color || '#3B82F6';
-              const isActive = ann.id === activeAnnotationId;
-              
-              return (
-                <div 
-                  key={ann.id} 
-                  onClick={() => setActiveAnnotationId(ann.id)}
-                  className={`group p-2 rounded border text-[11px] flex items-center justify-between cursor-pointer transition-all ${
-                    isActive 
-                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400 text-blue-700 dark:text-blue-400 shadow-sm' 
-                      : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-blue-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: color }} />
-                    <span className="font-medium">
-                      {ann.label} {ann.difficult && <AlertTriangle className="w-3 h-3 inline text-red-500"/>}
-                    </span>
-                  </div>
-
-                  {/* 🌟 核心修改：删除按钮 */}
-                  {/* 🌟 核心修改：垃圾桶删除也支持撤销 */}
-                  <Button 
-                    variant="ghost" 
-                    size="icon" 
-                    className="w-6 h-6 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      const targetAnno = currentAnnotations.find((a: any) => a.id === ann.id);
-                      if (targetAnno) {
-                        setActionHistory(prev => [...prev, { type: 'delete', anno: targetAnno }]);
-                        setRedoHistory([]);
-                      }
-                      removeAnnotation(ann.id); 
-                      if(isActive) setActiveAnnotationId(null); 
-                    }}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* 5. Scene Groups */}
-        <div className="h-[20%] flex flex-col overflow-hidden bg-neutral-100 dark:bg-black/20 shrink-0">
-          <div className="p-3 pb-2 shrink-0">
-            <h3 className="font-bold text-[11px] uppercase tracking-wider text-neutral-500 flex items-center gap-2">
-              <ImageIcon className="w-3.5 h-3.5" /> {t('workspace.scenegroup')}
-            </h3>
-          </div>
-          <div className="flex-grow overflow-y-auto p-2 pt-0 space-y-1 custom-scrollbar">
-            {stems.map((stem: string) => (
-              <button
-                key={stem}
-                onClick={() => {
-                  setCurrentStem(stem);
-                  setActiveAnnotationId(null);
-                }}
-                className={`w-full text-left px-3 py-1.5 text-[11px] rounded transition-all flex items-center justify-between group ${
-                  currentStem === stem 
-                    ? 'bg-blue-600 text-white shadow-md font-bold' 
-                    : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
-                }`}
-              >
-                <span className="font-mono truncate">{stem}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <RightPanel 
+      tool={tool} 
+      showFullExtent={showFullExtent} toggleFullExtent={toggleFullExtent} 
+      pushAction={pushAction}
+    />
     </div>
   );
 }
@@ -933,299 +530,25 @@ function CanvasView({
     };
   }, [view.folderId, view.bands, view.colormap, currentStem, folders, view.id]);
 
-  // 🌟 3. 主渲染逻辑
-  // 2. 修改渲染主逻辑 useEffect
+// 🌟 现在的 Canvas 渲染主逻辑：极致精简！
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const colors = UI_THEMES[theme as 'dark' | 'light'] || UI_THEMES.dark;
-    const parent = canvas.parentElement;
-    if (parent) {
-      canvas.width = parent.clientWidth;
-      canvas.height = parent.clientHeight;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // =====================================
-    // 🌟 画布坐标系变换与【遮罩裁剪】核心逻辑
-    // =====================================
-    ctx.save(); // [Save 1] 保存初始状态
-    
-    // 1. 应用视口平移与缩放 (进入 Main View 世界坐标系)
-    ctx.translate(viewport.panX, viewport.panY);
-    ctx.scale(viewport.zoom, viewport.zoom);
-
-    // 2. 执行裁剪 (如果未开启全景，且是辅视图)
-    if (!isFullExtent && !view.isMain) {
-      ctx.beginPath();
-      ctx.rect(0, 0, mainWidth, mainHeight);
-      ctx.clip(); 
-    }
-
-    // =====================================
-    // 🌟 绘制真实图片 (进入 Aug View 局部坐标系)
-    // =====================================
-    ctx.save(); // [Save 2] 保存主视图坐标系状态
-
-    // 应用辅助视图自身的配准偏移 (Transform)
-    if (!view.isMain) {
-      ctx.translate(view.transform.offsetX, view.transform.offsetY);
-      ctx.scale(view.transform.scaleX, view.transform.scaleY || view.transform.scaleX);
-    }
-
-    if (imageObj) {
-      ctx.drawImage(imageObj, 0, 0);
-
-      // 图片真实的物理边界框 (跟图片走)
-      ctx.strokeStyle = theme === 'dark' ? 'rgba(255, 255, 255, 0.3)' : 'rgba(0, 0, 0, 0.3)';
-      ctx.lineWidth = 2 / viewport.zoom; 
-      ctx.strokeRect(0, 0, imageObj.width, imageObj.height);
-    } else {
-      ctx.fillStyle = view.isMain ? colors.canvasMainBg : colors.canvasAugBg;
-      ctx.fillRect(0, 0, 1024, 1024);
-      ctx.fillStyle = colors.annoDoneText;
-      ctx.font = `${14 / viewport.zoom}px Arial`;
-      ctx.fillText("Loading Image...", 20 / viewport.zoom, 30 / viewport.zoom);
-    }
-
-    ctx.restore(); // [Restore 2] 恢复到主视图世界坐标系！(关键点)
-
-    // =====================================
-    // 🌟 绘制全景模式下的“裁剪参考框” (Crop Boundary)
-    // =====================================
-    if (isFullExtent && !view.isMain && imageObj) {
-      // 使用醒目的黄色/橙色虚线，标示主视图的有效范围
-      ctx.strokeStyle = theme === 'dark' ? 'rgba(250, 204, 21, 0.8)' : 'rgba(234, 88, 12, 0.8)'; // Tailwind Yellow-400 / Orange-600
-      ctx.lineWidth = 2 / viewport.zoom;
-      // 开启虚线模式 (线长5px，间距5px，随缩放动态调整)
-      ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]);
-      
-      // 在主坐标系下绘制参考框
-      ctx.strokeRect(0, 0, mainWidth, mainHeight);
-      
-      // 绘制一个半透明遮罩，让主视图范围外的地方稍微变暗，突出焦点
-      ctx.fillStyle = theme === 'dark' ? 'rgba(0, 0, 0, 0.2)' : 'rgba(255, 255, 255, 0.2)';
-      ctx.beginPath();
-      ctx.rect(-99999, -99999, 199998, 199998); // 覆盖整个宇宙
-      ctx.rect(0, 0, mainWidth, mainHeight);     // 挖空主视图区域 (利用奇偶填充规则)
-      ctx.fill('evenodd');
-
-      // 必须重置虚线，否则后面的标注框也会变成虚线！
-      ctx.setLineDash([]); 
-    }
-    // =====================================
-    // 绘制标注 (这部分完全保留你原来的逻辑)
-    // =====================================
-    annotations.forEach((ann: any) => {
-      const clsDef = taxonomyClasses?.find((c: any) => c.name === ann.label);
-      const baseColor = clsDef?.color || colors.annoDoneStroke;
-      const isActive = ann.id === activeAnnotationId;
-      
-      // 选中状态颜色加深加粗
-      ctx.strokeStyle = isActive ? '#FFFFFF' : baseColor;
-      ctx.lineWidth = (isActive ? 4 : 2) / viewport.zoom;
-      
-      // 填充透明度
-      ctx.fillStyle = isActive ? `${baseColor}60` : `${baseColor}30`; 
-
-      if (ann.type === 'bbox' && ann.points.length === 2) {
-        const [p1, p2] = ann.points;
-        const x = Math.min(p1.x, p2.x);
-        const y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x);
-        const h = Math.abs(p2.y - p1.y);
-        ctx.strokeRect(x, y, w, h);
-        ctx.fillRect(x, y, w, h);
-        
-        ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
-        ctx.font = `bold ${14 / viewport.zoom}px Arial`;
-        ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
-      } else if (ann.type === 'polygon' && ann.points.length > 0) {
-        ctx.beginPath();
-        ctx.moveTo(ann.points[0].x, ann.points[0].y);
-        for (let i = 1; i < ann.points.length; i++) {
-          ctx.lineTo(ann.points[i].x, ann.points[i].y);
-        }
-        ctx.closePath();
-        ctx.stroke();
-        ctx.fill();
-        
-        ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
-        ctx.font = `bold ${14 / viewport.zoom}px Arial`;
-        ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom);
-      } else if (ann.type === 'line' && ann.points.length > 0) {
-        ctx.beginPath(); ctx.moveTo(ann.points[0].x, ann.points[0].y);
-        for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
-        ctx.stroke();
-        ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom);
-      // 🌟 同时支持椭圆和正圆的正式渲染
-      } else if ((ann.type === 'ellipse' || ann.type === 'circle') && ann.points.length === 2) {
-        const [p1, p2] = ann.points;
-        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-        
-        ctx.beginPath();
-        if (ann.type === 'circle') {
-          const radius = Math.max(w, h) / 2;
-          ctx.arc(x + w/2, y + h/2, radius, 0, Math.PI * 2);
-        } else {
-          ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2);
-        }
-        ctx.fill(); ctx.stroke();
-        
-        ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; 
-        ctx.font = `bold ${14 / viewport.zoom}px Arial`; 
-        ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
-      } else if (ann.type === 'point' && ann.points.length > 0) {
-        const p = ann.points[0];
-        ctx.beginPath(); ctx.arc(p.x, p.y, 3 / viewport.zoom, 0, Math.PI * 2);
-        ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; ctx.fill(); ctx.stroke();
-        ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, p.x + 8 / viewport.zoom, p.y - 8 / viewport.zoom);
-      }
-
-      // ... (前面绘制各类实线和文字的逻辑) ...
-      
-      // 🌟 新增：如果当前是 Select 模式，且该对象被选中，则在关键节点上绘制“编辑控制点”
-      if (isActive && tool === 'select') {
-        ctx.fillStyle = '#FFFFFF'; // 控制点白心
-        ctx.strokeStyle = baseColor; // 控制点描边用类别颜色
-        ctx.lineWidth = 1.5 / viewport.zoom;
-        const handleRadius = 4 / viewport.zoom;
-
-        const drawHandle = (x: number, y: number) => {
-          ctx.beginPath();
-          ctx.arc(x, y, handleRadius, 0, Math.PI * 2);
-          ctx.fill(); ctx.stroke();
-        };
-
-        if (ann.type === 'bbox' && ann.points.length === 2) {
-          const [p1, p2] = ann.points;
-          const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
-          const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
-          // 绘制四角控制点
-          drawHandle(minX, minY); drawHandle(maxX, minY);
-          drawHandle(minX, maxY); drawHandle(maxX, maxY);
-        } else if (ann.type === 'polygon' || ann.type === 'line' || ann.type === 'lasso' || ann.type === 'freemask') {
-          // 绘制多边形/线段的所有顶点
-          ann.points.forEach((p: any) => drawHandle(p.x, p.y));
-        } else if (ann.type === 'ellipse' || ann.type === 'circle') {
-          // 绘制边界控制点
-          const [p1, p2] = ann.points;
-          const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
-          const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-          drawHandle(x + w/2, y); drawHandle(x + w/2, y + h);
-          drawHandle(x, y + h/2); drawHandle(x + w, y + h/2);
-        }
-      }
+    // 直接调用渲染引擎
+    renderCanvasScene({
+      canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 
+      imageObj, theme, annotations, activeAnnotationId, taxonomyClasses, 
+      currentPoints, tool, formLabel, pendingAnnotation
     });
-
-// =====================================
-    // 🌟 绘制中的过程状态 (带动态颜色掩膜 + 虚线边界)
-    // =====================================
-    // 获取当前准备打标的颜色
-    const activeClassDef = taxonomyClasses?.find((c: any) => c.name === formLabel);
-    const activeColor = activeClassDef?.color || '#3B82F6';
-
-    if (currentPoints.length > 0) {
-      ctx.strokeStyle = activeColor;
-      ctx.fillStyle = `${activeColor}40`; // 动态颜色的 25% 半透明掩膜
-      ctx.lineWidth = 2 / viewport.zoom;
-      
-      // 🌟 新增：开启虚线模式 (虚线长 6px，间距 4px，并随缩放自适应)
-      ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]); 
-      
-      if (tool === 'bbox' && currentPoints.length === 2) {
-        const [p1, p2] = currentPoints;
-        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-        ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h);
-      } else if (tool === 'ellipse' && currentPoints.length === 2) {
-        const [p1, p2] = currentPoints;
-        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-        ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); 
-        ctx.fill(); ctx.stroke();
-      } else if (tool === 'circle' && currentPoints.length === 2) {
-        const [p1, p2] = currentPoints;
-        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-        const radius = Math.max(w, h) / 2; // 正圆取长边的一半为半径
-        ctx.beginPath(); ctx.arc(x + w/2, y + h/2, radius, 0, Math.PI * 2); 
-        ctx.fill(); ctx.stroke();
-      } else if (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask') {
-        ctx.beginPath(); ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
-        for (let i = 1; i < currentPoints.length; i++) ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
-        if (tool === 'polygon' || tool === 'freemask') {
-          ctx.closePath();
-          ctx.fill();
-        }
-        ctx.stroke();
-        
-        // 🌟 自由绘制工具由于点太密集，绘制时屏蔽控制小圆点
-        if (tool !== 'lasso' && tool !== 'freemask') {
-          ctx.fillStyle = activeColor; 
-          ctx.setLineDash([]); 
-          currentPoints.forEach((p: any) => {
-            ctx.beginPath(); ctx.arc(p.x, p.y, 4 / viewport.zoom, 0, Math.PI * 2); ctx.fill();
-          });
-        }
-      } else if (tool === 'point' && currentPoints.length > 0) {
-        ctx.beginPath(); 
-        // 🌟 半径从 6 缩小到 3，精致一点
-        ctx.arc(currentPoints[0].x, currentPoints[0].y, 3 / viewport.zoom, 0, Math.PI * 2); 
-        ctx.stroke();
-      }
-
-      // 🌟 新增：绘制结束后恢复实线，防止污染后续渲染
-      ctx.setLineDash([]); 
-    }
-
-    // =====================================
-    // 🌟 绘制 Pending (待确认) 虚线状态
-    // =====================================
-    if (pendingAnnotation) {
-      ctx.strokeStyle = activeColor;
-      ctx.fillStyle = `${activeColor}40`; 
-      ctx.lineWidth = 2 / viewport.zoom;
-      ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]); // 🌟 开启虚线
-
-      if (pendingAnnotation.type === 'bbox' || pendingAnnotation.type === 'ellipse' || pendingAnnotation.type === 'circle') {
-        const [p1, p2] = pendingAnnotation.points;
-        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
-        const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-        
-        if (pendingAnnotation.type === 'bbox') {
-          ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h);
-        } else if (pendingAnnotation.type === 'ellipse') {
-          ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        } else if (pendingAnnotation.type === 'circle') {
-          const radius = Math.max(w, h) / 2;
-          ctx.beginPath(); ctx.arc(x + w/2, y + h/2, radius, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-        }
-      } else if (pendingAnnotation.type === 'polygon') {
-        ctx.beginPath(); ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
-        for (let i = 1; i < pendingAnnotation.points.length; i++) ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-      } else if (pendingAnnotation.type === 'line') {
-        ctx.beginPath(); ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
-        for (let i = 1; i < pendingAnnotation.points.length; i++) ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
-        ctx.stroke();
-      } else if (pendingAnnotation.type === 'point') {
-          const p = pendingAnnotation.points[0];
-          ctx.beginPath(); ctx.arc(p.x, p.y, 3 / viewport.zoom, 0, Math.PI * 2); 
-          ctx.stroke(); // 只有虚线框，没有填充
-        }
-      ctx.setLineDash([]); // 🌟 恢复实线
-    }
-
-    ctx.restore();
-  }, [viewport, view, annotations, activeAnnotationId, currentPoints, tool, taxonomyClasses, imageObj, isFullExtent, 
-    mainWidth, 
-    mainHeight]); // 🌟 别忘了把 imageObj 加进依赖数组
+    
+  }, [
+    viewport, view, annotations, activeAnnotationId, currentPoints, 
+    tool, taxonomyClasses, imageObj, isFullExtent, mainWidth, mainHeight, 
+    theme, formLabel, pendingAnnotation
+  ]);
 
   return (
     <canvas
