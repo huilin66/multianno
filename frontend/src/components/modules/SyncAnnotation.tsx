@@ -94,7 +94,10 @@ export function SyncAnnotation() {
 
 // 🌟 将这个函数完整替换，注意参数里连 viewId 都不要了
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (popoverOpen) setPopoverOpen(false);
+    if (popoverOpen) {
+      handleCancelDrawing();
+      return; 
+    }
     
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
     // 🌟 核心：直接获取纯正的 Main View 坐标，绝对不要区分辅视图！
@@ -153,8 +156,7 @@ export function SyncAnnotation() {
           const screenH = Math.abs(mainY - p1.y) * viewport.zoom;
           if (screenW > 5 || screenH > 5) {
             setPendingAnnotation({ type: tool, points: [p1, { x: mainX, y: mainY }] });
-            setPopoverPos({ x: e.clientX, y: e.clientY });
-            setPopoverOpen(true);
+            openSmartPopover(e.clientX, e.clientY);
           }
         }
         setCurrentPoints([]); // 清空草图
@@ -169,8 +171,7 @@ export function SyncAnnotation() {
       setUndonePoints([]); // 顺手清空重做栈
     } else if (tool === 'point') {
       setPendingAnnotation({ type: 'point', points: [{ x: mainX, y: mainY }] });
-      setPopoverPos({ x: e.clientX, y: e.clientY });
-      setPopoverOpen(true);
+      openSmartPopover(e.clientX, e.clientY);
     }
   };
 
@@ -225,8 +226,7 @@ export function SyncAnnotation() {
         // 🌟 核心修复：如果是 lasso 则保存为线(line)，freemask 存为多边形(polygon)
         const saveType = tool === 'lasso' ? 'line' : 'polygon';
         setPendingAnnotation({ type: saveType, points: currentPoints });
-        setPopoverPos({ x: e.clientX, y: e.clientY });
-        setPopoverOpen(true);
+        openSmartPopover(e.clientX, e.clientY);
       }
       setCurrentPoints([]); 
     }
@@ -245,8 +245,7 @@ export function SyncAnnotation() {
       if (tool === 'polygon' && currentPoints.length < 3) return;
 
       setPendingAnnotation({ type: tool, points: currentPoints });
-      setPopoverPos({ x: e.clientX, y: e.clientY });
-      setPopoverOpen(true);
+      openSmartPopover(e.clientX, e.clientY);
       
       // 清空状态
       setCurrentPoints([]);
@@ -275,6 +274,32 @@ export function SyncAnnotation() {
     setFormDifficult(false);
     setUndonePoints([]); // 取消绘制时清空点的重做栈
     setTool('pan');
+  }, []);
+// 🌟 新增：智能计算弹窗位置，防止超出屏幕边界
+
+  const openSmartPopover = useCallback((clientX: number, clientY: number) => {
+    const popoverW = 300; // 弹窗预估宽度
+    const popoverH = 400; // 弹窗预估高度
+    const padding = 20;   // 留出安全边距
+
+    // 默认在鼠标右下方一点点出现
+    let safeX = clientX + 15; 
+    let safeY = clientY + 15;
+
+    // 碰壁检测：如果超出右边界，往左推
+    if (safeX + popoverW > window.innerWidth) {
+      safeX = window.innerWidth - popoverW - padding;
+    }
+    // 碰壁检测：如果超出下边界，往上推
+    if (safeY + popoverH > window.innerHeight) {
+      safeY = window.innerHeight - popoverH - padding;
+    }
+    // 左上角极限保护
+    if (safeX < padding) safeX = padding;
+    if (safeY < padding) safeY = padding;
+
+    setPopoverPos({ x: safeX, y: safeY });
+    setPopoverOpen(true);
   }, []);
 
   const handleUndo = useCallback(() => {
@@ -354,8 +379,7 @@ export function SyncAnnotation() {
       const lastPoint = currentPoints[currentPoints.length - 1];
       const screenX = (lastPoint.x * viewport.zoom) + viewport.panX;
       const screenY = (lastPoint.y * viewport.zoom) + viewport.panY;
-      setPopoverPos({ x: screenX + 100, y: screenY + 50 }); 
-      setPopoverOpen(true);
+      openSmartPopover(screenX, screenY);
       setCurrentPoints([]);
     } else if (e.key === 'Escape') {
       handleCancelDrawing();
