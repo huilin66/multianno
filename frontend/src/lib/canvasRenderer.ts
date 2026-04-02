@@ -17,6 +17,8 @@ export interface RenderParams {
   tool: string;
   formLabel: string;
   pendingAnnotation: any;
+  hoverPos: { x: number, y: number, viewId: string } | null;
+  editorSettings: any;
 }
 
 // 1. 绘制背景与图层
@@ -225,7 +227,7 @@ function drawPendingConfirm(params: RenderParams) {
 // 🌟 暴露给外部的主渲染入口
 // ==========================================
 export function renderCanvasScene(params: RenderParams) {
-  const { canvas, ctx, theme } = params;
+  const { canvas, ctx, theme, hoverPos, viewport, view, editorSettings } = params;
   const colors = UI_THEMES[theme] || UI_THEMES.dark;
 
   // 1. 初始化画布尺寸并清空
@@ -244,7 +246,33 @@ export function renderCanvasScene(params: RenderParams) {
   drawSavedObjects(params, colors);
   drawDrawingDraft(params);
   drawPendingConfirm(params);
-
+  // 🌟 核心：在这里显式调用准星绘制
+  // 只有当鼠标不在当前 View（即正在移动）或者我们需要全视图同步时显示
+  if (hoverPos && editorSettings.showCrosshair && hoverPos.viewId !== view.id) {
+    drawSyncCursor(ctx, hoverPos, viewport);
+  }
   // 4. 恢复全局状态
+  ctx.restore();
+}
+
+// 🌟 新增：绘制同步观察标记
+function drawSyncCursor(ctx: CanvasRenderingContext2D, hoverPos: {x: number, y: number} | null, viewport: any) {
+  if (!hoverPos) return;
+
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 235, 59, 0.8)'; // 明亮的黄色，易于观察
+  ctx.lineWidth = 1 / viewport.zoom;
+  
+  const size = 10 / viewport.zoom; // 长度缩短一点
+
+  ctx.beginPath();
+  // 水平线
+  ctx.moveTo(hoverPos.x - size, hoverPos.y);
+  ctx.lineTo(hoverPos.x + size, hoverPos.y);
+  // 垂直线
+  ctx.moveTo(hoverPos.x, hoverPos.y - size);
+  ctx.lineTo(hoverPos.x, hoverPos.y + size);
+  ctx.stroke();
+  
   ctx.restore();
 }

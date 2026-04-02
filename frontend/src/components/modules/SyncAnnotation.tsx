@@ -1,25 +1,15 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useStore, Annotation } from '../../store/useStore';
-
-import {  Image as ImageIcon,
-  Cloud, CloudCog, CloudLightning, 
-} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ClassFormPopover } from './annotation/ClassFormPopover';
 import { LeftToolbar } from './annotation/LeftToolbar';
 import { RightPanel } from './annotation/RightPanel';
 import { useAutoSave } from '../../hooks/useAutoSave';
 import { useActionHistory } from '../../hooks/useActionHistory';
-import { renderCanvasScene } from '../../lib/canvasRenderer'; // 注意相对路径
-// 🌟 尝试引入后端保存接口 (如果文件不存在，后续只需创建即可)
-import { getPreviewImageUrl } from '../../api/client';
-
-
-
+import { CanvasView } from './annotation/CanvasView';
 
 export function SyncAnnotation() {
   const { t } = useTranslation();
-  const { saveStatus } = useAutoSave();
   const { pushAction, performGlobalUndo, performGlobalRedo, undoCount, redoCount } = useActionHistory();
   // 🌟 安全解构：使用 default value 防止 useStore 还没有彻底更新导致报错
   const state = useStore();
@@ -29,39 +19,32 @@ export function SyncAnnotation() {
     taxonomyClasses = [{ id: 'default', name: 'object', color: '#3B82F6' }], // 兜底默认值
     taxonomyAttributes = [],
     activeAnnotationId = null,
-    setActiveAnnotationId = () => {} // 兜底空函数
+    setActiveAnnotationId = () => {}, // 兜底空函数
+    editorSettings = { showCrosshair: true, showPixelValue: true }, // 🌟 从全局拿
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
-  
+  const [mouseQuad, setMouseQuad] = useState<Record<string, { tl: boolean, tr: boolean }>>({});
   type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' | 'circle' | 'lasso' | 'freemask';
   const [tool, setTool] = useState<ToolType>('pan');
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-
+// 🌟 记录鼠标在主视图/全局坐标系下的位置
+  const [hoverPos, setHoverPos] = useState<{ x: number, y: number } | null>(null);
 // 🌟 新增：漫游 (Pan) 状态记录
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ mouseX: 0, mouseY: 0, panX: 0, panY: 0 });
-
+  // 🌟 新增：编辑器设置状态
   // Popover state
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverPos, setPopoverPos] = useState({ x: 0, y: 0 });
   const [pendingAnnotation, setPendingAnnotation] = useState<any>(null);
-  
+
   // 🌟 表单状态升级为绑定 Taxonomy
   const [formLabel, setFormLabel] = useState(taxonomyClasses[0]?.name || 'object');
   const [formText, setFormText] = useState('');
   const [formDifficult, setFormDifficult] = useState(false);
   const [formGroupId, setFormGroupId] = useState(''); 
   const [formTrackId, setFormTrackId] = useState('');
-  // 🌟 自动保存状态
-  // const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
-
-  // ==========================
-  // 🌟 新增：全局撤销与重做历史栈 (Action History)
-  // ==========================
-  type Action = { type: 'add' | 'delete', anno: any };
-  // const [actionHistory, setActionHistory] = useState<Action[]>([]);
-  // const [redoHistory, setRedoHistory] = useState<Action[]>([]);
   const [undonePoints, setUndonePoints] = useState<{x: number, y: number}[]>([]);
 
   // 当切换图片(Stem)时，清空历史栈，防止跨图像撤销产生 Bug
@@ -87,13 +70,9 @@ export function SyncAnnotation() {
   const mainWidth = mainViewFolder?.metadata?.width || 1024;
   const mainHeight = mainViewFolder?.metadata?.height || 1024;
 
-
-
-
   // ==========================================
   // 🖱️ 2. 画布交互逻辑 (加入平移与智能缩放)
   // ==========================================
-  
   // 🌟 升级：以鼠标指针为中心进行缩放
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
@@ -196,7 +175,7 @@ export function SyncAnnotation() {
   };
 
 // 🌟 将这个函数完整替换，同样不需要 viewId
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: React.MouseEvent, viewId: string) => {
     if (isPanning) {
       const dx = e.clientX - panStart.mouseX;
       const dy = e.clientY - panStart.mouseY;
@@ -205,9 +184,23 @@ export function SyncAnnotation() {
     }
 
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+    const localX = e.clientX - rect.left;
+    const localY = e.clientY - rect.top;
+
+    // 🌟 计算鼠标是否处于危险重叠区 (TL=左上角, TR=右上角)
+    setMouseQuad(prev => ({
+      ...prev,
+      [viewId]: {
+        tl: localX < 150 && localY < 80,
+        tr: localX > rect.width - 150 && localY < 100
+      }
+    }));
+    
     // 🌟 核心：永远只获取纯正的主视图坐标系
     const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
+
+    setHoverPos({ x: mainX, y: mainY, viewId });
 
     // 严密保护的预览逻辑
     if (isDrawing && (tool === 'bbox' || tool === 'ellipse' || tool === 'circle')) {
@@ -222,7 +215,7 @@ export function SyncAnnotation() {
     }
   };
 
-const handleMouseUp = (e: React.MouseEvent) => {
+  const handleMouseUp = (e: React.MouseEvent) => {
     if (isPanning) { setIsPanning(false); return; }
     
     // 🌟 在这套体系下，只有 Lasso, freemask 是靠“松开鼠标”来结束绘制的
@@ -261,8 +254,17 @@ const handleMouseUp = (e: React.MouseEvent) => {
     }
   };
 
-// 🌟 核心 1：彻底清理当前正在绘制/待确认的所有状态
-const handleCancelDrawing = useCallback(() => {
+  const handleMouseLeave = (viewId: string) => {
+    setHoverPos(null);
+    setMouseQuad(prev => {
+      const n = { ...prev };
+      delete n[viewId];
+      return n;
+    });
+  };
+
+  // 🌟 核心 1：彻底清理当前正在绘制/待确认的所有状态
+  const handleCancelDrawing = useCallback(() => {
     setPopoverOpen(false);
     setPendingAnnotation(null);
     setCurrentPoints([]);
@@ -275,7 +277,7 @@ const handleCancelDrawing = useCallback(() => {
     setTool('pan');
   }, []);
 
-const handleUndo = useCallback(() => {
+  const handleUndo = useCallback(() => {
     // 场景 A：精确撤销多边形/线段/Lasso 的单个点
     if (currentPoints.length > 0 && (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask')) {
       const lastPoint = currentPoints[currentPoints.length - 1];
@@ -362,7 +364,8 @@ const handleUndo = useCallback(() => {
   }, [currentPoints, tool, viewport, activeAnnotationId, 
     removeAnnotation, setActiveAnnotationId, 
     currentAnnotations, pushAction, handleUndo, handleRedo, handleCancelDrawing]);
-  useEffect(() => {
+  
+    useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
@@ -419,13 +422,12 @@ const handleUndo = useCallback(() => {
     />
       {/* 🎯 Grid Workspace */}
       <div className="flex-grow p-4 overflow-hidden relative" ref={containerRef} onWheel={handleWheel}>
-        
-        {/* 🌟 顶部状态云图标 */}
-        <div className="absolute top-6 right-6 z-40 flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/90 dark:bg-black/90 backdrop-blur border border-neutral-200 dark:border-neutral-800 shadow-sm text-xs font-medium transition-colors">
-          {saveStatus === 'idle' && <><Cloud className="w-4 h-4 text-green-500" /> {t('workspace.autoSaved')}</>}
-          {saveStatus === 'saving' && <><CloudCog className="w-4 h-4 text-blue-500 animate-spin" /> {t('workspace.saving')}</>}
-          {saveStatus === 'error' && <><CloudLightning className="w-4 h-4 text-red-500" /> {t('workspace.saveError')}</>}
+        {/* 🌟 1. 左上角：新增设置按钮 (功能3) */}
+        <div className="absolute top-6 left-6 z-40 flex gap-2">
+
         </div>
+        {/* 🌟 顶部状态云图标 */}
+
 
         {views.length === 0 ? (
           <div className="w-full h-full flex items-center justify-center text-neutral-500 border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">
@@ -435,7 +437,9 @@ const handleUndo = useCallback(() => {
           <div className="w-full h-full grid gap-4" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))` }}>
             {views.map((view: any, index: number) => (
               <div key={view.id} className="relative border border-neutral-200 dark:border-neutral-800 bg-neutral-200 dark:bg-black rounded-lg overflow-hidden transition-colors duration-300">
-                <div className="absolute top-2 left-2 z-10 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300">
+                <div className={`absolute z-10 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300 transition-all duration-300 ${
+                  mouseQuad[view.id]?.tl ? 'top-2 right-2' : 'top-2 left-2'
+                }`}>
                   {view.isMain ? t('workspace.mainView') : `${t('workspace.augView')} ${index}`}
                 </div>
                 <CanvasView 
@@ -456,8 +460,12 @@ const handleUndo = useCallback(() => {
                   pendingAnnotation={pendingAnnotation}
                   onDoubleClick={handleDoubleClick}
                   onMouseDown={handleMouseDown}
-                  onMouseMove={handleMouseMove}
+                  onMouseMove={(e: any) => handleMouseMove(e, view.id)}
                   onMouseUp={handleMouseUp}
+                  hoverPos={hoverPos}
+                  onMouseLeave={handleMouseLeave}
+                  editorSettings={editorSettings}
+                  mouseQuad={mouseQuad[view.id]}
                 />
               </div>
             ))}
@@ -485,87 +493,5 @@ const handleUndo = useCallback(() => {
       pushAction={pushAction}
     />
     </div>
-  );
-}
-
-// ---------------------------------------------------------
-// 🌟 Canvas 渲染组件 (无损升级高亮和颜色)
-// ---------------------------------------------------------
-function CanvasView({ 
-  view, annotations, activeAnnotationId, taxonomyClasses, currentPoints, 
-  tool, theme, folders, currentStem, isPanning,// 🌟 确保父组件传了 folders 和 currentStem 进来
-  mainWidth, mainHeight, isFullExtent,
-  onMouseDown, onMouseMove, onMouseUp,
-  formLabel, pendingAnnotation, onDoubleClick,
-}: any) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { viewport, sceneGroups } = useStore();
-  
-  // 🌟 1. 新增：存储当前视图加载完毕的图片对象
-  const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
-
-  // 🌟 2. 新增：异步加载真实图片逻辑
-  useEffect(() => {
-    if (!currentStem || !folders) return;
-    const folder = folders.find((f: any) => f.id === view.folderId);
-    if (!folder) return;
-
-    // 🌟 2. 核心大换血：直接去字典里拿真实文件名，绝不猜测！
-    // 如果万一没拿到（兜底），才退化为拼接
-    const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
-    const fileName = exactFileName || `${currentStem}${folder.suffix || '.tif'}`;
-    
-    // 拼接后端请求 URL
-    const url = getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap);
-
-    const img = new Image();
-    img.crossOrigin = 'anonymous'; // 必须加，防止 Canvas 跨域污染报错
-    img.src = url;
-    
-    img.onload = () => {
-      setImageObj(img);
-    };
-    
-    img.onerror = () => {
-      console.warn(`Failed to load image for view ${view.id}: ${url}`);
-      setImageObj(null);
-    };
-  }, [view.folderId, view.bands, view.colormap, currentStem, folders, view.id]);
-
-// 🌟 现在的 Canvas 渲染主逻辑：极致精简！
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // 直接调用渲染引擎
-    renderCanvasScene({
-      canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 
-      imageObj, theme, annotations, activeAnnotationId, taxonomyClasses, 
-      currentPoints, tool, formLabel, pendingAnnotation
-    });
-    
-  }, [
-    viewport, view, annotations, activeAnnotationId, currentPoints, 
-    tool, taxonomyClasses, imageObj, isFullExtent, mainWidth, mainHeight, 
-    theme, formLabel, pendingAnnotation
-  ]);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className={`absolute inset-0 w-full h-full ${
-        isPanning ? 'cursor-grabbing' : 
-        tool === 'pan' ? 'cursor-default' :
-        tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'
-      }`}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onDoubleClick={onDoubleClick}
-      onMouseLeave={onMouseUp}
-      onContextMenu={(e) => e.preventDefault()}
-    />
   );
 }

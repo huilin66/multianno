@@ -26,13 +26,17 @@ import {
   DialogTitle 
 } from '@/components/ui/dialog';
 // 🌟 引入新的图标: FolderPlus 和 Upload
-import { Menu, Settings, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags } from 'lucide-react';
+import { Menu, Settings,Cloud, CloudCog, CloudLightning,  Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
+import { Label } from './components/ui/label';
+import { Switch } from './components/ui/switch';
+import { useAutoSave } from './hooks/useAutoSave';
 
 export default function App() {
-  const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage} = useStore();
+  const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings} = useStore();
   // 🌟 拿到翻译函数 t，和 i18n 实例
   const { t, i18n } = useTranslation();
-
+  const { saveStatus } = useAutoSave();
   // 🌟 监听 Store 里的语言变化，同步给 i18next 引擎
   useEffect(() => {
     i18n.changeLanguage(language);
@@ -107,6 +111,7 @@ export default function App() {
           </span>
 
           {/* 🌟 4. 当前切片 (Stem) 药丸标签：日间浅灰底深色字，夜间深灰底浅色字 */}
+          {/* 🌟 4. 当前切片 (Stem) 药丸标签 */}
           {currentStem && (
             <>
               <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors" />
@@ -115,11 +120,49 @@ export default function App() {
               </span>
             </>
           )}
+          
+          {/* 🌟 5. 自动保存状态：去掉 absolute，直接融入 flex 队列 */}
+          {currentStem && (
+            <>
+              <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors" />
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-medium transition-colors">
+                {saveStatus === 'idle' && <><Cloud className="w-3.5 h-3.5 text-green-500" /> <span className="text-neutral-500">{t('workspace.autoSaved', 'Saved')}</span></>}
+                {saveStatus === 'saving' && <><CloudCog className="w-3.5 h-3.5 text-blue-500 animate-spin" /> <span className="text-neutral-500">{t('workspace.saving', 'Saving...')}</span></>}
+                {saveStatus === 'error' && <><CloudLightning className="w-3.5 h-3.5 text-red-500" /> <span className="text-neutral-500">{t('workspace.saveError', 'Error')}</span></>}
+              </div>
+            </>
+          )}
         </div>
 
         {/* 右侧区域：放置主题切换按钮 */}
         <div className="w-1/3 flex justify-end items-center gap-2">
-          
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="icon" className="rounded-full bg-white/90 dark:bg-black/90 shadow-sm border-neutral-200 dark:border-neutral-800">
+                <Settings className="w-4 h-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-4 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
+              <h4 className="font-bold text-sm mb-4 border-b pb-2">Editor Settings</h4>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <Label className="text-xs">Show Sync Crosshair</Label>
+                    <Switch 
+                      checked={editorSettings.showCrosshair} 
+                      onCheckedChange={(v) => updateEditorSettings({ showCrosshair: v })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Show Pixel Value</Label>
+                    <Switch 
+                      checked={editorSettings.showPixelValue} 
+                      onCheckedChange={(v) => updateEditorSettings({ showPixelValue: v })} 
+                    />
+                  </div>
+                {/* 这里可以放更多你以后想收拢的开关 */}
+              </div>
+            </PopoverContent>
+          </Popover>
           {/* 语言切换按钮 */}
           <Button 
             variant="ghost" 

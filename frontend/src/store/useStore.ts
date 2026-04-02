@@ -113,7 +113,10 @@ export interface AppState {
   sceneGroups: Record<string, Record<string, string>>;
   setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
   viewport: {zoom: number;panX: number;panY: number;};
-  
+
+  editorSettings: { showCrosshair: boolean; showPixelValue: boolean };
+updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean }>) => void;
+
   activeModule: ActiveModule;
   currentStem: string | null;
   stems: string[];
@@ -197,6 +200,11 @@ export const useStore = create<AppState>()(
       setStems: (stems) => set({ stems }),
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
+
+      editorSettings: { showCrosshair: true, showPixelValue: true },
+      updateEditorSettings: (newSettings) => set((state) => ({ 
+        editorSettings: { ...state.editorSettings, ...newSettings } 
+      })),
 
       // 🌟 5. 新增方法：更新特定 stem 的全局属性
       updateStemMetadata: (stem, data) => set((state) => ({
@@ -353,6 +361,7 @@ export const useStore = create<AppState>()(
         completedViews: state.completedViews,
         taxonomyClasses: state.taxonomyClasses,
         taxonomyAttributes: state.taxonomyAttributes,
+        editorSettings: state.editorSettings,
       }),
     }
   )
