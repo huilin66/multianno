@@ -10,7 +10,7 @@ import {
   Layers, Save, MousePointer2, Square, Hexagon, 
   Database, Image as ImageIcon, X, ChevronRight, Eye, AlertTriangle, 
   Cloud, CloudCog, CloudLightning, Trash2, Maximize, Crop,
-  Hand, CircleDot, Pencil, Activity, Circle, Undo2
+  Hand, CircleDot, Pencil, Activity, Circle, Undo2, Redo2
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -54,6 +54,21 @@ export function SyncAnnotation() {
   const [formTrackId, setFormTrackId] = useState('');
   // 🌟 自动保存状态
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
+
+  // ==========================
+  // 🌟 新增：全局撤销与重做历史栈 (Action History)
+  // ==========================
+  type Action = { type: 'add' | 'delete', anno: any };
+  const [actionHistory, setActionHistory] = useState<Action[]>([]);
+  const [redoHistory, setRedoHistory] = useState<Action[]>([]);
+  const [undonePoints, setUndonePoints] = useState<{x: number, y: number}[]>([]);
+
+  // 当切换图片(Stem)时，清空历史栈，防止跨图像撤销产生 Bug
+  useEffect(() => {
+    setActionHistory([]);
+    setRedoHistory([]);
+    setUndonePoints([]);
+  }, [currentStem]);
 
   // ==========================
   // 🌟 新增：全景展示 (Full Extent) 状态
@@ -225,7 +240,9 @@ export function SyncAnnotation() {
         setCurrentPoints([]); // 清空草图
       }
     } else if (tool === 'polygon' || tool === 'line') {
+      setIsDrawing(true); // 🌟 极其关键：激活绘制状态，否则撤销逻辑无法捕获
       setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
+      setUndonePoints([]); // 只要点下了新点，就清空重做栈，断开之前的未来
     } else if (tool === 'lasso') {
       setIsDrawing(true);
       setCurrentPoints([{ x: mainX, y: mainY }]);
@@ -300,8 +317,86 @@ const handleMouseUp = (e: React.MouseEvent) => {
     }
   };
 
+// 🌟 核心 1：彻底清理当前正在绘制/待确认的所有状态
+const handleCancelDrawing = useCallback(() => {
+    setPopoverOpen(false);
+    setPendingAnnotation(null);
+    setCurrentPoints([]);
+    setIsDrawing(false);
+    setFormText('');
+    setFormGroupId('');
+    setFormTrackId('');
+    setFormDifficult(false);
+    setUndonePoints([]); // 取消绘制时清空点的重做栈
+  }, []);
 
-  
+  const handleUndo = useCallback(() => {
+    // 场景 A1：精确撤销多边形/线段/Lasso 的单个点
+    if (currentPoints.length > 0 && (tool === 'polygon' || tool === 'line' || tool === 'lasso')) {
+      const lastPoint = currentPoints[currentPoints.length - 1];
+      setUndonePoints(prev => [...prev, lastPoint]); // 存入点的重做栈
+      
+      if (currentPoints.length === 1) {
+        setCurrentPoints([]);
+        setIsDrawing(false); // 回退完最后一个点，退出绘制状态
+      } else {
+        setCurrentPoints(prev => prev.slice(0, -1));
+      }
+      return;
+    }
+
+    // 场景 A2：撤销正在拖拽的 框/圆
+    if (isDrawing && (tool === 'bbox' || tool === 'ellipse' || tool === 'circle')) {
+      handleCancelDrawing();
+      return;
+    }
+
+    // 场景 B：取消待确认的蓝色虚线弹窗
+    if (pendingAnnotation || popoverOpen) {
+      handleCancelDrawing();
+      return;
+    }
+
+    // 场景 C：全局级撤销 (通过 Action 历史栈，可恢复被误删的对象！)
+    if (actionHistory.length > 0) {
+      const lastAction = actionHistory[actionHistory.length - 1];
+      setActionHistory(prev => prev.slice(0, -1));
+      setRedoHistory(prev => [...prev, lastAction]); // 推入对象级重做栈
+      
+      if (lastAction.type === 'add') {
+        removeAnnotation(lastAction.anno.id);
+        if (activeAnnotationId === lastAction.anno.id) setActiveAnnotationId(null);
+      } else if (lastAction.type === 'delete') {
+        addAnnotation(lastAction.anno); // 撤销删除 = 恢复对象
+      }
+    }
+  }, [isDrawing, currentPoints, tool, pendingAnnotation, popoverOpen, actionHistory, removeAnnotation, addAnnotation, activeAnnotationId, setActiveAnnotationId, handleCancelDrawing]);
+
+  const handleRedo = useCallback(() => {
+    // 场景 A：重做多边形/线段的点
+    if ((tool === 'polygon' || tool === 'line' || tool === 'lasso') && undonePoints.length > 0) {
+      const pointToRestore = undonePoints[undonePoints.length - 1];
+      setUndonePoints(prev => prev.slice(0, -1));
+      setCurrentPoints(prev => [...prev, pointToRestore]);
+      setIsDrawing(true);
+      return;
+    }
+
+    // 场景 B：全局级重做 (利用 Redo 栈)
+    if (redoHistory.length > 0) {
+      const redoAction = redoHistory[redoHistory.length - 1];
+      setRedoHistory(prev => prev.slice(0, -1));
+      setActionHistory(prev => [...prev, redoAction]);
+      
+      if (redoAction.type === 'add') {
+        addAnnotation(redoAction.anno);
+        setActiveAnnotationId(redoAction.anno.id);
+      } else if (redoAction.type === 'delete') {
+        removeAnnotation(redoAction.anno.id);
+        if (activeAnnotationId === redoAction.anno.id) setActiveAnnotationId(null);
+      }
+    }
+  }, [tool, undonePoints, redoHistory, addAnnotation, removeAnnotation, setActiveAnnotationId]);
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (e.key === 'v' || e.key === 'V') setTool('select');
     if (e.key === 'h' || e.key === 'H') setTool('pan');
@@ -313,7 +408,29 @@ const handleMouseUp = (e: React.MouseEvent) => {
     if (e.key === 'l' || e.key === 'L') setTool('line');
     if (e.key === 'f' || e.key === 'F') setTool('lasso');
     
+    // 🌟 新增：Ctrl+Z 或 Cmd+Z 触发撤销
+    // 🌟 全新重做快捷键 (支持 Ctrl+Y 或 Ctrl+Shift+Z)
+    const isCtrl = e.ctrlKey || e.metaKey;
+    if (isCtrl && (e.key === 'y' || e.key === 'Y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
+      e.preventDefault();
+      handleRedo();
+      return;
+    }
+    
+    // 🌟 全新撤销快捷键 (Ctrl+Z，屏蔽 Shift 防止冲突)
+    if (isCtrl && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      handleUndo();
+      return;
+    }
+
+    // 🌟 拦截删除键：将被删除的对象压入历史栈，从而支持“撤销删除”！
     if ((e.key === 'Delete' || e.key === 'Backspace') && activeAnnotationId) {
+      const targetAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
+      if (targetAnno) {
+        setActionHistory(prev => [...prev, { type: 'delete', anno: targetAnno }]);
+        setRedoHistory([]);
+      }
       removeAnnotation(activeAnnotationId);
       setActiveAnnotationId(null);
     }
@@ -327,9 +444,7 @@ const handleMouseUp = (e: React.MouseEvent) => {
       setPopoverOpen(true);
       setCurrentPoints([]);
     } else if (e.key === 'Escape') {
-      setCurrentPoints([]);
-      setIsDrawing(false);
-      setPopoverOpen(false);
+      handleCancelDrawing();
       setActiveAnnotationId(null);
     }
   }, [currentPoints, tool, viewport, activeAnnotationId, removeAnnotation, setActiveAnnotationId]);
@@ -346,18 +461,25 @@ const handleMouseUp = (e: React.MouseEvent) => {
       });
 
       const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
-      addAnnotation({
-        id: newId,
-        ...pendingAnnotation,
-        label: formLabel,
-        text: formText,
-        group_id: formGroupId || null,
-        track_id: formTrackId ? Number(formTrackId) : null,
-        stem: currentStem,
-        difficult: formDifficult,
-        attributes: defaultAttrs
-      });
-      
+      const fullAnno = {
+      id: newId,
+      ...pendingAnnotation,
+      label: formLabel,
+      text: formText,
+      group_id: formGroupId || null,
+      track_id: formTrackId ? Number(formTrackId) : null,
+      stem: currentStem,
+      difficult: formDifficult,
+      attributes: defaultAttrs
+    };
+
+    addAnnotation(fullAnno);
+    
+    // 🌟 将新增操作记入历史栈
+    setActionHistory(prev => [...prev, { type: 'add', anno: fullAnno }]);
+    setRedoHistory([]);
+    setUndonePoints([]);
+
       setPopoverOpen(false);
       setPendingAnnotation(null);
       setFormText('');
@@ -373,17 +495,6 @@ const handleMouseUp = (e: React.MouseEvent) => {
     <div className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative">
       
       {/* 👈 Left Toolbar */}
-      {/* <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-4 bg-neutral-50 dark:bg-neutral-950 shrink-0 z-10">
-        <Button variant={tool === 'select' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('select')} title={t('workspace.toolSelect')}>
-          <MousePointer2 className="w-5 h-5" />
-        </Button>
-        <Button variant={tool === 'bbox' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('bbox')} title={t('workspace.toolBbox')}>
-          <Square className="w-5 h-5" />
-        </Button>
-        <Button variant={tool === 'polygon' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('polygon')} title={t('workspace.toolPolygon')}>
-          <Hexagon className="w-5 h-5" />
-        </Button>
-      </div> */}
       <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 flex flex-col items-center py-4 space-y-2 bg-neutral-50 dark:bg-neutral-950 shrink-0 z-10 overflow-y-auto custom-scrollbar">
         <Button variant={tool === 'select' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('select')} title="Select (V)">
           <MousePointer2 className="w-5 h-5" />
@@ -415,6 +526,17 @@ const handleMouseUp = (e: React.MouseEvent) => {
         <Button variant={tool === 'lasso' ? 'default' : 'ghost'} size="icon" onClick={() => setTool('lasso')} title="Freehand Lasso (F)">
           <Pencil className="w-5 h-5" />
         </Button>
+        <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
+        
+        {/* 🌟 撤销与重做按钮组 */}
+        <Button variant="ghost" size="icon" onClick={handleUndo} title="Undo (Ctrl+Z)">
+          <Undo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100" />
+        </Button>
+        <Button variant="ghost" size="icon" onClick={handleRedo} title="Redo (Ctrl+Y / Ctrl+Shift+Z)">
+          <Redo2 className="w-5 h-5 text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100" />
+        </Button>
+
+        <div className="w-8 h-[1px] bg-neutral-300 dark:bg-neutral-700 my-2" />
       </div>
       {/* 🎯 Grid Workspace */}
       <div className="flex-grow p-4 overflow-hidden relative" ref={containerRef} onWheel={handleWheel}>
@@ -513,7 +635,8 @@ const handleMouseUp = (e: React.MouseEvent) => {
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setPopoverOpen(false)}>{t('common.cancel')}</Button>
+                {/* 找到这行代码： */}
+                <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={handleCancelDrawing}>{t('common.cancel')}</Button>
                 <Button size="sm" className="h-7 text-xs bg-primary" onClick={savePendingAnnotationToStore}>{t('workspace.saveObject')}</Button>
               </div>
             </div>
@@ -701,13 +824,18 @@ const handleMouseUp = (e: React.MouseEvent) => {
                   </div>
 
                   {/* 🌟 核心修改：删除按钮 */}
+                  {/* 🌟 核心修改：垃圾桶删除也支持撤销 */}
                   <Button 
                     variant="ghost" 
                     size="icon" 
-                    // 使用 group-hover 实现鼠标悬放时才显示，保持界面简洁
                     className="w-6 h-6 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
                     onClick={(e) => { 
-                      e.stopPropagation(); // 🔴 必须阻止冒泡，否则点击删除也会触发上面的选中逻辑
+                      e.stopPropagation(); 
+                      const targetAnno = currentAnnotations.find((a: any) => a.id === ann.id);
+                      if (targetAnno) {
+                        setActionHistory(prev => [...prev, { type: 'delete', anno: targetAnno }]);
+                        setRedoHistory([]);
+                      }
                       removeAnnotation(ann.id); 
                       if(isActive) setActiveAnnotationId(null); 
                     }}
