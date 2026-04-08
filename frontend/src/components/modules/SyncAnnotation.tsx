@@ -510,9 +510,8 @@ export function SyncAnnotation() {
         {/* 🌟 升级：多图层悬浮叠加控制器 (TopBar) */}
         {focusedViewId && views.length > 0 && (
           <div 
+            // 🌟 核心修复：把 z-50 改成 z-[1001]，必须大于底下的 Canvas (1000)
             className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md p-1.5 rounded-full shadow-lg border border-neutral-200 dark:border-neutral-700 flex items-center gap-3 animate-in slide-in-from-top-4"
-            // 🌟 终极修复 1：加上 Pointer 拦截！
-            // 因为我们要换用原生滑块，原生滑块不怕拦截，加上这行能完美防止你在操作控制条时底下的 Canvas 跟着乱动。
             onPointerDown={e => e.stopPropagation()}
             onWheel={e => e.stopPropagation()}
           >
@@ -618,7 +617,7 @@ export function SyncAnnotation() {
           <div className="w-full h-full grid gap-4" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))` }}>
             {displayViews.map((view: any, index: number) => (
               <div key={view.id} className="relative border border-neutral-200 dark:border-neutral-800 bg-neutral-200 dark:bg-black rounded-lg overflow-hidden transition-colors duration-300">
-                <div className={`absolute z-[100] px-2 py-1 bg-black/70 text-xs rounded text-neutral-300 transition-all duration-300 ${mouseQuad[view.id]?.tl ? 'top-2 right-2' : 'top-2 left-2'}`}>
+                <div className={`absolute z-40 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300 transition-all duration-300 ${mouseQuad[view.id]?.tl ? 'top-2 right-2' : 'top-2 left-2'}`}>
                   {view.isMain ? t('workspace.mainView') : `${t('workspace.augView')} ${index}`}
                 </div>
                 

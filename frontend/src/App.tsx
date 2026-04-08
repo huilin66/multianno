@@ -137,10 +137,9 @@ export default function App() {
         {/* 右侧区域：放置主题切换按钮 */}
         <div className="w-1/3 flex justify-end items-center gap-2">
           <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" size="icon" className="rounded-full bg-white/90 dark:bg-black/90 shadow-sm border-neutral-200 dark:border-neutral-800">
-                <Settings className="w-4 h-4" />
-              </Button>
+            {/* 🌟 修复：移除 asChild 和内部的 Button，直接对 Trigger 进行原生样式装扮 */}
+            <PopoverTrigger className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/90 dark:bg-black/90 shadow-sm border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors focus:outline-none cursor-pointer">
+              <Settings className="w-4 h-4 text-neutral-700 dark:text-neutral-200" />
             </PopoverTrigger>
             <PopoverContent className="w-64 p-4 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
               <h4 className="font-bold text-sm mb-4 border-b pb-2">Editor Settings</h4>

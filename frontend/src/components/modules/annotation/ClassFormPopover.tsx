@@ -63,8 +63,10 @@ export function ClassFormPopover({
 
   return (
     <div 
-      className="absolute z-50 w-72 bg-white dark:bg-neutral-900 rounded-lg shadow-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden flex flex-col"
-      style={{ left: `${pos.x}px`, top: `${pos.y}px` }} 
+      // 去掉这里的 z-50
+      className="absolute w-72 bg-white dark:bg-neutral-900 rounded-lg shadow-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden flex flex-col"
+      // 🌟 直接在 style 里赋予它超越画布的最高层级
+      style={{ left: `${pos.x}px`, top: `${pos.y}px`, zIndex: 9999 }}
     >
       {/* 头部拖拽区 */}
       <div 

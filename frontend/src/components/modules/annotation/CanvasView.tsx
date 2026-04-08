@@ -61,7 +61,7 @@ function PixelInfoBadge({ hoverPos, imageObj, view, mouseQuad }: any) {
           : 'top-2 right-2';
 
   return (
-    <div className={`absolute z-20 px-2 py-1 bg-black/80 backdrop-blur rounded text-[10px] font-mono text-white border border-white/20 transition-all duration-300 ${positionClass}`}>
+    <div className={`absolute z-40 px-2 py-1 bg-black/80 backdrop-blur rounded text-[10px] font-mono text-white border border-white/20 transition-all duration-300 ${positionClass}`}>
       <div className="flex flex-col gap-0.5">
         <span className="text-neutral-400">X:{Math.floor(localX)} Y:{Math.floor(localY)}</span>
         <span className="text-blue-400">
@@ -118,24 +118,40 @@ export function CanvasView({
     };
   }, [view.folderId, view.bands, view.colormap, currentStem, folders, view.id]);
 
-// 🌟 现在的 Canvas 渲染主逻辑：极致精简！
+// 🌟 现在的 Canvas 渲染主逻辑：解耦分离！
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 直接调用渲染引擎
+    // 🌟 核心拦截魔法：如果是单图模式，我们拦截掉底图的绘制！
+    // 这样 Canvas 就会变成一层透明的玻璃，上面只画纯粹的标注线条。
+    let originalDrawImage = ctx.drawImage;
+    if (isSingleViewMode) {
+      ctx.drawImage = function(img, ...args) {
+        if (img === imageObj) return; // 遇到自己的底图，拒绝绘制
+        originalDrawImage.apply(this, [img, ...args]);
+      };
+    }
+
+    // 调用外部渲染引擎（引擎照常运行，坐标系完好，只是画底图时被我们“静音”了）
     renderCanvasScene({
       canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 
       imageObj, theme, annotations, activeAnnotationId, taxonomyClasses, 
       currentPoints, tool, formLabel, pendingAnnotation, hoverPos, editorSettings
     });
+
+    // 恢复原生的画图能力，防止污染其他组件
+    if (isSingleViewMode) {
+      ctx.drawImage = originalDrawImage;
+    }
     
   }, [
     viewport, view, annotations, activeAnnotationId, currentPoints, 
     tool, taxonomyClasses, imageObj, isFullExtent, mainWidth, mainHeight, 
-    theme, formLabel, pendingAnnotation, hoverPos, editorSettings
+    theme, formLabel, pendingAnnotation, hoverPos, editorSettings,
+    isSingleViewMode // 🌟 切记加上这个依赖项
   ]);
 
   // 获取其他叠加图层的真实 URL
@@ -152,67 +168,101 @@ return (
         <PixelInfoBadge hoverPos={hoverPos} imageObj={imageObj} view={view} mouseQuad={mouseQuad} />
       )}
       
-      {/* 🌟 核心引擎：根据 layerOrder 倒序循环，确保顶层拥有最大的 z-index */}
-      {layerOrder.map((layerId: string) => {
-         // 计算 zIndex，排在数组前面的层叠在最上面
+      {/* ==========================================
+          🌟 修复 1：在任意视图的单图模式下，永远渲染 Main View 的红色虚线参考框
+          ========================================== */}
+      {isSingleViewMode && (
+        <div 
+          className="absolute border-2 border-dashed border-red-500 pointer-events-none z-20 bg-red-500/5 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+          style={{
+            left: `${viewport.panX}px`,
+            top: `${viewport.panY}px`,
+            width: `${mainWidth * viewport.zoom}px`,
+            height: `${mainHeight * viewport.zoom}px`,
+          }}
+        >
+          <span className="absolute -top-5 left-0 text-[10px] text-red-500 font-mono bg-black/70 px-1.5 py-0.5 rounded-t">
+            Main View Extent
+          </span>
+        </div>
+      )}
+
+      {/* ==========================================
+          🌟 修复 2：绝对顶层的玻璃画板（专供标注，不含底图）
+          ========================================== */}
+      <canvas
+        ref={canvasRef}
+        style={{ zIndex: isSingleViewMode ? 30 : 1 }} // 永远在最顶层，俯瞰所有图层
+        className={`absolute inset-0 w-full h-full ${
+          isPanning ? 'cursor-grabbing' : 
+          tool === 'pan' ? 'cursor-default' :
+          tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'
+        }`}
+        onMouseDown={onMouseDown} onMouseUp={onMouseUp} onDoubleClick={onDoubleClick}
+        onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} onContextMenu={(e) => e.preventDefault()}
+      />
+
+{/* ==========================================
+          🌟 重建的底层图像引擎：Base Image + Overlays (严格服从图层顺序)
+          ========================================== */}
+      {isSingleViewMode && layerOrder.map((layerId: string) => {
          const zIndex = layerOrder.length - layerOrder.indexOf(layerId);
-         
-         // 提取该图层的特效配置
          const config = layerConfigs?.[layerId] || { mode: 'opacity', value: 1 };
          const opacity = config.mode === 'opacity' ? config.value : 1;
 
-         // 1. 如果轮到了当前作为底板的 Canvas 图层
+         // 1. 底板图像 (Base Layer)
          if (layerId === view.id) {
-           // ==========================================
-           // 🌟 修复 1：精准计算底层 Canvas 的裁剪路径 (消灭 Main View 滑块两端死区)
-           // ==========================================
-           let canvasClipPath = 'none';
-           if (config.mode !== 'opacity') {
-             // 获取底层视图当前的 Crop 状态
-             const isBaseFullExtent = !!(showFullExtent && showFullExtent[view.id]);
-             const baseCrop = view.transform?.crop || { t: 0, r: 100, b: 100, l: 0 };
-             const bBoundL = isBaseFullExtent ? 0 : baseCrop.l;
-             const bBoundR = isBaseFullExtent ? 100 : baseCrop.r;
-             const bBoundT = isBaseFullExtent ? 0 : baseCrop.t;
-             const bBoundB = isBaseFullExtent ? 100 : baseCrop.b;
+           // 🌟 核心修复 1：放弃复杂的屏幕 px 计算，统一使用百分比 (%) 处理裁剪和卷帘！
+           const isBaseFullExtent = !!(showFullExtent && showFullExtent[view.id]);
+           const baseCrop = view.transform?.crop || { t: 0, r: 100, b: 100, l: 0 };
+           const boundL = isBaseFullExtent ? 0 : baseCrop.l;
+           const boundR = isBaseFullExtent ? 100 : baseCrop.r;
+           const boundT = isBaseFullExtent ? 0 : baseCrop.t;
+           const boundB = isBaseFullExtent ? 100 : baseCrop.b;
 
-             // 计算图像在当前屏幕上的实际物理像素大小
-             const imgScreenW = mainWidth * viewport.zoom;
-             const imgScreenH = mainHeight * viewport.zoom;
+           const mappedX = boundL + (config.value / 100) * (boundR - boundL);
+           const mappedY = boundT + (config.value / 100) * (boundB - boundT);
 
-             // 计算图像在当前屏幕上的真实起止物理坐标
-             const baseStartX = viewport.panX + (bBoundL / 100) * imgScreenW;
-             const baseEndX = viewport.panX + (bBoundR / 100) * imgScreenW;
-             const baseStartY = viewport.panY + (bBoundT / 100) * imgScreenH;
-             const baseEndY = viewport.panY + (bBoundB / 100) * imgScreenH;
-
-             // 核心映射：将 0-100 的滑块值完美映射到屏幕上的像素边界
-             const mappedCanvasX = baseStartX + (config.value / 100) * (baseEndX - baseStartX);
-             const mappedCanvasY = baseStartY + (config.value / 100) * (baseEndY - baseStartY);
-
-             // 使用极大的负值（-9999px）作为无限边界，确保无论用户怎么缩放和平移，卷帘都不会露出破绽
-             canvasClipPath = config.mode === 'swipeX' ? `polygon(-9999px -9999px, ${mappedCanvasX}px -9999px, ${mappedCanvasX}px 9999px, -9999px 9999px)` :
-                              config.mode === 'swipeY' ? `polygon(-9999px -9999px, 9999px -9999px, 9999px ${mappedCanvasY}px, -9999px ${mappedCanvasY}px)` : 'none';
+           let imgClipPath = 'none';
+           if (config.mode === 'swipeX') {
+               imgClipPath = `polygon(${boundL}% ${boundT}%, ${mappedX}% ${boundT}%, ${mappedX}% ${boundB}%, ${boundL}% ${boundB}%)`;
+           } else if (config.mode === 'swipeY') {
+               imgClipPath = `polygon(${boundL}% ${boundT}%, ${boundR}% ${boundT}%, ${boundR}% ${mappedY}%, ${boundL}% ${mappedY}%)`;
+           } else {
+               if (!isBaseFullExtent) {
+                   imgClipPath = `polygon(${boundL}% ${boundT}%, ${boundR}% ${boundT}%, ${boundR}% ${boundB}%, ${boundL}% ${boundB}%)`;
+               }
            }
 
+           // 🌟 核心修复 2：获取当前视图的真实逻辑尺寸，强行撑开 <img>，防止它缩水！
+           const currentFolder = folders?.find((f: any) => f.id === view.folderId);
+           const logicalW = currentFolder?.metadata?.width || mainWidth;
+           const logicalH = currentFolder?.metadata?.height || mainHeight;
+
            return (
-             <canvas
-                key={`canvas-${layerId}`}
-                ref={canvasRef}
-                style={{ zIndex, opacity, clipPath: canvasClipPath, transition: 'clip-path 0.1s ease-out' }}
-                className={`absolute inset-0 w-full h-full ${
-                  isPanning ? 'cursor-grabbing' : 
-                  tool === 'pan' ? 'cursor-default' :
-                  tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'
-                }`}
-                onMouseDown={onMouseDown} onMouseUp={onMouseUp} onDoubleClick={onDoubleClick}
-                onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} onContextMenu={(e) => e.preventDefault()}
-              />
+             <div key={`base-img-${layerId}`} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex }}>
+               <div style={{ transformOrigin: '0 0', transform: `translate3d(${viewport.panX}px, ${viewport.panY}px, 0) scale(${viewport.zoom})` }}>
+                  <div style={{ transformOrigin: '0 0', transform: `translate3d(${view.transform?.offsetX || 0}px, ${view.transform?.offsetY || 0}px, 0) scale(${view.transform?.scaleX || 1}, ${view.transform?.scaleY || view.transform?.scaleX || 1})` }}>
+                     <img
+                       src={imageObj?.src}
+                       alt="Base Layer"
+                       className="block max-w-none"
+                       style={{
+                         width: `${logicalW}px`,      // 👈 强行锁定物理宽度
+                         height: `${logicalH}px`,     // 👈 强行锁定物理高度
+                         opacity,
+                         clipPath: imgClipPath,
+                         transition: 'clip-path 0.1s ease-out'
+                       }}
+                     />
+                  </div>
+               </div>
+             </div>
            );
          } 
          
-         // 2. 如果轮到了其他被勾选作为 Overlay 的图层 (仅在单图模式下激活)
-         if (isSingleViewMode && visibleLayers[layerId]) {
+         // 2. 叠加层图像 (Overlay Layers)
+         if (visibleLayers[layerId]) {
             const oView = allViews.find((v: any) => v.id === layerId);
             if (!oView) return null;
             
@@ -224,10 +274,6 @@ return (
             const boundT = isLayerFullExtent ? 0 : crop.t;
             const boundB = isLayerFullExtent ? 100 : crop.b;
 
-            // ==========================================
-            // 🌟 修复 2：精准计算叠加图像的裁剪路径 (消灭 Aug View 滑块两端死区)
-            // ==========================================
-            // 核心映射：将 0-100 的滑块值，线性插值到当前 Crop 的百分比区间内
             const mappedX = boundL + (config.value / 100) * (boundR - boundL);
             const mappedY = boundT + (config.value / 100) * (boundB - boundT);
 
@@ -242,6 +288,11 @@ return (
                 }
             }
             
+            // 🌟 同理，获取 Overlay 的真实逻辑尺寸，防止叠加层也缩水
+            const oFolder = folders?.find((f: any) => f.id === oView.folderId);
+            const oLogicalW = oFolder?.metadata?.width || mainWidth;
+            const oLogicalH = oFolder?.metadata?.height || mainHeight;
+
             return (
               <div key={`overlay-${layerId}`} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex }}>
                  <div style={{ transformOrigin: '0 0', transform: `translate3d(${viewport.panX}px, ${viewport.panY}px, 0) scale(${viewport.zoom})` }}>
@@ -250,7 +301,13 @@ return (
                          src={getOverlayUrl(oView)}
                          alt={`Overlay ${layerId}`}
                          className="block max-w-none mix-blend-screen" 
-                         style={{ opacity, clipPath: overlayClipPath, transition: 'clip-path 0.1s ease-out' }}
+                         style={{
+                           width: `${oLogicalW}px`,    // 👈 强行锁定物理宽度
+                           height: `${oLogicalH}px`,   // 👈 强行锁定物理高度
+                           opacity, 
+                           clipPath: overlayClipPath, 
+                           transition: 'clip-path 0.1s ease-out' 
+                         }}
                        />
                     </div>
                  </div>
