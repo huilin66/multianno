@@ -237,7 +237,9 @@ export const useStore = create<AppState>()(
             sceneGroupsSkipped: f["files Skipped"],
           }
         })),
-        views: meta.views.map(v => ({
+        
+        // 🌟 终极防线：无论 JSON 里有多少个视图，强制只截取前 9 个！
+        views: meta.views.slice(0, 9).map(v => ({
           id: v.id,
           folderId: String(v["folder id"]),
           bands: v.bands,
@@ -246,6 +248,7 @@ export const useStore = create<AppState>()(
           colormap: v.renderMode !== 'rgb' ? (v.renderMode as any) : 'gray',
           transform: v.transform,
         })),
+        
         currentStem: null, 
         annotations: [],
         stemMetadata: {}, // 🌟 加载新项目时清空
@@ -275,7 +278,28 @@ export const useStore = create<AppState>()(
       removeFolder: (id) => set((state) => ({ folders: state.folders.filter(f => f.id !== id) })),
       clearFolders: () => set({ folders: [] }),
 
-      addView: (view) => set((state) => ({ views: [...state.views, view] })),
+
+      addView: (newView) => set((state) => {
+        // 🌟 终极防线：在数据层彻底锁死
+        if (state.views.length >= 9) {
+          console.warn("View limit reached: Cannot exceed 9 views.");
+          // 触发一个全局 Toast 提示用户（如果你有集成 sonner 或 react-hot-toast）
+          // toast.error("Maximum of 9 views allows!");
+          
+          return state; // 拒绝修改，直接返回当前状态
+        }
+
+        return {
+          views: [...state.views, newView]
+        };
+      }),
+      setViews: (importedViews) => set((state) => {
+        if (importedViews.length > 9) {
+          console.warn("Imported project has too many views, truncating to 9.");
+          return { views: importedViews.slice(0, 9) }; // 强行截断只保留前 9 个
+        }
+        return { views: importedViews };
+      }),
       updateView: (id, data) => set((state) => ({views: state.views.map(v => v.id === id ? { ...v, ...data } : v)})),
       removeView: (id) => set((state) => ({ views: state.views.filter(v => v.id !== id) })),
       clearViews: () => set({ views: [] }),
