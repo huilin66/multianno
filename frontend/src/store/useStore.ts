@@ -46,6 +46,12 @@ export interface ViewConfig {
     scaleY: number;
   };
   crop?: { t: number, r: number, b: number, l: number };
+  settings?: {
+    brightness?: number; // 0.5 - 2.0 (默认 1)
+    contrast?: number;   // 0.5 - 2.0 (默认 1)
+    saturation?: number; // 0 - 2 (默认 1)
+    minMax?: [number, number]; // [min, max] 百分比拉伸，如 [0, 100]
+  };
 }
 
 // 🌟 1. 扩充单体标注接口 (兼容最终的 shapes 数组内元素)
@@ -116,7 +122,7 @@ export interface AppState {
   viewport: {zoom: number;panX: number;panY: number;};
 
   editorSettings: { showCrosshair: boolean; showPixelValue: boolean };
-updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean }>) => void;
+  updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean }>) => void;
 
   activeModule: ActiveModule;
   currentStem: string | null;
@@ -162,6 +168,11 @@ updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValu
   addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
   updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
   deleteTaxonomyAttribute: (id: string) => void;
+
+  // 🌟 新增：色彩调节暂态存储 (Stem 级)
+  tempViewSettings: Record<string, any>;
+  setTempViewSettings: (stem: string, viewId: string, settings: any) => void;
+  applyViewSettingsToAll: (stem: string, viewId: string) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -189,6 +200,20 @@ export const useStore = create<AppState>()(
       taxonomyClasses: [],
       taxonomyAttributes: [],
       sceneGroups: {},
+
+      // 🌟 新增：暂态初始化与方法
+      tempViewSettings: {},
+      setTempViewSettings: (stem, viewId, settings) => set((state) => ({
+        tempViewSettings: { ...state.tempViewSettings, [`${stem}_${viewId}`]: settings }
+      })),
+      applyViewSettingsToAll: (stem, viewId) => set((state) => {
+        const temp = state.tempViewSettings[`${stem}_${viewId}`];
+        if (!temp) return state;
+        return {
+          views: state.views.map(v => v.id === viewId ? { ...v, settings: { ...(v.settings || {}), ...temp } } : v),
+          // 应用后可以选择清理暂态，也可以保留，这里保留让 UI 不会闪烁
+        };
+      }),
 
       setSceneGroups: (groups) => set({ sceneGroups: groups }),
       setProjectName: (name) => set({ projectName: name }),
@@ -247,6 +272,7 @@ export const useStore = create<AppState>()(
           opacity: 1,
           colormap: v.renderMode !== 'rgb' ? (v.renderMode as any) : 'gray',
           transform: v.transform,
+          settings: v.settings || { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100] }
         })),
         
         currentStem: null, 
@@ -290,7 +316,11 @@ export const useStore = create<AppState>()(
         }
 
         return {
-          views: [...state.views, newView]
+          views: [...state.views, { 
+            ...newView, 
+            // 🌟 确保新视图有默认调节参数
+            settings: { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100] } 
+          }]
         };
       }),
       setViews: (importedViews) => set((state) => {

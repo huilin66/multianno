@@ -84,12 +84,18 @@ export function CanvasView({
   onMouseDown, onMouseMove, onMouseUp,
   formLabel, pendingAnnotation, onDoubleClick, 
   hoverPos, onMouseLeave, editorSettings, mouseQuad,
-  layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent // 🌟 接收引擎数据
+  layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent, tempViewSettings // 🌟 接收引擎数据
 }: any) {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport, sceneGroups } = useStore();
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
+
+  // 🌟 核心修复 1：在组件顶层提前合并当前底图的滤镜配置（优先读取暂态）
+  const baseGlobalSettings = view.settings || { brightness: 1, contrast: 1, saturation: 1 };
+  const baseLocalSettings = tempViewSettings?.[`${currentStem}_${view.id}`];
+  const baseSettings = { ...baseGlobalSettings, ...baseLocalSettings };
+  const baseFilterStyle = `brightness(${baseSettings.brightness}) contrast(${baseSettings.contrast}) saturate(${baseSettings.saturation})`;
 
   useEffect(() => {
     if (!currentStem || !folders) return;
@@ -119,39 +125,48 @@ export function CanvasView({
   }, [view.folderId, view.bands, view.colormap, currentStem, folders, view.id]);
 
 // 🌟 现在的 Canvas 渲染主逻辑：解耦分离！
+// 🌟 现在的 Canvas 渲染主逻辑：解耦分离！
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // 🌟 核心拦截魔法：如果是单图模式，我们拦截掉底图的绘制！
-    // 这样 Canvas 就会变成一层透明的玻璃，上面只画纯粹的标注线条。
     let originalDrawImage = ctx.drawImage;
-    if (isSingleViewMode) {
-      ctx.drawImage = function(img, ...args) {
-        if (img === imageObj) return; // 遇到自己的底图，拒绝绘制
-        originalDrawImage.apply(this, [img, ...args]);
-      };
-    }
+    
+    // 🌟 核心修复 2：彻底劫持 Canvas 画笔！将滤镜打入底层渲染！
+    ctx.drawImage = function(img, ...args) {
+      if (img === imageObj) {
+        if (isSingleViewMode) {
+          return; // 单图模式由 HTML <img> 接管底图，Canvas 保持透明玻璃
+        } else {
+          // 多图模式下：强制在 Canvas 绘制上下文挂载滤镜
+          const prevFilter = ctx.filter;
+          ctx.filter = baseFilterStyle; 
+          originalDrawImage.apply(this, [img, ...args]);
+          ctx.filter = prevFilter; // 画完立即恢复，防止污染上面画的标注线！
+          return;
+        }
+      }
+      originalDrawImage.apply(this, [img, ...args]);
+    };
 
-    // 调用外部渲染引擎（引擎照常运行，坐标系完好，只是画底图时被我们“静音”了）
+    // 调用外部渲染引擎
     renderCanvasScene({
       canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 
       imageObj, theme, annotations, activeAnnotationId, taxonomyClasses, 
       currentPoints, tool, formLabel, pendingAnnotation, hoverPos, editorSettings
     });
 
-    // 恢复原生的画图能力，防止污染其他组件
-    if (isSingleViewMode) {
-      ctx.drawImage = originalDrawImage;
-    }
+    // 恢复原生的画图能力
+    ctx.drawImage = originalDrawImage;
     
   }, [
     viewport, view, annotations, activeAnnotationId, currentPoints, 
     tool, taxonomyClasses, imageObj, isFullExtent, mainWidth, mainHeight, 
     theme, formLabel, pendingAnnotation, hoverPos, editorSettings,
-    isSingleViewMode // 🌟 切记加上这个依赖项
+    isSingleViewMode, 
+    baseFilterStyle // 🌟 核心修复 3：必须将计算好的滤镜加入依赖数组，这样你拖滑块时才会触发重绘！
   ]);
 
   // 获取其他叠加图层的真实 URL
@@ -248,18 +263,18 @@ return (
                        alt="Base Layer"
                        className="block max-w-none"
                        style={{
-                         width: `${logicalW}px`,      // 👈 强行锁定物理宽度
-                         height: `${logicalH}px`,     // 👈 强行锁定物理高度
+                         width: `${logicalW}px`,
+                         height: `${logicalH}px`,
                          opacity,
-                         clipPath: imgClipPath,
-                         transition: 'clip-path 0.1s ease-out'
+                         filter: baseFilterStyle, // 🌟 直接复用顶层的计算结果
+                         transition: 'clip-path 0.1s ease-out, filter 0.1s ease-out'
                        }}
                      />
                   </div>
                </div>
              </div>
            );
-         } 
+         }
          
          // 2. 叠加层图像 (Overlay Layers)
          if (visibleLayers[layerId]) {
@@ -293,6 +308,13 @@ return (
             const oLogicalW = oFolder?.metadata?.width || mainWidth;
             const oLogicalH = oFolder?.metadata?.height || mainHeight;
 
+            // 🌟 核心修复 2：叠加图也要应用合并逻辑（注意这里要用 oView 获取持久配置，你之前笔误写成了 view）
+            const globalSettings = oView.settings || { brightness: 1, contrast: 1, saturation: 1 };
+            const localSettings = tempViewSettings?.[`${currentStem}_${layerId}`];
+            const settings = { ...globalSettings, ...localSettings };
+            const filterStyle = `brightness(${settings.brightness}) contrast(${settings.contrast}) saturate(${settings.saturation})`;
+            
+            
             return (
               <div key={`overlay-${layerId}`} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex }}>
                  <div style={{ transformOrigin: '0 0', transform: `translate3d(${viewport.panX}px, ${viewport.panY}px, 0) scale(${viewport.zoom})` }}>
@@ -305,8 +327,8 @@ return (
                            width: `${oLogicalW}px`,    // 👈 强行锁定物理宽度
                            height: `${oLogicalH}px`,   // 👈 强行锁定物理高度
                            opacity, 
-                           clipPath: overlayClipPath, 
-                           transition: 'clip-path 0.1s ease-out' 
+                           filter: filterStyle, // 🌟 应用效果
+                           transition: 'clip-path 0.1s ease-out, filter 0.1s ease-out'
                          }}
                        />
                     </div>

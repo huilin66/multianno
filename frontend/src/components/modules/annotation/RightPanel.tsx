@@ -10,6 +10,7 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame
 } from 'lucide-react';
+import { Slider } from '../../ui/slider';
 
 interface RightPanelProps {
   tool: string;
@@ -37,8 +38,10 @@ export function RightPanel({
   const { 
     folders, views, annotations, updateAnnotation, removeAnnotation, 
     stems, currentStem, setCurrentStem, taxonomyClasses, taxonomyAttributes, 
-    activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta
+    activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta,
+    updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll
   } = useStore() as any;
+  const [openLayerId, setOpenLayerId] = React.useState<string | null>(null);
 
   // 控制各个板块的展开状态
   const [expanded, setExpanded] = React.useState({
@@ -110,73 +113,295 @@ export function RightPanel({
         
         {expanded.layers && (
           <div className="p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30">
-            {/* 🌟 需求 2：按照 layerOrder 排序渲染，并实现拖拽逻辑 */}
+            {/* 🌟 需求 2：按照 layerOrder 排序渲染 */}
             {[...views].sort((a, b) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id)).map((v: any) => {
               const originalIndex = views.findIndex((orig: any) => orig.id === v.id);
               
+              // 🌟 获取 DIY 配置，兜底默认值
+              const settings = v.settings || { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100] };
+              const isOpen = openLayerId === v.id;
+              
               return (
-                <div 
-                  key={v.id} 
-                  draggable // 👈 开启原生拖拽
-                  onDragStart={(e) => { e.dataTransfer.setData('text/plain', v.id); e.dataTransfer.effectAllowed = 'move'; }}
-                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    const sourceId = e.dataTransfer.getData('text/plain');
-                    if (sourceId && sourceId !== v.id) {
-                      const newOrder = [...layerOrder];
-                      newOrder.splice(newOrder.indexOf(sourceId), 1);
-                      newOrder.splice(newOrder.indexOf(v.id), 0, sourceId);
-                      setLayerOrder(newOrder); // 🌟 触发 Z-Index 重排！
-                    }
-                  }}
-                  className="flex items-center justify-between bg-white dark:bg-neutral-900/50 p-1.5 rounded border border-neutral-200 dark:border-neutral-800/50 text-[10px] cursor-move hover:border-blue-400 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    {/* 🌟 需求 2：单视图模式下，对非焦点图层显示 Checkbox */}
-                    {focusedViewId && focusedViewId !== v.id && (
-                       <input 
-                         type="checkbox" 
-                         className="w-3 h-3 accent-blue-500 cursor-pointer"
-                         checked={!!visibleLayers[v.id]}
-                         onChange={(e) => setVisibleLayers(p => ({ ...p, [v.id]: e.target.checked }))}
-                         title="Show as Overlay"
-                       />
-                    )}
-                    <div className={`w-1.5 h-1.5 rounded-full ${v.isMain ? 'bg-blue-500' : 'bg-emerald-500'}`} />
-                    <span className={v.isMain ? "text-blue-500 font-bold" : "text-neutral-500 dark:text-neutral-300"}>
-                      {v.isMain ? 'Main View' : `Aug View ${originalIndex}`}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[9px] font-mono text-neutral-400 uppercase mr-1">
-                      {v.bands?.length === 3 ? 'RGB' : (v.colormap || 'GRAY')}
-                    </span>
+                <div key={v.id} className="flex flex-col bg-white dark:bg-neutral-900/50 rounded border border-neutral-200 dark:border-neutral-800/50 mb-1">
+                  
+                  {/* === 图层头部（拖拽、基础操作） === */}
+                  <div className="flex items-center justify-between p-1.5 gap-2 hover:border-blue-400 transition-colors">
                     
-                    {/* 单视图 Focus 按钮 */}
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setFocusedViewId(focusedViewId === v.id ? null : v.id); }} 
-                      className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${focusedViewId === v.id ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
-                      // 🌟 加回丢失的悬停提示，并加上 i18n 支持
-                      title={focusedViewId === v.id ? t('workspace.exitSingleView', 'Exit Single View') : t('workspace.isolateView', 'Isolate View')}
+                  {/* 🌟 体验升级：将 draggable 提升到左半边整个容器，包含图标、复选框和名称 */}
+                    <div 
+                      className="flex items-center gap-2 flex-1 min-w-0 cursor-grab active:cursor-grabbing hover:bg-neutral-100 dark:hover:bg-neutral-800 p-1 -ml-1 rounded transition-colors"
+                      draggable 
+                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', v.id); e.dataTransfer.effectAllowed = 'move'; }}
+                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const sourceId = e.dataTransfer.getData('text/plain');
+                        if (sourceId && sourceId !== v.id) {
+                          const newOrder = [...layerOrder];
+                          newOrder.splice(newOrder.indexOf(sourceId), 1);
+                          newOrder.splice(newOrder.indexOf(v.id), 0, sourceId);
+                          setLayerOrder(newOrder); // 触发 Z-Index 重排
+                        }
+                      }}
+                      title="Drag to reorder"
                     >
-                      {focusedViewId === v.id ? <Minimize className="w-3 h-3" /> : <Maximize className="w-3 h-3" />}
-                    </button>
+                      <Frame className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
 
-                    {/* 🌟 修复 1：将图标改为 Crop，并增加 title 悬停提示 */}
-                    {!v.isMain && (
+                      {/* 保留你原有的 Checkbox (阻止拖拽事件冲突) */}
+                      {focusedViewId && focusedViewId !== v.id && (
+                         <input 
+                           type="checkbox" 
+                           className="w-3 h-3 accent-blue-500 cursor-pointer shrink-0"
+                           checked={!!visibleLayers[v.id]}
+                           onChange={(e) => setVisibleLayers(p => ({ ...p, [v.id]: e.target.checked }))}
+                           onClick={(e) => e.stopPropagation()} // 🌟 防止点击复选框时干扰外层
+                           title="Show as Overlay"
+                         />
+                      )}
+                      
+                      {/* 🌟 修改 1：名称区域回归纯文本，不再绑定任何点击事件和 pointer 样式 */}
+                      <div className="flex items-center gap-2 flex-1 truncate pointer-events-none">
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${v.isMain ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                        <span className={v.isMain ? "text-blue-500 font-bold text-[10px]" : "text-neutral-500 dark:text-neutral-300 text-[10px]"}>
+                          {v.isMain ? 'Main View' : `Aug View ${originalIndex}`}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* 右侧：完整保留你所有的原有按钮！ */}
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {/* 🌟 修改 2：将 RGB/GRAY 标签升级为可点击的交互按钮，并绑定展开状态 */}
                       <button 
-                        onClick={(e) => { e.stopPropagation(); toggleFullExtent(v.id); }} 
-                        className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${showFullExtent[v.id] ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
-                        title={showFullExtent[v.id] ? t('workspace.showCrop', 'Show Crop') : t('workspace.fullExtent', 'Show Full Extent')}
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          setOpenLayerId(isOpen ? null : v.id); 
+                        }}
+                        className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded transition-colors mr-1 ${
+                          isOpen 
+                            ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 font-bold shadow-inner' 
+                            : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700'
+                        }`}
+                        title="Adjust Color Settings"
                       >
-                        <Crop className={`w-3.5 h-3.5 ${!showFullExtent[v.id] && 'opacity-50'}`} />
+                        {v.bands?.length === 3 ? 'RGB' : (v.colormap || 'GRAY')}
                       </button>
-                    )}
-                    <button className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
-                      <Eye className="w-3.5 h-3.5" />
-                    </button>
+                      
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); setFocusedViewId(focusedViewId === v.id ? null : v.id); }} 
+                        className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${focusedViewId === v.id ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
+                        title={focusedViewId === v.id ? t('workspace.exitSingleView', 'Exit Single View') : t('workspace.isolateView', 'Isolate View')}
+                      >
+                        {focusedViewId === v.id ? <Minimize className="w-3 h-3" /> : <Maximize className="w-3 h-3" />}
+                      </button>
+
+                      {!v.isMain && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); toggleFullExtent(v.id); }} 
+                          className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${showFullExtent[v.id] ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
+                          title={showFullExtent[v.id] ? t('workspace.showCrop', 'Show Crop') : t('workspace.fullExtent', 'Show Full Extent')}
+                        >
+                          <Crop className={`w-3.5 h-3.5 ${!showFullExtent[v.id] && 'opacity-50'}`} />
+                        </button>
+                      )}
+                      <button className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
+
+                  {/* === DIY 滑块调节面板（仅展开时显示） === */}
+                  {isOpen && (
+                    <div className="p-3 pt-1 border-t border-neutral-100 dark:border-neutral-800 space-y-4 bg-neutral-50/50 dark:bg-black/20">
+                      {(() => {
+                        // 🌟 1. 获取全局和本地配置进行合并
+                        const globalSettings = v.settings || { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100] };
+                        const localSettings = tempViewSettings?.[`${currentStem}_${v.id}`];
+                        const settings = { ...globalSettings, ...localSettings };
+                        const hasLocalChanges = !!localSettings;
+
+                        return (
+                          <>
+                            {v.bands?.length === 1 ? (
+                              <div className="space-y-3">
+                                {/* 🌟 1. 新增：伪彩色 (Colormap) 选择器 */}
+                                <div className="flex justify-between items-center bg-white dark:bg-neutral-900/40 px-2 py-1.5 rounded border border-neutral-200 dark:border-neutral-700/50">
+                                  <span className="text-[9px] text-neutral-500 font-bold uppercase">Color Map</span>
+                                  <Select 
+                                    value={v.colormap || 'gray'} 
+                                    onValueChange={(val: any) => updateView(v.id, { colormap: val })} // 改变后立刻全局触发图像重载
+                                  >
+                                    <SelectTrigger className="h-6 w-[100px] text-[10px] bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-700">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="gray">Gray</SelectItem>
+                                      <SelectItem value="jet">Jet</SelectItem>
+                                      <SelectItem value="viridis">Viridis</SelectItem>
+                                      <SelectItem value="plasma">Plasma</SelectItem>
+                                      <SelectItem value="inferno">Inferno</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+                                {/* 🌟 2. 核心拉伸：Stretch Range */}
+                                <div className="space-y-1 pt-1">
+                                  <div className="flex justify-between text-[9px] text-neutral-500 font-bold uppercase">
+                                    <span>Stretch Range</span>
+                                    <span className="font-mono">{settings.minMax[0]}% - {settings.minMax[1]}%</span>
+                                  </div>
+                                  <Slider 
+                                    value={Array.isArray(settings.minMax) ? settings.minMax : [0, 100]} 
+                                    max={100} step={1} 
+                                    onValueChange={(val: any) => {
+                                      const newArr = Array.isArray(val) ? val : [val, val];
+                                      if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, minMax: newArr });
+                                    }} 
+                                  />
+                                </div>
+
+                                {/* 🌟 3. 基础视觉调整 (和 RGB 对齐) */}
+                                {[
+                                  { label: 'Brightness', key: 'brightness', default: 1, min: 0.5, max: 2 },
+                                  { label: 'Contrast', key: 'contrast', default: 1, min: 0.5, max: 2 },
+                                  { label: 'Saturation', key: 'saturation', default: 1, min: 0, max: 2 } // 伪彩色同样可以被饱和度控制
+                                ].map((item) => {
+                                  const val = (settings as any)[item.key] ?? item.default;
+                                  return (
+                                    <div key={item.key} className="space-y-1 pt-1">
+                                      <div className="flex justify-between text-[9px] text-neutral-500 uppercase">
+                                        <span>{item.label}</span>
+                                        <span className="font-mono">{val}</span>
+                                      </div>
+                                      <Slider 
+                                        value={Array.isArray(val) ? val : [val]} 
+                                        min={item.min} max={item.max} step={0.1} 
+                                        onValueChange={(val: any) => {
+                                          const newVal = Array.isArray(val) ? val[0] : val;
+                                          if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, [item.key]: newVal });
+                                        }} 
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {[
+                                  { label: 'Brightness', key: 'brightness', default: 1, min: 0.5, max: 2 },
+                                  { label: 'Contrast', key: 'contrast', default: 1, min: 0.5, max: 2 },
+                                  { label: 'Saturation', key: 'saturation', default: 1, min: 0, max: 2 }
+                                ].map((item) => {
+                                  const val = (settings as any)[item.key] ?? item.default;
+                                  return (
+                                    <div key={item.key} className="space-y-1">
+                                      <div className="flex justify-between text-[9px] text-neutral-500 uppercase">
+                                        <span>{item.label}</span>
+                                        <span className="font-mono">{val}</span>
+                                      </div>
+                                      <Slider 
+                                        value={Array.isArray(val) ? val : [val]} 
+                                        min={item.min} max={item.max} step={0.1} 
+                                        onValueChange={(val: any) => {
+                                          // 🌟 核心修复：防止组件返回单个数字导致解构为 undefined
+                                          const newVal = Array.isArray(val) ? val[0] : val;
+                                          
+                                          if (setTempViewSettings) {
+                                            setTempViewSettings(currentStem, v.id, { ...settings, [item.key]: newVal });
+                                          } else if (updateView) {
+                                            // 🌟 兜底保障：即使你的 useStore 没写暂态，也能降级保存生效
+                                            updateView(v.id, { settings: { ...settings, [item.key]: newVal } });
+                                          }
+                                        }} 
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* 🌟 Apply To All & Reset 按钮区 */}
+                            <div className="pt-2 mt-2 border-t border-neutral-200 dark:border-neutral-700/50 flex justify-between items-center animate-in fade-in">
+                              <span className="text-[9px] text-neutral-400">
+                                {hasLocalChanges ? '* Current image only' : 'Saved to Project Meta'}
+                              </span>
+                              
+                              <div className="flex items-center gap-1.5">
+                                {/* 🌟 新增：Reset 按钮 */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // 🌟 统一提取默认值（单波段现在也支持明暗调整了）
+                                    const defaultSettings = v.bands?.length === 1 
+                                      ? { minMax: [0, 100], brightness: 1, contrast: 1, saturation: 1 } 
+                                      : { brightness: 1, contrast: 1, saturation: 1 };
+                                    
+                                    // 写入暂态！这会让它只对当前图像生效，并且让 hasLocalChanges 变为 true，从而点亮 Apply 按钮！
+                                    if (setTempViewSettings) setTempViewSettings(currentStem, v.id, defaultSettings);
+                                  }}
+                                  className="text-[9px] font-bold px-2 py-1.5 rounded transition-all bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-300"
+                                  title="Reset to default settings (current image only)"
+                                >
+                                  Reset
+                                </button>
+
+                                {/* 🌟 升级：Apply to All 并触发保存 */}
+                                <button
+                                  onClick={async (e) => { 
+                                    e.stopPropagation(); 
+                                    
+                                    // 1. 触发应用到所有 (将暂态写入全局)
+                                    if (applyViewSettingsToAll) applyViewSettingsToAll(currentStem, v.id); 
+                                    
+                                    // 2. 自动呼出保存 JSON 对话框
+                                    try {
+                                      // 动态引入你已经在 DataPreload 中使用过的 projectUtils
+                                      const { generateProjectMetaConfig } = await import('../../../lib/projectUtils');
+                                      const state = useStore.getState(); // 获取写入后的最新状态
+                                      const projectMeta = generateProjectMetaConfig(state);
+                                      const jsonStr = JSON.stringify(projectMeta, null, 2);
+                                      
+                                      // 调用原生文件保存 API (和你的 DataPreload.tsx 逻辑一致)
+                                      if ('showSaveFilePicker' in window) {
+                                        const handle = await (window as any).showSaveFilePicker({
+                                          suggestedName: `${state.projectName || 'project'}_meta.json`,
+                                          types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
+                                        });
+                                        const writable = await handle.createWritable();
+                                        await writable.write(jsonStr);
+                                        await writable.close();
+                                      } else {
+                                        // 兜底：传统下载方式
+                                        const blob = new Blob([jsonStr], { type: 'application/json' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = `${state.projectName || 'project'}_meta.json`;
+                                        a.click();
+                                        URL.revokeObjectURL(url);
+                                      }
+                                    } catch (err) {
+                                      console.warn("Export cancelled or failed", err);
+                                    }
+                                  }}
+                                  className={`text-[9px] font-bold px-2.5 py-1.5 rounded transition-all ${
+                                    hasLocalChanges 
+                                      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm' 
+                                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
+                                  }`}
+                                  disabled={!hasLocalChanges}
+                                  title="Apply current color settings to all images in this view and save"
+                                >
+                                  Apply to All
+                                </button>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+
                 </div>
               );
             })}

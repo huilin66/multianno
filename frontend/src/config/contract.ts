@@ -66,5 +66,11 @@ export interface ProjectMetaContract {
       offsetX: number;           
       offsetY: number;
     };
+    settings?: {
+      brightness?: number;
+      contrast?: number;
+      saturation?: number;
+      minMax?: [number, number];
+    };
   }[];
 }

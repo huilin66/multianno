@@ -21,11 +21,12 @@ export function SyncAnnotation() {
   const {
     views, folders, annotations, addAnnotation, removeAnnotation,
     viewport, setViewport, currentStem,  theme,
-    taxonomyClasses = [{ id: 'default', name: 'object', color: '#3B82F6' }], // 兜底默认值
+    taxonomyClasses = [{ id: 'default', name: 'object', color: '#3B82F6' }],
     taxonomyAttributes = [],
     activeAnnotationId = null,
     setActiveAnnotationId = () => {}, // 兜底空函数
-    editorSettings = { showCrosshair: true, showPixelValue: true }, // 🌟 从全局拿
+    editorSettings = { showCrosshair: true, showPixelValue: true },
+    tempViewSettings, // 🌟 新增：提取暂态配置
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
   const [mouseQuad, setMouseQuad] = useState<Record<string, { tl: boolean, tr: boolean }>>({});
   type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' | 'circle' | 'lasso' | 'freemask';
@@ -84,8 +85,13 @@ export function SyncAnnotation() {
     mode: 'opacity' as 'opacity' | 'swipeX' | 'swipeY',
     value: 0.5
   });
-  // 🌟 核心：如果开启了单图模式，就过滤出这一个 View，否则显示所有
-  const displayViews = focusedViewId ? views.filter((v: any) => v.id === focusedViewId) : views;
+  // // 🌟 核心：如果开启了单图模式，就过滤出这一个 View，否则显示所有
+  // const displayViews = focusedViewId ? views.filter((v: any) => v.id === focusedViewId) : views;
+
+  // 🌟 核心修复：单图模式显示焦点图层；多图模式下，严格按照右侧列表的拖拽顺序 (layerOrder) 重新排列网格！
+  const displayViews = focusedViewId 
+    ? views.filter((v: any) => v.id === focusedViewId) 
+    : [...views].sort((a: any, b: any) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id));
   
   // 网格动态计算将自动把 1 个视图放大为 1x1 铺满
   const gridCols = Math.ceil(Math.sqrt(Math.max(1, displayViews.length)));
@@ -652,6 +658,7 @@ export function SyncAnnotation() {
                   allViews={views}
                   isSingleViewMode={!!focusedViewId}
                   showFullExtent={showFullExtent} // 🌟 修复 2：把裁剪范围控制权传给覆盖层引擎
+                  tempViewSettings={tempViewSettings}
                 />
               </div>
             ))}

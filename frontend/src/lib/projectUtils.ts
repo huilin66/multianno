@@ -55,7 +55,8 @@ export function generateProjectMetaConfig(state: AppState): ProjectMetaContract 
               scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
               offsetX: v.transform?.offsetX ?? 0,
               offsetY: v.transform?.offsetY ?? 0
-            }
+            },
+            settings: v.settings
           };
         })
   };

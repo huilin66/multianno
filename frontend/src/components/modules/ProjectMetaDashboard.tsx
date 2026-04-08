@@ -169,6 +169,45 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
                     </div>
                   </>
                 )}
+
+                {/* 🌟 新增：在面板底部展示 DIY 颜色配置 */}
+                {/* 🌟 核心修复：移除对 view.settings 的严格判断，使用兜底逻辑，保证新老项目必定显示面板 */}
+                {(() => {
+                  // 智能兜底：如果没有 settings，就强制赋予 1, 1, 1 的默认视觉状态
+                  const settings = view.settings || (view.bands.length === 1 
+                    ? { minMax: [0, 100] } 
+                    : { brightness: 1, contrast: 1, saturation: 1 });
+
+                  return (
+                    <>
+                      <div className="h-px bg-neutral-200 dark:bg-neutral-800 my-2"></div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-neutral-500 shrink-0">Color Adjust:</span>
+                        <div className="flex flex-wrap justify-end gap-1.5 text-[10px] font-mono">
+                          {view.bands.length === 1 ? (
+                            <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded">
+                              Stretch: {settings.minMax?.[0] ?? 0}% - {settings.minMax?.[1] ?? 100}%
+                            </span>
+                          ) : (
+                            <>
+                              <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                                B:{settings.brightness ?? 1}
+                              </span>
+                              <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                                C:{settings.contrast ?? 1}
+                              </span>
+                              <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                                S:{settings.saturation ?? 1}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+
+
               </div>
             </div>
             ))}
