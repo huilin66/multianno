@@ -7,8 +7,8 @@ import { Switch } from '../../ui/switch';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { 
-  Database, ChevronRight, Layers, Maximize, Crop, Edit3,
-  Eye, Square, AlertTriangle, Trash2, Image as ImageIcon 
+  Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
+  Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame
 } from 'lucide-react';
 
 interface RightPanelProps {
@@ -16,10 +16,21 @@ interface RightPanelProps {
   showFullExtent: Record<string, boolean>;
   toggleFullExtent: (id: string) => void;
   pushAction: (action: any) => void;
+  focusedViewId: string | null;            
+  setFocusedViewId: (id: string | null) => void;
+
+  // 🌟 2. 补齐本次新增的图层引擎状态
+  layerOrder: string[];
+  setLayerOrder: (order: string[]) => void;
+  visibleLayers: Record<string, boolean>;
+  setVisibleLayers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
 }
 
 export function RightPanel({ 
-  tool, showFullExtent, toggleFullExtent, pushAction
+  tool, showFullExtent, toggleFullExtent, pushAction, 
+  focusedViewId, setFocusedViewId,
+  layerOrder, setLayerOrder,
+  visibleLayers, setVisibleLayers
 }: RightPanelProps) {
   const { t } = useTranslation();
   
@@ -94,35 +105,76 @@ export function RightPanel({
       <div className="flex-1 flex flex-col overflow-hidden">
         
         {/* 2. View Layers */}
-        <SectionHeader 
-          title={t('workspace.viewLayers', 'View Layers')} icon={Layers} 
-          isExpanded={expanded.layers} onToggle={() => toggleSection('layers')} 
-        />
+        {/* 2. View Layers */}
+        <SectionHeader title={t('workspace.viewLayers', 'View Layers')} icon={Layers} isExpanded={expanded.layers} onToggle={() => toggleSection('layers')} />
+        
         {expanded.layers && (
           <div className="p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30">
-            {views.map((v: any, idx: number) => (
-              <div key={v.id} className="flex items-center justify-between bg-white dark:bg-neutral-900/50 p-1.5 rounded border border-neutral-200 dark:border-neutral-800/50 text-[10px]">
-                <div className="flex items-center gap-2">
-                  <div className={`w-1.5 h-1.5 rounded-full ${v.isMain ? 'bg-blue-500' : 'bg-emerald-500'}`} />
-                  <span className={v.isMain ? "text-blue-500 font-bold" : "text-neutral-500 dark:text-neutral-300"}>
-                    {v.isMain ? 'Main View' : `Aug View ${idx}`}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] font-mono text-neutral-400 uppercase mr-1">
-                    {v.bands?.length === 3 ? 'RGB' : (v.colormap || 'GRAY')}
-                  </span>
-                  {!v.isMain && (
-                    <button onClick={(e) => { e.stopPropagation(); toggleFullExtent(v.id); }} className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${showFullExtent[v.id] ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}>
-                      {showFullExtent[v.id] ? <Crop className="w-3 h-3" /> : <Maximize className="w-3 h-3" />}
+            {/* 🌟 需求 2：按照 layerOrder 排序渲染，并实现拖拽逻辑 */}
+            {[...views].sort((a, b) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id)).map((v: any) => {
+              const originalIndex = views.findIndex((orig: any) => orig.id === v.id);
+              
+              return (
+                <div 
+                  key={v.id} 
+                  draggable // 👈 开启原生拖拽
+                  onDragStart={(e) => { e.dataTransfer.setData('text/plain', v.id); e.dataTransfer.effectAllowed = 'move'; }}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const sourceId = e.dataTransfer.getData('text/plain');
+                    if (sourceId && sourceId !== v.id) {
+                      const newOrder = [...layerOrder];
+                      newOrder.splice(newOrder.indexOf(sourceId), 1);
+                      newOrder.splice(newOrder.indexOf(v.id), 0, sourceId);
+                      setLayerOrder(newOrder); // 🌟 触发 Z-Index 重排！
+                    }
+                  }}
+                  className="flex items-center justify-between bg-white dark:bg-neutral-900/50 p-1.5 rounded border border-neutral-200 dark:border-neutral-800/50 text-[10px] cursor-move hover:border-blue-400 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    {/* 🌟 需求 2：单视图模式下，对非焦点图层显示 Checkbox */}
+                    {focusedViewId && focusedViewId !== v.id && (
+                       <input 
+                         type="checkbox" 
+                         className="w-3 h-3 accent-blue-500 cursor-pointer"
+                         checked={!!visibleLayers[v.id]}
+                         onChange={(e) => setVisibleLayers(p => ({ ...p, [v.id]: e.target.checked }))}
+                         title="Show as Overlay"
+                       />
+                    )}
+                    <div className={`w-1.5 h-1.5 rounded-full ${v.isMain ? 'bg-blue-500' : 'bg-emerald-500'}`} />
+                    <span className={v.isMain ? "text-blue-500 font-bold" : "text-neutral-500 dark:text-neutral-300"}>
+                      {v.isMain ? 'Main View' : `Aug View ${originalIndex}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] font-mono text-neutral-400 uppercase mr-1">
+                      {v.bands?.length === 3 ? 'RGB' : (v.colormap || 'GRAY')}
+                    </span>
+                    
+                    {/* 单视图 Focus 按钮 */}
+                    <button onClick={(e) => { e.stopPropagation(); setFocusedViewId(focusedViewId === v.id ? null : v.id); }} className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${focusedViewId === v.id ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}>
+                      {focusedViewId === v.id ? <Minimize className="w-3 h-3" /> : <Maximize className="w-3 h-3" />}
                     </button>
-                  )}
-                  <button className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
-                    <Eye className="w-3.5 h-3.5" />
-                  </button>
+
+                    {/* 🌟 修复 1：将图标改为 Crop，并增加 title 悬停提示 */}
+                    {!v.isMain && (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); toggleFullExtent(v.id); }} 
+                        className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${showFullExtent[v.id] ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
+                        title={showFullExtent[v.id] ? t('workspace.showCrop', 'Show Crop') : t('workspace.fullExtent', 'Show Full Extent')}
+                      >
+                        <Crop className={`w-3.5 h-3.5 ${!showFullExtent[v.id] && 'opacity-50'}`} />
+                      </button>
+                    )}
+                    <button className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200 transition-colors">
+                      <Eye className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 

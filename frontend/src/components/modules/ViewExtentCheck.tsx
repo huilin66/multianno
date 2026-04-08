@@ -762,15 +762,15 @@ const getPreviewUrl = (view: typeof mainView) => {
             >
               <SelectTrigger className="h-7 w-[95px] text-xs bg-transparent border-none focus:ring-0 text-neutral-300">
                 <SelectValue>
-                  {topBarConfig.mode === 'opacity' && t('viewExtent.topBar.opacity')}
-                  {topBarConfig.mode === 'swipeX' && t('viewExtent.topBar.hSwipe')}
-                  {topBarConfig.mode === 'swipeY' && t('viewExtent.topBar.vSwipe')}
+                  {topBarConfig.mode === 'opacity' && t('viewExtent.topBar.opacity', 'Opacity')}
+                  {topBarConfig.mode === 'swipeX' && t('viewExtent.topBar.hSwipe', 'H-Swipe')}
+                  {topBarConfig.mode === 'swipeY' && t('viewExtent.topBar.vSwipe', 'V-Swipe')}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="opacity" className="text-xs">{t('viewExtent.topBar.opacity')}</SelectItem>
-                <SelectItem value="swipeX" className="text-xs">{t('viewExtent.topBar.hSwipe')}</SelectItem>
-                <SelectItem value="swipeY" className="text-xs">{t('viewExtent.topBar.vSwipe')}</SelectItem>
+                <SelectItem value="opacity" className="text-xs">{t('viewExtent.topBar.opacity', 'Opacity')}</SelectItem>
+                <SelectItem value="swipeX" className="text-xs">{t('viewExtent.topBar.hSwipe', 'H-Swipe')}</SelectItem>
+                <SelectItem value="swipeY" className="text-xs">{t('viewExtent.topBar.vSwipe', 'V-Swipe')}</SelectItem>
               </SelectContent>
             </Select>
             

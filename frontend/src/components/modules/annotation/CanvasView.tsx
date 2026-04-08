@@ -83,7 +83,8 @@ export function CanvasView({
   mainWidth, mainHeight, isFullExtent,
   onMouseDown, onMouseMove, onMouseUp,
   formLabel, pendingAnnotation, onDoubleClick, 
-  hoverPos, onMouseLeave, editorSettings, mouseQuad // 🌟 确保接收了 mouseQuad
+  hoverPos, onMouseLeave, editorSettings, mouseQuad,
+  layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent // 🌟 接收引擎数据
 }: any) {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -137,25 +138,128 @@ export function CanvasView({
     theme, formLabel, pendingAnnotation, hoverPos, editorSettings
   ]);
 
-  return (
+  // 获取其他叠加图层的真实 URL
+  const getOverlayUrl = (oView: any) => {
+    if (!folders || !currentStem) return '';
+    const folder = folders.find((f: any) => f.id === oView.folderId);
+    if (!folder) return '';
+    const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
+    return getPreviewImageUrl(folder.path, exactFileName || `${currentStem}${folder.suffix || '.tif'}`, oView.bands, oView.colormap);
+  };
+return (
     <>
       {editorSettings.showPixelValue && (
         <PixelInfoBadge hoverPos={hoverPos} imageObj={imageObj} view={view} mouseQuad={mouseQuad} />
       )}
-      <canvas
-        ref={canvasRef}
-        className={`absolute inset-0 w-full h-full ${
-          isPanning ? 'cursor-grabbing' : 
-          tool === 'pan' ? 'cursor-default' :
-          tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'
-        }`}
-        onMouseDown={onMouseDown}
-        onMouseUp={onMouseUp}
-        onDoubleClick={onDoubleClick}
-        onMouseMove={onMouseMove}
-        onMouseLeave={onMouseLeave}
-        onContextMenu={(e) => e.preventDefault()}
-      />
+      
+      {/* 🌟 核心引擎：根据 layerOrder 倒序循环，确保顶层拥有最大的 z-index */}
+      {layerOrder.map((layerId: string) => {
+         // 计算 zIndex，排在数组前面的层叠在最上面
+         const zIndex = layerOrder.length - layerOrder.indexOf(layerId);
+         
+         // 提取该图层的特效配置
+         const config = layerConfigs?.[layerId] || { mode: 'opacity', value: 1 };
+         const opacity = config.mode === 'opacity' ? config.value : 1;
+
+         // 1. 如果轮到了当前作为底板的 Canvas 图层
+         if (layerId === view.id) {
+           // ==========================================
+           // 🌟 修复 1：精准计算底层 Canvas 的裁剪路径 (消灭 Main View 滑块两端死区)
+           // ==========================================
+           let canvasClipPath = 'none';
+           if (config.mode !== 'opacity') {
+             // 获取底层视图当前的 Crop 状态
+             const isBaseFullExtent = !!(showFullExtent && showFullExtent[view.id]);
+             const baseCrop = view.transform?.crop || { t: 0, r: 100, b: 100, l: 0 };
+             const bBoundL = isBaseFullExtent ? 0 : baseCrop.l;
+             const bBoundR = isBaseFullExtent ? 100 : baseCrop.r;
+             const bBoundT = isBaseFullExtent ? 0 : baseCrop.t;
+             const bBoundB = isBaseFullExtent ? 100 : baseCrop.b;
+
+             // 计算图像在当前屏幕上的实际物理像素大小
+             const imgScreenW = mainWidth * viewport.zoom;
+             const imgScreenH = mainHeight * viewport.zoom;
+
+             // 计算图像在当前屏幕上的真实起止物理坐标
+             const baseStartX = viewport.panX + (bBoundL / 100) * imgScreenW;
+             const baseEndX = viewport.panX + (bBoundR / 100) * imgScreenW;
+             const baseStartY = viewport.panY + (bBoundT / 100) * imgScreenH;
+             const baseEndY = viewport.panY + (bBoundB / 100) * imgScreenH;
+
+             // 核心映射：将 0-100 的滑块值完美映射到屏幕上的像素边界
+             const mappedCanvasX = baseStartX + (config.value / 100) * (baseEndX - baseStartX);
+             const mappedCanvasY = baseStartY + (config.value / 100) * (baseEndY - baseStartY);
+
+             // 使用极大的负值（-9999px）作为无限边界，确保无论用户怎么缩放和平移，卷帘都不会露出破绽
+             canvasClipPath = config.mode === 'swipeX' ? `polygon(-9999px -9999px, ${mappedCanvasX}px -9999px, ${mappedCanvasX}px 9999px, -9999px 9999px)` :
+                              config.mode === 'swipeY' ? `polygon(-9999px -9999px, 9999px -9999px, 9999px ${mappedCanvasY}px, -9999px ${mappedCanvasY}px)` : 'none';
+           }
+
+           return (
+             <canvas
+                key={`canvas-${layerId}`}
+                ref={canvasRef}
+                style={{ zIndex, opacity, clipPath: canvasClipPath, transition: 'clip-path 0.1s ease-out' }}
+                className={`absolute inset-0 w-full h-full ${
+                  isPanning ? 'cursor-grabbing' : 
+                  tool === 'pan' ? 'cursor-default' :
+                  tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'
+                }`}
+                onMouseDown={onMouseDown} onMouseUp={onMouseUp} onDoubleClick={onDoubleClick}
+                onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} onContextMenu={(e) => e.preventDefault()}
+              />
+           );
+         } 
+         
+         // 2. 如果轮到了其他被勾选作为 Overlay 的图层 (仅在单图模式下激活)
+         if (isSingleViewMode && visibleLayers[layerId]) {
+            const oView = allViews.find((v: any) => v.id === layerId);
+            if (!oView) return null;
+            
+            const isLayerFullExtent = !!(showFullExtent && showFullExtent[layerId]);
+            const crop = oView.transform?.crop || { t: 0, r: 100, b: 100, l: 0 };
+            
+            const boundL = isLayerFullExtent ? 0 : crop.l;
+            const boundR = isLayerFullExtent ? 100 : crop.r;
+            const boundT = isLayerFullExtent ? 0 : crop.t;
+            const boundB = isLayerFullExtent ? 100 : crop.b;
+
+            // ==========================================
+            // 🌟 修复 2：精准计算叠加图像的裁剪路径 (消灭 Aug View 滑块两端死区)
+            // ==========================================
+            // 核心映射：将 0-100 的滑块值，线性插值到当前 Crop 的百分比区间内
+            const mappedX = boundL + (config.value / 100) * (boundR - boundL);
+            const mappedY = boundT + (config.value / 100) * (boundB - boundT);
+
+            let overlayClipPath = 'none';
+            if (config.mode === 'swipeX') {
+                overlayClipPath = `polygon(${boundL}% ${boundT}%, ${mappedX}% ${boundT}%, ${mappedX}% ${boundB}%, ${boundL}% ${boundB}%)`;
+            } else if (config.mode === 'swipeY') {
+                overlayClipPath = `polygon(${boundL}% ${boundT}%, ${boundR}% ${boundT}%, ${boundR}% ${mappedY}%, ${boundL}% ${mappedY}%)`;
+            } else {
+                if (!isLayerFullExtent) {
+                    overlayClipPath = `polygon(${boundL}% ${boundT}%, ${boundR}% ${boundT}%, ${boundR}% ${boundB}%, ${boundL}% ${boundB}%)`;
+                }
+            }
+            
+            return (
+              <div key={`overlay-${layerId}`} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex }}>
+                 <div style={{ transformOrigin: '0 0', transform: `translate3d(${viewport.panX}px, ${viewport.panY}px, 0) scale(${viewport.zoom})` }}>
+                    <div style={{ transformOrigin: '0 0', transform: `translate3d(${oView.transform?.offsetX || 0}px, ${oView.transform?.offsetY || 0}px, 0) scale(${oView.transform?.scaleX || 1}, ${oView.transform?.scaleY || oView.transform?.scaleX || 1})` }}>
+                       <img
+                         src={getOverlayUrl(oView)}
+                         alt={`Overlay ${layerId}`}
+                         className="block max-w-none mix-blend-screen" 
+                         style={{ opacity, clipPath: overlayClipPath, transition: 'clip-path 0.1s ease-out' }}
+                       />
+                    </div>
+                 </div>
+              </div>
+            );
+         }
+         
+         return null;
+      })}
     </>
   );
 }

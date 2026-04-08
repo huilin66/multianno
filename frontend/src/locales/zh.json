@@ -96,8 +96,8 @@
       "fitMainTitle": "将裁剪区域自动适配到主视图",
       "resetTransform": "重置位置/缩放",
       "opacity": "透明度",
-      "hSwipe": "水平卷帘",
-      "vSwipe": "垂直卷帘",
+      "hSwipe": "横向卷帘",
+      "vSwipe": "纵向卷帘",
       "hideAug": "隐藏辅助视图",
       "showAug": "显示辅助视图"
     },

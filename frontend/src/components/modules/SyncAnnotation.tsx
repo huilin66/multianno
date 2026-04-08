@@ -7,6 +7,10 @@ import { RightPanel } from './annotation/RightPanel';
 import { useAutoSave } from '../../hooks/useAutoSave';
 import { useActionHistory } from '../../hooks/useActionHistory';
 import { CanvasView } from './annotation/CanvasView';
+import { X, Minimize, Frame } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Slider } from '../ui/slider';
+import { Button } from '@/components/ui/button';
 
 export function SyncAnnotation() {
   const { t } = useTranslation();
@@ -40,6 +44,53 @@ export function SyncAnnotation() {
   const [popoverPos, setPopoverPos] = useState({ x: 0, y: 0 });
   const [pendingAnnotation, setPendingAnnotation] = useState<any>(null);
 
+  // 🌟 新增：单视图专注模式状态
+  const [focusedViewId, setFocusedViewId] = useState<string | null>(null);
+  
+  // 🌟 史诗级升级：多图层管理引擎
+  const [layerOrder, setLayerOrder] = useState<string[]>([]); // 控制渲染 Z-Index 顺序
+  const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({}); // 控制其他图层的显示
+  const [layerConfigs, setLayerConfigs] = useState<Record<string, { mode: 'opacity' | 'swipeX' | 'swipeY', value: number }>>({}); // 独立控制每个图层的特效
+  const [activeControlLayer, setActiveControlLayer] = useState<string>(''); // 顶部控制条当前选中的图层
+
+// 初始化图层数据 (🌟 修复：严密的增量初始化，确保 operableLayers 永远不为空)
+  useEffect(() => {
+    if (views.length > 0 && layerOrder.length !== views.length) {
+      setLayerOrder(views.map((v: any) => v.id));
+      setLayerConfigs(prev => {
+        const newConfigs = { ...prev };
+        views.forEach((v: any) => {
+          if (!newConfigs[v.id]) newConfigs[v.id] = { mode: 'opacity', value: 1 };
+        });
+        return newConfigs;
+      });
+    }
+  }, [views, layerOrder.length]);
+
+  // 🌟 安全提取当前选中图层的配置，作为绝对的兜底
+  const activeConfig = layerConfigs[activeControlLayer] || { mode: 'opacity', value: 1 };
+  // 当进入单视图模式时，默认选中基础图层
+  useEffect(() => {
+    if (focusedViewId) setActiveControlLayer(focusedViewId);
+  }, [focusedViewId]);
+
+  // 计算当前可被控制的图层列表 (当前图层 + 被勾选显示的图层)
+  const operableLayers = layerOrder.filter(id => id === focusedViewId || visibleLayers[id]);
+  
+  // 🌟 新增：单视图模式下的叠加控制状态
+  const [overlayConfig, setOverlayConfig] = useState({
+    active: false,
+    overlayViewId: 'none',
+    mode: 'opacity' as 'opacity' | 'swipeX' | 'swipeY',
+    value: 0.5
+  });
+  // 🌟 核心：如果开启了单图模式，就过滤出这一个 View，否则显示所有
+  const displayViews = focusedViewId ? views.filter((v: any) => v.id === focusedViewId) : views;
+  
+  // 网格动态计算将自动把 1 个视图放大为 1x1 铺满
+  const gridCols = Math.ceil(Math.sqrt(Math.max(1, displayViews.length)));
+  const gridRows = Math.ceil(Math.max(1, displayViews.length) / gridCols);
+
   // 🌟 表单状态升级为绑定 Taxonomy
   const [formLabel, setFormLabel] = useState(taxonomyClasses[0]?.name || 'object');
   const [formText, setFormText] = useState('');
@@ -62,8 +113,8 @@ export function SyncAnnotation() {
       setShowFullExtent(prev => ({ ...prev, [viewId]: !prev[viewId] }));
     };
 
-  const gridCols = Math.ceil(Math.sqrt(Math.max(1, views.length)));
-  const gridRows = Math.ceil(Math.max(1, views.length) / gridCols);
+  // const gridCols = Math.ceil(Math.sqrt(Math.max(1, views.length)));
+  // const gridRows = Math.ceil(Math.max(1, views.length) / gridCols);
   const currentAnnotations = annotations.filter((a: Annotation) => a.stem === currentStem);
   
   // 提取主视图的物理尺寸 (作为基准裁剪框)
@@ -455,12 +506,109 @@ export function SyncAnnotation() {
     />
       {/* 🎯 Grid Workspace */}
       <div className="flex-grow p-4 overflow-hidden relative" ref={containerRef} onWheel={handleWheel}>
-        {/* 🌟 1. 左上角：新增设置按钮 (功能3) */}
-        <div className="absolute top-6 left-6 z-40 flex gap-2">
+        
+        {/* 🌟 升级：多图层悬浮叠加控制器 (TopBar) */}
+        {focusedViewId && views.length > 0 && (
+          <div 
+            className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md p-1.5 rounded-full shadow-lg border border-neutral-200 dark:border-neutral-700 flex items-center gap-3 animate-in slide-in-from-top-4"
+            // 🌟 终极修复 1：加上 Pointer 拦截！
+            // 因为我们要换用原生滑块，原生滑块不怕拦截，加上这行能完美防止你在操作控制条时底下的 Canvas 跟着乱动。
+            onPointerDown={e => e.stopPropagation()}
+            onWheel={e => e.stopPropagation()}
+          >
+            <div className="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-full uppercase tracking-wider">
+              Single View
+            </div>
+            <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-700" />
 
-        </div>
-        {/* 🌟 顶部状态云图标 */}
+            {/* 🌟 终极修复 2：彻底放弃坑人的 Radix 自动回显，直接手动硬编码匹配文字！ */}
+            <Select value={activeControlLayer || 'none'} onValueChange={setActiveControlLayer}>
+              <SelectTrigger className="h-7 w-36 text-xs bg-transparent border-none focus:ring-0 font-bold">
+                <SelectValue>
+                  {/* 强制要求它渲染我们手写的逻辑，再也不会出现乱码或 ID 暴露 */}
+                  {(!activeControlLayer || activeControlLayer === 'none') ? (
+                    <span className="text-neutral-500">None (Disable FX)</span>
+                  ) : (
+                    (() => {
+                      const v = views.find((v:any) => v.id === activeControlLayer);
+                      if (!v) return "None (Disable FX)";
+                      return `${activeControlLayer === focusedViewId ? '✨ ' : ''}${v.isMain ? 'Main View' : `Aug View ${views.indexOf(v)}`}`;
+                    })()
+                  )}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-xs text-neutral-500">None (Disable FX)</SelectItem>
+                {operableLayers.map((layerId) => {
+                  const v = views.find((v:any) => v.id === layerId);
+                  if (!v) return null;
+                  return (
+                    <SelectItem key={layerId} value={layerId} className="text-xs">
+                      {layerId === focusedViewId ? '✨ ' : ''}
+                      {v.isMain ? 'Main View' : `Aug View ${views.indexOf(v)}`}
+                    </SelectItem>
+                  )
+                })}
+              </SelectContent>
+            </Select>
 
+            {/* 图层特效控制器 */}
+            {activeControlLayer && activeControlLayer !== 'none' && (
+              <>
+                <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-700" />
+                <Select 
+                  value={activeConfig.mode} 
+                  onValueChange={(val: any) => setLayerConfigs(p => ({ ...p, [activeControlLayer]: { mode: val, value: val === 'opacity' ? 0.5 : 50 } }))}
+                >
+                  <SelectTrigger className="h-7 w-24 text-xs bg-transparent border-none focus:ring-0">
+                    {/* 🌟 终极修复：放弃自动匹配，直接根据状态写死屏幕上该显示的文字 */}
+                    <SelectValue>
+                      {activeConfig.mode === 'opacity' && 'Opacity'}
+                      {activeConfig.mode === 'swipeX' && 'H-Swipe'}
+                      {activeConfig.mode === 'swipeY' && 'V-Swipe'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="opacity" className="text-xs">Opacity</SelectItem>
+                    <SelectItem value="swipeX" className="text-xs">H-Swipe</SelectItem>
+                    <SelectItem value="swipeY" className="text-xs">V-Swipe</SelectItem>
+                  </SelectContent>
+                </Select>
+                
+                {/* 调整了父级宽度，留出文字空间，并设置 gap-2 */}
+                <div className="w-44 px-2 flex items-center gap-2">
+                  <input 
+                    type="range"
+                    min={0}
+                    max={activeConfig.mode === 'opacity' ? 1 : 100}
+                    step={activeConfig.mode === 'opacity' ? 0.01 : 1}
+                    value={activeConfig.value}
+                    onChange={(e) => setLayerConfigs(p => ({ 
+                      ...p, 
+                      [activeControlLayer]: { 
+                        ...(p[activeControlLayer] || { mode: 'opacity', value: 1 }), 
+                        value: parseFloat(e.target.value) 
+                      } 
+                    }))}
+                    // flex-1 让滑块占据剩下的所有空间
+                    className="flex-1 h-1.5 bg-neutral-200 dark:bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                  {/* 🌟 修复 1：新增动态数字回显 */}
+                  <span className="text-[10px] text-neutral-500 font-mono w-9 text-right shrink-0 select-none">
+                    {activeConfig.mode === 'opacity' 
+                      ? `${Math.round(activeConfig.value * 100)}%` 
+                      : `${Math.round(activeConfig.value)}%`
+                    }
+                  </span>
+                </div>
+              </>
+            )}
+
+            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full hover:bg-red-100 hover:text-red-600 dark:hover:bg-red-900/30" onClick={() => setFocusedViewId(null)}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
 
         {views.length === 0 ? (
           <div className="w-full h-full flex items-center justify-center text-neutral-500 border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-lg">
@@ -468,13 +616,12 @@ export function SyncAnnotation() {
           </div>
         ) : (
           <div className="w-full h-full grid gap-4" style={{ gridTemplateColumns: `repeat(${gridCols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${gridRows}, minmax(0, 1fr))` }}>
-            {views.map((view: any, index: number) => (
+            {displayViews.map((view: any, index: number) => (
               <div key={view.id} className="relative border border-neutral-200 dark:border-neutral-800 bg-neutral-200 dark:bg-black rounded-lg overflow-hidden transition-colors duration-300">
-                <div className={`absolute z-10 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300 transition-all duration-300 ${
-                  mouseQuad[view.id]?.tl ? 'top-2 right-2' : 'top-2 left-2'
-                }`}>
+                <div className={`absolute z-[100] px-2 py-1 bg-black/70 text-xs rounded text-neutral-300 transition-all duration-300 ${mouseQuad[view.id]?.tl ? 'top-2 right-2' : 'top-2 left-2'}`}>
                   {view.isMain ? t('workspace.mainView') : `${t('workspace.augView')} ${index}`}
                 </div>
+                
                 <CanvasView 
                   view={view} 
                   annotations={currentAnnotations}
@@ -499,6 +646,13 @@ export function SyncAnnotation() {
                   onMouseLeave={handleMouseLeave}
                   editorSettings={editorSettings}
                   mouseQuad={mouseQuad[view.id]}
+                  /* 🌟 传递图层引擎数据 */
+                  layerOrder={layerOrder}
+                  visibleLayers={visibleLayers}
+                  layerConfigs={layerConfigs}
+                  allViews={views}
+                  isSingleViewMode={!!focusedViewId}
+                  showFullExtent={showFullExtent} // 🌟 修复 2：把裁剪范围控制权传给覆盖层引擎
                 />
               </div>
             ))}
@@ -527,6 +681,10 @@ export function SyncAnnotation() {
       tool={tool} 
       showFullExtent={showFullExtent} toggleFullExtent={toggleFullExtent} 
       pushAction={pushAction}
+      /* 🌟 新增状态透传 */
+      focusedViewId={focusedViewId} setFocusedViewId={setFocusedViewId}
+      layerOrder={layerOrder} setLayerOrder={setLayerOrder}
+      visibleLayers={visibleLayers} setVisibleLayers={setVisibleLayers}
     />
     </div>
   );
