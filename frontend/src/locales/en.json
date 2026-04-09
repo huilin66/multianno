@@ -252,6 +252,7 @@
   },
   "common": {
     "confirm": "Confirm",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "edit": "Edit"
   }
 }

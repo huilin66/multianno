@@ -8,15 +8,15 @@ export interface ColormapConfig {
   gradient: string;
 }
 
-export const COLOR_MAPS: ColormapConfig[] = [
-  { name: 'gray', gradient: 'linear-gradient(to right, #000000, #ffffff)' },
-  { name: 'jet', gradient: 'linear-gradient(to right, #00007F, #0000FF, #007FFF, #00FFFF, #7FFF7F, #FFFF00, #FF7F00, #FF0000, #7F0000)' },
-  { name: 'viridis', gradient: 'linear-gradient(to right, #440154, #414487, #2a788e, #22a884, #7ad151, #fde725)' },
-  { name: 'plasma', gradient: 'linear-gradient(to right, #0d0887, #6a00a8, #b12a90, #e16462, #fca636, #f0f921)' },
-  { name: 'inferno', gradient: 'linear-gradient(to right, #000004, #420a68, #932667, #dd513a, #fca50a, #fcffa4)' },
-  { name: 'bone', gradient: 'linear-gradient(to right, #000000, #4a4a68, #a2a2ba, #ffffff)' },
-  { name: 'hot', gradient: 'linear-gradient(to right, #0b0000, #ff0000, #ffff00, #ffffff)' }
-] as const;
+// export const COLOR_MAPS: ColormapConfig[] = [
+//   { name: 'gray', gradient: 'linear-gradient(to right, #000000, #ffffff)' },
+//   { name: 'jet', gradient: 'linear-gradient(to right, #00007F, #0000FF, #007FFF, #00FFFF, #7FFF7F, #FFFF00, #FF7F00, #FF0000, #7F0000)' },
+//   { name: 'viridis', gradient: 'linear-gradient(to right, #440154, #414487, #2a788e, #22a884, #7ad151, #fde725)' },
+//   { name: 'plasma', gradient: 'linear-gradient(to right, #0d0887, #6a00a8, #b12a90, #e16462, #fca636, #f0f921)' },
+//   { name: 'inferno', gradient: 'linear-gradient(to right, #000004, #420a68, #932667, #dd513a, #fca50a, #fcffa4)' },
+//   { name: 'bone', gradient: 'linear-gradient(to right, #000000, #4a4a68, #a2a2ba, #ffffff)' },
+//   { name: 'hot', gradient: 'linear-gradient(to right, #0b0000, #ff0000, #ffff00, #ffffff)' }
+// ] as const;
 
 
 // ==========================================
@@ -106,16 +106,19 @@ export const TAXONOMY_COLORS: string[] = [
   '#14b8a6', // Teal
 ];
 
+// 🌟 1. UI 与 渲染引擎共享的：科学色带注册中心
+export const COLOR_MAPS = [
+  { name: 'gray', label: 'Gray', css: 'from-black to-white', lut: [[0,0,0], [255,255,255]] },
+  { name: 'jet', label: 'Jet', css: 'from-blue-600 via-green-400 to-red-600', lut: [[0,0,131], [0,0,255], [0,255,255], [255,255,0], [255,0,0], [128,0,0]] },
+  { name: 'viridis', label: 'Viridis', css: 'from-indigo-900 via-emerald-500 to-yellow-300', lut: [[68,1,84], [72,40,120], [62,74,137], [49,104,142], [38,130,142], [31,158,137], [53,183,121], [109,205,89], [180,222,44], [253,231,37]] },
+  { name: 'plasma', label: 'Plasma', css: 'from-blue-900 via-fuchsia-500 to-yellow-400', lut: [[13,8,135], [75,3,161], [126,3,168], [170,35,149], [204,70,120], [229,107,93], [248,149,64], [253,195,40], [240,249,33]] },
+  { name: 'inferno', label: 'Inferno', css: 'from-black via-red-600 to-yellow-200', lut: [[0,0,4], [32,11,83], [87,21,126], [148,43,128], [211,81,113], [245,136,96], [252,202,70], [252,255,164]] }
+];
 
+// 🌟 2. 专供 Canvas 内存重绘的高精度查找表 (自动从上面的字典生成，无需重复维护)
+export const COLOR_MAP_LUT: Record<string, number[][]> = {};
+COLOR_MAPS.forEach(cm => { COLOR_MAP_LUT[cm.name] = cm.lut; });
 
-// 🌟 科研引擎 1：高精度科学色彩映射表 (LUT)
-export const COLOR_MAP_LUT: Record<string, number[][]> = {
-  gray: [[0,0,0], [255,255,255]],
-  jet: [[0,0,131], [0,0,255], [0,255,255], [255,255,0], [255,0,0], [128,0,0]],
-  viridis: [[68,1,84], [72,40,120], [62,74,137], [49,104,142], [38,130,142], [31,158,137], [53,183,121], [109,205,89], [180,222,44], [253,231,37]],
-  plasma: [[13,8,135], [75,3,161], [126,3,168], [170,35,149], [204,70,120], [229,107,93], [248,149,64], [253,195,40], [240,249,33]],
-  inferno: [[0,0,4], [32,11,83], [87,21,126], [148,43,128], [211,81,113], [245,136,96], [252,202,70], [252,255,164]]
-};
 
 // 🌟 科研引擎 2：获取 LUT 颜色的插值函数
 export function getLutColor(colormap: string, value: number) {

@@ -2,10 +2,12 @@
 import React from 'react';
 import { useStore } from '../../store/useStore'; // 确认路径是否正确
 import { Button } from '../ui/button';
-import { FolderOpen, Layers, Database, Download } from 'lucide-react';
+import { FolderOpen, Layers, Database, Download, Edit3 } from 'lucide-react';
 import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
+import { COLOR_MAPS } from '../../config/colors';
+
 
 // 🌟 1. 新增：定义组件接收的参数
 interface ProjectMetaDashboardProps {
@@ -144,8 +146,12 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
                 {view.bands.length === 1 && (
                   <div className="flex justify-between items-center mt-1">
                     <span className="text-neutral-500">{t('projectMeta.views.renderMode')}:</span>
-                    <span className="text-amber-600 dark:text-amber-400 capitalize bg-amber-50 dark:bg-amber-400/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-200 dark:border-amber-500/20">
-                      {view.renderMode} 
+                    {/* 🌟 升级：在 Dashboard 也加入可视化的色带徽章 */}
+                    <span className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-400/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-200 dark:border-amber-500/20">
+                      <div className={`w-3.5 h-2 rounded-sm bg-gradient-to-r ${COLOR_MAPS.find(c => c.name === (view.renderMode || 'gray'))?.css || 'from-black to-white'} border border-amber-200/50`} />
+                      <span className="text-amber-600 dark:text-amber-400 capitalize font-bold">
+                        {view.renderMode || 'gray'}
+                      </span>
                     </span>
                   </div>
                 )}
@@ -290,6 +296,14 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
             <Download className="w-4 h-4 mr-2" /> {t('projectMeta.bottom.downloadJson')}
           </Button>
           
+          <Button 
+            onClick={() => setActiveModule('preload')} // 跳转到预加载模块
+            variant="outline" 
+            className="border-amber-500/50 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10"
+          >
+            <Edit3 className="w-4 h-4 mr-2" /> {t('common.edit')}
+          </Button>
+
           <Button 
             type="button"
             onClick={(e) => {

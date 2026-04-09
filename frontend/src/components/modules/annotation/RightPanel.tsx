@@ -11,6 +11,8 @@ import {
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
+import { COLOR_MAPS } from '../../../config/colors';
+
 
 interface RightPanelProps {
   tool: string;
@@ -183,7 +185,25 @@ export function RightPanel({
                         }`}
                         title="Adjust Color Settings"
                       >
-                        {v.bands?.length === 3 ? 'RGB' : (v.colormap || 'GRAY')}
+                        {v.bands?.length === 3 ? (
+                          <div className="flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded shadow-sm">
+                            {/* 🌟 三色图标：模拟 RGB 通道叠加效果 */}
+                            <div className="flex -space-x-1.5">
+                              <div className="w-2.5 h-2.5 rounded-full bg-[#FF0000] border border-black/10 shadow-sm" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-[#00FF00] border border-black/10 shadow-sm" />
+                              <div className="w-2.5 h-2.5 rounded-full bg-[#0000FF] border border-black/10 shadow-sm" />
+                            </div>
+                            <span className="text-blue-500 font-bold text-[9px] ml-0.5">RGB</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1.5 bg-purple-500/10 border border-purple-500/20 px-1.5 py-0.5 rounded shadow-sm">
+                            {/* 🌟 读取全局配置中的 CSS 渐变 */}
+                            <div className={`w-3.5 h-2.5 rounded-sm bg-gradient-to-r ${COLOR_MAPS.find(c => c.name === (v.colormap || 'gray'))?.css || 'from-black to-white'} border border-black/10`} />
+                            <span className="text-purple-500 font-bold text-[9px] uppercase">
+                              {v.colormap || 'gray'}
+                            </span>
+                          </div>
+                        )}
                       </button>
                       
                       <button 
@@ -227,29 +247,28 @@ export function RightPanel({
                                 <div className={`flex justify-between items-center bg-white dark:bg-neutral-900/40 px-2 py-1.5 rounded border border-neutral-200 dark:border-neutral-700/50 transition-opacity ${settings.binarize?.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                                   <span className="text-[9px] text-neutral-500 font-bold uppercase">Color Map</span>
                                   <Select 
-                                    value={v.colormap || 'gray'} 
-                                    onValueChange={(val: any) => updateView(v.id, { colormap: val })}
-                                  >
-                                    <SelectTrigger className="h-6 w-[120px] text-[10px] bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-700">
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {[
-                                        { name: 'gray', range: 'from-black to-white' },
-                                        { name: 'jet', range: 'from-blue-600 via-green-400 to-red-600' },
-                                        { name: 'viridis', range: 'from-indigo-900 via-emerald-500 to-yellow-300' },
-                                        { name: 'plasma', range: 'from-blue-900 via-fuchsia-500 to-yellow-400' },
-                                        { name: 'inferno', range: 'from-black via-red-600 to-yellow-200' }
-                                      ].map((cm) => (
-                                        <SelectItem key={cm.name} value={cm.name} className="text-xs">
-                                          <div className="flex items-center gap-2 w-full">
-                                            <div className={`h-2 w-12 rounded-sm bg-gradient-to-r ${cm.range} border border-black/10`} />
-                                            <span className="capitalize">{cm.name}</span>
-                                          </div>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                      value={v.colormap || 'gray'} 
+                                      onValueChange={(val: any) => updateView(v.id, { colormap: val })}
+                                    >
+                                      <SelectTrigger className="h-6 w-[130px] text-[10px] bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-700">
+                                        {/* 🌟 核心修复：让选中的值也带有色带预览 */}
+                                        <div className="flex items-center gap-2">
+                                          <div className={`h-2.5 w-6 rounded-sm shadow-sm bg-gradient-to-r ${COLOR_MAPS.find(c => c.name === (v.colormap || 'gray'))?.css || 'from-black to-white'}`} />
+                                          <SelectValue />
+                                        </div>
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {COLOR_MAPS.map((cm) => (
+                                          <SelectItem key={cm.name} value={cm.name} className="text-xs">
+                                            <div className="flex items-center gap-2 w-full">
+                                              {/* 列表里的预览 */}
+                                              <div className={`h-2 w-12 rounded-sm bg-gradient-to-r ${cm.css} border border-black/10`} />
+                                              <span className="capitalize">{cm.label}</span>
+                                            </div>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
                                 </div>
 
                                 {/* 🌟 1. 现有的 Stretch Range (非 manual 模式时置灰锁定) */}

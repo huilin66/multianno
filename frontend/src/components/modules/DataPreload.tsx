@@ -431,37 +431,43 @@ export function DataPreload() {
                                   </SelectContent>
                                 </Select>
                               </div>
-                              <div className="space-y-1">
-                                <Label className="text-xs text-amber-600 font-medium">{t('dataPreload.views.colorMap')}</Label>
-                                <Select value={view.colormap || 'gray'} onValueChange={(val: any) => updateView(view.id, { colormap: val })}>
-                                  <SelectTrigger className="h-8 bg-background border-input text-foreground text-xs">
-                                    <SelectValue>
-                                      {(() => {
-                                        const currentMap = COLOR_MAPS.find(cm => cm.name === (view.colormap || 'gray'));
-                                        if (currentMap) {
-                                          return (
-                                            <div className="flex items-center gap-2">
-                                              <div className="w-6 h-3 rounded-sm shadow-inner border border-neutral-300 shrink-0" style={{ background: currentMap.gradient }}/>
-                                              <span className="capitalize font-medium">{currentMap.name}</span>
-                                            </div>
-                                          );
-                                        }
-                                        return t('dataPreload.views.selectColormap');
-                                      })()}
-                                    </SelectValue>
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-popover border-border">
-                                    {COLOR_MAPS.map(cm => (
-                                      <SelectItem key={cm.name} value={cm.name} className="text-xs text-popover-foreground focus:bg-accent focus:text-accent-foreground">
-                                        <div className="flex items-center gap-2">
-                                          <div className="w-12 h-3.5 rounded-sm shadow-inner border border-neutral-300 shrink-0" style={{ background: cm.gradient }}/>
-                                          <span className="capitalize font-medium">{cm.name}</span>
-                                        </div>
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
+
+                                <div className="space-y-1">
+                                  <Label className="text-xs text-amber-600 font-medium">{t('dataPreload.views.colorMap')}</Label>
+                                  <Select value={view.colormap || 'gray'} onValueChange={(val: any) => updateView(view.id, { colormap: val})}>
+                                    <SelectTrigger className="h-8 bg-background border-input text-foreground text-xs">
+                                      <SelectValue>
+                                        {(() => {
+                                          // 🌟 统一从 config/colors.ts 引入 COLOR_MAPS
+                                          const currentMap = COLOR_MAPS.find(cm => cm.name === (view.colormap || 'gray'));
+                                          if (currentMap) {
+                                            return (
+                                              <div className="flex items-center gap-2">
+                                                {/* 🌟 修复：使用 bg-gradient-to-r 和全局定义的 css 类名 */}
+                                                <div className={`w-6 h-3 rounded-sm shadow-inner border border-neutral-300 shrink-0 bg-gradient-to-r ${currentMap.css}`} />
+                                                <span className="capitalize font-medium">{currentMap.label}</span>
+                                              </div>
+                                            );
+                                          }
+                                          return t('dataPreload.views.selectColormap');
+                                        })()}
+                                      </SelectValue>
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-popover border-border">
+                                      {COLOR_MAPS.map(cm => (
+                                        <SelectItem key={cm.name} value={cm.name} className="text-xs text-popover-foreground focus:bg-accent focus:text-accent-foreground">
+                                          <div className="flex items-center gap-2">
+                                            {/* 🌟 修复：统一使用渐变色预览 */}
+                                            <div className={`w-12 h-3.5 rounded-sm shadow-inner border border-neutral-300 shrink-0 bg-gradient-to-r ${cm.css}`} />
+                                            <span className="capitalize font-medium">{cm.label}</span>
+                                          </div>
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+
+
                             </div>
                             ) : view.bands.length === 3 ? (
                             <div className="space-y-2 animate-in fade-in duration-200">
