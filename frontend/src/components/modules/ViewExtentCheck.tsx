@@ -331,6 +331,10 @@ const getPreviewUrl = (view: typeof mainView) => {
   const handleWheel = (e: React.WheelEvent) => {
     e.preventDefault();
     const zoomFactor = e.deltaY > 0 ? 0.92 : 1.08; 
+    setViewport(prev => ({ 
+      ...prev, 
+      scale: Math.max(0.01, Math.min(20, prev.scale * zoomFactor)) 
+    }));
 
     if (mode === 'pan') {
       setViewport(prev => ({ ...prev, scale: Math.max(0.01, Math.min(20, prev.scale * zoomFactor)) }));
