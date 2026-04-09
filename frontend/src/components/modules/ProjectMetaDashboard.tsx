@@ -172,24 +172,86 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
 
                 {/* 🌟 新增：在面板底部展示 DIY 颜色配置 */}
                 {/* 🌟 核心修复：移除对 view.settings 的严格判断，使用兜底逻辑，保证新老项目必定显示面板 */}
+                {/* 🌟 核心升级：科研级参数的动态标签云展示 */}
                 {(() => {
-                  // 智能兜底：如果没有 settings，就强制赋予 1, 1, 1 的默认视觉状态
+                  // 1. 扩充单波段的默认兜底参数
+                  const defaultSingleBand = { 
+                    minMax: [0, 100], brightness: 1, contrast: 1, saturation: 1,
+                    gamma: 1.0, enhancementMode: 'manual', spatialFilter: 'none', 
+                    invert: false, binarize: { enabled: false, threshold: 128 }
+                  };
+                  
                   const settings = view.settings || (view.bands.length === 1 
-                    ? { minMax: [0, 100] } 
+                    ? defaultSingleBand 
                     : { brightness: 1, contrast: 1, saturation: 1 });
 
                   return (
                     <>
                       <div className="h-px bg-neutral-200 dark:bg-neutral-800 my-2"></div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-neutral-500 shrink-0">Color Adjust:</span>
+                      {/* 考虑到徽章可能换行，将 items-center 改为 items-start，并加点 pt */}
+                      <div className="flex justify-between items-start pt-0.5">
+                        <span className="text-neutral-500 shrink-0 mt-0.5">
+                          {view.bands.length === 1 ? 'Enhancements:' : 'Color Adjust:'}
+                        </span>
                         <div className="flex flex-wrap justify-end gap-1.5 text-[10px] font-mono">
                           {view.bands.length === 1 ? (
-                            <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded">
-                              Stretch: {settings.minMax?.[0] ?? 0}% - {settings.minMax?.[1] ?? 100}%
-                            </span>
+                            <>
+                              {/* 🌟 1. 二值化模式 (最高级视觉，开启后剥离其他色彩参数) */}
+                              {settings.binarize?.enabled ? (
+                                <span className="bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                                  Binarize: {settings.binarize.threshold}
+                                </span>
+                              ) : (
+                                <>
+                                  {/* 🌟 2. 映射模式 (HE / CLAHE / Stretch) */}
+                                  {settings.enhancementMode && settings.enhancementMode !== 'manual' ? (
+                                    <span className="bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/30 px-1.5 py-0.5 rounded shadow-sm uppercase">
+                                      {settings.enhancementMode === 'he' ? 'Global HE' : 'Auto CLAHE'}
+                                    </span>
+                                  ) : (
+                                    <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                                      Stretch: {settings.minMax?.[0] ?? 0}%-{settings.minMax?.[1] ?? 100}%
+                                    </span>
+                                  )}
+                                  
+                                  {/* 🌟 3. Gamma 校正 (非 1.0 时显示) */}
+                                  {(settings.gamma !== undefined && settings.gamma !== 1.0) && (
+                                    <span className="bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                                      γ: {(settings.gamma).toFixed(1)}
+                                    </span>
+                                  )}
+                                </>
+                              )}
+
+                              {/* 🌟 4. 空间滤波 (锐化) */}
+                              {settings.spatialFilter === 'sharpen' && (
+                                <span className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-1.5 py-0.5 rounded shadow-sm">
+                                  Sharpen
+                                </span>
+                              )}
+                              
+                              {/* 🌟 5. 反相操作 */}
+                              {settings.invert && (
+                                <span className="bg-neutral-800 text-white dark:bg-neutral-200 dark:text-black border border-neutral-700 dark:border-neutral-300 px-1.5 py-0.5 rounded shadow-sm">
+                                  Invert
+                                </span>
+                              )}
+
+                              {/* 🌟 6. 极致兜底：如果完全是原始状态（没有任何增强），显示 Default */}
+                              {!settings.binarize?.enabled && 
+                               (settings.enhancementMode === 'manual' || !settings.enhancementMode) && 
+                               (settings.gamma === 1.0 || settings.gamma === undefined) && 
+                               settings.spatialFilter !== 'sharpen' && 
+                               !settings.invert && 
+                               settings.minMax?.[0] === 0 && settings.minMax?.[1] === 100 && (
+                                <span className="bg-neutral-100 dark:bg-neutral-800/40 text-neutral-400 border border-neutral-200 dark:border-neutral-700 px-1.5 py-0.5 rounded shadow-sm">
+                                  Default RAW
+                                </span>
+                              )}
+                            </>
                           ) : (
                             <>
+                              {/* RGB 多波段的展示保持不变 */}
                               <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
                                 B:{settings.brightness ?? 1}
                               </span>
