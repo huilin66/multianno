@@ -394,6 +394,7 @@ return (
                          width: `${logicalW}px`,
                          height: `${logicalH}px`,
                          opacity,
+                         clipPath: imgClipPath, // 🌟 修复：把算好的裁剪路径挂载上去！
                          filter: baseFilterStyle, // 🌟 直接复用顶层的计算结果
                          transition: 'clip-path 0.1s ease-out, filter 0.1s ease-out'
                        }}
@@ -455,6 +456,7 @@ return (
                            width: `${oLogicalW}px`,    // 👈 强行锁定物理宽度
                            height: `${oLogicalH}px`,   // 👈 强行锁定物理高度
                            opacity, 
+                           clipPath: overlayClipPath, // 🌟 修复：把叠加层的裁剪路径也挂载上去！
                            filter: filterStyle, // 🌟 应用效果
                            transition: 'clip-path 0.1s ease-out, filter 0.1s ease-out'
                          }}
