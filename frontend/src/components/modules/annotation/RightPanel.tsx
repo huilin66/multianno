@@ -221,10 +221,10 @@ export function RightPanel({
 
                         return (
                           <>
-                            {v.bands?.length === 1 ? (
+                              {v.bands?.length === 1 ? (
                               <div className="space-y-3">
-                                {/* 🌟 1. 带有可视化渐变条的 Colormap 选择器 */}
-                                <div className="flex justify-between items-center bg-white dark:bg-neutral-900/40 px-2 py-1.5 rounded border border-neutral-200 dark:border-neutral-700/50">
+                                {/* 🌟 0. 现有的 Colormap 选择器 (二值化时自动置灰) */}
+                                <div className={`flex justify-between items-center bg-white dark:bg-neutral-900/40 px-2 py-1.5 rounded border border-neutral-200 dark:border-neutral-700/50 transition-opacity ${settings.binarize?.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                                   <span className="text-[9px] text-neutral-500 font-bold uppercase">Color Map</span>
                                   <Select 
                                     value={v.colormap || 'gray'} 
@@ -252,27 +252,24 @@ export function RightPanel({
                                   </Select>
                                 </div>
 
-                                {/* 🌟 2. 拉伸控制 (Stretch Range) */}
-                                <div className="space-y-1 pt-1">
+                                {/* 🌟 1. 现有的 Stretch Range (非 manual 模式时置灰锁定) */}
+                                <div className={`space-y-1 pt-1 transition-opacity ${settings.enhancementMode && settings.enhancementMode !== 'manual' ? 'opacity-40 pointer-events-none' : ''}`}>
                                   <div className="flex justify-between text-[9px] text-neutral-500 font-bold uppercase">
                                     <span>Stretch Range</span>
-                                    <span className="font-mono">{settings.minMax[0]}% - {settings.minMax[1]}%</span>
+                                    <span className="font-mono">{settings.minMax?.[0] ?? 0}% - {settings.minMax?.[1] ?? 100}%</span>
                                   </div>
                                   <Slider 
+                                    disabled={settings.enhancementMode && settings.enhancementMode !== 'manual'}
                                     value={Array.isArray(settings.minMax) ? settings.minMax : [0, 100]} 
                                     max={100} step={1} 
                                     onValueChange={(val: any) => {
                                       const newArr = Array.isArray(val) ? val : [val, val];
-                                      if (setTempViewSettings) {
-                                        setTempViewSettings(currentStem, v.id, { ...settings, minMax: newArr });
-                                      } else if (updateView) {
-                                        updateView(v.id, { settings: { ...settings, minMax: newArr } });
-                                      }
+                                      if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, minMax: newArr });
                                     }} 
                                   />
                                 </div>
 
-                                {/* 🌟 3. 色彩高级调整 (允许对伪彩色进行二次调整) */}
+                                {/* 🌟 2. 现有的 B/C/S 三剑客 */}
                                 {[
                                   { label: 'Brightness', key: 'brightness', default: 1, min: 0.5, max: 2 },
                                   { label: 'Contrast', key: 'contrast', default: 1, min: 0.5, max: 2 },
@@ -280,7 +277,7 @@ export function RightPanel({
                                 ].map((item) => {
                                   const val = (settings as any)[item.key] ?? item.default;
                                   return (
-                                    <div key={item.key} className="space-y-1 pt-1">
+                                    <div key={item.key} className={`space-y-1 pt-1 transition-opacity ${settings.binarize?.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                                       <div className="flex justify-between text-[9px] text-neutral-500 uppercase">
                                         <span>{item.label}</span>
                                         <span className="font-mono">{val}</span>
@@ -290,16 +287,99 @@ export function RightPanel({
                                         min={item.min} max={item.max} step={0.1} 
                                         onValueChange={(val: any) => {
                                           const newVal = Array.isArray(val) ? val[0] : val;
-                                          if (setTempViewSettings) {
-                                            setTempViewSettings(currentStem, v.id, { ...settings, [item.key]: newVal });
-                                          } else if (updateView) {
-                                            updateView(v.id, { settings: { ...settings, [item.key]: newVal } });
-                                          }
+                                          if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, [item.key]: newVal });
                                         }} 
                                       />
                                     </div>
                                   );
                                 })}
+
+                                <div className="h-px bg-neutral-200 dark:bg-neutral-800 my-3" />
+
+                                {/* 🌟 新增行 1：Gamma Correction (二值化时置灰) */}
+                                <div className={`space-y-1 transition-opacity ${settings.binarize?.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                                  <div className="flex justify-between text-[9px] text-blue-500 font-bold uppercase">
+                                    <span>Gamma Correction</span>
+                                    <span className="font-mono">{(settings.gamma ?? 1.0).toFixed(1)}</span>
+                                  </div>
+                                  <Slider 
+                                    value={[settings.gamma ?? 1.0]} min={0.1} max={3.0} step={0.1}
+                                    onValueChange={(val: any) => {
+                                      // 🌟 修复：兼容数字或数组
+                                      const newVal = Array.isArray(val) ? val[0] : val;
+                                      if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, gamma: newVal });
+                                    }}
+                                  />
+                                </div>
+
+                                {/* 🌟 新增行 2：空间滤波 + 反相 + 二值化 */}
+                                <div className="flex gap-1.5 pt-2">
+                                  <Button 
+                                    variant={settings.spatialFilter === 'sharpen' ? 'default' : 'outline'}
+                                    className={`h-6 text-[9px] flex-1 px-1 font-bold ${settings.spatialFilter === 'sharpen' ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, spatialFilter: settings.spatialFilter === 'sharpen' ? 'none' : 'sharpen' });
+                                    }}
+                                  >Sharpen</Button>
+                                  <Button 
+                                    variant={settings.invert ? 'default' : 'outline'}
+                                    className={`h-6 text-[9px] flex-1 px-1 font-bold ${settings.invert ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, invert: !settings.invert });
+                                    }}
+                                  >Invert</Button>
+                                  <Button 
+                                    variant={settings.binarize?.enabled ? 'default' : 'outline'}
+                                    className={`h-6 text-[9px] flex-1 px-1 font-bold ${settings.binarize?.enabled ? 'bg-red-500 hover:bg-red-600 text-white border-transparent' : ''}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, binarize: { threshold: 128, ...settings.binarize, enabled: !settings.binarize?.enabled } });
+                                    }}
+                                  >Binarize</Button>
+                                </div>
+
+                                {/* 🎯 隐藏福利：如果开启了二值化，自动弹出阈值调节滑块 */}
+                                {settings.binarize?.enabled && (
+                                   <div className="space-y-1 pt-1 animate-in fade-in zoom-in-95 duration-200">
+                                     <div className="flex justify-between text-[9px] text-red-500 font-bold uppercase">
+                                       <span>Threshold (Binarize)</span>
+                                       <span className="font-mono">{settings.binarize.threshold}</span>
+                                     </div>
+                                     <Slider
+                                       value={[settings.binarize.threshold ?? 128]} min={0} max={255} step={1}
+                                       className="[&_[role=slider]]:bg-red-500 [&_[data-orientation=horizontal]]:bg-red-200"
+                                       onValueChange={(val: any) => {
+                                         // 🌟 修复：兼容数字或数组
+                                         const newVal = Array.isArray(val) ? val[0] : val;
+                                         if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, binarize: { ...settings.binarize, threshold: newVal } });
+                                       }}
+                                     />
+                                   </div>
+                                )}
+
+                                {/* 🌟 新增行 3：对比度映射单选框 (二值化时置灰) */}
+                                <div className={`pt-2 transition-opacity ${settings.binarize?.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
+                                  <div className="text-[9px] text-blue-500 uppercase font-bold mb-1.5">Contrast Mapping Mode</div>
+                                  <div className="grid grid-cols-3 gap-1 bg-white dark:bg-neutral-900/50 p-1.5 rounded border border-neutral-200 dark:border-neutral-700/50">
+                                    {['manual', 'he', 'clahe'].map((mode) => (
+                                      <label key={mode} className="flex flex-col items-center justify-center gap-1 cursor-pointer py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors">
+                                        <input 
+                                          type="radio" name={`mode-${v.id}`} 
+                                          checked={settings.enhancementMode === mode || (!settings.enhancementMode && mode === 'manual')}
+                                          onChange={() => {
+                                            if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, enhancementMode: mode });
+                                          }}
+                                          className="accent-blue-500 w-3 h-3"
+                                        />
+                                        <span className="text-[9px] uppercase font-bold text-center leading-tight">
+                                          {mode === 'manual' ? 'Manual\nStretch' : mode === 'he' ? 'Global\nHE' : 'Auto\nCLAHE'}
+                                        </span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                </div>
                               </div>
                             ) : (
                               <div className="space-y-3">
@@ -344,21 +424,51 @@ export function RightPanel({
                               
                               <div className="flex items-center gap-1.5">
                                 {/* 🌟 新增：Reset 按钮 */}
+                                {/* 🌟 升级：Apply to All 并触发保存 */}
                                 <button
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    // 🌟 统一提取默认值（单波段现在也支持明暗调整了）
-                                    const defaultSettings = v.bands?.length === 1 
-                                      ? { minMax: [0, 100], brightness: 1, contrast: 1, saturation: 1 } 
-                                      : { brightness: 1, contrast: 1, saturation: 1 };
+                                  onClick={async (e) => { 
+                                    e.stopPropagation(); 
                                     
-                                    // 写入暂态！这会让它只对当前图像生效，并且让 hasLocalChanges 变为 true，从而点亮 Apply 按钮！
-                                    if (setTempViewSettings) setTempViewSettings(currentStem, v.id, defaultSettings);
+                                    // 1. 直接触发应用到所有 (因为 useStore 里的逻辑会自动合并所有的 temp 参数，完美符合你的需求)
+                                    if (applyViewSettingsToAll) applyViewSettingsToAll(currentStem, v.id); 
+                                    
+                                    // 2. 自动呼出保存 JSON 对话框
+                                    try {
+                                      const { generateProjectMetaConfig } = await import('../../../lib/projectUtils');
+                                      const state = useStore.getState(); 
+                                      const projectMeta = generateProjectMetaConfig(state);
+                                      const jsonStr = JSON.stringify(projectMeta, null, 2);
+                                      
+                                      if ('showSaveFilePicker' in window) {
+                                        const handle = await (window as any).showSaveFilePicker({
+                                          suggestedName: `${state.projectName || 'project'}_meta.json`,
+                                          types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
+                                        });
+                                        const writable = await handle.createWritable();
+                                        await writable.write(jsonStr);
+                                        await writable.close();
+                                      } else {
+                                        const blob = new Blob([jsonStr], { type: 'application/json' });
+                                        const url = URL.createObjectURL(blob);
+                                        const a = document.createElement('a');
+                                        a.href = url;
+                                        a.download = `${state.projectName || 'project'}_meta.json`;
+                                        a.click();
+                                        URL.revokeObjectURL(url);
+                                      }
+                                    } catch (err) {
+                                      console.warn("Export cancelled or failed", err);
+                                    }
                                   }}
-                                  className="text-[9px] font-bold px-2 py-1.5 rounded transition-all bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-300"
-                                  title="Reset to default settings (current image only)"
+                                  className={`text-[9px] font-bold px-2.5 py-1.5 rounded transition-all ${
+                                    hasLocalChanges 
+                                      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm' 
+                                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
+                                  }`}
+                                  disabled={!hasLocalChanges}
+                                  title="Apply current color settings to all images in this view and save"
                                 >
-                                  Reset
+                                  Apply to All
                                 </button>
 
                                 {/* 🌟 升级：Apply to All 并触发保存 */}

@@ -71,6 +71,11 @@ export interface ProjectMetaContract {
       contrast?: number;
       saturation?: number;
       minMax?: [number, number];
+      gamma?: number;
+      enhancementMode?: 'manual' | 'he' | 'clahe';
+      spatialFilter?: 'none' | 'sharpen';
+      invert?: boolean;
+      binarize?: { enabled: boolean; threshold: number };
     };
   }[];
 }

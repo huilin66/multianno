@@ -272,7 +272,10 @@ export const useStore = create<AppState>()(
           opacity: 1,
           colormap: (v.bands.length === 1 && v.renderMode !== 'rgb' ? (v.renderMode || 'gray') : 'gray') as any,
           transform: v.transform,
-          settings: v.settings || { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100] }
+          settings: v.settings || { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100],
+            gamma: 1.0, enhancementMode: 'manual', spatialFilter: 'none', invert: false,
+            binarize: { enabled: false, threshold: 128 }
+           },
         })),
         
         currentStem: null, 
