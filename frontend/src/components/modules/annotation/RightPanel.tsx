@@ -416,20 +416,41 @@ export function RightPanel({
                               </div>
                             )}
 
-                            {/* 🌟 Apply To All & Reset 按钮区 */}
-                            <div className="pt-2 mt-2 border-t border-neutral-200 dark:border-neutral-700/50 flex justify-between items-center animate-in fade-in">
+                            {/* 🌟 底部操作区：Reset & Apply to All */}
+                            <div className="pt-3 mt-3 border-t border-neutral-200 dark:border-neutral-700/50 flex justify-between items-center animate-in fade-in">
                               <span className="text-[9px] text-neutral-400">
                                 {hasLocalChanges ? '* Current image only' : 'Saved to Project Meta'}
                               </span>
                               
                               <div className="flex items-center gap-1.5">
-                                {/* 🌟 新增：Reset 按钮 */}
-                                {/* 🌟 升级：Apply to All 并触发保存 */}
+                                {/* 🌟 1. Reset 按钮 (完美支持单波段科研参数与多波段归位) */}
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // 提取所有参数的初始默认值
+                                    const defaultSettings = v.bands?.length === 1 
+                                      ? { 
+                                          minMax: [0, 100], brightness: 1, contrast: 1, saturation: 1,
+                                          gamma: 1.0, enhancementMode: 'manual', spatialFilter: 'none', 
+                                          invert: false, binarize: { enabled: false, threshold: 128 }
+                                        } 
+                                      : { brightness: 1, contrast: 1, saturation: 1 };
+                                    
+                                    // 写入暂态，瞬间重置当前图像，并点亮 Apply 按钮
+                                    if (setTempViewSettings) setTempViewSettings(currentStem, v.id, defaultSettings);
+                                  }}
+                                  className="text-[9px] font-bold px-2 py-1.5 rounded transition-all bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-300"
+                                  title="Reset to default settings (current image only)"
+                                >
+                                  Reset
+                                </button>
+
+                                {/* 🌟 2. Apply to All 按钮 */}
                                 <button
                                   onClick={async (e) => { 
                                     e.stopPropagation(); 
                                     
-                                    // 1. 直接触发应用到所有 (因为 useStore 里的逻辑会自动合并所有的 temp 参数，完美符合你的需求)
+                                    // 1. 触发应用到所有
                                     if (applyViewSettingsToAll) applyViewSettingsToAll(currentStem, v.id); 
                                     
                                     // 2. 自动呼出保存 JSON 对话框
@@ -466,57 +487,7 @@ export function RightPanel({
                                       : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
                                   }`}
                                   disabled={!hasLocalChanges}
-                                  title="Apply current color settings to all images in this view and save"
-                                >
-                                  Apply to All
-                                </button>
-
-                                {/* 🌟 升级：Apply to All 并触发保存 */}
-                                <button
-                                  onClick={async (e) => { 
-                                    e.stopPropagation(); 
-                                    
-                                    // 1. 触发应用到所有 (将暂态写入全局)
-                                    if (applyViewSettingsToAll) applyViewSettingsToAll(currentStem, v.id); 
-                                    
-                                    // 2. 自动呼出保存 JSON 对话框
-                                    try {
-                                      // 动态引入你已经在 DataPreload 中使用过的 projectUtils
-                                      const { generateProjectMetaConfig } = await import('../../../lib/projectUtils');
-                                      const state = useStore.getState(); // 获取写入后的最新状态
-                                      const projectMeta = generateProjectMetaConfig(state);
-                                      const jsonStr = JSON.stringify(projectMeta, null, 2);
-                                      
-                                      // 调用原生文件保存 API (和你的 DataPreload.tsx 逻辑一致)
-                                      if ('showSaveFilePicker' in window) {
-                                        const handle = await (window as any).showSaveFilePicker({
-                                          suggestedName: `${state.projectName || 'project'}_meta.json`,
-                                          types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
-                                        });
-                                        const writable = await handle.createWritable();
-                                        await writable.write(jsonStr);
-                                        await writable.close();
-                                      } else {
-                                        // 兜底：传统下载方式
-                                        const blob = new Blob([jsonStr], { type: 'application/json' });
-                                        const url = URL.createObjectURL(blob);
-                                        const a = document.createElement('a');
-                                        a.href = url;
-                                        a.download = `${state.projectName || 'project'}_meta.json`;
-                                        a.click();
-                                        URL.revokeObjectURL(url);
-                                      }
-                                    } catch (err) {
-                                      console.warn("Export cancelled or failed", err);
-                                    }
-                                  }}
-                                  className={`text-[9px] font-bold px-2.5 py-1.5 rounded transition-all ${
-                                    hasLocalChanges 
-                                      ? 'bg-blue-500 hover:bg-blue-600 text-white shadow-sm' 
-                                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
-                                  }`}
-                                  disabled={!hasLocalChanges}
-                                  title="Apply current color settings to all images in this view and save"
+                                  title="Apply current settings to all images and save"
                                 >
                                   Apply to All
                                 </button>

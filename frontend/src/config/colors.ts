@@ -107,7 +107,8 @@ export const TAXONOMY_COLORS: string[] = [
 ];
 
 
-// 🌟 核心引擎 1：纯前端的高精度科学色彩映射表 (LUT)
+
+// 🌟 科研引擎 1：高精度科学色彩映射表 (LUT)
 export const COLOR_MAP_LUT: Record<string, number[][]> = {
   gray: [[0,0,0], [255,255,255]],
   jet: [[0,0,131], [0,0,255], [0,255,255], [255,255,0], [255,0,0], [128,0,0]],
@@ -115,3 +116,20 @@ export const COLOR_MAP_LUT: Record<string, number[][]> = {
   plasma: [[13,8,135], [75,3,161], [126,3,168], [170,35,149], [204,70,120], [229,107,93], [248,149,64], [253,195,40], [240,249,33]],
   inferno: [[0,0,4], [32,11,83], [87,21,126], [148,43,128], [211,81,113], [245,136,96], [252,202,70], [252,255,164]]
 };
+
+// 🌟 科研引擎 2：获取 LUT 颜色的插值函数
+export function getLutColor(colormap: string, value: number) {
+  const stops = COLOR_MAP_LUT[colormap] || COLOR_MAP_LUT.gray;
+  const t = Math.max(0, Math.min(1, value / 255));
+  const idx = t * (stops.length - 1);
+  const idx1 = Math.floor(idx);
+  const idx2 = Math.min(stops.length - 1, idx1 + 1);
+  const frac = idx - idx1;
+  const c1 = stops[idx1];
+  const c2 = stops[idx2];
+  return [
+    c1[0] + (c2[0] - c1[0]) * frac, // R
+    c1[1] + (c2[1] - c1[1]) * frac, // G
+    c1[2] + (c2[2] - c1[2]) * frac  // B
+  ];
+}

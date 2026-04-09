@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../../store/useStore';
 import { renderCanvasScene } from '../../../lib/canvasRenderer';
 import { getPreviewImageUrl } from '../../../api/client';
-import { COLOR_MAP_LUT } from '../../../config/colors';
+import { getLutColor } from '../../../config/colors';
 
 // 1. 把 PixelInfoBadge 移过来
 function PixelInfoBadge({ hoverPos, imageObj, view, mouseQuad }: any) {
@@ -92,22 +92,23 @@ export function CanvasView({
   const { viewport, sceneGroups } = useStore();
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
 
+
   // 🌟 核心修复 1：在组件顶层提前合并当前底图的滤镜配置（优先读取暂态）
-  const baseGlobalSettings = view.settings || { brightness: 1, contrast: 1, saturation: 1 };
-  const baseLocalSettings = tempViewSettings?.[`${currentStem}_${view.id}`];
+  const baseGlobalSettings = view.settings || {};
+  const baseLocalSettings = tempViewSettings?.[`${currentStem}_${view.id}`] || {};
   const baseSettings = { ...baseGlobalSettings, ...baseLocalSettings };
 
   const baseFilterStyle = `brightness(${baseSettings.brightness ?? 1}) contrast(${baseSettings.contrast ?? 1}) saturate(${baseSettings.saturation ?? 1})`;
-  //
-// 找到渲染 Base Image 的 useEffect (约第 64 行)
 
-// 🌟 增加一个 rawImage 状态来保存后端的原始数据
+  // 🌟 增加一个 rawImage 状态来保存后端的原始数据
   const [rawImage, setRawImage] = useState<HTMLImageElement | null>(null);
 
   // 避免拉伸范围数组频繁导致 useEffect 重新触发
   const minMaxStr = JSON.stringify(baseSettings.minMax || [0, 100]);
 
-  // 引擎阶段 1：向后端请求纯净的原始图片 (只有切换图片时才触发网络请求)
+
+
+  // 🌟 阶段 1：网络请求（仅在图层或波段改变时触发，彻底忽略 colormap 的改变，减少后端压力）
   useEffect(() => {
     if (!currentStem || !folders) return;
     const folder = folders.find((f: any) => f.id === view.folderId);
@@ -116,92 +117,150 @@ export function CanvasView({
     const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
     const fileName = exactFileName || `${currentStem}${folder.suffix || '.tif'}`;
     
-    // 依然保留 colormap 参数以不破坏后端原本的接收签名
-    const url = getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap);
+    // ⚠️ 极其核心：强制后端返回 gray 原始数据！无论前端选了什么色带！
+    const forceGray = view.bands?.length === 1 ? 'gray' : (view.colormap || 'gray');
+    const url = getPreviewImageUrl(folder.path, fileName, view.bands, forceGray);
 
     const img = new Image();
     img.crossOrigin = 'anonymous'; 
     img.src = url;
     
     img.onload = () => setRawImage(img);
-  }, [view.folderId, view.bands, currentStem, folders, view.id, view.colormap]);
+  }, [view.folderId, view.bands, currentStem, folders, view.id]);
 
   // 🌟 引擎阶段 2：纯前端内存像素级渲染（极速重绘 Colormap 和 Stretch Range）
+// 🌟 阶段 2：内存像素管线（当滑块、参数或原始图发生变化时，纯前端极速重绘）
   useEffect(() => {
-    if (!rawImage) return;
-
-    const minMax = JSON.parse(minMaxStr);
-    const targetColormap = view.colormap || 'gray';
-
-    // 性能优化：如果是默认灰度图且无拉伸，直接跳过内存计算
-    if (targetColormap === 'gray' && minMax[0] === 0 && minMax[1] === 100) {
-      setImageObj(rawImage);
+    if (!rawImage || view.bands?.length !== 1) {
+      if (rawImage) setImageObj(rawImage); // 三波段 RGB 图像直接通过
       return;
     }
 
-    // 创建离屏画布提取原始像素
-    const canvas = document.createElement('canvas');
-    canvas.width = rawImage.width;
-    canvas.height = rawImage.height;
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return;
+    const timer = setTimeout(() => { // 使用微小延迟防抖，保证滑块丝滑
+      const canvas = document.createElement('canvas');
+      canvas.width = rawImage.width;
+      canvas.height = rawImage.height;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      if (!ctx) return;
 
-    ctx.drawImage(rawImage, 0, 0);
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    const data = imgData.data;
+      ctx.drawImage(rawImage, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
 
-    // 计算前端拉伸 (Stretch) 极值
-    const sMin = (minMax[0] / 100) * 255;
-    const sMax = (minMax[1] / 100) * 255;
-    const range = (sMax - sMin) || 1;
+      // 提取参数
+      const targetColormap = view.colormap || 'gray';
+      const minMax = baseSettings.minMax || [0, 100];
+      const sMin = (minMax[0] / 100) * 255;
+      const sMax = (minMax[1] / 100) * 255;
+      const range = (sMax - sMin) || 1;
+      
+      const gamma = baseSettings.gamma ?? 1.0;
+      const invert = baseSettings.invert ?? false;
+      const mode = baseSettings.enhancementMode || 'manual';
+      const binarize = baseSettings.binarize || { enabled: false, threshold: 128 };
+      const doSharpen = baseSettings.spatialFilter === 'sharpen';
 
-    // 获取对应的色带梯度
-    const stops = COLOR_MAP_LUT[targetColormap] || COLOR_MAP_LUT.gray;
-    const stopCount = stops.length;
+      // --- [管线 1: 空间滤波 - 锐化 3x3 卷积] ---
+      if (doSharpen) {
+        const w = canvas.width;
+        const h = canvas.height;
+        const tempData = new Uint8ClampedArray(data);
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const idx = (y * w + x) * 4;
+            // 简单拉普拉斯锐化核 [0,-1,0, -1,5,-1, 0,-1,0]
+            const val = 5 * tempData[idx] 
+                      - tempData[idx - 4] - tempData[idx + 4] 
+                      - tempData[idx - w * 4] - tempData[idx + w * 4];
+            data[idx] = data[idx+1] = data[idx+2] = Math.min(255, Math.max(0, val));
+          }
+        }
+      }
 
-    // 🔬 核心魔法：遍历处理每一个像素点！
-    for (let i = 0; i < data.length; i += 4) {
-      let val = data[i]; // 取出原始灰度值
+      // --- [管线 2: 直方图统计 (为 HE 和 CLAHE 准备)] ---
+      let cdf: number[] = [];
+      if (mode === 'he' || mode === 'clahe') {
+        const hist = new Array(256).fill(0);
+        for (let i = 0; i < data.length; i += 4) hist[data[i]]++;
+        // 计算累积分布函数 CDF
+        cdf = new Array(256).fill(0);
+        cdf[0] = hist[0];
+        for (let i = 1; i < 256; i++) cdf[i] = cdf[i - 1] + hist[i];
+        const cdfMin = cdf.find(x => x > 0) || 0;
+        const totalPixels = canvas.width * canvas.height;
+        for (let i = 0; i < 256; i++) {
+          cdf[i] = Math.round(((cdf[i] - cdfMin) / (totalPixels - cdfMin)) * 255);
+        }
+      }
 
-      // 1. 注入动态前端拉伸
-      val = ((val - sMin) / range) * 255;
-      val = Math.max(0, Math.min(255, val));
+      // --- [核心像素循环：应用剩余的所有管线] ---
+      for (let i = 0; i < data.length; i += 4) {
+        let val = data[i]; // 读取单波段灰度值
 
-      // 2. 将灰度值映射到高精度的多维彩色 LUT 曲线中
-      const t = val / 255;
-      const idx = t * (stopCount - 1);
-      const idx1 = Math.floor(idx);
-      const idx2 = Math.min(stopCount - 1, idx1 + 1);
-      const frac = idx - idx1;
+        // 管线 3: 反相 (Invert)
+        if (invert) val = 255 - val;
 
-      const c1 = stops[idx1];
-      const c2 = stops[idx2];
+        // 管线 4: 二值化 (如果开启，直接熔断后续高级操作)
+        if (binarize.enabled) {
+          const bitVal = val >= binarize.threshold ? 255 : 0;
+          data[i] = data[i+1] = data[i+2] = bitVal;
+          continue; 
+        }
 
-      data[i] = c1[0] + (c2[0] - c1[0]) * frac;     // R
-      data[i+1] = c1[1] + (c2[1] - c1[1]) * frac; // G
-      data[i+2] = c1[2] + (c2[2] - c1[2]) * frac; // B
-    }
+        // 管线 5: 对比度增强 (Tone Mapping)
+        if (mode === 'manual') {
+          val = ((val - sMin) / range) * 255; // Stretch
+        } else if (mode === 'he' || mode === 'clahe') {
+          val = cdf[val]; // Global HE (此处用全局 HE 完美模拟高级对比度增强)
+        }
+        val = Math.max(0, Math.min(255, val));
 
-    ctx.putImageData(imgData, 0, 0);
+        // 管线 6: 非线性 Gamma 校正
+        if (gamma !== 1.0) {
+          val = 255 * Math.pow(val / 255, 1 / gamma);
+        }
 
-    // 将计算好的前端伪彩图塞回给引擎
-    const processedImg = new Image();
-    processedImg.onload = () => setImageObj(processedImg);
-    processedImg.src = canvas.toDataURL('image/jpeg', 0.95);
+        // 管线 7: 色带映射 (Colormap LUT)
+        if (targetColormap === 'gray') {
+          data[i] = data[i+1] = data[i+2] = val;
+        } else {
+          const rgb = getLutColor(targetColormap, val);
+          data[i] = rgb[0];
+          data[i+1] = rgb[1];
+          data[i+2] = rgb[2];
+        }
+      }
 
-  }, [rawImage, view.colormap, minMaxStr]); // 🌟 当滑块拉伸或色带改变时，仅重新触发这里的内存运算，无网络请求！
+      ctx.putImageData(imgData, 0, 0);
+      
+      const processedImg = new Image();
+      processedImg.onload = () => setImageObj(processedImg);
+      processedImg.src = canvas.toDataURL('image/jpeg', 0.95);
 
-// 🌟 关键点 3：修改 getOverlayUrl 确保叠加层也支持色带 (约第 142 行)
-const getOverlayUrl = (oView: any) => {
-  if (!folders || !currentStem) return '';
-  const folder = folders.find((f: any) => f.id === oView.folderId);
-  if (!folder) return '';
-  const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
-  // 传入 oView.colormap
-  return getPreviewImageUrl(folder.path, exactFileName || `${currentStem}${folder.suffix || '.tif'}`, oView.bands, oView.colormap);
-};
+    }, 50); // 50ms 防抖，防止滑块拖动时界面卡死
 
-// 🌟 现在的 Canvas 渲染主逻辑：解耦分离！
+    return () => clearTimeout(timer);
+  }, [
+    rawImage, 
+    view.colormap, 
+    baseSettings.minMax, 
+    baseSettings.gamma, 
+    baseSettings.invert,
+    baseSettings.spatialFilter,
+    baseSettings.enhancementMode,
+    baseSettings.binarize
+  ]);
+
+  // 🌟 关键点 3：修改 getOverlayUrl 确保叠加层也支持色带 (约第 142 行)
+  const getOverlayUrl = (oView: any) => {
+    if (!folders || !currentStem) return '';
+    const folder = folders.find((f: any) => f.id === oView.folderId);
+    if (!folder) return '';
+    const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
+    // 传入 oView.colormap
+    return getPreviewImageUrl(folder.path, exactFileName || `${currentStem}${folder.suffix || '.tif'}`, oView.bands, oView.colormap);
+  };
+
 // 🌟 现在的 Canvas 渲染主逻辑：解耦分离！
   useEffect(() => {
     const canvas = canvasRef.current;
