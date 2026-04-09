@@ -223,27 +223,36 @@ export function RightPanel({
                           <>
                             {v.bands?.length === 1 ? (
                               <div className="space-y-3">
-                                {/* 🌟 1. 新增：伪彩色 (Colormap) 选择器 */}
+                                {/* 🌟 1. 带有可视化渐变条的 Colormap 选择器 */}
                                 <div className="flex justify-between items-center bg-white dark:bg-neutral-900/40 px-2 py-1.5 rounded border border-neutral-200 dark:border-neutral-700/50">
                                   <span className="text-[9px] text-neutral-500 font-bold uppercase">Color Map</span>
                                   <Select 
                                     value={v.colormap || 'gray'} 
-                                    onValueChange={(val: any) => updateView(v.id, { colormap: val })} // 改变后立刻全局触发图像重载
+                                    onValueChange={(val: any) => updateView(v.id, { colormap: val })}
                                   >
-                                    <SelectTrigger className="h-6 w-[100px] text-[10px] bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-700">
+                                    <SelectTrigger className="h-6 w-[120px] text-[10px] bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-700">
                                       <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                      <SelectItem value="gray">Gray</SelectItem>
-                                      <SelectItem value="jet">Jet</SelectItem>
-                                      <SelectItem value="viridis">Viridis</SelectItem>
-                                      <SelectItem value="plasma">Plasma</SelectItem>
-                                      <SelectItem value="inferno">Inferno</SelectItem>
+                                      {[
+                                        { name: 'gray', range: 'from-black to-white' },
+                                        { name: 'jet', range: 'from-blue-600 via-green-400 to-red-600' },
+                                        { name: 'viridis', range: 'from-indigo-900 via-emerald-500 to-yellow-300' },
+                                        { name: 'plasma', range: 'from-blue-900 via-fuchsia-500 to-yellow-400' },
+                                        { name: 'inferno', range: 'from-black via-red-600 to-yellow-200' }
+                                      ].map((cm) => (
+                                        <SelectItem key={cm.name} value={cm.name} className="text-xs">
+                                          <div className="flex items-center gap-2 w-full">
+                                            <div className={`h-2 w-12 rounded-sm bg-gradient-to-r ${cm.range} border border-black/10`} />
+                                            <span className="capitalize">{cm.name}</span>
+                                          </div>
+                                        </SelectItem>
+                                      ))}
                                     </SelectContent>
                                   </Select>
                                 </div>
 
-                                {/* 🌟 2. 核心拉伸：Stretch Range */}
+                                {/* 🌟 2. 拉伸控制 (Stretch Range) */}
                                 <div className="space-y-1 pt-1">
                                   <div className="flex justify-between text-[9px] text-neutral-500 font-bold uppercase">
                                     <span>Stretch Range</span>
@@ -254,16 +263,20 @@ export function RightPanel({
                                     max={100} step={1} 
                                     onValueChange={(val: any) => {
                                       const newArr = Array.isArray(val) ? val : [val, val];
-                                      if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, minMax: newArr });
+                                      if (setTempViewSettings) {
+                                        setTempViewSettings(currentStem, v.id, { ...settings, minMax: newArr });
+                                      } else if (updateView) {
+                                        updateView(v.id, { settings: { ...settings, minMax: newArr } });
+                                      }
                                     }} 
                                   />
                                 </div>
 
-                                {/* 🌟 3. 基础视觉调整 (和 RGB 对齐) */}
+                                {/* 🌟 3. 色彩高级调整 (允许对伪彩色进行二次调整) */}
                                 {[
                                   { label: 'Brightness', key: 'brightness', default: 1, min: 0.5, max: 2 },
                                   { label: 'Contrast', key: 'contrast', default: 1, min: 0.5, max: 2 },
-                                  { label: 'Saturation', key: 'saturation', default: 1, min: 0, max: 2 } // 伪彩色同样可以被饱和度控制
+                                  { label: 'Saturation', key: 'saturation', default: 1, min: 0, max: 2 }
                                 ].map((item) => {
                                   const val = (settings as any)[item.key] ?? item.default;
                                   return (
@@ -277,7 +290,11 @@ export function RightPanel({
                                         min={item.min} max={item.max} step={0.1} 
                                         onValueChange={(val: any) => {
                                           const newVal = Array.isArray(val) ? val[0] : val;
-                                          if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, [item.key]: newVal });
+                                          if (setTempViewSettings) {
+                                            setTempViewSettings(currentStem, v.id, { ...settings, [item.key]: newVal });
+                                          } else if (updateView) {
+                                            updateView(v.id, { settings: { ...settings, [item.key]: newVal } });
+                                          }
                                         }} 
                                       />
                                     </div>

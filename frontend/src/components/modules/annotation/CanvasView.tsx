@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../../store/useStore';
 import { renderCanvasScene } from '../../../lib/canvasRenderer';
 import { getPreviewImageUrl } from '../../../api/client';
+import { COLOR_MAP_LUT } from '../../../config/colors';
 
 // 1. 把 PixelInfoBadge 移过来
 function PixelInfoBadge({ hoverPos, imageObj, view, mouseQuad }: any) {
@@ -95,34 +96,110 @@ export function CanvasView({
   const baseGlobalSettings = view.settings || { brightness: 1, contrast: 1, saturation: 1 };
   const baseLocalSettings = tempViewSettings?.[`${currentStem}_${view.id}`];
   const baseSettings = { ...baseGlobalSettings, ...baseLocalSettings };
-  const baseFilterStyle = `brightness(${baseSettings.brightness}) contrast(${baseSettings.contrast}) saturate(${baseSettings.saturation})`;
 
+  const baseFilterStyle = `brightness(${baseSettings.brightness ?? 1}) contrast(${baseSettings.contrast ?? 1}) saturate(${baseSettings.saturation ?? 1})`;
+  //
+// 找到渲染 Base Image 的 useEffect (约第 64 行)
+
+// 🌟 增加一个 rawImage 状态来保存后端的原始数据
+  const [rawImage, setRawImage] = useState<HTMLImageElement | null>(null);
+
+  // 避免拉伸范围数组频繁导致 useEffect 重新触发
+  const minMaxStr = JSON.stringify(baseSettings.minMax || [0, 100]);
+
+  // 引擎阶段 1：向后端请求纯净的原始图片 (只有切换图片时才触发网络请求)
   useEffect(() => {
     if (!currentStem || !folders) return;
     const folder = folders.find((f: any) => f.id === view.folderId);
     if (!folder) return;
 
-    // 🌟 2. 核心大换血：直接去字典里拿真实文件名，绝不猜测！
-    // 如果万一没拿到（兜底），才退化为拼接
     const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
     const fileName = exactFileName || `${currentStem}${folder.suffix || '.tif'}`;
     
-    // 拼接后端请求 URL
+    // 依然保留 colormap 参数以不破坏后端原本的接收签名
     const url = getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap);
 
     const img = new Image();
-    img.crossOrigin = 'anonymous'; // 必须加，防止 Canvas 跨域污染报错
+    img.crossOrigin = 'anonymous'; 
     img.src = url;
     
-    img.onload = () => {
-      setImageObj(img);
-    };
-    
-    img.onerror = () => {
-      console.warn(`Failed to load image for view ${view.id}: ${url}`);
-      setImageObj(null);
-    };
-  }, [view.folderId, view.bands, view.colormap, currentStem, folders, view.id]);
+    img.onload = () => setRawImage(img);
+  }, [view.folderId, view.bands, currentStem, folders, view.id, view.colormap]);
+
+  // 🌟 引擎阶段 2：纯前端内存像素级渲染（极速重绘 Colormap 和 Stretch Range）
+  useEffect(() => {
+    if (!rawImage) return;
+
+    const minMax = JSON.parse(minMaxStr);
+    const targetColormap = view.colormap || 'gray';
+
+    // 性能优化：如果是默认灰度图且无拉伸，直接跳过内存计算
+    if (targetColormap === 'gray' && minMax[0] === 0 && minMax[1] === 100) {
+      setImageObj(rawImage);
+      return;
+    }
+
+    // 创建离屏画布提取原始像素
+    const canvas = document.createElement('canvas');
+    canvas.width = rawImage.width;
+    canvas.height = rawImage.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return;
+
+    ctx.drawImage(rawImage, 0, 0);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+
+    // 计算前端拉伸 (Stretch) 极值
+    const sMin = (minMax[0] / 100) * 255;
+    const sMax = (minMax[1] / 100) * 255;
+    const range = (sMax - sMin) || 1;
+
+    // 获取对应的色带梯度
+    const stops = COLOR_MAP_LUT[targetColormap] || COLOR_MAP_LUT.gray;
+    const stopCount = stops.length;
+
+    // 🔬 核心魔法：遍历处理每一个像素点！
+    for (let i = 0; i < data.length; i += 4) {
+      let val = data[i]; // 取出原始灰度值
+
+      // 1. 注入动态前端拉伸
+      val = ((val - sMin) / range) * 255;
+      val = Math.max(0, Math.min(255, val));
+
+      // 2. 将灰度值映射到高精度的多维彩色 LUT 曲线中
+      const t = val / 255;
+      const idx = t * (stopCount - 1);
+      const idx1 = Math.floor(idx);
+      const idx2 = Math.min(stopCount - 1, idx1 + 1);
+      const frac = idx - idx1;
+
+      const c1 = stops[idx1];
+      const c2 = stops[idx2];
+
+      data[i] = c1[0] + (c2[0] - c1[0]) * frac;     // R
+      data[i+1] = c1[1] + (c2[1] - c1[1]) * frac; // G
+      data[i+2] = c1[2] + (c2[2] - c1[2]) * frac; // B
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    // 将计算好的前端伪彩图塞回给引擎
+    const processedImg = new Image();
+    processedImg.onload = () => setImageObj(processedImg);
+    processedImg.src = canvas.toDataURL('image/jpeg', 0.95);
+
+  }, [rawImage, view.colormap, minMaxStr]); // 🌟 当滑块拉伸或色带改变时，仅重新触发这里的内存运算，无网络请求！
+
+// 🌟 关键点 3：修改 getOverlayUrl 确保叠加层也支持色带 (约第 142 行)
+const getOverlayUrl = (oView: any) => {
+  if (!folders || !currentStem) return '';
+  const folder = folders.find((f: any) => f.id === oView.folderId);
+  if (!folder) return '';
+  const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
+  // 传入 oView.colormap
+  return getPreviewImageUrl(folder.path, exactFileName || `${currentStem}${folder.suffix || '.tif'}`, oView.bands, oView.colormap);
+};
 
 // 🌟 现在的 Canvas 渲染主逻辑：解耦分离！
 // 🌟 现在的 Canvas 渲染主逻辑：解耦分离！
@@ -169,14 +246,6 @@ export function CanvasView({
     baseFilterStyle // 🌟 核心修复 3：必须将计算好的滤镜加入依赖数组，这样你拖滑块时才会触发重绘！
   ]);
 
-  // 获取其他叠加图层的真实 URL
-  const getOverlayUrl = (oView: any) => {
-    if (!folders || !currentStem) return '';
-    const folder = folders.find((f: any) => f.id === oView.folderId);
-    if (!folder) return '';
-    const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
-    return getPreviewImageUrl(folder.path, exactFileName || `${currentStem}${folder.suffix || '.tif'}`, oView.bands, oView.colormap);
-  };
 return (
     <>
       {editorSettings.showPixelValue && (
