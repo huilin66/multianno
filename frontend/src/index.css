@@ -192,3 +192,43 @@
   scrollbar-width: thin;
   scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
 }
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer utilities {
+  /* 针对 Chrome, Edge, Safari 的滚动条美化 */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;  /* 垂直滚动条的宽度 */
+    height: 6px; /* 水平滚动条的高度 */
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent; /* 轨道透明，显得更清爽 */
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    /* 使用 Tailwind 的 @apply 来完美适配你的日/夜间主题 */
+    @apply bg-neutral-300 dark:bg-neutral-700 rounded-full transition-colors;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    /* 鼠标悬停时稍微加深颜色 */
+    @apply bg-neutral-400 dark:bg-neutral-600;
+  }
+
+  /* 针对 Firefox 的滚动条美化 (Firefox 不支持 webkit 伪元素) */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    /* Firefox 暂时无法直接用 @apply 动态切换颜色，这里提供一个中性的默认值 */
+    scrollbar-color: #d4d4d8 transparent; 
+  }
+}
+
+/* 如果需要在 Firefox 下也完美适配夜间模式，可以加上这句媒体查询 */
+@media (prefers-color-scheme: dark) {
+  .custom-scrollbar {
+    scrollbar-color: #3f3f46 transparent;
+  }
+}

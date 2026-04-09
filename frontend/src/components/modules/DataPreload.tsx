@@ -219,7 +219,7 @@ export function DataPreload() {
           </CardTitle>
         </CardHeader>
         
-        <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col">
+        <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar">
           <div className="flex-1 space-y-3">
             {recentPaths.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/20 rounded-lg border border-border border-dashed mb-4">
@@ -329,7 +329,7 @@ export function DataPreload() {
           </CardTitle>
         </CardHeader>
         
-        <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col">
+        <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar">
           <div className="flex-1 space-y-4">
             {views.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
