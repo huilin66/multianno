@@ -155,3 +155,40 @@
     @apply font-sans;
     }
 }
+
+/* 🌟 极致优雅的自定义滚动条 (适配日/夜间模式) */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;  /* 极细的宽度，不抢占视觉焦点 */
+  height: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent; /* 轨道完全透明 */
+}
+
+/* 日间模式滑块：极浅的灰色半透明 */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.4); 
+  border-radius: 10px; /* 圆润的胶囊感 */
+  transition: background-color 0.3s ease;
+}
+
+/* 日间模式悬停：颜色稍微加深 */
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.7); 
+}
+
+/* 🌙 夜间模式适配 (假设你的暗色模式是在 HTML/Body 上挂载 .dark 类) */
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(82, 82, 91, 0.4); /* 暗黑模式下的深灰半透明 */
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(113, 113, 122, 0.8); 
+}
+
+/* Firefox 兼容写法 */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(156, 163, 175, 0.4) transparent;
+}

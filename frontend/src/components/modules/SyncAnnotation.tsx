@@ -21,15 +21,17 @@ export function SyncAnnotation() {
   const {
     views, folders, annotations, addAnnotation, removeAnnotation,
     viewport, setViewport, currentStem,  theme,
+    stems, setCurrentStem,
     taxonomyClasses = [{ id: 'default', name: 'object', color: '#3B82F6' }],
     taxonomyAttributes = [],
     activeAnnotationId = null,
     setActiveAnnotationId = () => {}, // 兜底空函数
     editorSettings = { showCrosshair: true, showPixelValue: true },
-    tempViewSettings, // 🌟 新增：提取暂态配置
+    tempViewSettings, updateAnnotation,
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
   const [mouseQuad, setMouseQuad] = useState<Record<string, { tl: boolean, tr: boolean }>>({});
-  type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' | 'circle' | 'lasso' | 'freemask';
+  type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' | 'circle' | 'lasso' | 'freemask' | 'rbbox' | 'cuboid' | 'ai_anno' | 'cut' | 'cutout';
+  const [dragVertex, setDragVertex] = useState<{ index: number, type: 'point' | 'edge' } | null>(null);
   const [tool, setTool] = useState<ToolType>('pan');
   const [isDrawing, setIsDrawing] = useState(false);
   const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
@@ -53,6 +55,8 @@ export function SyncAnnotation() {
   const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({}); // 控制其他图层的显示
   const [layerConfigs, setLayerConfigs] = useState<Record<string, { mode: 'opacity' | 'swipeX' | 'swipeY', value: number }>>({}); // 独立控制每个图层的特效
   const [activeControlLayer, setActiveControlLayer] = useState<string>(''); // 顶部控制条当前选中的图层
+
+  const [tempActiveAnno, setTempActiveAnno] = useState<any>(null);
 
 // 初始化图层数据 (🌟 修复：严密的增量初始化，确保 operableLayers 永远不为空)
   useEffect(() => {
@@ -165,6 +169,28 @@ export function SyncAnnotation() {
 
     // 1. Select 工具精准碰撞检测
     if (e.button === 0 && tool === 'select') {
+      if (activeAnnotationId) {
+        const activeAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
+        if (activeAnno) {
+          // 遍历顶点，计算距离 (假设控制点吸附半径为 6 像素)
+          const hitRadius = 6 / viewport.zoom;
+          let hitIndex = -1;
+          for (let i = 0; i < activeAnno.points.length; i++) {
+            const pt = activeAnno.points[i];
+            if (Math.hypot(mainX - pt.x, mainY - pt.y) < hitRadius) {
+              hitIndex = i;
+              break;
+            }
+          }
+
+          if (hitIndex !== -1) {
+            // 命中控制点！进入拖拽状态
+            setDragVertex({ index: hitIndex, type: 'point' });
+            setTempActiveAnno(JSON.parse(JSON.stringify(activeAnno))); // 深拷贝一份用于本地拖拽显示
+            return; // 拦截后续逻辑
+          }
+        }
+      }
       let clickedId = null;
       for (let i = currentAnnotations.length - 1; i >= 0; i--) {
         const ann = currentAnnotations[i];
@@ -271,9 +297,35 @@ export function SyncAnnotation() {
         setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
       }
     }
+
+    // 🌟 拖拽顶点逻辑
+    if (tool === 'select' && dragVertex && tempActiveAnno) {
+      const updatedAnno = { ...tempActiveAnno };
+      
+      // 更新拖拽的那个点的坐标
+      updatedAnno.points[dragVertex.index] = { x: mainX, y: mainY };
+      
+      // 如果是矩形 (bbox)，拖动一个角点会影响另外两个角点（需要维持矩形特性）
+      if (updatedAnno.type === 'bbox' && updatedAnno.points.length === 2) {
+        // 矩形实际上只存了左上和右下 2 个点，拖拽逻辑稍有不同，需要映射
+        updatedAnno.points[dragVertex.index] = { x: mainX, y: mainY };
+      }
+      
+      setTempActiveAnno(updatedAnno);
+      return;
+    }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
+    // 🌟 结束拖拽顶点并保存到全局 Store
+    if (tool === 'select' && dragVertex && tempActiveAnno) {
+      updateAnnotation(tempActiveAnno.id, { points: tempActiveAnno.points });
+      pushAction({ type: 'edit', anno: tempActiveAnno }); // 压入历史记录以支持撤销
+      setDragVertex(null);
+      setTempActiveAnno(null);
+      return;
+    }
+
     if (isPanning) { setIsPanning(false); return; }
     
     // 🌟 在这套体系下，只有 Lasso, freemask 是靠“松开鼠标”来结束绘制的
@@ -499,6 +551,20 @@ export function SyncAnnotation() {
     }
   };
 
+  const stemIndex = stems.indexOf(currentStem);
+  const handlePrevStem = () => {
+    if (stemIndex > 0) {
+      setCurrentStem(stems[stemIndex - 1]);
+      setActiveAnnotationId(null);
+    }
+  }; 
+  const handleNextStem = () => {
+    if (stemIndex < stems.length - 1) {
+      setCurrentStem(stems[stemIndex + 1]);
+      setActiveAnnotationId(null);
+    }
+  };
+
   return (
     <div className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative">
       
@@ -509,6 +575,10 @@ export function SyncAnnotation() {
       // 🌟 传下去，加上 currentPoints 的长度判断（用于撤销点）
       canUndo={undoCount > 0 || currentPoints.length > 0}
       canRedo={redoCount > 0 || undonePoints.length > 0}
+      handlePrevStem={handlePrevStem}
+      handleNextStem={handleNextStem}
+      hasPrev={stemIndex > 0}
+      hasNext={stemIndex < stems.length - 1}
     />
       {/* 🎯 Grid Workspace */}
       <div className="flex-grow p-4 overflow-hidden relative" ref={containerRef} onWheel={handleWheel}>
