@@ -9,11 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { 
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
-  Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud
+  Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
+  Tag, Type, Hash, Route, EyeOff
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
-
+import { ObjectEditorForm } from './ObjectEditorForm'; // 🌟 引入新组件
 
 interface RightPanelProps {
   tool: string;
@@ -563,70 +564,30 @@ export function RightPanel({
               colorClass="text-blue-500"
             />
             {expanded.editor && (
-              <div className="p-3 space-y-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-blue-50/50 dark:bg-blue-900/10 transition-all animate-in fade-in">
+              <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30 transition-all animate-in fade-in relative">
                 {(() => {
                   const activeAnno = annotations.find((a: any) => a.id === activeAnnotationId);
                   if (!activeAnno) return null;
+                  
+                  const activeClassDef = taxonomyClasses.find((c: any) => c.name === activeAnno.label);
+                  const activeColor = activeClassDef?.color || '#3B82F6';
+
                   return (
-                    <>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-[10px] text-neutral-500">{t('workspace.label')}</Label>
-                          <Select value={activeAnno.label} onValueChange={(val) => updateAnnotation(activeAnno.id, { label: val })}>
-                            <SelectTrigger className="h-7 text-xs bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {taxonomyClasses.map((c: any) => <SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-neutral-500">Shape Text</Label>
-                          <Input value={activeAnno.text || ''} onChange={(e) => updateAnnotation(activeAnno.id, { text: e.target.value })} className="h-7 text-xs bg-white dark:bg-neutral-900" placeholder="Object text..." />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-[10px] text-neutral-500">Group ID</Label>
-                          <Input type="number" className="h-7 text-xs bg-white dark:bg-neutral-900" value={activeAnno.group_id || ''} onChange={(e) => updateAnnotation(activeAnno.id, { group_id: e.target.value ? Number(e.target.value) : null })} />
-                        </div>
-                        <div>
-                          <Label className="text-[10px] text-neutral-500">Track ID</Label>
-                          <Input type="number" className="h-7 text-xs bg-white dark:bg-neutral-900" value={activeAnno.track_id || ''} onChange={(e) => updateAnnotation(activeAnno.id, { track_id: e.target.value ? Number(e.target.value) : null })} />
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 p-2 bg-white dark:bg-neutral-900 rounded border border-neutral-200 dark:border-neutral-800">
-                        <div className="flex items-center gap-2">
-                          <Switch checked={!!activeAnno.difficult} onCheckedChange={(val) => updateAnnotation(activeAnno.id, { difficult: val })} />
-                          <Label className="text-[10px]">Difficult</Label>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Switch checked={!!activeAnno.occluded} onCheckedChange={(val) => updateAnnotation(activeAnno.id, { occluded: val })} />
-                          <Label className="text-[10px]">Occluded</Label>
-                        </div>
-                      </div>
-                      {taxonomyAttributes && taxonomyAttributes.length > 0 && (
-                        <div className="bg-white dark:bg-neutral-900 p-2 rounded border border-neutral-200 dark:border-neutral-800">
-                          <Label className="text-[10px] text-neutral-500 mb-2 block uppercase tracking-wider">{t('workspace.attributes')}</Label>
-                          <div className="space-y-2.5 max-h-32 overflow-y-auto custom-scrollbar pr-1">
-                            {taxonomyAttributes.map((attr: any) => (
-                              <div key={attr.id} className="flex items-center justify-between">
-                                <span className="text-xs text-neutral-700 dark:text-neutral-300 truncate mr-2">{attr.name}</span>
-                                {attr.options ? (
-                                  <Select value={activeAnno.attributes?.[attr.name] as string || attr.defaultValue} onValueChange={(val) => updateAnnotation(activeAnno.id, { attributes: { ...(activeAnno.attributes || {}), [attr.name]: val } })}>
-                                    <SelectTrigger className="w-28 h-6 text-[10px] bg-neutral-50 dark:bg-neutral-950"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                      {attr.options.map((opt: string) => <SelectItem key={opt} value={opt} className="text-xs">{opt}</SelectItem>)}
-                                    </SelectContent>
-                                  </Select>
-                                ) : (
-                                  <Input value={activeAnno.attributes?.[attr.name] as string || ''} onChange={(e) => updateAnnotation(activeAnno.id, { attributes: { ...(activeAnno.attributes || {}), [attr.name]: e.target.value } })} className="w-24 h-6 text-xs bg-white dark:bg-neutral-950" />
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
+                    <div className="pl-2">
+                      <div className="absolute left-0 top-0 bottom-0 w-0.5 transition-colors duration-300" style={{ backgroundColor: activeColor }} />
+                      
+                      {/* 🌟 完美复用相同的表单，只改变回调函数直接触发 Store 更新 */}
+                      <ObjectEditorForm 
+                        label={activeAnno.label} onLabelChange={(val) => updateAnnotation(activeAnno.id, { label: val })}
+                        text={activeAnno.text || ''} onTextChange={(val) => updateAnnotation(activeAnno.id, { text: val })}
+                        groupId={activeAnno.group_id || ''} onGroupIdChange={(val) => updateAnnotation(activeAnno.id, { group_id: val ? Number(val) : null })}
+                        trackId={activeAnno.track_id || ''} onTrackIdChange={(val) => updateAnnotation(activeAnno.id, { track_id: val ? Number(val) : null })}
+                        difficult={!!activeAnno.difficult} onDifficultChange={(val) => updateAnnotation(activeAnno.id, { difficult: val })}
+                        occluded={!!activeAnno.occluded} onOccludedChange={(val) => updateAnnotation(activeAnno.id, { occluded: val })}
+                        attributes={activeAnno.attributes || {}} onAttributesChange={(val) => updateAnnotation(activeAnno.id, { attributes: val })}
+                        taxonomyClasses={taxonomyClasses} taxonomyAttributes={taxonomyAttributes} activeColor={activeColor}
+                      />
+                    </div>
                   );
                 })()}
               </div>
