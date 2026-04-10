@@ -172,6 +172,15 @@ export default function App() {
                       onCheckedChange={(v) => updateEditorSettings({ continuousDrawing: v })} 
                     />
                   </div>
+                  
+                 {/* 🌟 新增：左侧工具栏文字显示开关 */}
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Show Tool Labels</Label>
+                    <Switch 
+                      checked={editorSettings.showToolLabels} 
+                      onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })} 
+                    />
+                  </div>
 
                   {/* 🌟 新增：快捷键设置按钮 */}
                   <Button 

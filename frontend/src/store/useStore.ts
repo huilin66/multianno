@@ -126,9 +126,9 @@ export interface AppState {
   setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
   viewport: {zoom: number;panX: number;panY: number;};
 
-  editorSettings: { showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean };
-  updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean }>) => void;
-  
+  editorSettings: { showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean; showToolLabels: boolean };
+  updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean; showToolLabels: boolean }>) => void;
+
   shortcuts: Record<string, string>;
   updateShortcut: (tool: string, key: string) => void;
 
@@ -235,7 +235,7 @@ export const useStore = create<AppState>()(
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
 
-      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false },
+      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false },
       updateEditorSettings: (newSettings) => set((state) => ({ 
         editorSettings: { ...state.editorSettings, ...newSettings } 
       })),
@@ -256,6 +256,11 @@ export const useStore = create<AppState>()(
         lasso: 'f',
         cut: 'x',   // 避免和 Circle(c) 冲突，使用 x 作为切割
         cutout: 'e', 
+
+        undo: 'z',     // 配合 Ctrl 使用，显示为 Z
+        redo: 'y',     // 配合 Ctrl 使用，显示为 Y
+        prev: 'arrowleft',  // 上一组
+        next: 'arrowright', // 下一组
       },
       updateShortcut: (tool: string, key: string) => set((state) => ({ 
         shortcuts: { ...state.shortcuts, [tool]: key.toLowerCase() } 

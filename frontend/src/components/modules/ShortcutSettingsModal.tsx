@@ -25,6 +25,10 @@ const TOOL_NAMES: Record<string, string> = {
   lasso: '套索 (Lasso)',
   cut: '切割断离 (Cut)',
   cutout: '橡皮擦/挖洞 (Cutout)',
+  undo: '撤销 (Undo)',
+  redo: '重做 (Redo)',
+  prev: '上一组图像 (Prev)',
+  next: '下一组图像 (Next)',
 };
 
 export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalProps) {
