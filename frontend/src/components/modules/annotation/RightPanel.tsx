@@ -8,7 +8,8 @@ import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { 
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
-  Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame
+  Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
+  Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -646,6 +647,24 @@ export function RightPanel({
               const color = clsDef?.color || '#3B82F6';
               const isActive = ann.id === activeAnnotationId;
               
+              // 🌟 新增：根据标注类型映射对应的 Icon 组件
+              const getShapeIcon = (type: string) => {
+                switch (type) {
+                  case 'bbox': return Square;
+                  case 'polygon': return Hexagon;
+                  case 'point': return CircleDot;
+                  case 'line': return Activity;
+                  case 'ellipse': 
+                  case 'circle': return Circle;
+                  case 'oriented_bbox': return Diamond;
+                  case 'cuboid': return Box;
+                  case 'lasso': return Pencil;
+                  case 'freemask': return Cloud;
+                  default: return Square;
+                }
+              };
+              const ShapeIcon = getShapeIcon(ann.type);
+
               return (
                 <div 
                   key={ann.id} onClick={() => setActiveAnnotationId(ann.id)}
@@ -653,12 +672,20 @@ export function RightPanel({
                     isActive ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400 text-blue-700 dark:text-blue-400 shadow-sm' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-blue-300'
                   }`}
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
-                    <span className="font-medium truncate max-w-[150px]">
-                      {ann.label} {ann.difficult && <AlertTriangle className="w-3 h-3 inline text-red-500 ml-1"/>}
+                    <span className="font-medium truncate max-w-[120px]">
+                      {ann.label}
                     </span>
+                    {/* 🌟 新增：在类别名后方展示图标 */}
+                    <ShapeIcon 
+                      className={`w-3.5 h-3.5 shrink-0 ml-0.5 ${isActive ? 'text-blue-500 dark:text-blue-400' : 'text-neutral-400'}`} 
+                      title={`Type: ${ann.type}`}
+                    />
+                    {/* 困难样本标志 */}
+                    {ann.difficult && <AlertTriangle className="w-3.5 h-3.5 inline text-red-500 shrink-0 ml-0.5" title="Difficult"/>}
                   </div>
+                  
                   <Button 
                     variant="ghost" size="icon" 
                     className="w-6 h-6 shrink-0 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
