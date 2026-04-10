@@ -57,7 +57,7 @@ export interface ViewConfig {
 // 🌟 1. 扩充单体标注接口 (兼容最终的 shapes 数组内元素)
 export interface Annotation {
   id: string;
-  type: 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' |'circle' | 'oriented_bbox' | 'keypoints';
+  type: 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' |'circle' | 'oriented_bbox' | 'cuboid' | 'keypoints';
   points: { x: number; y: number }[]; 
   label: string;
   text?: string;

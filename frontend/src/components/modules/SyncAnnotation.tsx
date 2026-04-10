@@ -34,6 +34,7 @@ export function SyncAnnotation() {
   const [dragVertex, setDragVertex] = useState<{ index: number, type: 'point' | 'edge' } | null>(null);
   const [tool, setTool] = useState<ToolType>('pan');
   const [isDrawing, setIsDrawing] = useState(false);
+  const [drawStep, setDrawStep] = useState(0);
   const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 // 🌟 记录鼠标在主视图/全局坐标系下的位置
@@ -162,6 +163,13 @@ export function SyncAnnotation() {
       return; 
     }
     
+    // 🌟 AI 功能暂不实现拦截
+    if (tool === 'ai_anno') {
+      alert("AI Auto Annotation is temporarily not implemented.");
+      setTool('pan');
+      return;
+    }
+
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
     // 🌟 核心：直接获取纯正的 Main View 坐标，绝对不要区分辅视图！
     const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
@@ -228,6 +236,23 @@ export function SyncAnnotation() {
       return;
     }
 
+    // 🌟 3. Rotated Box & 3D Cuboid (复杂三点交互)
+    if (tool === 'rbbox' || tool === 'cuboid') {
+      if (drawStep === 0) {
+        setIsDrawing(true);
+        setDrawStep(1);
+        setCurrentPoints([{ x: mainX, y: mainY }, { x: mainX, y: mainY }]);
+      } else if (drawStep === 2) {
+        // 第三次点击：结束厚度拉伸，确认弹出窗口
+        const finalType = tool === 'rbbox' ? 'oriented_bbox' : 'cuboid';
+        openSmartPopover(e.clientX, e.clientY, finalType, currentPoints);
+        setCurrentPoints([]);
+        setDrawStep(0);
+        setIsDrawing(false);
+      }
+      return;
+    }
+
     // 3. 各种画图工具的逻辑分支
     if (tool === 'bbox' || tool === 'ellipse' || tool === 'circle') {
       if (!isDrawing) {
@@ -286,6 +311,18 @@ export function SyncAnnotation() {
 
     setHoverPos({ x: mainX, y: mainY, viewId });
 
+    // 🌟 复杂三点绘制拖拽更新
+    if (isDrawing && (tool === 'rbbox' || tool === 'cuboid')) {
+      if (drawStep === 1) {
+        // 第一步：拖动形成线 / 矩形面
+        setCurrentPoints([currentPoints[0], { x: mainX, y: mainY }]);
+      } else if (drawStep === 2) {
+        // 第二步：拖动拉伸厚度 / 景深
+        setCurrentPoints([currentPoints[0], currentPoints[1], { x: mainX, y: mainY }]);
+      }
+      return;
+    }
+
     // 严密保护的预览逻辑
     if (isDrawing && (tool === 'bbox' || tool === 'ellipse' || tool === 'circle')) {
       if (currentPoints.length > 0 && currentPoints[0]) {
@@ -327,7 +364,21 @@ export function SyncAnnotation() {
     }
 
     if (isPanning) { setIsPanning(false); return; }
-    
+
+    // 🌟 处理复杂绘制的第一阶段结束
+    if ((tool === 'rbbox' || tool === 'cuboid') && isDrawing && drawStep === 1) {
+      const [p1, p2] = currentPoints;
+      if (Math.hypot(p2.x - p1.x, p2.y - p1.y) * viewport.zoom > 5) {
+         setDrawStep(2); // 成功画出基准，进入第二步（拉伸阶段）
+      } else {
+         // 太小了当作误触
+         setDrawStep(0);
+         setIsDrawing(false);
+         setCurrentPoints([]);
+      }
+      return;
+    }
+
     // 🌟 在这套体系下，只有 Lasso, freemask 是靠“松开鼠标”来结束绘制的
     if ((tool === 'lasso' || tool === 'freemask') && isDrawing) {
       setIsDrawing(false);
@@ -352,9 +403,6 @@ export function SyncAnnotation() {
       // 如果点数太少（比如多边形少于3个点），则不触发保存
       if (tool === 'polygon' && currentPoints.length < 3) return;
       openSmartPopover(e.clientX, e.clientY, tool, currentPoints);
-
-      setPendingAnnotation({ type: tool, points: currentPoints });
-      openSmartPopover(e.clientX, e.clientY);
       
       // 清空状态
       setCurrentPoints([]);
@@ -377,6 +425,7 @@ export function SyncAnnotation() {
     setPendingAnnotation(null);
     setCurrentPoints([]);
     setIsDrawing(false);
+    setDrawStep(0);
     setFormText('');
     setFormGroupId('');
     setFormTrackId('');

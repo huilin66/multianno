@@ -70,6 +70,57 @@ function drawCanvasBackground(params: RenderParams, colors: any) {
     ctx.setLineDash([]); 
   }
 }
+// === 🌟 新增：空间几何计算工具 ===
+// 根据前 3 个点计算旋转矩形的 4 个角点
+function getRbboxPoints(p1: any, p2: any, p3: any) {
+  if (!p3) return [p1, p2, p2, p1]; 
+  const dx = p2.x - p1.x;
+  const dy = p2.y - p1.y;
+  const len = Math.hypot(dx, dy);
+  if (len === 0) return [p1, p1, p1, p1];
+  
+  // 法线向量
+  const nx = -dy / len;
+  const ny = dx / len;
+  
+  // 计算 p3 到基准线 p1-p2 的投影距离
+  const d = (p3.x - p1.x) * nx + (p3.y - p1.y) * ny;
+  return [
+      p1, p2,
+      { x: p2.x + d * nx, y: p2.y + d * ny },
+      { x: p1.x + d * nx, y: p1.y + d * ny }
+  ];
+}
+
+// 绘制 3D 立方体
+function drawCuboidEngine(ctx: CanvasRenderingContext2D, p1: any, p2: any, p3: any) {
+  const f1 = { x: Math.min(p1.x, p2.x), y: Math.min(p1.y, p2.y) };
+  const f3 = { x: Math.max(p1.x, p2.x), y: Math.max(p1.y, p2.y) };
+  const f2 = { x: f3.x, y: f1.y };
+  const f4 = { x: f1.x, y: f3.y };
+
+  if (!p3) {
+      ctx.strokeRect(f1.x, f1.y, f3.x - f1.x, f3.y - f1.y);
+      return;
+  }
+
+  // 计算偏移深度
+  const vx = p3.x - f1.x;
+  const vy = p3.y - f1.y;
+
+  const b1 = { x: f1.x + vx, y: f1.y + vy };
+  const b2 = { x: f2.x + vx, y: f2.y + vy };
+  const b3 = { x: f3.x + vx, y: f3.y + vy };
+  const b4 = { x: f4.x + vx, y: f4.y + vy };
+
+  // 渲染后面板、前面板、连接线
+  ctx.beginPath(); ctx.moveTo(b1.x, b1.y); ctx.lineTo(b2.x, b2.y); ctx.lineTo(b3.x, b3.y); ctx.lineTo(b4.x, b4.y); ctx.closePath(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(f1.x, f1.y); ctx.lineTo(f2.x, f2.y); ctx.lineTo(f3.x, f3.y); ctx.lineTo(f4.x, f4.y); ctx.closePath(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(f1.x, f1.y); ctx.lineTo(b1.x, b1.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(f2.x, f2.y); ctx.lineTo(b2.x, b2.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(f3.x, f3.y); ctx.lineTo(b3.x, b3.y); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(f4.x, f4.y); ctx.lineTo(b4.x, b4.y); ctx.stroke();
+}
 
 // 2. 绘制已保存的标注对象
 function drawSavedObjects(params: RenderParams, colors: any) {
@@ -121,6 +172,21 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       ctx.beginPath(); ctx.arc(p.x, p.y, 3 / viewport.zoom, 0, Math.PI * 2);
       ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; ctx.fill(); ctx.stroke();
       ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, p.x + 8 / viewport.zoom, p.y - 8 / viewport.zoom);
+    } else if (ann.type === 'oriented_bbox' && ann.points.length >= 2) {
+      const pts = getRbboxPoints(ann.points[0], ann.points[1], ann.points[2]);
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
+      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, pts[0].x, pts[0].y - 6 / viewport.zoom);
+    
+    // 🌟 新增：渲染已保存的 3D立方体
+    } else if (ann.type === 'cuboid' && ann.points.length >= 2) {
+      drawCuboidEngine(ctx, ann.points[0], ann.points[1], ann.points[2]);
+      const f1x = Math.min(ann.points[0].x, ann.points[1].x);
+      const f1y = Math.min(ann.points[0].y, ann.points[1].y);
+      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
+      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, f1x, f1y - 6 / viewport.zoom);
     }
 
     // 绘制 Select 模式下的控制点
@@ -142,6 +208,8 @@ function drawSavedObjects(params: RenderParams, colors: any) {
         const [p1, p2] = ann.points;
         const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
         drawHandle(x + w/2, y); drawHandle(x + w/2, y + h); drawHandle(x, y + h/2); drawHandle(x + w, y + h/2);
+      } else if (ann.type === 'oriented_bbox' || ann.type === 'cuboid') {
+        ann.points.forEach((p: any) => drawHandle(p.x, p.y));
       }
     }
   });
@@ -184,6 +252,19 @@ function drawDrawingDraft(params: RenderParams) {
     }
   } else if (tool === 'point' && currentPoints.length > 0) {
     ctx.beginPath(); ctx.arc(currentPoints[0].x, currentPoints[0].y, 3 / viewport.zoom, 0, Math.PI * 2); ctx.stroke();
+  } else if (tool === 'rbbox' && currentPoints.length >= 2) {
+      const pts = getRbboxPoints(currentPoints[0], currentPoints[1], currentPoints[2]);
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      
+      // 用亮色高亮显示基准线
+      ctx.save(); ctx.strokeStyle = '#fff'; ctx.setLineDash([]); ctx.beginPath(); 
+      ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.stroke(); ctx.restore();
+
+  // 🌟 新增：绘制3D立方体草图
+  } else if (tool === 'cuboid' && currentPoints.length >= 2) {
+      drawCuboidEngine(ctx, currentPoints[0], currentPoints[1], currentPoints[2]);
   }
   ctx.setLineDash([]); 
 }
@@ -219,6 +300,13 @@ function drawPendingConfirm(params: RenderParams) {
     ctx.stroke();
   } else if (pendingAnnotation.type === 'point') {
     ctx.beginPath(); ctx.arc(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y, 3 / viewport.zoom, 0, Math.PI * 2); ctx.stroke(); 
+  } else if (pendingAnnotation.type === 'oriented_bbox' && pendingAnnotation.points.length >= 2) {
+      const pts = getRbboxPoints(pendingAnnotation.points[0], pendingAnnotation.points[1], pendingAnnotation.points[2]);
+      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+  } else if (pendingAnnotation.type === 'cuboid' && pendingAnnotation.points.length >= 2) {
+      drawCuboidEngine(ctx, pendingAnnotation.points[0], pendingAnnotation.points[1], pendingAnnotation.points[2]);
   }
   ctx.setLineDash([]); 
 }
