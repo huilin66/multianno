@@ -127,6 +127,32 @@ export function SyncAnnotation() {
     if (focusedViewId) setActiveControlLayer(focusedViewId);
   }, [focusedViewId]);
 
+
+// 🌟 全局快捷键监听引擎
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // 安全锁 1：如果用户正在输入框里打字（例如填 Label Text），绝对不触发快捷键！
+      const target = e.target as HTMLElement;
+      if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+      
+      // 安全锁 2：如果用户正在画图过程中，禁用快捷键切换工具，防止状态错乱
+      if (isDrawing) return;
+
+      const key = e.key.toLowerCase();
+      const { shortcuts } = useStore.getState() as any;
+
+      // 遍历匹配快捷键
+      const matchedTool = Object.keys(shortcuts).find(tool => shortcuts[tool] === key);
+      if (matchedTool) {
+        e.preventDefault(); // 阻止浏览器默认行为
+        handleToolChange(matchedTool); // 调用之前写的带弹窗拦截的 Tool Change 函数
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isDrawing]); // 依赖 isDrawing，防止画一半切工具
+
   // 计算当前可被控制的图层列表 (当前图层 + 被勾选显示的图层)
   const operableLayers = layerOrder.filter(id => id === focusedViewId || visibleLayers[id]);
   
@@ -569,8 +595,11 @@ export function SyncAnnotation() {
     setUndonePoints([]); // 取消绘制时清空点的重做栈
     setTool('pan');
     setDrawStep(0);
+    const { editorSettings } = useStore.getState() as any;
+    if (!editorSettings?.continuousDrawing) {
+      setTool('pan'); 
+    }
   }, []);
-// 🌟 新增：智能计算弹窗位置，防止超出屏幕边界
 
 // 🌟 升级版：统一处理属性初始化、保存草稿、以及智能计算坐标
   const openSmartPopover = useCallback((
@@ -732,6 +761,10 @@ export function SyncAnnotation() {
       setFormTrackId('');
       setFormAttributes({});
       setActiveAnnotationId(newId);
+    }
+
+    if (!state.editorSettings?.continuousDrawing) {
+      handleToolChange('pan'); // 使用我们之前封装的拦截器切换
     }
   };
 

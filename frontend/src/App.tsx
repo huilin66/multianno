@@ -26,17 +26,19 @@ import {
   DialogTitle 
 } from '@/components/ui/dialog';
 // 🌟 引入新的图标: FolderPlus 和 Upload
-import { Menu, Settings,Cloud, CloudCog, CloudLightning,  Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags } from 'lucide-react';
+import { Menu, Settings,Cloud, CloudCog, CloudLightning,  Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags, Keyboard } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
 import { useAutoSave } from './hooks/useAutoSave';
+import { ShortcutSettingsModal } from './components/modules/ShortcutSettingsModal';
 
 export default function App() {
   const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings} = useStore();
   // 🌟 拿到翻译函数 t，和 i18n 实例
   const { t, i18n } = useTranslation();
   const { saveStatus } = useAutoSave();
+  const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   // 🌟 监听 Store 里的语言变化，同步给 i18next 引擎
   useEffect(() => {
     i18n.changeLanguage(language);
@@ -143,8 +145,11 @@ export default function App() {
             </PopoverTrigger>
             <PopoverContent className="w-64 p-4 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
               <h4 className="font-bold text-sm mb-4 border-b pb-2">Editor Settings</h4>
+
+              <PopoverContent className="w-64 p-4 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
+              <h4 className="font-bold text-sm mb-4 border-b pb-2">Editor Settings</h4>
               <div className="space-y-4">
-                <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between">
                     <Label className="text-xs">Show Sync Crosshair</Label>
                     <Switch 
                       checked={editorSettings.showCrosshair} 
@@ -158,8 +163,29 @@ export default function App() {
                       onCheckedChange={(v) => updateEditorSettings({ showPixelValue: v })} 
                     />
                   </div>
-                {/* 这里可以放更多你以后想收拢的开关 */}
+                  
+                  {/* 🌟 新增：连续绘制开关 */}
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">Continuous Drawing</Label>
+                    <Switch 
+                      checked={editorSettings.continuousDrawing} 
+                      onCheckedChange={(v) => updateEditorSettings({ continuousDrawing: v })} 
+                    />
+                  </div>
+
+                  {/* 🌟 新增：快捷键设置按钮 */}
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start text-xs h-8 mt-2" 
+                    onClick={() => setShortcutModalOpen(true)}
+                  >
+                    <Keyboard className="w-4 h-4 mr-2" />
+                    Shortcut Settings
+                  </Button>
               </div>
+            </PopoverContent>
+
+
             </PopoverContent>
           </Popover>
           {/* 语言切换按钮 */}
@@ -312,6 +338,11 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ShortcutSettingsModal 
+        open={shortcutModalOpen} 
+        onClose={() => setShortcutModalOpen(false)} 
+      />
     </div>
   );
 }

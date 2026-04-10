@@ -100,6 +100,10 @@ export interface TaxonomyAttribute {
   applyToAll: boolean; 
 }
 
+export interface EditorSettings {
+  showCrosshair: boolean;
+  continuousDrawing: boolean; // 🌟 新增：连续绘制开关
+}
 
 type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy';
 
@@ -122,8 +126,11 @@ export interface AppState {
   setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
   viewport: {zoom: number;panX: number;panY: number;};
 
-  editorSettings: { showCrosshair: boolean; showPixelValue: boolean };
-  updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean }>) => void;
+  editorSettings: { showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean };
+  updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean }>) => void;
+  
+  shortcuts: Record<string, string>;
+  updateShortcut: (tool: string, key: string) => void;
 
   activeModule: ActiveModule;
   currentStem: string | null;
@@ -228,10 +235,25 @@ export const useStore = create<AppState>()(
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
 
-      editorSettings: { showCrosshair: true, showPixelValue: true },
+      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false },
       updateEditorSettings: (newSettings) => set((state) => ({ 
         editorSettings: { ...state.editorSettings, ...newSettings } 
       })),
+      
+      shortcuts: {
+        pan: 'h',
+        select: 'v',
+        bbox: 'r',
+        polygon: 'p',
+        cutout: 'e', 
+        cut: 'c',
+      },
+      updateShortcut: (tool: string, key: string) => set((state) => ({ 
+        shortcuts: { ...state.shortcuts, [tool]: key.toLowerCase() } 
+      })),
+    setEditorSettings: (settings: Partial<EditorSettings>) => set((state) => ({ 
+      editorSettings: { ...state.editorSettings, ...settings } 
+    })),
 
       // 🌟 5. 新增方法：更新特定 stem 的全局属性
       updateStemMetadata: (stem, data) => set((state) => ({
