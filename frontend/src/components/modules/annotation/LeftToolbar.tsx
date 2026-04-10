@@ -6,6 +6,7 @@ import {
   MoreHorizontal, ChevronLeft, ChevronRight, Box, RotateCw, Activity, 
   Pencil, Cloud, MousePointer2, Undo2, Redo2, Columns2, Diamond
 } from 'lucide-react';
+import { useStore } from '../../../store/useStore';
 
 interface LeftToolbarProps {
   tool: string;
@@ -27,7 +28,13 @@ export function LeftToolbar({
 }: LeftToolbarProps) {
   
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const { shortcuts } = useStore() as any; // 🌟 引入快捷键字典
 
+  // 🌟 辅助函数：动态生成提示文字
+  const getLabel = (name: string, id: string) => {
+    return shortcuts[id] ? `${name} (${shortcuts[id].toUpperCase()})` : name;
+  };
+  
   // === 1. 核心展示的 4 个绘图按钮 ===
   const mainDrawTools = [
     { id: 'bbox', icon: Square, label: 'BBox (R)' },

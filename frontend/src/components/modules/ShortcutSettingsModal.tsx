@@ -14,8 +14,17 @@ const TOOL_NAMES: Record<string, string> = {
   select: '选择/编辑 (Select)',
   bbox: '矩形框 (BBox)',
   polygon: '多边形 (Polygon)',
-  cutout: '橡皮擦/挖洞 (Cutout)',
+  ai_anno: 'AI 自动标注 (AI Auto)',
+  rbbox: '旋转框 (Rotated Box)',
+  cuboid: '3D 立方体 (Cuboid)',
+  ellipse: '椭圆 (Ellipse)',
+  circle: '圆形 (Circle)',
+  freemask: '自由掩膜 (FreeMask)',
+  point: '点 (Point)',
+  line: '线段 (Line)',
+  lasso: '套索 (Lasso)',
   cut: '切割断离 (Cut)',
+  cutout: '橡皮擦/挖洞 (Cutout)',
 };
 
 export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalProps) {

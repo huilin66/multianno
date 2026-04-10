@@ -670,48 +670,33 @@ export function SyncAnnotation() {
   }, [tool, undonePoints, performGlobalRedo]);
   
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'v' || e.key === 'V') setTool('select');
-    if (e.key === 'h' || e.key === 'H') setTool('pan');
-    if (e.key === 'r' || e.key === 'R') setTool('bbox');
-    if (e.key === 'p' || e.key === 'P') setTool('polygon');
-    if (e.key === 'o' || e.key === 'O') setTool('ellipse');
-    if (e.key === 'c' || e.key === 'C') setTool('circle');
-    if (e.key === 't' || e.key === 'T') setTool('point');
-    if (e.key === 'l' || e.key === 'L') setTool('line');
-    if (e.key === 'f' || e.key === 'F') setTool('lasso');
-    
-    // 🌟 新增：Ctrl+Z 或 Cmd+Z 触发撤销
-    // 🌟 全新重做快捷键 (支持 Ctrl+Y 或 Ctrl+Shift+Z)
-    const isCtrl = e.ctrlKey || e.metaKey;
+  const isCtrl = e.ctrlKey || e.metaKey;
     if (isCtrl && (e.key === 'y' || e.key === 'Y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
       e.preventDefault();
       handleRedo();
       return;
     }
     
-    // 🌟 全新撤销快捷键 (Ctrl+Z，屏蔽 Shift 防止冲突)
     if (isCtrl && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
       e.preventDefault();
       handleUndo();
       return;
     }
 
-    // 🌟 拦截删除键：将被删除的对象压入历史栈，从而支持“撤销删除”！
     if ((e.key === 'Delete' || e.key === 'Backspace') && activeAnnotationId) {
       const targetAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
       if (targetAnno) {
-        pushAction({ type: 'delete', anno: targetAnno }); // 🌟 使用 Hook 提供的方法
+        pushAction({ type: 'delete', anno: targetAnno }); 
       }
       removeAnnotation(activeAnnotationId);
       setActiveAnnotationId(null);
     }
+    
     if (e.key === 'Enter' && (tool === 'polygon' || tool === 'line') && currentPoints.length > 1) {
       if (tool === 'polygon' && currentPoints.length < 3) return;
-  
       const lastPoint = currentPoints[currentPoints.length - 1];
       const screenX = (lastPoint.x * viewport.zoom) + viewport.panX;
       const screenY = (lastPoint.y * viewport.zoom) + viewport.panY;
-      
       openSmartPopover(screenX, screenY, tool, currentPoints);
       setCurrentPoints([]);
     } else if (e.key === 'Escape') {

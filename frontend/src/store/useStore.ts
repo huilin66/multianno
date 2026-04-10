@@ -245,8 +245,17 @@ export const useStore = create<AppState>()(
         select: 'v',
         bbox: 'r',
         polygon: 'p',
+        ai_anno: 'a',
+        rbbox: 'd',
+        cuboid: 'b',
+        ellipse: 'o',
+        circle: 'c',
+        freemask: 'm',
+        point: 't',
+        line: 'l',
+        lasso: 'f',
+        cut: 'x',   // 避免和 Circle(c) 冲突，使用 x 作为切割
         cutout: 'e', 
-        cut: 'c',
       },
       updateShortcut: (tool: string, key: string) => set((state) => ({ 
         shortcuts: { ...state.shortcuts, [tool]: key.toLowerCase() } 
