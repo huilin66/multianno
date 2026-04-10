@@ -59,6 +59,7 @@ export interface Annotation {
   id: string;
   type: 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' |'circle' | 'oriented_bbox' | 'cuboid' | 'keypoints';
   points: { x: number; y: number }[]; 
+  holes?: { x: number; y: number }[][];
   label: string;
   text?: string;
   stem: string; 

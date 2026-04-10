@@ -11,6 +11,7 @@ import { X, Minimize, Frame } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Slider } from '../ui/slider';
 import { Button } from '@/components/ui/button';
+import PolyBool from 'polybooljs';
 
 export function SyncAnnotation() {
   const { t } = useTranslation();
@@ -58,7 +59,53 @@ export function SyncAnnotation() {
   const [activeControlLayer, setActiveControlLayer] = useState<string>(''); // 顶部控制条当前选中的图层
 
   const [tempActiveAnno, setTempActiveAnno] = useState<any>(null);
+// 🌟 2. 新增：原生纯 JS 多边形折线切割算法
+  const splitPolygonPureJS = (poly: {x: number, y: number}[], line: {x: number, y: number}[]) => {
+    const getIntersection = (A: any, B: any, C: any, D: any) => {
+        const denom = (D.y - C.y)*(B.x - A.x) - (D.x - C.x)*(B.y - A.y);
+        if (denom === 0) return null;
+        const ua = ((D.x - C.x)*(A.y - C.y) - (D.y - C.y)*(A.x - C.x)) / denom;
+        const ub = ((B.x - A.x)*(A.y - C.y) - (B.y - A.y)*(A.x - C.x)) / denom;
+        if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) return { x: A.x + ua*(B.x - A.x), y: A.y + ua*(B.y - A.y) };
+        return null;
+    };
 
+    let intersections = [];
+    for(let i = 0; i < line.length - 1; i++) {
+        for(let j = 0; j < poly.length; j++) {
+            const intersect = getIntersection(line[i], line[i+1], poly[j], poly[(j+1) % poly.length]);
+            if(intersect) intersections.push({ pt: intersect, polyIdx: j, lineIdx: i });
+        }
+    }
+    
+    // 必须有确切的穿入和穿出点才能分割
+    if (intersections.length < 2) return null;
+    
+    const first = intersections[0];
+    const last = intersections[intersections.length - 1];
+
+    // 构建第一个子多边形
+    let poly1 = [first.pt];
+    let idx1 = (first.polyIdx + 1) % poly.length;
+    while (idx1 !== (last.polyIdx + 1) % poly.length) {
+        poly1.push(poly[idx1]);
+        idx1 = (idx1 + 1) % poly.length;
+    }
+    poly1.push(last.pt);
+    for (let k = last.lineIdx; k > first.lineIdx; k--) poly1.push(line[k]);
+
+    // 构建第二个子多边形
+    let poly2 = [last.pt];
+    let idx2 = (last.polyIdx + 1) % poly.length;
+    while (idx2 !== (first.polyIdx + 1) % poly.length) {
+        poly2.push(poly[idx2]);
+        idx2 = (idx2 + 1) % poly.length;
+    }
+    poly2.push(first.pt);
+    for (let k = first.lineIdx + 1; k <= last.lineIdx; k++) poly2.push(line[k]);
+
+    return [poly1, poly2];
+  };
 // 初始化图层数据 (🌟 修复：严密的增量初始化，确保 operableLayers 永远不为空)
   useEffect(() => {
     if (views.length > 0 && layerOrder.length !== views.length) {
@@ -155,7 +202,25 @@ export function SyncAnnotation() {
 
     setViewport(newZoom, newPanX, newPanY);
   };
-
+// 🌟 新增：工具栏选择拦截器
+  const handleToolChange = (newTool: string) => {
+    // 如果用户试图点击 Cut 或 Cutout 工具
+    if (newTool === 'cut' || newTool === 'cutout') {
+      // 检查当前是否有选中的标注，且必须是多边形
+      const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
+      if (!activeAnno || activeAnno.type !== 'polygon') {
+        const actionName = newTool === 'cut' ? "切割" : "擦除";
+        alert(`请先选中一个多边形，然后再使用${actionName}工具。`);
+        
+        // 💡 贴心交互：自动帮用户切换到 Select (选择) 工具，引导他们去选图形
+        setTool('select'); 
+        return; 
+      }
+    }
+    
+    // 如果校验通过，或者切换的是其他工具，正常更新状态
+    setTool(newTool);
+  };
 // 🌟 将这个函数完整替换，注意参数里连 viewId 都不要了
   const handleMouseDown = (e: React.MouseEvent) => {
     if (popoverOpen) {
@@ -236,23 +301,35 @@ export function SyncAnnotation() {
       return;
     }
 
-    // 🌟 3. Rotated Box & 3D Cuboid (复杂三点交互)
+    // 🌟 3. Rotated Box & 3D Cuboid (纯点击3次交互)
     if (tool === 'rbbox' || tool === 'cuboid') {
       if (drawStep === 0) {
         setIsDrawing(true);
         setDrawStep(1);
-        setCurrentPoints([{ x: mainX, y: mainY }, { x: mainX, y: mainY }]);
+        setCurrentPoints([{ x: mainX, y: mainY }]); // 第 1 击
+      } else if (drawStep === 1) {
+        setDrawStep(2);
+        setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]); // 第 2 击
       } else if (drawStep === 2) {
-        // 第三次点击：结束厚度拉伸，确认弹出窗口
+        const finalPoints = [...currentPoints, { x: mainX, y: mainY }]; // 第 3 击
         const finalType = tool === 'rbbox' ? 'oriented_bbox' : 'cuboid';
-        openSmartPopover(e.clientX, e.clientY, finalType, currentPoints);
+        openSmartPopover(e.clientX, e.clientY, finalType, finalPoints);
         setCurrentPoints([]);
         setDrawStep(0);
         setIsDrawing(false);
       }
       return;
     }
-
+    // 🌟 增加拦截检查：如果是切割或擦除工具，且当前不是正在绘制中（即第一笔落下时）
+    if ((tool === 'cut' || tool === 'cutout') && !isDrawing) {
+      const activeAnno = annotations.find((a: any) => a.id === activeAnnotationId);
+      // 检查：1. 是否选中了对象 2. 选中的对象是否是多边形
+      if (!activeAnno || activeAnno.type !== 'polygon') {
+        const actionName = tool === 'cut' ? "切割" : "擦除";
+        alert(`请先在右侧列表或画布中选中一个多边形，再执行${actionName}操作。`);
+        return; // 直接返回，不执行后续的 setIsDrawing(true)
+      }
+    }
     // 3. 各种画图工具的逻辑分支
     if (tool === 'bbox' || tool === 'ellipse' || tool === 'circle') {
       if (!isDrawing) {
@@ -270,10 +347,10 @@ export function SyncAnnotation() {
         }
         setCurrentPoints([]); // 清空草图
       }
-    } else if (tool === 'polygon' || tool === 'line') {
-      setIsDrawing(true); // 🌟 极其关键：激活绘制状态，否则撤销逻辑无法捕获
+    } else if (tool === 'polygon' || tool === 'line' || tool === 'cut' || tool === 'cutout') {
+      setIsDrawing(true); 
       setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
-      setUndonePoints([]); // 只要点下了新点，就清空重做栈，断开之前的未来
+      setUndonePoints([]); 
     } else if (tool === 'lasso'|| tool === 'freemask') {
       setIsDrawing(true);
       setCurrentPoints([{ x: mainX, y: mainY }]);
@@ -365,19 +442,6 @@ export function SyncAnnotation() {
 
     if (isPanning) { setIsPanning(false); return; }
 
-    // 🌟 处理复杂绘制的第一阶段结束
-    if ((tool === 'rbbox' || tool === 'cuboid') && isDrawing && drawStep === 1) {
-      const [p1, p2] = currentPoints;
-      if (Math.hypot(p2.x - p1.x, p2.y - p1.y) * viewport.zoom > 5) {
-         setDrawStep(2); // 成功画出基准，进入第二步（拉伸阶段）
-      } else {
-         // 太小了当作误触
-         setDrawStep(0);
-         setIsDrawing(false);
-         setCurrentPoints([]);
-      }
-      return;
-    }
 
     // 🌟 在这套体系下，只有 Lasso, freemask 是靠“松开鼠标”来结束绘制的
     if ((tool === 'lasso' || tool === 'freemask') && isDrawing) {
@@ -393,17 +457,87 @@ export function SyncAnnotation() {
     // Polygon 等工具的结束移交给了 handleDoubleClick / Enter 键
   };
 
-// 🌟 新增：双击完成多边形/多段线
+  // 🌟 处理双击结束绘制
   const handleDoubleClick = (e: React.MouseEvent) => {
-    // 只有在绘制多边形或线段，且有点的情况下才触发
-    if ((tool === 'polygon' || tool === 'line') && currentPoints.length > 1) {
+    if ((tool === 'polygon' || tool === 'line' || tool === 'cut' || tool === 'cutout') && currentPoints.length > 1) {
       e.preventDefault();
       e.stopPropagation();
 
-      // 如果点数太少（比如多边形少于3个点），则不触发保存
-      if (tool === 'polygon' && currentPoints.length < 3) return;
-      openSmartPopover(e.clientX, e.clientY, tool, currentPoints);
-      
+      if ((tool === 'polygon' || tool === 'cutout') && currentPoints.length < 3) return;
+
+      // 🌟 新增：如果是 Cut 或 Cutout，执行几何修改逻辑
+      if (tool === 'cut' || tool === 'cutout') {
+        if (!activeAnnotationId) {
+          alert(t('Please select a polygon first (Shortcut: V)'));
+          setCurrentPoints([]); setIsDrawing(false);
+          return;
+        }
+        
+        const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
+        if (!activeAnno || activeAnno.type !== 'polygon') {
+          alert(t('Cut/Cutout tools only work on Polygons.'));
+          setCurrentPoints([]); setIsDrawing(false);
+          return;
+        }
+
+        // 1. Cutout 挖洞逻辑 (原生支持)
+// 1. Cutout 真正的几何擦除 (Boolean Difference)
+        if (tool === 'cutout') {
+          try {
+            // 将当前目标和橡皮擦转换为 PolyBool 数据格式
+            const polyA = { regions: [activeAnno.points.map((p: any) => [p.x, p.y])], inverted: false };
+            const polyB = { regions: [currentPoints.map((p: any) => [p.x, p.y])], inverted: false };
+
+            // 🌟 核心引擎：执行 A - B 的布尔差集运算
+            const result = PolyBool.difference(polyA, polyB);
+
+            if (result.regions.length === 0) {
+              // 橡皮擦太大了，图形被完全擦没，直接删除
+              removeAnnotation(activeAnno.id);
+              pushAction({ type: 'delete', anno: activeAnno });
+              setActiveAnnotationId(null);
+            } else {
+              // 🌟 智能判断：
+              // polybooljs 会自动帮我们算出结果。
+              // 如果只剩 1 个 region，说明只是削了边角（变成五边形），或者在内部挖了个纯净的洞
+              // 如果有多个 region，说明一刀擦下去，把原图形拦腰截断成了两半！
+              
+              // 第一块区域保留给原对象更新
+              const newPoints = result.regions[0].map((pt: any) => ({ x: pt[0], y: pt[1] }));
+              updateAnnotation(activeAnno.id, { points: newPoints, holes: [] }); 
+
+              // 如果断成了好几块，剩下的区域生成全新对象
+              for (let i = 1; i < result.regions.length; i++) {
+                 const extraPoints = result.regions[i].map((pt: any) => ({ x: pt[0], y: pt[1] }));
+                 const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+                 addAnnotation({ ...activeAnno, id: newId, points: extraPoints, holes: [] });
+              }
+              pushAction({ type: 'edit', anno: activeAnno });
+            }
+          } catch (err) {
+            // 兜底：如果奇异几何情况计算失败，回退到存 holes
+            const newHoles = activeAnno.holes ? [...activeAnno.holes, currentPoints] : [currentPoints];
+            updateAnnotation(activeAnno.id, { holes: newHoles });
+          }
+        }
+        // 2. Cut 分割逻辑
+        else if (tool === 'cut') {
+          const splitResult = splitPolygonPureJS(activeAnno.points, currentPoints);
+          if (splitResult && splitResult.length === 2) {
+             updateAnnotation(activeAnno.id, { points: splitResult[0] });
+             const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+             addAnnotation({ ...activeAnno, id: newId, points: splitResult[1], holes: [] });
+             pushAction({ type: 'edit', anno: activeAnno }); 
+          } else {
+             alert("切割失败：折线必须从多边形外部穿入并穿出（有且仅有两个交点）。");
+          }
+        }
+
+      } else {
+        // 常规的新建 Polygon / Line 逻辑
+        openSmartPopover(e.clientX, e.clientY, tool, currentPoints);
+      }
+
       // 清空状态
       setCurrentPoints([]);
       setIsDrawing(false);
@@ -434,6 +568,7 @@ export function SyncAnnotation() {
     setFormAttributes({});
     setUndonePoints([]); // 取消绘制时清空点的重做栈
     setTool('pan');
+    setDrawStep(0);
   }, []);
 // 🌟 新增：智能计算弹窗位置，防止超出屏幕边界
 
@@ -619,7 +754,7 @@ export function SyncAnnotation() {
       
       {/* 👈 Left Toolbar */}
       <LeftToolbar 
-      tool={tool} setTool={setTool} 
+      tool={tool} setTool={handleToolChange}
       handleUndo={handleUndo} handleRedo={handleRedo} 
       // 🌟 传下去，加上 currentPoints 的长度判断（用于撤销点）
       canUndo={undoCount > 0 || currentPoints.length > 0}

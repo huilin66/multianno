@@ -143,11 +143,70 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
       ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
     } else if (ann.type === 'polygon' && ann.points.length > 0) {
-      ctx.beginPath(); ctx.moveTo(ann.points[0].x, ann.points[0].y);
+      ctx.save();
+
+      // 🌟 第一重裁剪：将整个世界的画布死死限制在原图形 A 内部！
+      // 这样一来，橡皮擦 B 伸到外面的任何“尾巴 (b')”都绝对画不出来。
+      ctx.beginPath(); 
+      ctx.moveTo(ann.points[0].x, ann.points[0].y);
       for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
-      ctx.closePath(); ctx.stroke(); ctx.fill();
+      ctx.closePath(); 
+      ctx.clip(); 
+
+      // 🌟 构建复合路径 (A + B)
+      ctx.beginPath();
+      ctx.moveTo(ann.points[0].x, ann.points[0].y);
+      for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
+      ctx.closePath();
+
+      if (ann.holes && ann.holes.length > 0) {
+        ann.holes.forEach((hole: any) => {
+          if (hole.length > 0) {
+            ctx.moveTo(hole[0].x, hole[0].y);
+            for (let i = 1; i < hole.length; i++) ctx.lineTo(hole[i].x, hole[i].y);
+            ctx.closePath();
+          }
+        });
+      }
+
+      // 🌟 由于第一重裁剪的保护，此时的 evenodd 填充，就是完美的 A 减 B (a')
+      ctx.fillStyle = isActive ? `${baseColor}60` : `${baseColor}30`;
+      ctx.fill('evenodd'); 
+
+      // 🌟 第二重裁剪：将接下来的描边也死死限制在 a' 的面积上！
+      // 这意味着相交的那根线 (c) 直接被物理屏蔽了，画不出来。
+      ctx.clip('evenodd'); 
+
+      // 🌟 描边魔法：因为描边有一半的宽度会被剪裁掉，所以我们这里线宽 x 2
+      ctx.lineWidth = ((isActive ? 4 : 2) / viewport.zoom) * 2;
+      ctx.strokeStyle = isActive ? '#FFFFFF' : baseColor;
+
+      // 画 A 的边 (超出 a' 面积的线段会被切掉)
+      ctx.beginPath();
+      ctx.moveTo(ann.points[0].x, ann.points[0].y);
+      for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
+      ctx.closePath();
+      ctx.stroke();
+
+      // 画 洞 B 的边 (同理，只有留在 a' 内的那道切口会被保留)
+      if (ann.holes && ann.holes.length > 0) {
+        ctx.beginPath(); // 必须重新起笔
+        ann.holes.forEach((hole: any) => {
+          if (hole.length > 0) {
+            ctx.moveTo(hole[0].x, hole[0].y);
+            for (let i = 1; i < hole.length; i++) ctx.lineTo(hole[i].x, hole[i].y);
+            ctx.closePath();
+          }
+        });
+        ctx.stroke();
+      }
+
+      ctx.restore(); // 释放全部裁剪魔法
+
+      // 绘制 Label 文字
       ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
-      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom);
+      ctx.font = `bold ${14 / viewport.zoom}px Arial`; 
+      ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom);
     } else if (ann.type === 'line' && ann.points.length > 0) {
       ctx.beginPath(); ctx.moveTo(ann.points[0].x, ann.points[0].y);
       for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
@@ -204,6 +263,12 @@ function drawSavedObjects(params: RenderParams, colors: any) {
         drawHandle(minX, minY); drawHandle(maxX, minY); drawHandle(minX, maxY); drawHandle(maxX, maxY);
       } else if (ann.type === 'polygon' || ann.type === 'line' || ann.type === 'lasso' || ann.type === 'freemask') {
         ann.points.forEach((p: any) => drawHandle(p.x, p.y));
+
+        if (ann.holes && ann.holes.length > 0) {
+          ann.holes.forEach((hole: any) => {
+            hole.forEach((p: any) => drawHandle(p.x, p.y));
+          });
+        }
       } else if (ann.type === 'ellipse' || ann.type === 'circle') {
         const [p1, p2] = ann.points;
         const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
@@ -217,7 +282,7 @@ function drawSavedObjects(params: RenderParams, colors: any) {
 
 // 3. 绘制正在进行的草图
 function drawDrawingDraft(params: RenderParams) {
-  const { ctx, currentPoints, tool, formLabel, taxonomyClasses, viewport } = params;
+  const { ctx, currentPoints, tool, formLabel, taxonomyClasses, viewport, hoverPos } = params;
   if (currentPoints.length === 0) return;
 
   const activeClassDef = taxonomyClasses?.find((c: any) => c.name === formLabel);
@@ -227,7 +292,21 @@ function drawDrawingDraft(params: RenderParams) {
   ctx.fillStyle = `${activeColor}40`; 
   ctx.lineWidth = 2 / viewport.zoom;
   ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]); 
-  
+
+  // 只有在绘制多边形、线、切割工具时，且鼠标在当前画布内时显示
+  if (hoverPos && ['polygon', 'line', 'cut', 'cutout'].includes(tool)) {
+    const lastPoint = currentPoints[currentPoints.length - 1];
+    ctx.save();
+    // 设置预览虚线样式
+    ctx.setLineDash([5 / viewport.zoom, 5 / viewport.zoom]);
+    ctx.strokeStyle = tool === 'cutout' ? '#EF4444' : (tool === 'cut' ? '#F59E0B' : activeColor);
+    ctx.beginPath();
+    ctx.moveTo(lastPoint.x, lastPoint.y);
+    ctx.lineTo(hoverPos.x, hoverPos.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   if (tool === 'bbox' && currentPoints.length === 2) {
     const [p1, p2] = currentPoints;
     const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
@@ -238,18 +317,34 @@ function drawDrawingDraft(params: RenderParams) {
   } else if (tool === 'circle' && currentPoints.length === 2) {
     const [p1, p2] = currentPoints, x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
     ctx.beginPath(); ctx.arc(x + w/2, y + h/2, Math.max(w, h) / 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  } else if (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask') {
-    ctx.beginPath(); ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
-    for (let i = 1; i < currentPoints.length; i++) ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
-    if (tool === 'polygon' || tool === 'freemask') { ctx.closePath(); ctx.fill(); }
-    ctx.stroke();
-    
-    if (tool !== 'lasso' && tool !== 'freemask') {
-      ctx.fillStyle = activeColor; ctx.setLineDash([]); 
-      currentPoints.forEach((p: any) => {
-        ctx.beginPath(); ctx.arc(p.x, p.y, 4 / viewport.zoom, 0, Math.PI * 2); ctx.fill();
-      });
-    }
+  } else if (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask' || tool === 'cut' || tool === 'cutout') {
+      ctx.beginPath(); ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
+      for (let i = 1; i < currentPoints.length; i++) ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
+      
+      if (tool === 'polygon' || tool === 'freemask' || tool === 'cutout') { 
+        ctx.closePath(); 
+      }
+      
+      // 🌟 动态草图样式：Cutout 为红色，Cut 为黄色，其他为默认分类色
+      if (tool === 'cutout') {
+        ctx.strokeStyle = '#EF4444'; // Red
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
+        ctx.fill();
+      } else if (tool === 'cut') {
+        ctx.strokeStyle = '#F59E0B'; // Amber/Yellow
+      } else if (tool === 'polygon' || tool === 'freemask') {
+        ctx.fill();
+      }
+      
+      ctx.stroke();
+      
+      if (tool !== 'lasso' && tool !== 'freemask' && tool !== 'cut') {
+        ctx.fillStyle = tool === 'cutout' ? '#EF4444' : activeColor; 
+        ctx.setLineDash([]); 
+        currentPoints.forEach((p: any) => {
+          ctx.beginPath(); ctx.arc(p.x, p.y, 4 / viewport.zoom, 0, Math.PI * 2); ctx.fill();
+        });
+      }
   } else if (tool === 'point' && currentPoints.length > 0) {
     ctx.beginPath(); ctx.arc(currentPoints[0].x, currentPoints[0].y, 3 / viewport.zoom, 0, Math.PI * 2); ctx.stroke();
   } else if (tool === 'rbbox' && currentPoints.length >= 2) {
