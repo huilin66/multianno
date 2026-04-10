@@ -14,9 +14,11 @@ import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
 
 // 🌟 定义自定义光标样式
-// 🌟 修复版光标：空心聚焦 (Hover) 与 实心拖拽 (Drag)
-const CURSOR_FOCUS = `url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI1IiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI0IiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=') 12 12, pointer`;
-const CURSOR_DRAG = `url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI1IiBmaWxsPSJibGFjayIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+') 12 12, crosshair`;
+// 🌟 修复版光标：使用原生 URL 编码，杜绝一切乱码和解析失败
+const CURSOR_FOCUS = `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='5' stroke='white' stroke-width='3'/%3E%3Cpath d='M12 7L9 4 L15 4 Z' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M12 17L9 20 L15 20 Z' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M7 12L4 9 L4 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M17 12L20 9 L20 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='12' r='5' stroke='black' stroke-width='1.5'/%3E%3Cpath d='M12 7L9 4 L15 4 Z' fill='black'/%3E%3Cpath d='M12 17L9 20 L15 20 Z' fill='black'/%3E%3Cpath d='M7 12L4 9 L4 15 Z' fill='black'/%3E%3Cpath d='M17 12L20 9 L20 15 Z' fill='black'/%3E%3C/svg%3E") 12 12, auto`;
+
+const CURSOR_DRAG = `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='5' stroke='white' stroke-width='3'/%3E%3Cpath d='M12 7L9 4 L15 4 Z' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M12 17L9 20 L15 20 Z' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M7 12L4 9 L4 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Cpath d='M17 12L20 9 L20 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round'/%3E%3Ccircle cx='12' cy='12' r='5.5' fill='black'/%3E%3Cpath d='M12 7L9 4 L15 4 Z' fill='black'/%3E%3Cpath d='M12 17L9 20 L15 20 Z' fill='black'/%3E%3Cpath d='M7 12L4 9 L4 15 Z' fill='black'/%3E%3Cpath d='M17 12L20 9 L20 15 Z' fill='black'/%3E%3C/svg%3E") 12 12, auto`;
+
 
 const getControlPoints = (anno: any) => {
   if ((anno.type === 'bbox' || anno.type === 'ellipse' || anno.type === 'circle') && anno.points.length === 2) {
@@ -301,31 +303,34 @@ export function SyncAnnotation() {
     }
 
     // 1. Select 工具精准碰撞检测
-    if (e.button === 0 && tool === 'select') {
+   // 1. Select 工具精准碰撞检测 (支持所有图形)
+    if (e.button === 0 && tool === 'select') { 
       
-      // 🌟 新增：先检测是否点中了当前激活图形的“控制顶点”
+      // 🌟 第一层检测：是否点中了当前激活图形的“控制点”
       if (activeAnnotationId) {
-        const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
-        if (activeAnno) {
-          const hitRadius = 8 / viewport.zoom; // 稍微扩大吸附范围，手感更好
-          const ctrlPoints = getControlPoints(activeAnno); // 🌟 使用新引擎生成所有物理控制点
-          
-          const hit = ctrlPoints.find(p => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
+         const activeAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
+         if (activeAnno) {
+            const hitRadius = 8 / viewport.zoom;
+            const ctrlPoints = getControlPoints(activeAnno); // 🌟 使用全能解析引擎
 
-          if (hit) {
-            // 🎯 命中！
-            setDragVertex({ index: hit.id, type: hit.type as any });
-            setCursorStyle(CURSOR_DRAG); // 🌟 立刻变为“实心”拖拽光标
-            setTempActiveAnno(JSON.parse(JSON.stringify(activeAnno)));
-            return;
-          }
-        }
+            const hit = ctrlPoints.find(p => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
+
+            if (hit) {
+               // 🎯 点击聚焦，变实心拖拽光标
+               setCursorStyle(CURSOR_DRAG);
+               setDragVertex({ index: hit.id, type: hit.type as any });
+               setTempActiveAnno(JSON.parse(JSON.stringify(activeAnno))); // 深拷贝，丝滑渲染
+               return; // 拦截后续，开始拖拽
+            }
+         }
       }
 
-      // --- 以下为你原有的 Select 选中逻辑，保持不变 ---
+      // 🌟 第二层检测：常规选中逻辑 (点击图形主体进行选中)
       let clickedId = null;
       for (let i = currentAnnotations.length - 1; i >= 0; i--) {
         const ann = currentAnnotations[i];
+        
+        // 1. 矩形、椭圆、圆 (面积法)
         if (ann.type === 'bbox' || ann.type === 'ellipse' || ann.type === 'circle') {
           const [p1, p2] = ann.points;
           const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
@@ -333,7 +338,9 @@ export function SyncAnnotation() {
           if (mainX >= minX && mainX <= maxX && mainY >= minY && mainY <= maxY) {
             clickedId = ann.id; break;
           }
-        } else if (ann.type === 'polygon' || ann.type === 'oriented_bbox' || ann.type === 'cuboid') {
+        } 
+        // 2. 多边形、旋转框、3D立方体 (射线法)
+        else if (ann.type === 'polygon' || ann.type === 'oriented_bbox' || ann.type === 'cuboid') {
           let inside = false;
           for (let j = 0, k = ann.points.length - 1; j < ann.points.length; k = j++) {
             const xi = ann.points[j].x, yi = ann.points[j].y;
@@ -342,29 +349,33 @@ export function SyncAnnotation() {
             if (intersect) inside = !inside;
           }
           if (inside) { clickedId = ann.id; break; }
-        } else if (ann.type === 'line') {
+        }
+        // 3. 线段、套索 (点到线段投影距离)
+        else if (ann.type === 'line') {
           let hit = false;
           for (let j = 0; j < ann.points.length - 1; j++) {
             const p1 = ann.points[j], p2 = ann.points[j+1];
             const l2 = Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2);
             let t = l2 === 0 ? 0 : ((mainX - p1.x) * (p2.x - p1.x) + (mainY - p1.y) * (p2.y - p1.y)) / l2;
-            t = Math.max(0, Math.min(1, t)); // 限制在线段端点内
+            t = Math.max(0, Math.min(1, t)); 
             const projX = p1.x + t * (p2.x - p1.x);
             const projY = p1.y + t * (p2.y - p1.y);
-            if (Math.hypot(mainX - projX, mainY - projY) < 6 / viewport.zoom) {
-              hit = true; break;
-            }
+            if (Math.hypot(mainX - projX, mainY - projY) < 6 / viewport.zoom) { hit = true; break; }
           }
           if (hit) { clickedId = ann.id; break; }
         }
-        // 4. 单点 (直接计算鼠标与该点的距离)
+        // 4. 单点 (距离计算)
         else if (ann.type === 'point') {
           if (ann.points.length > 0 && Math.hypot(mainX - ann.points[0].x, mainY - ann.points[0].y) < 8 / viewport.zoom) {
             clickedId = ann.id; break;
           }
         }
       }
+
+      // 执行选中状态变更
       setActiveAnnotationId(clickedId);
+      
+      // 如果什么都没点中，进入漫游模式
       if (!clickedId) {
         setIsPanning(true);
         setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
@@ -455,26 +466,31 @@ export function SyncAnnotation() {
     const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
 
+    // 🌟 智能光标反馈：悬停在控制点附近变空心光标
     if (tool === 'select' && activeAnnotationId && !dragVertex) {
-      const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
+      const activeAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
       if (activeAnno) {
         const hitRadius = 8 / viewport.zoom;
-        const ctrlPoints = getControlPoints(activeAnno);
+        const ctrlPoints = getControlPoints(activeAnno); // 🌟 使用解析引擎！支持BBox和椭圆的角点感应
         const isNearVertex = ctrlPoints.some(p => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
-        setCursorStyle(isNearVertex ? CURSOR_FOCUS : 'default'); // 靠近变空心，远离恢复箭头
+        
+        setCursorStyle(isNearVertex ? CURSOR_FOCUS : 'default');
       }
-    } else if (!dragVertex && cursorStyle !== 'default') {
-      // 保证切换到别的工具时，光标能正确恢复
-      setCursorStyle('default');
+    }
+
+    // 🌟 光标状态清理：确保切换工具或离开时恢复正常箭头
+    if (cursorStyle === CURSOR_FOCUS && (tool !== 'select' || dragVertex)) {
+        setCursorStyle('default');
     }
 
     // 🌟 临时拖拽更新逻辑
     // 🌟 全能拖拽更新逻辑：区分普通点和 BBox 的角点
+    // 🌟 临时拖拽更新逻辑：智能处理角点与普通点
     if (tool === 'select' && dragVertex && tempActiveAnno) {
       const updatedAnno = { ...tempActiveAnno };
       
       if (dragVertex.type === 'bbox-corner') {
-        // 如果是 BBox，拖动一个角，更新对应的 P1 或 P2 坐标
+        // 如果是 BBox 或 椭圆 的包围盒角点
         const [p1, p2] = updatedAnno.points;
         if (dragVertex.index === 0) { p1.x = mainX; p1.y = mainY; }
         else if (dragVertex.index === 1) { p2.x = mainX; p1.y = mainY; }
@@ -482,7 +498,7 @@ export function SyncAnnotation() {
         else if (dragVertex.index === 3) { p1.x = mainX; p2.y = mainY; }
         updatedAnno.points = [{ ...p1 }, { ...p2 }];
       } else {
-        // 多边形、线段等，直接更新数组里的这个点
+        // 多边形、线段等，直接更新对应的点
         updatedAnno.points[dragVertex.index] = { x: mainX, y: mainY };
       }
       
@@ -524,13 +540,11 @@ export function SyncAnnotation() {
 
     // 🌟 结束拖拽顶点并保存到全局 Store
     if (tool === 'select' && dragVertex && tempActiveAnno) {
-      // 1. 更新 Zustand 数据库
-      updateAnnotation(tempActiveAnno.id, { points: tempActiveAnno.points });
-      // 2. 压入历史记录以支持快捷键 Ctrl+Z 撤销！
-      pushAction({ type: 'edit', anno: tempActiveAnno }); 
-      // 3. 清空拖拽状态
+      updateAnnotation(tempActiveAnno.id, { points: tempActiveAnno.points }); // Zustand 数据库
+      pushAction({ type: 'edit', anno: tempActiveAnno }); // Undo/Redo 历史记录
       setDragVertex(null);
       setTempActiveAnno(null);
+      setCursorStyle('default'); // 抬手，变回箭头
       return;
     }
 
@@ -1003,6 +1017,7 @@ export function SyncAnnotation() {
                   isSingleViewMode={!!focusedViewId}
                   showFullExtent={showFullExtent} // 🌟 修复 2：把裁剪范围控制权传给覆盖层引擎
                   tempViewSettings={tempViewSettings}
+                  cursorStyle={cursorStyle}
                 />
               </div>
             ))}

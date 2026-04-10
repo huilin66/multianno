@@ -85,7 +85,7 @@ export function CanvasView({
   onMouseDown, onMouseMove, onMouseUp,
   formLabel, pendingAnnotation, onDoubleClick, 
   hoverPos, onMouseLeave, editorSettings, mouseQuad,
-  layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent, tempViewSettings // 🌟 接收引擎数据
+  layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent, tempViewSettings, cursorStyle // 🌟 接收引擎数据
 }: any) {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -335,12 +335,17 @@ return (
           ========================================== */}
       <canvas
         ref={canvasRef}
-        style={{ zIndex: isSingleViewMode ? 30 : 1 }} // 永远在最顶层，俯瞰所有图层
-        className={`absolute inset-0 w-full h-full ${
-          isPanning ? 'cursor-grabbing' : 
-          tool === 'pan' ? 'cursor-default' :
-          tool !== 'select' ? 'cursor-crosshair' : 'cursor-default'
-        }`}
+        style={{ 
+          zIndex: isSingleViewMode ? 30 : 1,
+          // 🌟 核心：优先使用外部传入的高级光标，否则回退到基础光标
+          cursor: (cursorStyle && cursorStyle !== 'default') 
+                    ? cursorStyle 
+                    : isPanning ? 'grabbing' 
+                    : tool === 'pan' ? 'grab' 
+                    : tool !== 'select' ? 'crosshair' 
+                    : 'default'
+        }} 
+        className="absolute inset-0 w-full h-full outline-none"
         onMouseDown={onMouseDown} onMouseUp={onMouseUp} onDoubleClick={onDoubleClick}
         onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} onContextMenu={(e) => e.preventDefault()}
       />
