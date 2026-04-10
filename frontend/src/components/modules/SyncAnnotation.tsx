@@ -13,6 +13,24 @@ import { Slider } from '../ui/slider';
 import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
 
+// 🌟 定义自定义光标样式
+// 🌟 修复版光标：空心聚焦 (Hover) 与 实心拖拽 (Drag)
+const CURSOR_FOCUS = `url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI1IiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiLz48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI0IiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiLz48L3N2Zz4=') 12 12, pointer`;
+const CURSOR_DRAG = `url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxMiIgY3k9IjEyIiByPSI1IiBmaWxsPSJibGFjayIgc3Ryb2tlPSJ3aGl0ZSIgc3Ryb2tlLXdpZHRoPSIyIi8+PC9zdmc+') 12 12, crosshair`;
+
+const getControlPoints = (anno: any) => {
+  if ((anno.type === 'bbox' || anno.type === 'ellipse' || anno.type === 'circle') && anno.points.length === 2) {
+    const [p1, p2] = anno.points;
+    return [
+      { x: p1.x, y: p1.y, id: 0, type: 'bbox-corner' }, // 左上
+      { x: p2.x, y: p1.y, id: 1, type: 'bbox-corner' }, // 右上
+      { x: p2.x, y: p2.y, id: 2, type: 'bbox-corner' }, // 右下
+      { x: p1.x, y: p2.y, id: 3, type: 'bbox-corner' }  // 左下
+    ];
+  }
+  return anno.points.map((p: any, i: number) => ({ ...p, id: i, type: 'point' }));
+};
+
 export function SyncAnnotation() {
   const { t } = useTranslation();
   const [formAttributes, setFormAttributes] = useState<Record<string, any>>({});
@@ -32,10 +50,16 @@ export function SyncAnnotation() {
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
   const [mouseQuad, setMouseQuad] = useState<Record<string, { tl: boolean, tr: boolean }>>({});
   type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' | 'circle' | 'lasso' | 'freemask' | 'rbbox' | 'cuboid' | 'ai_anno' | 'cut' | 'cutout';
-  const [dragVertex, setDragVertex] = useState<{ index: number, type: 'point' | 'edge' } | null>(null);
+
   const [tool, setTool] = useState<ToolType>('pan');
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStep, setDrawStep] = useState(0);
+// 🌟 补充拖拽与光标的状态
+  const [cursorStyle, setCursorStyle] = useState('default');
+// 🌟 1. 新增：用于记录当前正在拖拽的顶点信息，以及拖拽时的临时图形状态
+  const [dragVertex, setDragVertex] = useState<{ index: number, type: 'point' | 'edge' } | null>(null);
+  const [tempActiveAnno, setTempActiveAnno] = useState<any>(null);
+
   const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
 // 🌟 记录鼠标在主视图/全局坐标系下的位置
@@ -58,7 +82,6 @@ export function SyncAnnotation() {
   const [layerConfigs, setLayerConfigs] = useState<Record<string, { mode: 'opacity' | 'swipeX' | 'swipeY', value: number }>>({}); // 独立控制每个图层的特效
   const [activeControlLayer, setActiveControlLayer] = useState<string>(''); // 顶部控制条当前选中的图层
 
-  const [tempActiveAnno, setTempActiveAnno] = useState<any>(null);
 // 🌟 2. 新增：原生纯 JS 多边形折线切割算法
   const splitPolygonPureJS = (poly: {x: number, y: number}[], line: {x: number, y: number}[]) => {
     const getIntersection = (A: any, B: any, C: any, D: any) => {
@@ -266,30 +289,40 @@ export function SyncAnnotation() {
     const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
 
+    // 🌟 增加拦截检查：如果是切割或擦除工具，且当前不是正在绘制中（即第一笔落下时）
+    if ((tool === 'cut' || tool === 'cutout') && !isDrawing) {
+      const activeAnno = annotations.find((a: any) => a.id === activeAnnotationId);
+      // 检查：1. 是否选中了对象 2. 选中的对象是否是多边形
+      if (!activeAnno || activeAnno.type !== 'polygon') {
+        const actionName = tool === 'cut' ? "切割" : "擦除";
+        alert(`请先在右侧列表或画布中选中一个多边形，再执行${actionName}操作。`);
+        return; // 直接返回，不执行后续的 setIsDrawing(true)
+      }
+    }
+
     // 1. Select 工具精准碰撞检测
     if (e.button === 0 && tool === 'select') {
+      
+      // 🌟 新增：先检测是否点中了当前激活图形的“控制顶点”
       if (activeAnnotationId) {
-        const activeAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
+        const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
         if (activeAnno) {
-          // 遍历顶点，计算距离 (假设控制点吸附半径为 6 像素)
-          const hitRadius = 6 / viewport.zoom;
-          let hitIndex = -1;
-          for (let i = 0; i < activeAnno.points.length; i++) {
-            const pt = activeAnno.points[i];
-            if (Math.hypot(mainX - pt.x, mainY - pt.y) < hitRadius) {
-              hitIndex = i;
-              break;
-            }
-          }
+          const hitRadius = 8 / viewport.zoom; // 稍微扩大吸附范围，手感更好
+          const ctrlPoints = getControlPoints(activeAnno); // 🌟 使用新引擎生成所有物理控制点
+          
+          const hit = ctrlPoints.find(p => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
 
-          if (hitIndex !== -1) {
-            // 命中控制点！进入拖拽状态
-            setDragVertex({ index: hitIndex, type: 'point' });
-            setTempActiveAnno(JSON.parse(JSON.stringify(activeAnno))); // 深拷贝一份用于本地拖拽显示
-            return; // 拦截后续逻辑
+          if (hit) {
+            // 🎯 命中！
+            setDragVertex({ index: hit.id, type: hit.type as any });
+            setCursorStyle(CURSOR_DRAG); // 🌟 立刻变为“实心”拖拽光标
+            setTempActiveAnno(JSON.parse(JSON.stringify(activeAnno)));
+            return;
           }
         }
       }
+
+      // --- 以下为你原有的 Select 选中逻辑，保持不变 ---
       let clickedId = null;
       for (let i = currentAnnotations.length - 1; i >= 0; i--) {
         const ann = currentAnnotations[i];
@@ -300,7 +333,7 @@ export function SyncAnnotation() {
           if (mainX >= minX && mainX <= maxX && mainY >= minY && mainY <= maxY) {
             clickedId = ann.id; break;
           }
-        } else if (ann.type === 'polygon') {
+        } else if (ann.type === 'polygon' || ann.type === 'oriented_bbox' || ann.type === 'cuboid') {
           let inside = false;
           for (let j = 0, k = ann.points.length - 1; j < ann.points.length; k = j++) {
             const xi = ann.points[j].x, yi = ann.points[j].y;
@@ -309,6 +342,26 @@ export function SyncAnnotation() {
             if (intersect) inside = !inside;
           }
           if (inside) { clickedId = ann.id; break; }
+        } else if (ann.type === 'line') {
+          let hit = false;
+          for (let j = 0; j < ann.points.length - 1; j++) {
+            const p1 = ann.points[j], p2 = ann.points[j+1];
+            const l2 = Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2);
+            let t = l2 === 0 ? 0 : ((mainX - p1.x) * (p2.x - p1.x) + (mainY - p1.y) * (p2.y - p1.y)) / l2;
+            t = Math.max(0, Math.min(1, t)); // 限制在线段端点内
+            const projX = p1.x + t * (p2.x - p1.x);
+            const projY = p1.y + t * (p2.y - p1.y);
+            if (Math.hypot(mainX - projX, mainY - projY) < 6 / viewport.zoom) {
+              hit = true; break;
+            }
+          }
+          if (hit) { clickedId = ann.id; break; }
+        }
+        // 4. 单点 (直接计算鼠标与该点的距离)
+        else if (ann.type === 'point') {
+          if (ann.points.length > 0 && Math.hypot(mainX - ann.points[0].x, mainY - ann.points[0].y) < 8 / viewport.zoom) {
+            clickedId = ann.id; break;
+          }
         }
       }
       setActiveAnnotationId(clickedId);
@@ -318,7 +371,6 @@ export function SyncAnnotation() {
       }
       return;
     }
-
     // 2. 漫游拦截
     if (e.button === 1 || tool === 'pan') {
       e.preventDefault();
@@ -346,16 +398,7 @@ export function SyncAnnotation() {
       }
       return;
     }
-    // 🌟 增加拦截检查：如果是切割或擦除工具，且当前不是正在绘制中（即第一笔落下时）
-    if ((tool === 'cut' || tool === 'cutout') && !isDrawing) {
-      const activeAnno = annotations.find((a: any) => a.id === activeAnnotationId);
-      // 检查：1. 是否选中了对象 2. 选中的对象是否是多边形
-      if (!activeAnno || activeAnno.type !== 'polygon') {
-        const actionName = tool === 'cut' ? "切割" : "擦除";
-        alert(`请先在右侧列表或画布中选中一个多边形，再执行${actionName}操作。`);
-        return; // 直接返回，不执行后续的 setIsDrawing(true)
-      }
-    }
+
     // 3. 各种画图工具的逻辑分支
     if (tool === 'bbox' || tool === 'ellipse' || tool === 'circle') {
       if (!isDrawing) {
@@ -412,6 +455,41 @@ export function SyncAnnotation() {
     const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
 
+    if (tool === 'select' && activeAnnotationId && !dragVertex) {
+      const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
+      if (activeAnno) {
+        const hitRadius = 8 / viewport.zoom;
+        const ctrlPoints = getControlPoints(activeAnno);
+        const isNearVertex = ctrlPoints.some(p => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
+        setCursorStyle(isNearVertex ? CURSOR_FOCUS : 'default'); // 靠近变空心，远离恢复箭头
+      }
+    } else if (!dragVertex && cursorStyle !== 'default') {
+      // 保证切换到别的工具时，光标能正确恢复
+      setCursorStyle('default');
+    }
+
+    // 🌟 临时拖拽更新逻辑
+    // 🌟 全能拖拽更新逻辑：区分普通点和 BBox 的角点
+    if (tool === 'select' && dragVertex && tempActiveAnno) {
+      const updatedAnno = { ...tempActiveAnno };
+      
+      if (dragVertex.type === 'bbox-corner') {
+        // 如果是 BBox，拖动一个角，更新对应的 P1 或 P2 坐标
+        const [p1, p2] = updatedAnno.points;
+        if (dragVertex.index === 0) { p1.x = mainX; p1.y = mainY; }
+        else if (dragVertex.index === 1) { p2.x = mainX; p1.y = mainY; }
+        else if (dragVertex.index === 2) { p2.x = mainX; p2.y = mainY; }
+        else if (dragVertex.index === 3) { p1.x = mainX; p2.y = mainY; }
+        updatedAnno.points = [{ ...p1 }, { ...p2 }];
+      } else {
+        // 多边形、线段等，直接更新数组里的这个点
+        updatedAnno.points[dragVertex.index] = { x: mainX, y: mainY };
+      }
+      
+      setTempActiveAnno(updatedAnno);
+      return;
+    }
+
     setHoverPos({ x: mainX, y: mainY, viewId });
 
     // 🌟 复杂三点绘制拖拽更新
@@ -437,30 +515,20 @@ export function SyncAnnotation() {
         setCurrentPoints([...currentPoints, { x: mainX, y: mainY }]);
       }
     }
-
-    // 🌟 拖拽顶点逻辑
-    if (tool === 'select' && dragVertex && tempActiveAnno) {
-      const updatedAnno = { ...tempActiveAnno };
-      
-      // 更新拖拽的那个点的坐标
-      updatedAnno.points[dragVertex.index] = { x: mainX, y: mainY };
-      
-      // 如果是矩形 (bbox)，拖动一个角点会影响另外两个角点（需要维持矩形特性）
-      if (updatedAnno.type === 'bbox' && updatedAnno.points.length === 2) {
-        // 矩形实际上只存了左上和右下 2 个点，拖拽逻辑稍有不同，需要映射
-        updatedAnno.points[dragVertex.index] = { x: mainX, y: mainY };
-      }
-      
-      setTempActiveAnno(updatedAnno);
-      return;
-    }
   };
 
   const handleMouseUp = (e: React.MouseEvent) => {
+    if (dragVertex) {
+      setCursorStyle('default'); // 🌟 抬手恢复
+    }
+
     // 🌟 结束拖拽顶点并保存到全局 Store
     if (tool === 'select' && dragVertex && tempActiveAnno) {
+      // 1. 更新 Zustand 数据库
       updateAnnotation(tempActiveAnno.id, { points: tempActiveAnno.points });
-      pushAction({ type: 'edit', anno: tempActiveAnno }); // 压入历史记录以支持撤销
+      // 2. 压入历史记录以支持快捷键 Ctrl+Z 撤销！
+      pushAction({ type: 'edit', anno: tempActiveAnno }); 
+      // 3. 清空拖拽状态
       setDragVertex(null);
       setTempActiveAnno(null);
       return;
@@ -768,7 +836,10 @@ export function SyncAnnotation() {
   };
 
   return (
-    <div className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative">
+    <div 
+    className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"
+    style={{ cursor: cursorStyle }}
+    >
       
       {/* 👈 Left Toolbar */}
       <LeftToolbar 
@@ -901,7 +972,8 @@ export function SyncAnnotation() {
                 
                 <CanvasView 
                   view={view} 
-                  annotations={currentAnnotations}
+                  // 🌟 核心修改：如果正在拖拽，就用 tempActiveAnno 临时替换掉原来的对象，实现丝滑渲染
+                  annotations={tempActiveAnno ? currentAnnotations.map((a: any) => a.id === tempActiveAnno.id ? tempActiveAnno : a) : currentAnnotations}
                   activeAnnotationId={activeAnnotationId}
                   taxonomyClasses={taxonomyClasses}
                   currentPoints={currentPoints}

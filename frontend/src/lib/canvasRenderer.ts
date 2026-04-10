@@ -256,25 +256,28 @@ function drawSavedObjects(params: RenderParams, colors: any) {
         ctx.beginPath(); ctx.arc(hx, hy, 4 / viewport.zoom, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       };
 
-      if (ann.type === 'bbox' && ann.points.length === 2) {
+      // 1. 矩形、椭圆、圆形 (画出 4 个计算得到的包围盒角点)
+      if (['bbox', 'ellipse', 'circle'].includes(ann.type) && ann.points.length === 2) {
         const [p1, p2] = ann.points;
         const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
         const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
-        drawHandle(minX, minY); drawHandle(maxX, minY); drawHandle(minX, maxY); drawHandle(maxX, maxY);
-      } else if (ann.type === 'polygon' || ann.type === 'line' || ann.type === 'lasso' || ann.type === 'freemask') {
+        drawHandle(minX, minY); drawHandle(maxX, minY); 
+        drawHandle(minX, maxY); drawHandle(maxX, maxY);
+      } 
+      // 2. 多边形、线段、自由线、套索、旋转框、3D框 (全部顶点都要画)
+      else if (['polygon', 'line', 'lasso', 'freemask', 'oriented_bbox', 'cuboid'].includes(ann.type)) {
         ann.points.forEach((p: any) => drawHandle(p.x, p.y));
 
+        // 如果挖了洞，把洞的顶点也画出来
         if (ann.holes && ann.holes.length > 0) {
           ann.holes.forEach((hole: any) => {
             hole.forEach((p: any) => drawHandle(p.x, p.y));
           });
         }
-      } else if (ann.type === 'ellipse' || ann.type === 'circle') {
-        const [p1, p2] = ann.points;
-        const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-        drawHandle(x + w/2, y); drawHandle(x + w/2, y + h); drawHandle(x, y + h/2); drawHandle(x + w, y + h/2);
-      } else if (ann.type === 'oriented_bbox' || ann.type === 'cuboid') {
-        ann.points.forEach((p: any) => drawHandle(p.x, p.y));
+      } 
+      // 3. 单点
+      else if (ann.type === 'point' && ann.points.length > 0) {
+        drawHandle(ann.points[0].x, ann.points[0].y);
       }
     }
   });
