@@ -42,10 +42,10 @@ export function LeftToolbar({
     // 🌟 修正：椭圆图标使用 Circle + 缩放，避免使用“三个点”
     { id: 'ellipse', icon: Circle, label: 'Ellipse (O)', className: "scale-y-[0.7]" },
     { id: 'circle', icon: Circle, label: 'Circle (C)' },
+    { id: 'freemask', icon: Cloud, label: 'FreeMask' },
     { id: 'point', icon: CircleDot, label: 'Point (T)' },
     { id: 'line', icon: Activity, label: 'Line (L)' },
     { id: 'lasso', icon: Pencil, label: 'Lasso (F)' },
-    { id: 'freemask', icon: Cloud, label: 'FreeMask' },
   ];
 
   // === 3. 编辑工具 (含修正后的 Cut) ===
