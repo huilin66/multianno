@@ -54,6 +54,7 @@ export function SyncAnnotation() {
 
 
   const [promptMode, setPromptMode] = useState<'positive' | 'negative' | 'box'>('positive');
+  const [activeAITab, setActiveAITab] = useState<'auto' | 'semi' | 'vqa'>('auto');
   const [isAIPanelOpen, setAIPanelOpen] = useState(false);
   const [isAIReady, setIsAIReady] = useState(false);
 
@@ -150,7 +151,30 @@ export function SyncAnnotation() {
 
     return [poly1, poly2];
   };
+// 🌟 终极全局漫游引擎：彻底解决“粘滞”和“无法释放”问题
+  useEffect(() => {
+    if (!isPanning) return;
 
+    // 全局移动：无论鼠标在哪，只要在漫游状态，就更新视口
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      const dx = e.clientX - panStart.mouseX;
+      const dy = e.clientY - panStart.mouseY;
+      setViewport(viewport.zoom, panStart.panX + dx, panStart.panY + dy);
+    };
+
+    // 全局抬手：无论鼠标在哪松开，强制结束漫游
+    const handleGlobalMouseUp = () => {
+      setIsPanning(false);
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+      window.removeEventListener('mouseup', handleGlobalMouseUp);
+    };
+  }, [isPanning, panStart, viewport.zoom, setViewport]);
   // 当视图列表加载完成后，默认选中第一个视图
   useEffect(() => {
     if (views.length > 0 && !selectedAIViewId) {
@@ -357,11 +381,24 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       return; 
     }
     
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
+      return;
+    }
 
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
     // 🌟 核心：直接获取纯正的 Main View 坐标，绝对不要区分辅视图！
     const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
+    // 🌟 优先拦截 2：Pan 工具，或者处于 Auto/VQA 模式下的 AI 工具，左键直接变为漫游拖拽！
+    if (tool === 'pan' || (tool === 'ai_anno' && activeAITab !== 'semi')) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
+      return;
+    }
 
     // 🌟 增加拦截检查：如果是切割或擦除工具，且当前不是正在绘制中（即第一笔落下时）
     if ((tool === 'cut' || tool === 'cutout') && !isDrawing) {
@@ -373,16 +410,13 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
         return; // 直接返回，不执行后续的 setIsDrawing(true)
       }
     }
-    if (tool === 'ai_anno') {
+    // 🌟 AI Semi 模式：真正需要打正负样本点的逻辑
+    if (tool === 'ai_anno' && activeAITab === 'semi') {
       if (!isAIReady) return;
-
-      // 🌟 修复：严格根据状态机的 promptMode 来决定是正样本还是负样本
       const label = promptMode === 'positive' ? 1 : 0;
       const newPoint: SAMPoint = { x: mainX, y: mainY, label };
       const updatedPrompts = [...aiPrompts, newPoint];
       setAiPrompts(updatedPrompts);
-
-      // 触发后端推理
       handleAIPredict(updatedPrompts);
       return;
     }
@@ -561,22 +595,6 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
         setCursorStyle(isNearVertex ? CURSOR_FOCUS : 'default');
       }
     } 
-    // 🌟 核心修复：处理 AI 标注工具的光标
-    else if (tool === 'ai_anno') {
-      // 只有在 Semi 模式下（准备点选正负样本、画框），才显示准星 (crosshair)
-      // 如果使用 Zustand 中全局的 promptMode，需要确保从 useStore 中读取
-      const { promptMode: globalPromptMode } = useStore.getState() as any;
-      const currentPromptMode = promptMode || globalPromptMode; // 兼容组件内 state 或 store state
-
-      // 假设你在 SyncAnnotation 中能拿到 activeTab 状态，如果拿不到，最简单的办法是：
-      // 如果不是 positive/negative/box，就认为是 default (对应 Auto / VQA)
-      if (currentPromptMode === 'positive' || currentPromptMode === 'negative' || currentPromptMode === 'box') {
-        // 这里你原本应该是有 CSS crosshair 或者你的自定义样式，这里假设用 crosshair
-         setCursorStyle('crosshair'); // 或者保持你之前用于绘制的默认样式
-      } else {
-         setCursorStyle('default'); // Auto 和 VQA 模式下，恢复普通箭头
-      }
-    }
 
     // 🌟 光标状态清理：确保切换工具或离开时恢复正常箭头
     if (cursorStyle === CURSOR_FOCUS && (tool !== 'select' || dragVertex)) {
@@ -647,8 +665,6 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       setCursorStyle('default'); // 抬手，变回箭头
       return;
     }
-
-    if (isPanning) { setIsPanning(false); return; }
 
 
     // 🌟 在这套体系下，只有 Lasso, freemask 是靠“松开鼠标”来结束绘制的
@@ -1245,6 +1261,8 @@ const handleAutoPredict = async (tags: string[]) => {
         isAIReady={isAIReady}        
         promptMode={promptMode}       
         setPromptMode={setPromptMode}
+        activeTab={activeAITab}
+        setActiveTab={setActiveAITab}
         isInitializing={isInitializing} 
         onConfirmInit={handleAIInit}
         onResetInit={handleAIReset}
@@ -1379,7 +1397,7 @@ const handleAutoPredict = async (tags: string[]) => {
                   activeAnnotationId={activeAnnotationId}
                   taxonomyClasses={taxonomyClasses}
                   currentPoints={currentPoints}
-                  tool={tool}
+                  tool={(tool === 'ai_anno' && activeAITab !== 'semi') ? 'pan' : tool}
                   theme={theme}
                   folders={folders}
                   currentStem={currentStem}

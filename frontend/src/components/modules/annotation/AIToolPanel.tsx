@@ -31,10 +31,9 @@ export function AIToolPanel({
   aiPrompts, setAiPrompts, onConfirmPreview, isPredicting,
   sourceMode, setSourceMode, promptMode, setPromptMode, 
   onConfirmInit, onResetInit, isAIReady, isInitializing,
-  onAutoPredict, autoResultMsg
+  onAutoPredict, autoResultMsg, activeTab, setActiveTab
 }: any) {
-  const { aiSettings, setAISettings } = useStore() as any;
-  const [activeTab, setActiveTab] = useState<'auto' | 'semi' | 'vqa'>('auto');
+  const {aiSettings, setAISettings } = useStore() as any;
   const [autoTags, setAutoTags] = useState<string[]>([]);
   const [autoText, setAutoText] = useState('');
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'ai', text: string}[]>([]);
