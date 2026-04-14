@@ -259,6 +259,22 @@ export function SyncAnnotation() {
   const mainWidth = mainViewFolder?.metadata?.width || 1024;
   const mainHeight = mainViewFolder?.metadata?.height || 1024;
 
+// 🌟 工具函数：将多边形点集转换为 BBox 点集 (左上角, 右下角)
+  const polygonToBBox = (points: {x: number, y: number}[]) => {
+    if (!points || points.length === 0) return [];
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of points) {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    }
+    return [
+      { x: minX, y: minY },
+      { x: maxX, y: maxY }
+    ];
+  };
+
   // ==========================================
   // 🖱️ 2. 画布交互逻辑 (加入平移与智能缩放)
   // ==========================================
@@ -306,14 +322,22 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 
       if (result.polygons && result.polygons.length > 0) {
         // 🌟 2. 逆向转换：将后端吐出的 Infer Size 坐标转回 Main View 坐标！
-        const mappedPolygons = result.polygons[0].map((pt: any) => 
+        let finalPoints = result.polygons[0].map((pt: any) => 
           mapInferToMain(pt, targetView, inferSize)
         );
+
+        let finalType = 'polygon';
+        
+        // 如果用户选择了 BBox，将多边形点阵转换为两个角点
+        if (aiSettings.outputType === 'bbox') {
+           finalPoints = polygonToBBox(finalPoints);
+           finalType = 'bbox';
+        }
 
         setTempActiveAnno({
           id: 'ai_preview',
           type: 'polygon',
-          points: mappedPolygons, // 必须使用投影后的坐标渲染
+          points: finalPoints, // 必须使用投影后的坐标渲染
           label: formLabel,
           stem: currentStem
         });
@@ -531,10 +555,26 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       const activeAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
       if (activeAnno) {
         const hitRadius = 8 / viewport.zoom;
-        const ctrlPoints = getControlPoints(activeAnno); // 🌟 使用解析引擎！支持BBox和椭圆的角点感应
+        const ctrlPoints = getControlPoints(activeAnno);
         const isNearVertex = ctrlPoints.some(p => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
         
         setCursorStyle(isNearVertex ? CURSOR_FOCUS : 'default');
+      }
+    } 
+    // 🌟 核心修复：处理 AI 标注工具的光标
+    else if (tool === 'ai_anno') {
+      // 只有在 Semi 模式下（准备点选正负样本、画框），才显示准星 (crosshair)
+      // 如果使用 Zustand 中全局的 promptMode，需要确保从 useStore 中读取
+      const { promptMode: globalPromptMode } = useStore.getState() as any;
+      const currentPromptMode = promptMode || globalPromptMode; // 兼容组件内 state 或 store state
+
+      // 假设你在 SyncAnnotation 中能拿到 activeTab 状态，如果拿不到，最简单的办法是：
+      // 如果不是 positive/negative/box，就认为是 default (对应 Auto / VQA)
+      if (currentPromptMode === 'positive' || currentPromptMode === 'negative' || currentPromptMode === 'box') {
+        // 这里你原本应该是有 CSS crosshair 或者你的自定义样式，这里假设用 crosshair
+         setCursorStyle('crosshair'); // 或者保持你之前用于绘制的默认样式
+      } else {
+         setCursorStyle('default'); // Auto 和 VQA 模式下，恢复普通箭头
       }
     }
 
@@ -1097,14 +1137,20 @@ const handleAutoPredict = async (tags: string[]) => {
         polys.forEach((poly: any, index: number) => {
           
           // 🌟 核心：批量将后端吐出的 Infer Size 坐标转回 Main View 坐标
-          const mappedPoly = poly.map((pt: any) => 
+         let mappedPoly = poly.map((pt: any) => 
             mapInferToMain(pt, targetView, inferSize)
           );
+
+          let finalType = 'polygon';
+          if (aiSettings.outputType === 'bbox') {
+            mappedPoly = polygonToBBox(mappedPoly); // 现在可以安全地重新赋值了
+            finalType = 'bbox';
+          }
 
           const newId = `anno_auto_${Math.random().toString(36).substr(2, 9)}_${index}`;
           const finalAnno = {
             id: newId,
-            type: 'polygon',
+            type: finalType,
             points: mappedPoly, // 存入纯正的主坐标系数值！
             label: formLabel, 
             stem: currentStem,

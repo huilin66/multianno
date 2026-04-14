@@ -132,6 +132,7 @@ return (
           </div>
         </div>
 
+        {/* 🌟 1. 恢复：Confirm 与 Reset 按钮 */}
         <div className="flex gap-2 pt-1">
           <Button variant="default" className="flex-1 h-8 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={onConfirmInit} disabled={isInitializing || isPredicting}>
             {isInitializing ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : null}
@@ -141,7 +142,27 @@ return (
             Reset
           </Button>
         </div>
+
+        {/* 🌟 2. 新增：输出结果类型选择 (BBox / Polygon) */}
+        <div className="pt-2">
+           <div className="flex bg-neutral-200/50 dark:bg-neutral-950/50 rounded p-0.5 border border-neutral-200 dark:border-neutral-800">
+            <button 
+              className={`flex-1 py-1 text-[10px] rounded transition-all ${aiSettings.outputType === 'polygon' || !aiSettings.outputType ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`} 
+              onClick={() => setAISettings({ outputType: 'polygon' })}
+            >
+              Polygon
+            </button>
+            <button 
+              className={`flex-1 py-1 text-[10px] rounded transition-all ${aiSettings.outputType === 'bbox' ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`} 
+              onClick={() => setAISettings({ outputType: 'bbox' })}
+            >
+              BBox
+            </button>
+          </div>
+        </div>
       </div>
+
+      {/* === 下面是 3. 中间：Tab 切换，保持不变 === */}
 
       {/* 3. 中间：Tab 切换 */}
       <div className="flex p-1 gap-1 border-b border-neutral-200 dark:border-neutral-800 shrink-0">

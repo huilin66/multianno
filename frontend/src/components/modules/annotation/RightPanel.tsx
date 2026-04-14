@@ -10,7 +10,7 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, Route, EyeOff
+  Tag, Type, Hash, Route, EyeOff, Check, X
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -55,6 +55,8 @@ export function RightPanel({
     objects: true,
     scenes: false    // 场景列表较长，默认收起
   });
+
+  const [confirmDeleteAll, setConfirmDeleteAll] = React.useState(false);
 
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
@@ -609,27 +611,54 @@ export function RightPanel({
           title={t('workspace.objects')} icon={Square} 
           isExpanded={expanded.objects} onToggle={() => toggleSection('objects')} 
           badge={currentAnnotations.length}
-          /* 🌟 新增：危险操作 - 删除所有对象按钮 */
           actionNode={
             currentAnnotations.length > 0 && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="w-5 h-5 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
-                title="Delete All Objects in Current Image"
-                onClick={() => {
-                  // ⚠️ 浏览器原生二次确认弹窗
-                  if (window.confirm("Are you sure you want to delete ALL objects in this image? This action cannot be undone.")) {
-                    // 批量执行删除
-                    currentAnnotations.forEach((anno: any) => {
-                      removeAnnotation(anno.id);
-                    });
-                    setActiveAnnotationId(null);
-                  }
-                }}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </Button>
+              <div className="flex items-center h-5">
+                {confirmDeleteAll ? (
+                  // 🛡️ 点击后展开的原地确认菜单
+                  <div className="flex items-center gap-1 bg-red-100 dark:bg-red-900/40 rounded px-1 animate-in fade-in zoom-in-95">
+                    <span className="text-[9px] text-red-600 font-bold px-1 uppercase tracking-wider">Sure?</span>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // 只有点 绿钩 才会真正删除！
+                        currentAnnotations.forEach((anno: any) => removeAnnotation(anno.id));
+                        setActiveAnnotationId(null);
+                        setConfirmDeleteAll(false);
+                      }}
+                      className="w-5 h-5 flex items-center justify-center text-red-600 hover:bg-red-200 dark:hover:bg-red-800/60 rounded transition-colors"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        // 点 X 取消操作，恢复垃圾桶
+                        setConfirmDeleteAll(false);
+                      }}
+                      className="w-5 h-5 flex items-center justify-center text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  // 默认状态下的垃圾桶图标
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // 点击垃圾桶，激活二次确认 UI
+                      setConfirmDeleteAll(true);
+                    }}
+                    className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-all"
+                    title="Delete All Objects in Current Image"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             )
           }
         />
