@@ -193,6 +193,7 @@ export interface AppState {
       isConfigured: boolean; // 关键：是否已设置
       inferenceSize: number;
       outputType: 'polygon' | 'bbox',
+      filterThreshold: number,
     };
   setAISettings: (settings: Partial<AppState['aiSettings']>) => void;
 }
@@ -264,6 +265,7 @@ export const useStore = create<AppState>()(
         isConfigured: false,
         inferenceSize: 644,
         outputType: 'polygon',
+        filterThreshold: 1
       },
       setAISettings: (newSettings) => set((state) => ({
         aiSettings: { ...state.aiSettings, ...newSettings }

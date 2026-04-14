@@ -1150,24 +1150,44 @@ const handleAutoPredict = async (tags: string[]) => {
       const polys = result.polygons || [];
       
       if (polys.length > 0) {
+        // 🌟 核心修复 1：严格获取当前视图的绝对物理尺寸（计算缩放后的全图尺寸）
+        const { rawWidth, rawHeight } = getViewDimensions(targetView);
+        const { scaleX = 1, scaleY = 1 } = targetView.transform || {};
+        const trueMainWidth = rawWidth * scaleX;
+        const trueMainHeight = rawHeight * (scaleY || scaleX);
+
         polys.forEach((poly: any, index: number) => {
           
-          // 🌟 核心：批量将后端吐出的 Infer Size 坐标转回 Main View 坐标
-         let mappedPoly = poly.map((pt: any) => 
+          let mappedPoly = poly.map((pt: any) => 
             mapInferToMain(pt, targetView, inferSize)
           );
 
+          // 🌟 核心修复 2：执行尺寸过滤逻辑
+          const threshold = Number(aiSettings.filterThreshold || 0) / 100;
+          if (threshold > 0) {
+            const objBbox = polygonToBBox(mappedPoly);
+            const objW = objBbox[1].x - objBbox[0].x;
+            const objH = objBbox[1].y - objBbox[0].y;
+
+            // 严谨判定：如果对象的宽高 都小于 整个原图对应比例的宽高，则丢弃
+            if (objW < trueMainWidth * threshold && objH < trueMainHeight * threshold) {
+              // 可以在浏览器控制台看到具体丢弃了多小的东西，方便你调试
+              console.log(`[AI Filter] Dropped small object: ${Math.round(objW)}x${Math.round(objH)} (Threshold: ${Math.round(trueMainWidth * threshold)}x${Math.round(trueMainHeight * threshold)})`);
+              return; // 提前退出，跳过写入数据库
+            }
+          }
+
           let finalType = 'polygon';
           if (aiSettings.outputType === 'bbox') {
-            mappedPoly = polygonToBBox(mappedPoly); // 现在可以安全地重新赋值了
+            mappedPoly = polygonToBBox(mappedPoly);
             finalType = 'bbox';
           }
 
           const newId = `anno_auto_${Math.random().toString(36).substr(2, 9)}_${index}`;
           const finalAnno = {
             id: newId,
-            type: finalType,
-            points: mappedPoly, // 存入纯正的主坐标系数值！
+            type: finalType, 
+            points: mappedPoly, 
             label: formLabel, 
             stem: currentStem,
             attributes: {},

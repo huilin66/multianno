@@ -144,7 +144,7 @@ const handleSaveAndVerify = async () => {
           <div className="space-y-3 pt-2">
             <div className="flex justify-between items-center">
               <Label className="text-xs text-neutral-500">默认置信度</Label>
-              <span className="text-xs">{localSettings.confidence.toFixed(2)}</span>
+              <span className="text-xs">{(localSettings.confidence ?? 0.25).toFixed(2)}</span>
             </div>
             <Slider 
               value={[localSettings.confidence * 100]} max={100} step={1}

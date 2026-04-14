@@ -2,6 +2,8 @@
 import React, { useState } from 'react';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import { Slider } from '../../ui/slider'; 
+import { useTranslation } from 'react-i18next';
 import { 
   MousePointerClick, Sparkles, MessageSquare, PlusCircle, 
   MinusCircle, SquareDashed, Trash2, Check, X, Layers, Send, Loader2
@@ -33,6 +35,7 @@ export function AIToolPanel({
   onConfirmInit, onResetInit, isAIReady, isInitializing,
   onAutoPredict, autoResultMsg, activeTab, setActiveTab
 }: any) {
+  const { t } = useTranslation();
   const {aiSettings, setAISettings } = useStore() as any;
   const [autoTags, setAutoTags] = useState<string[]>([]);
   const [autoText, setAutoText] = useState('');
@@ -123,6 +126,22 @@ return (
           </div>
         </div>
 
+        {/* --- Confidence --- */}
+        <div className="space-y-1.5">
+          <div className="flex justify-between items-center">
+            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Confidence</label>
+            <input 
+              type="number" step={0.05} min={0.01} max={1.0}
+              className="w-10 h-4 bg-transparent border-b border-neutral-300 dark:border-neutral-700 text-right font-mono text-[10px] outline-none focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              value={aiSettings.confidence ?? 0.25}
+              onChange={(e) => {
+                const val = e.target.valueAsNumber;
+                if (!isNaN(val)) setAISettings({ confidence: val });
+              }}
+            />
+          </div>
+          </div>
+
         <div>
           <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">Image Source</label>
           <div className="flex bg-neutral-200/50 dark:bg-neutral-950/50 rounded p-0.5 border border-neutral-200 dark:border-neutral-800">
@@ -181,7 +200,26 @@ return (
         {/* === AUTO TAB === */}
         {activeTab === 'auto' && (
           <div className="space-y-4">
-            
+            {/* --- Size Filter --- */}
+        <div className="space-y-1.5 p-2 bg-neutral-50 dark:bg-black/20 rounded-md border border-neutral-200 dark:border-neutral-800">
+          <div className="flex justify-between items-center mb-1">
+            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Size Filter (Min %)</label>
+            <div className="flex items-center text-blue-600 bg-blue-100 dark:bg-blue-900/40 px-1 rounded">
+              <input 
+                type="number" step={0.1} min={0} max={100}
+                className="w-8 h-4 bg-transparent text-right font-mono text-[10px] font-bold outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                value={aiSettings.filterThreshold ?? 0}
+                onChange={(e) => {
+                  const val = e.target.valueAsNumber;
+                  if (!isNaN(val)) setAISettings({ filterThreshold: val });
+                }}
+              />
+              <span className="text-[9px] ml-0.5">%</span>
+            </div>
+          </div>
+                    <p className="text-[8px] text-neutral-400 leading-tight italic">* {t('ai.filterDesc', 'Ignore objects where BOTH width and height < this % of original image.')}</p>
+        </div>
+
             {/* 1. 快捷添加下拉框 */}
             <div className="space-y-1.5">
               <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Quick Add Class</label>
