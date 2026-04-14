@@ -61,7 +61,8 @@ export function RightPanel({
   };
 
   // 通用手风琴头部组件
-  const SectionHeader = ({ title, icon: Icon, isExpanded, onToggle, badge, colorClass }: any) => (
+// 🌟 升级通用手风琴头部组件，支持传入 actionNode (如删除按钮)
+  const SectionHeader = ({ title, icon: Icon, isExpanded, onToggle, badge, colorClass, actionNode }: any) => (
     <div 
       onClick={onToggle}
       className={`p-2.5 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 cursor-pointer hover:bg-neutral-200/50 dark:hover:bg-neutral-800 transition-colors shrink-0 ${
@@ -79,7 +80,15 @@ export function RightPanel({
           </span>
         )}
       </div>
-      <ChevronRight className={`w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+      <div className="flex items-center gap-2">
+        {/* 🌟 渲染额外操作按钮，并阻止点击事件冒泡到折叠面板 */}
+        {actionNode && (
+          <div onClick={(e) => e.stopPropagation()}>
+            {actionNode}
+          </div>
+        )}
+        <ChevronRight className={`w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+      </div>
     </div>
   );
 
@@ -600,6 +609,29 @@ export function RightPanel({
           title={t('workspace.objects')} icon={Square} 
           isExpanded={expanded.objects} onToggle={() => toggleSection('objects')} 
           badge={currentAnnotations.length}
+          /* 🌟 新增：危险操作 - 删除所有对象按钮 */
+          actionNode={
+            currentAnnotations.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-5 h-5 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                title="Delete All Objects in Current Image"
+                onClick={() => {
+                  // ⚠️ 浏览器原生二次确认弹窗
+                  if (window.confirm("Are you sure you want to delete ALL objects in this image? This action cannot be undone.")) {
+                    // 批量执行删除
+                    currentAnnotations.forEach((anno: any) => {
+                      removeAnnotation(anno.id);
+                    });
+                    setActiveAnnotationId(null);
+                  }
+                }}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            )
+          }
         />
         {expanded.objects && (
           <div className="max-h-[40vh] overflow-y-auto p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/30 custom-scrollbar">

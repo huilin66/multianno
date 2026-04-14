@@ -44,6 +44,10 @@ class SAMInitRequest(BaseModel):
     image_path: Optional[str] = None
     image_data: Optional[str] = None  # 接收 base64 字符串
     image_size: Optional[int] = None  # 🌟 修复：补上前端传来的 image_size 字段！
+    crop_x: Optional[int] = 0
+    crop_y: Optional[int] = 0
+    crop_w: Optional[int] = 0
+    crop_h: Optional[int] = 0
 
 
 class SAMPoint(BaseModel):

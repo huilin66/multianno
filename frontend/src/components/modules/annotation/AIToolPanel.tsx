@@ -74,7 +74,7 @@ export function AIToolPanel({
     statusText = 'AI Engine Ready';
     statusColor = 'bg-green-50 text-green-600 dark:bg-green-950/20 dark:text-green-400';
   }
-  
+
   if (!isOpen) return null;
 
 return (
@@ -161,56 +161,82 @@ return (
         {/* === AUTO TAB === */}
         {activeTab === 'auto' && (
           <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-bold text-neutral-500 uppercase">Quick Add Class</label>
+            
+            {/* 1. 快捷添加下拉框 */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Quick Add Class</label>
               <Select onValueChange={(val) => { if (!autoTags.includes(val)) setAutoTags([...autoTags, val]); }}>
-                <SelectTrigger className="h-7 text-[10px]"><SelectValue placeholder="Select Class..." /></SelectTrigger>
+                <SelectTrigger className="h-8 text-[11px] bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 shadow-sm focus:ring-1 focus:ring-blue-500">
+                  <SelectValue placeholder="Select Class..." />
+                </SelectTrigger>
                 <SelectContent>
                   {taxonomyClasses.map((c: any) => (<SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>))}
                 </SelectContent>
               </Select>
             </div>
 
+            {/* 🌟 2. 核心重构：输入与列表分离 */}
             <div className="space-y-2">
-              <label className="text-[10px] font-bold text-neutral-500 uppercase">Text Prompts</label>
-              <div className="flex flex-wrap gap-1 p-2 border rounded-md bg-neutral-50 dark:bg-black/20 min-h-[80px]">
-                {autoTags.map((tag, i) => (
-                  <span key={i} className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded text-[9px] flex items-center gap-1">
-                    {tag} <X className="w-2.5 h-2.5 cursor-pointer" onClick={() => setAutoTags(autoTags.filter((_, idx) => idx !== i))} />
-                  </span>
-                ))}
-                <input 
-                  className="flex-1 bg-transparent border-none outline-none text-[10px] min-w-[40px]" placeholder="Type..." value={autoText}
-                  onChange={e => setAutoText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && autoText.trim()) { setAutoTags([...autoTags, autoText.trim()]); setAutoText(''); } }}
-                />
+              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Text Prompts</label>
+              
+              {/* 独立干净的输入框 */}
+              <input 
+                className="w-full h-8 px-2.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded text-[11px] shadow-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" 
+                placeholder="Type prompt and press Enter..." 
+                value={autoText}
+                onChange={e => setAutoText(e.target.value)} 
+                onKeyDown={e => { 
+                  if (e.key === 'Enter' && autoText.trim()) { 
+                    setAutoTags([...autoTags, autoText.trim()]); 
+                    setAutoText(''); 
+                  } 
+                }}
+              />
+
+              {/* 独立的 Prompts 收集篮 (带空状态提示) */}
+              <div className={`min-h-[70px] p-2 rounded-md transition-colors ${
+                autoTags.length > 0 
+                  ? 'bg-neutral-50 dark:bg-black/20 border border-neutral-200 dark:border-neutral-800 shadow-inner' 
+                  : 'bg-neutral-50/50 dark:bg-black/10 border border-dashed border-neutral-200 dark:border-neutral-800 flex items-center justify-center'
+              }`}>
+                {autoTags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {autoTags.map((tag, i) => (
+                      <span key={i} className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800/50 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 shadow-sm">
+                        {tag} 
+                        <X className="w-3 h-3 cursor-pointer hover:text-red-500 transition-colors" onClick={() => setAutoTags(autoTags.filter((_, idx) => idx !== i))} />
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <span className="text-[9px] text-neutral-400 font-medium">No prompts added yet.</span>
+                )}
               </div>
             </div>
 
-            <div className="space-y-2 pt-2">
-              {/* 🌟 修改：加入点击事件，并根据 isPredicting 控制状态 */}
+            {/* 🌟 3. 操作区：去掉了 Batch 按钮，突出核心推断 */}
+            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
               <Button 
-                className="w-full bg-blue-600 h-8 text-[10px] gap-2" 
+                className="w-full bg-blue-600 hover:bg-blue-700 h-8 text-[11px] font-bold shadow-sm gap-2 transition-all" 
                 onClick={() => {
-                  // 🌟 智能修正：如果用户在输入框写了字但忘记按回车，我们自动帮他存为 Tag
                   if (autoText.trim()) {
                     const newTags = [...autoTags, autoText.trim()];
                     setAutoTags(newTags);
                     setAutoText('');
-                    onAutoPredict(newTags); // 将最新的 Tags 传给父组件
+                    onAutoPredict(newTags);
                   } else {
                     onAutoPredict(autoTags);
                   }
                 }}
-                // 🌟 放宽禁用条件：只要 Tags 列表有东西，或者 输入框里有字，就允许点击！
                 disabled={!isAIReady || isPredicting || (autoTags.length === 0 && autoText.trim() === '')}
               >
-                {isPredicting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} 
+                {isPredicting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} 
                 {isPredicting ? 'Inferring...' : 'Infer Current'}
               </Button>
-              <Button variant="outline" className="w-full h-8 text-[10px]" disabled={!isAIReady || isPredicting}>Batch All Images</Button>
             </div>
           </div>
         )}
+
 
         {/* === SEMI TAB === */}
         {activeTab === 'semi' && (

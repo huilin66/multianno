@@ -135,6 +135,7 @@ async def init_image(req: SAMInitRequest):
 
         print(f"--> [AI Init] Extracting features. Image size: {req.image_size or 644}")
 
+        # 1. 读取图像 (无论是 Base64 还是本地路径，此时都是未经裁剪的全尺寸大图)
         if req.image_data:
             header, encoded = req.image_data.split(",", 1)
             data = base64.b64decode(encoded)
@@ -143,17 +144,33 @@ async def init_image(req: SAMInitRequest):
         else:
             img = cv2.imread(req.image_path)
 
-        # 调整尺寸
+        # 🌟 核心修复：将裁剪逻辑提取到公共区域！无论数据源是什么，必须先切片！
+        print(
+            f"--> [AI Init] Crop: {req.crop_x}, {req.crop_y}, {req.crop_w}, {req.crop_h}"
+        )
+        if req.crop_w and req.crop_h:
+            x, y = int(req.crop_x), int(req.crop_y)
+            w, h = int(req.crop_w), int(req.crop_h)
+
+            # 增加边界安全锁，防止前端由于精度问题传了超出原图尺寸的坐标
+            img_h, img_w = img.shape[:2]
+            y_end = min(y + h, img_h)
+            x_end = min(x + w, img_w)
+
+            # 使用 Numpy 进行物理切片
+            img = img[max(0, y) : y_end, max(0, x) : x_end]
+
+        # 2. 对已经裁剪好的精准区域，进行缩放以满足 AI 的 Inference Size
         if req.image_size and req.image_size > 0:
             h, w = img.shape[:2]
             scale = req.image_size / max(h, w)
             new_w, new_h = int(w * scale), int(h * scale)
             img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-        # 动态更新 predictor 的内部参数以匹配前端尺寸
+        # 3. 动态更新 predictor 的内部参数以匹配前端尺寸
         vision_engine.predictor.args.imgsz = req.image_size or 644
 
-        # 核心：调用底层 set_image 提取特征
+        # 4. 调用底层 set_image 提取特征
         vision_engine.predictor.set_image(img)
         vision_engine.current_image_key = cache_key
 

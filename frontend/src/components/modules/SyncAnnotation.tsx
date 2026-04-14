@@ -282,36 +282,50 @@ export function SyncAnnotation() {
   };
 // 🌟 新增：调用后端推理函数
 const handleAIPredict = async (prompts: SAMPoint[]) => {
-  const targetView = views.find((v: any) => v.id === selectedAIViewId);
-  const fullPath = getFullImagePath(targetView);
-  
-  try {
-    setIsPredicting(true);
-    // 🌟 修复：删除多余的原生 fetch，直接使用封装好的 predictSAM (确保 client.ts 里接收 conf)
-    // 如果 client.ts 还没更新，可以使用如下原生 fetch 替换，但一定要记得 const AI_API_BASE_URL = 'http://localhost:8080/api/sam';
-    const result = await predictSAM(
-    fullPath || '', 
-    prompts, 
-    undefined, 
-    aiSettings.confidence,
-    aiSettings.inferenceSize // 🌟 传入尺寸
-  );
+    const targetView = views.find((v: any) => v.id === selectedAIViewId);
+    const fullPath = getFullImagePath(targetView);
+    const inferSize = aiSettings.inferenceSize || 644; // 提取设置的尺寸
+    
+    try {
+      setIsPredicting(true);
 
-    if (result.polygons && result.polygons.length > 0) {
-      setTempActiveAnno({
-        id: 'ai_preview',
-        type: 'polygon',
-        points: result.polygons[0], 
-        label: formLabel,
-        stem: currentStem
-      });
+      // 🌟 1. 正向转换：将用户的 Main View 坐标转为后端所需的 Infer Size 坐标
+      const mappedPrompts = prompts.map(p => ({
+        ...p,
+        ...mapMainToInfer({ x: p.x, y: p.y }, targetView, inferSize)
+      }));
+
+      // 注意：使用 mappedPrompts 和 inferSize
+      const result = await predictSAM(
+        fullPath || '', 
+        mappedPrompts, 
+        undefined, 
+        aiSettings.confidence,
+        inferSize 
+      );
+
+      if (result.polygons && result.polygons.length > 0) {
+        // 🌟 2. 逆向转换：将后端吐出的 Infer Size 坐标转回 Main View 坐标！
+        const mappedPolygons = result.polygons[0].map((pt: any) => 
+          mapInferToMain(pt, targetView, inferSize)
+        );
+
+        setTempActiveAnno({
+          id: 'ai_preview',
+          type: 'polygon',
+          points: mappedPolygons, // 必须使用投影后的坐标渲染
+          label: formLabel,
+          stem: currentStem
+        });
+      }
+    } catch (err) {
+      console.error("AI Predict Error:", err);
+    } finally {
+      setIsPredicting(false);
     }
-  } catch (err) {
-    console.error("AI Predict Error:", err);
-  } finally {
-    setIsPredicting(false);
-  }
-};
+  };
+
+
 // 🌟 将这个函数完整替换，注意参数里连 viewId 都不要了
   const handleMouseDown = (e: React.MouseEvent) => {
     if (popoverOpen) {
@@ -905,6 +919,72 @@ const getFullImagePath = (view: any) => {
   return `${folder.path}/${fileName}`;
 };
 
+// 🌟 引擎 1：解析当前视图的真实物理尺寸与可能存在的裁剪框 (Crop)
+// 🌟 引擎 1：解析当前视图的真实物理尺寸与百分比裁剪框 (Crop)
+  const getViewDimensions = (view: any) => {
+    const folder = folders?.find((f: any) => f.id === view.folderId);
+    // 提取原图尺寸，如果没有则给兜底值
+    const rawWidth = folder?.metadata?.width || 1024;
+    const rawHeight = folder?.metadata?.height || 1024;
+    
+    // 🌟 核心修复：正确读取 transform 中的百分比 Crop 参数
+    const crop = view.transform?.crop;
+
+    if (!crop) {
+      // 如果没有裁剪，返回整图尺寸
+      return { rawWidth, rawHeight, cropX: 0, cropY: 0, cropW: rawWidth, cropH: rawHeight };
+    }
+
+    // t(Top), r(Right), b(Bottom), l(Left) 是 0-100 的百分比
+    // 根据百分比换算出实际的物理像素坐标和宽高
+    const cropX = (crop.l / 100) * rawWidth;
+    const cropY = (crop.t / 100) * rawHeight;
+    const cropW = ((crop.r - crop.l) / 100) * rawWidth;
+    const cropH = ((crop.b - crop.t) / 100) * rawHeight;
+    
+    return { rawWidth, rawHeight, cropX, cropY, cropW, cropH };
+  };
+
+  // 🌟 引擎 2：【正向投影】 发送给 AI 前：主坐标系 -> AI 推理坐标系
+  const mapMainToInfer = (pt: {x: number, y: number}, targetView: any, inferSize: number) => {
+    // 1. 解除矩阵变换：Main -> Aug Raw
+    const { offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1 } = targetView.transform || {};
+    const targetRawX = (pt.x - offsetX) / scaleX;
+    const targetRawY = (pt.y - offsetY) / (scaleY || scaleX);
+
+    // 2. 解除裁剪偏移：Aug Raw -> Aug Crop
+    const { cropX, cropY, cropW, cropH } = getViewDimensions(targetView);
+    const targetCropX = targetRawX - cropX;
+    const targetCropY = targetRawY - cropY;
+
+    // 3. 计算缩放比并映射：Aug Crop -> Infer Size
+    const scaleToInfer = inferSize / Math.max(cropW, cropH);
+    return {
+      x: targetCropX * scaleToInfer,
+      y: targetCropY * scaleToInfer
+    };
+  };
+
+  // 🌟 引擎 3：【逆向投影】 接收 AI 结果入库前：AI 推理坐标系 -> 主坐标系
+  const mapInferToMain = (pt: {x: number, y: number}, targetView: any, inferSize: number) => {
+    const { offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1 } = targetView.transform || {};
+    const { cropX, cropY, cropW, cropH } = getViewDimensions(targetView);
+
+    // 1. 解除缩放：Infer Size -> Aug Crop
+    const scaleToInfer = inferSize / Math.max(cropW, cropH);
+    const targetCropX = pt.x / scaleToInfer;
+    const targetCropY = pt.y / scaleToInfer;
+
+    // 2. 加上裁剪偏移：Aug Crop -> Aug Raw
+    const targetRawX = targetCropX + cropX;
+    const targetRawY = targetCropY + cropY;
+
+    // 3. 加上矩阵变换重回主坐标系：Aug Raw -> Main View
+    return {
+      x: targetRawX * scaleX + offsetX,
+      y: targetRawY * (scaleY || scaleX) + offsetY
+    };
+  };
 
 // 🌟 修改工具栏点击拦截
 // 🌟 修复关键：在参数列表前加上 async 关键字
@@ -950,26 +1030,33 @@ const handleToolChange = async (newTool: string) => {
 // 🌟 核心：AI 初始化函数（带参数修复）
 // src/components/SyncAnnotation.tsx 内部修改
 const handleAIInit = async () => {
-  const targetView = views.find((v: any) => v.id === selectedAIViewId);
-  if (!targetView) return;
+    const targetView = views.find((v: any) => v.id === selectedAIViewId);
+    if (!targetView) return;
 
-  const fullPath = getFullImagePath(targetView);
+    const fullPath = getFullImagePath(targetView);
+    // 🌟 直接调用我们写好的强力引擎获取真实裁剪框
+    const { cropX, cropY, cropW, cropH } = getViewDimensions(targetView);
 
-  try {
-    setIsInitializing(true); 
-    
-    const renderedData = sourceMode === 'view' 
-      ? document.querySelector('img[alt="Base Layer"]')?.getAttribute('src') 
-      : null;
+    try {
+      setIsInitializing(true); 
+      
+      const renderedData = sourceMode === 'view' 
+        ? document.querySelector('img[alt="Base Layer"]')?.getAttribute('src') 
+        : null;
 
-    await initSAM({ 
-      image_path: fullPath || '', 
-      image_data: renderedData || undefined,
-      image_size: aiSettings.inferenceSize
-    });
-    
-    setIsAIReady(true); 
-  } catch (err: any) {
+      await initSAM({ 
+        image_path: fullPath || '', 
+        image_data: renderedData || undefined,
+        image_size: aiSettings.inferenceSize,
+        // 🌟 修复：把裁剪框传给后端
+        crop_x: Math.round(cropX),
+        crop_y: Math.round(cropY),
+        crop_w: Math.round(cropW),
+        crop_h: Math.round(cropH)
+      });
+      
+      setIsAIReady(true); 
+    } catch (err: any) {
     console.error("AI Init Error:", err);
     setIsAIReady(false);
     
@@ -987,34 +1074,39 @@ const handleAIInit = async () => {
 };
 // 🌟 处理 Auto Tab 下的推理点击事件
 // 🌟 替换之前的 handleAutoPredict 函数
-  const handleAutoPredict = async (tags: string[]) => {
+const handleAutoPredict = async (tags: string[]) => {
     if (!isAIReady) return;
     const targetView = views.find((v: any) => v.id === selectedAIViewId);
     const fullPath = getFullImagePath(targetView);
+    const inferSize = aiSettings.inferenceSize || 644;
 
     try {
       setIsPredicting(true);
-      setAutoResultMsg(''); // 发起请求前清空旧提示
+      setAutoResultMsg(''); 
       
-      // 1. 调用刚才写好的后端 API
       const result = await predictAutoSAM(
         fullPath || '',
         tags,
         aiSettings.confidence,
-        aiSettings.inferenceSize || 644
+        inferSize
       );
       
       const polys = result.polygons || [];
       
-      // 2. 将预测出的多边形直接写入全局 Annotation
       if (polys.length > 0) {
         polys.forEach((poly: any, index: number) => {
+          
+          // 🌟 核心：批量将后端吐出的 Infer Size 坐标转回 Main View 坐标
+          const mappedPoly = poly.map((pt: any) => 
+            mapInferToMain(pt, targetView, inferSize)
+          );
+
           const newId = `anno_auto_${Math.random().toString(36).substr(2, 9)}_${index}`;
           const finalAnno = {
             id: newId,
             type: 'polygon',
-            points: poly,
-            label: formLabel, // 默认使用当前侧边栏选中的类别
+            points: mappedPoly, // 存入纯正的主坐标系数值！
+            label: formLabel, 
             stem: currentStem,
             attributes: {},
             difficult: false,
@@ -1024,17 +1116,12 @@ const handleAIInit = async () => {
           pushAction({ type: 'add', anno: finalAnno });
         });
         
-        // 3. 成功反馈
         setAutoResultMsg(`Found ${polys.length} Objects!`);
       } else {
-        // 失败或无结果反馈
         setAutoResultMsg(`Found 0 Objects.`);
       }
 
-      // 4. 定时器：3 秒后清除状态栏文字，恢复绿色的 Ready 状态
-      setTimeout(() => {
-        setAutoResultMsg('');
-      }, 3000);
+      setTimeout(() => setAutoResultMsg(''), 3000);
 
     } catch (e: any) {
       console.error(e);

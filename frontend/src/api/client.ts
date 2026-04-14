@@ -173,6 +173,10 @@ export interface SAMInitRequest {
   image_path?: string;
   image_data?: string; // 用于传输 Base64 渲染图
   image_size?: number; // 🌟 新增
+  crop_x?: number;
+  crop_y?: number;
+  crop_w?: number;
+  crop_h?: number;
 }
 
 // 2. 🌟 新增：获取后端 AI 真实状态的探针
