@@ -239,8 +239,6 @@ export function SyncAnnotation() {
     mode: 'opacity' as 'opacity' | 'swipeX' | 'swipeY',
     value: 0.5
   });
-  // // 🌟 核心：如果开启了单图模式，就过滤出这一个 View，否则显示所有
-  // const displayViews = focusedViewId ? views.filter((v: any) => v.id === focusedViewId) : views;
 
   // 🌟 核心修复：单图模式显示焦点图层；多图模式下，严格按照右侧列表的拖拽顺序 (layerOrder) 重新排列网格！
   const displayViews = focusedViewId 
@@ -283,6 +281,31 @@ export function SyncAnnotation() {
   const mainWidth = mainViewFolder?.metadata?.width || 1024;
   const mainHeight = mainViewFolder?.metadata?.height || 1024;
 
+  // 🌟 1. 修复版的重置视口方法 (Home)
+  const handleHomeViewport = useCallback(() => {
+    if (!containerRef.current || !mainWidth || !mainHeight) return;
+
+    // 🌟 核心修复：不能用外层大容器，必须精准获取单个画布 (Canvas) 的物理尺寸
+    const firstCanvas = containerRef.current.querySelector('canvas');
+    if (!firstCanvas) return;
+
+    const containerW = firstCanvas.clientWidth;
+    const containerH = firstCanvas.clientHeight;
+
+    const padding = 40; // 留出 40px 的边距
+    const availableW = Math.max(10, containerW - padding);
+    const availableH = Math.max(10, containerH - padding);
+
+    // 计算适合单格屏幕的缩放比 (取宽比和高比的最小值)
+    const targetZoom = Math.min(availableW / mainWidth, availableH / mainHeight);
+
+    // 计算居中的偏移量 (相对于单格 Canvas)
+    const newPanX = (containerW - mainWidth * targetZoom) / 2;
+    const newPanY = (containerH - mainHeight * targetZoom) / 2;
+
+    // 应用新的视口状态
+    setViewport(targetZoom, newPanX, newPanY);
+  }, [mainWidth, mainHeight, setViewport]);
 // 🌟 工具函数：将多边形点集转换为 BBox 点集 (左上角, 右下角)
   const polygonToBBox = (points: {x: number, y: number}[]) => {
     if (!points || points.length === 0) return [];
@@ -1254,6 +1277,7 @@ const handleAutoPredict = async (tags: string[]) => {
       <LeftToolbar 
       tool={tool} 
       setTool={handleToolChange}
+      onHomeClick={handleHomeViewport}
       handleUndo={handleUndo} handleRedo={handleRedo} 
       canUndo={undoCount > 0 || currentPoints.length > 0}
       canRedo={redoCount > 0 || undonePoints.length > 0}

@@ -4,13 +4,14 @@ import { Button } from '../../ui/button';
 import { 
   Hand, Square, Hexagon, Circle, CircleDot, Wand2, Scissors, Eraser, 
   MoreHorizontal, ChevronLeft, ChevronRight, Box, RotateCw, Activity, 
-  Pencil, Cloud, MousePointer2, Undo2, Redo2, Columns2, Diamond
+  Pencil, Cloud, MousePointer2, Undo2, Redo2, Columns2, Diamond, Home
 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 
 interface LeftToolbarProps {
   tool: string;
   setTool: (tool: any) => void;
+  onHomeClick: () => void;
   handleUndo: () => void;
   handleRedo: () => void;
   canUndo: boolean;
@@ -22,7 +23,7 @@ interface LeftToolbarProps {
 }
 
 export function LeftToolbar({ 
-  tool, setTool, handleUndo, handleRedo, canUndo, canRedo,
+  tool, setTool, onHomeClick, handleUndo, handleRedo, canUndo, canRedo,
   handlePrevStem, handleNextStem, hasPrev, hasNext 
 }: LeftToolbarProps) {
   
@@ -41,6 +42,7 @@ export function LeftToolbar({
 
   const navTools = [
     { id: 'pan', icon: Hand, label: getLabel('Pan', 'pan') },
+    { id: 'home', icon: Home, label: getLabel('Home', 'home'), action: onHomeClick },
     { id: 'prev', icon: ChevronLeft, label: getLabel('Prev', 'prev'), action: handlePrevStem, disabled: !hasPrev },
     { id: 'next', icon: ChevronRight, label: getLabel('Next', 'next'), action: handleNextStem, disabled: !hasNext },
   ];
