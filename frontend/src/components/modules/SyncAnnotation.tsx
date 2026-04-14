@@ -151,6 +151,20 @@ export function SyncAnnotation() {
 
     return [poly1, poly2];
   };
+
+  // 🌟 1. 核心修复：建立 AI 状态同步监听器
+  useEffect(() => {
+    // 只要图片路径(currentStem) 或者 推理的目标视图(selectedAIViewId) 发生任何变化
+    // 必须立刻“降级”AI 状态，直到用户再次点击 Confirm
+    console.log("[AI Context] View or Image changed, resetting AI state...");
+    
+    setIsAIReady(false); // 状态栏会立即变回“Image Data Not Loaded”
+    setAiPrompts([]);    // 清空当前的点选提示
+    setTempActiveAnno(null); // 清空预览图形
+    
+    // 如果你希望 3 个按钮看起来是“未选中”状态
+    // 我们可以在 AIToolPanel 渲染时根据 isAIReady 强制控制其样式
+  }, [currentStem, selectedAIViewId]);
 // 🌟 终极全局漫游引擎：彻底解决“粘滞”和“无法释放”问题
   useEffect(() => {
     if (!isPanning) return;
