@@ -1153,7 +1153,7 @@ const handleAIInit = async () => {
 };
 // 🌟 处理 Auto Tab 下的推理点击事件
 // 🌟 替换之前的 handleAutoPredict 函数
-const handleAutoPredict = async (tags: string[]) => {
+const handleAutoPredict = async (tags: string[], mappingDict: Record<string, string>) => {
     if (!isAIReady) return;
     const targetView = views.find((v: any) => v.id === selectedAIViewId);
     const fullPath = getFullImagePath(targetView);
@@ -1170,63 +1170,64 @@ const handleAutoPredict = async (tags: string[]) => {
         inferSize
       );
       
-      const polys = result.polygons || [];
+      // 🌟 2. 适配后端新结构：result.results 是一个对象数组
+      const groupedResults = result.results || [];
+      let totalFound = 0;
       
-      if (polys.length > 0) {
-        // 🌟 核心修复 1：严格获取当前视图的绝对物理尺寸（计算缩放后的全图尺寸）
-        const { rawWidth, rawHeight } = getViewDimensions(targetView);
-        const { scaleX = 1, scaleY = 1 } = targetView.transform || {};
-        const trueMainWidth = rawWidth * scaleX;
-        const trueMainHeight = rawHeight * (scaleY || scaleX);
+      if (groupedResults.length > 0) {
+        // 🌟 3. 外层循环：遍历每一个 Prompt 组
+        groupedResults.forEach((group: { prompt: string, polygons: any[] }) => {
+          const { prompt, polygons } = group;
+          // 💡 查字典：根据后端返回的 prompt，找出用户刚才确认的真实类别
+          const finalClassName = mappingDict[prompt] || 'Uncategorized'; 
 
-        polys.forEach((poly: any, index: number) => {
-          
-          let mappedPoly = poly.map((pt: any) => 
-            mapInferToMain(pt, targetView, inferSize)
-          );
+          // 🌟 4. 内层循环：处理该 Prompt 下的所有多边形
+          polygons.forEach((poly: any, index: number) => {
+            totalFound++;
+            const { rawWidth, rawHeight } = getViewDimensions(targetView);
+            const { scaleX = 1, scaleY = 1 } = targetView.transform || {};
+            const trueMainWidth = rawWidth * scaleX;
+            const trueMainHeight = rawHeight * (scaleY || scaleX);
 
-          // 🌟 核心修复 2：执行尺寸过滤逻辑
-          const threshold = Number(aiSettings.filterThreshold || 0) / 100;
-          if (threshold > 0) {
-            const objBbox = polygonToBBox(mappedPoly);
-            const objW = objBbox[1].x - objBbox[0].x;
-            const objH = objBbox[1].y - objBbox[0].y;
+            let mappedPoly = poly.map((pt: any) => mapInferToMain(pt, targetView, inferSize));
 
-            // 严谨判定：如果对象的宽高 都小于 整个原图对应比例的宽高，则丢弃
-            if (objW < trueMainWidth * threshold && objH < trueMainHeight * threshold) {
-              // 可以在浏览器控制台看到具体丢弃了多小的东西，方便你调试
-              console.log(`[AI Filter] Dropped small object: ${Math.round(objW)}x${Math.round(objH)} (Threshold: ${Math.round(trueMainWidth * threshold)}x${Math.round(trueMainHeight * threshold)})`);
-              return; // 提前退出，跳过写入数据库
+            // 尺寸过滤逻辑
+            const filterVal = Number(aiSettings.filterThreshold || 0);
+            if (filterVal > 0) {
+              const bbox = polygonToBBox(mappedPoly);
+              const w = bbox[1].x - bbox[0].x;
+              const h = bbox[1].y - bbox[0].y;
+              if (w < trueMainWidth * (filterVal / 100) || h < trueMainHeight * (filterVal / 100)) {
+                return; 
+              }
             }
-          }
 
-          let finalType = 'polygon';
-          if (aiSettings.outputType === 'bbox') {
-            mappedPoly = polygonToBBox(mappedPoly);
-            finalType = 'bbox';
-          }
+            let finalType = 'polygon';
+            if (aiSettings.outputType === 'bbox') {
+              mappedPoly = polygonToBBox(mappedPoly);
+              finalType = 'bbox';
+            }
 
-          const newId = `anno_auto_${Math.random().toString(36).substr(2, 9)}_${index}`;
-          const finalAnno = {
-            id: newId,
-            type: finalType, 
-            points: mappedPoly, 
-            label: formLabel, 
-            stem: currentStem,
-            attributes: {},
-            difficult: false,
-            occluded: false
-          };
-          addAnnotation(finalAnno);
-          pushAction({ type: 'add', anno: finalAnno });
+            const newId = `anno_auto_${Math.random().toString(36).substr(2, 9)}_${totalFound}`;
+            const finalAnno = {
+              id: newId,
+              type: finalType, 
+              points: mappedPoly, 
+              label: finalClassName, // 🌟 核心：写入真正映射好的类别名！
+              stem: currentStem,
+              attributes: {},
+              difficult: false,
+              occluded: false
+            };
+            addAnnotation(finalAnno);
+            pushAction({ type: 'add', anno: finalAnno });
+          });
         });
         
-        setAutoResultMsg(`Found ${polys.length} Objects!`);
+        setAutoResultMsg(`Found ${totalFound} Objects!`);
       } else {
         setAutoResultMsg(`Found 0 Objects.`);
       }
-
-      setTimeout(() => setAutoResultMsg(''), 3000);
 
     } catch (e: any) {
       console.error(e);

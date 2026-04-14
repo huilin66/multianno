@@ -234,7 +234,7 @@ async def predict_interactive(req: SAMInteractiveRequest):
 async def predict_auto(req: SAMAutoRequest):
     """
     🌟 阶段 3B：文本推理 (Auto 工具: Text Prompt)
-    复用同一个 predictor，彻底告别二次实例化和 OOM！
+    重构版：返回结构已改为 {"results": [{"prompt": "window", "polygons": [...]}, ...]}
     """
     if not vision_engine.is_loaded:
         raise HTTPException(status_code=400, detail="Vision AI 尚未装载")
@@ -245,23 +245,54 @@ async def predict_auto(req: SAMAutoRequest):
         vision_engine.current_image_key = req.image_path
 
     try:
-        # 正如你测试代码中写的，直接传 text 即可
         results = vision_engine.predictor(
             text=req.texts,
             conf=req.conf,
             verbose=False,
         )
 
-        all_polygons = []
+        # 🌟 1. 初始化一个字典，用来按 prompt 收集多边形
+        grouped_polygons = {text: [] for text in req.texts}
+
         for result in results:
-            if result.masks is not None:
+            if result.masks is not None and result.boxes is not None:
+                # 这里的 names_data 可能是 dict，也可能是 list
+                names_data = result.names
+
                 for i in range(len(result.masks.data)):
+                    # 1. 提取当前 mask 对应的类别 ID
+                    cls_id = int(result.boxes.cls[i].item())
+
+                    # 🌟 2. 核心修复：兼容 list 和 dict 两种情况
+                    if isinstance(names_data, dict):
+                        prompt_text = names_data.get(cls_id, "unknown")
+                    elif isinstance(names_data, list):
+                        prompt_text = (
+                            names_data[cls_id]
+                            if 0 <= cls_id < len(names_data)
+                            else "unknown"
+                        )
+                    else:
+                        prompt_text = "unknown"
+
+                    # 3. 提取并转换坐标
                     mask_np = result.masks.data[i].cpu().numpy()
                     polys = vision_engine.mask_to_polygons(mask_np)
-                    if polys:
-                        all_polygons.extend(polys)
 
-        return {"polygons": all_polygons}
+                    if polys:
+                        if prompt_text not in grouped_polygons:
+                            grouped_polygons[prompt_text] = []
+                        grouped_polygons[prompt_text].extend(polys)
+
+        # 🌟 3. 组装为前端需要的、带签名的结构体数组
+        final_results = []
+        for prompt, polys in grouped_polygons.items():
+            # 只有当该 prompt 真的识别到了多边形，才放进返回列表里
+            if len(polys) > 0:
+                final_results.append({"prompt": prompt, "polygons": polys})
+
+        return {"results": final_results}
+
     except Exception as e:
         import traceback
 

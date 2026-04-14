@@ -6,7 +6,8 @@ import { Slider } from '../../ui/slider';
 import { useTranslation } from 'react-i18next';
 import { 
   MousePointerClick, Sparkles, MessageSquare, PlusCircle, 
-  MinusCircle, SquareDashed, Trash2, Check, X, Layers, Send, Loader2
+  MinusCircle, SquareDashed, Trash2, Check, X, Layers, Send, Loader2, 
+  AlertTriangle, Tags
 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 
@@ -36,7 +37,15 @@ export function AIToolPanel({
   onAutoPredict, autoResultMsg, activeTab, setActiveTab
 }: any) {
   const { t } = useTranslation();
-  const {aiSettings, setAISettings } = useStore() as any;
+  const {aiSettings, setAISettings, addTaxonomyClass } = useStore() as any;
+
+  // 🌟 新增弹窗状态
+  const [mappingModalOpen, setMappingModalOpen] = useState(false);
+  const [unmappedTags, setUnmappedTags] = useState<string[]>([]);
+  // 格式: { "red door": { mode: 'existing', target: 'door' } }
+  const [tagMappings, setTagMappings] = useState<Record<string, { mode: 'new'|'existing'|'uncategorized', target: string }>>({});
+
+
   const [autoTags, setAutoTags] = useState<string[]>([]);
   const [autoText, setAutoText] = useState('');
   const [chatHistory, setChatHistory] = useState<{role: 'user' | 'ai', text: string}[]>([]);
@@ -80,8 +89,7 @@ export function AIToolPanel({
   if (!isOpen) return null;
 
 return (
-    <div className="w-52 h-full bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex flex-col z-20 shadow-xl animate-in slide-in-from-left-2">
-      
+    <div className="relative w-52 h-full bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex flex-col z-20 shadow-xl animate-in slide-in-from-left-2">
       {/* 🌟 1. 顶部指示灯：改为单行显示 */}
       <div className={`p-2 border-b flex items-center justify-center text-[10px] font-bold shrink-0 ${
         aiSettings.isConfigured 
@@ -217,7 +225,7 @@ return (
               <span className="text-[9px] ml-0.5">%</span>
             </div>
           </div>
-                    <p className="text-[8px] text-neutral-400 leading-tight italic">* {t('ai.filterDesc', 'Ignore objects where BOTH width and height < this % of original image.')}</p>
+          <p className="text-[8px] text-neutral-400 leading-tight italic">* {t('ai.filterDesc', 'Ignore objects where BOTH width and height < this % of original image.')}</p>
         </div>
 
             {/* 1. 快捷添加下拉框 */}
@@ -273,17 +281,32 @@ return (
             </div>
 
             {/* 🌟 3. 操作区：去掉了 Batch 按钮，突出核心推断 */}
-            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
+            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 relative">
               <Button 
                 className="w-full bg-blue-600 hover:bg-blue-700 h-8 text-[11px] font-bold shadow-sm gap-2 transition-all" 
                 onClick={() => {
+                  const finalTags = autoText.trim() ? [...autoTags, autoText.trim()] : [...autoTags];
                   if (autoText.trim()) {
-                    const newTags = [...autoTags, autoText.trim()];
-                    setAutoTags(newTags);
+                    setAutoTags(finalTags);
                     setAutoText('');
-                    onAutoPredict(newTags);
+                  }
+                  
+                  // 🛡️ 拦截逻辑：检查未知标签
+                  const existingClassNames = taxonomyClasses.map((c: any) => c.name);
+                  const unknown = finalTags.filter(tag => !existingClassNames.includes(tag));
+                  
+                  if (unknown.length > 0) {
+                    // 初始化映射状态
+                    const initialMappings: any = {};
+                    unknown.forEach(t => initialMappings[t] = { mode: 'new', target: t }); // 默认新增
+                    setUnmappedTags(unknown);
+                    setTagMappings(initialMappings);
+                    setMappingModalOpen(true); // 打开弹窗
                   } else {
-                    onAutoPredict(autoTags);
+                    // 完美匹配，直接执行 (组装一个直通的映射表)
+                    const directMap: any = {};
+                    finalTags.forEach(t => directMap[t] = t);
+                    onAutoPredict(finalTags, directMap);
                   }
                 }}
                 disabled={!isAIReady || isPredicting || (autoTags.length === 0 && autoText.trim() === '')}
@@ -292,6 +315,77 @@ return (
                 {isPredicting ? 'Inferring...' : 'Infer Current'}
               </Button>
             </div>
+
+            {/* 🌟 4. Mapping Modal (未知标签处理弹窗) */}
+            {mappingModalOpen && (
+              <div className="absolute inset-x-2 bottom-10 z-50 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 shadow-2xl rounded-lg p-3 flex flex-col animate-in slide-in-from-bottom-4">
+                <div className="flex items-center gap-2 mb-3 border-b border-neutral-100 dark:border-neutral-800 pb-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500" />
+                  <h4 className="text-[11px] font-bold">Unrecognized Prompts</h4>
+                </div>
+                
+                <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar max-h-48 pr-1">
+                  {unmappedTags.map(tag => (
+                    <div key={tag} className="bg-neutral-50 dark:bg-neutral-950 p-2 rounded border border-neutral-200 dark:border-neutral-800">
+                      <div className="text-[10px] font-bold text-blue-600 dark:text-blue-400 mb-1.5 flex items-center gap-1">
+                        <Tags className="w-3 h-3" /> "{tag}"
+                      </div>
+                      
+                      <div className="flex gap-1 mb-1.5">
+                        <button className={`flex-1 text-[9px] py-1 rounded transition-colors ${tagMappings[tag].mode === 'new' ? 'bg-green-100 text-green-700 font-bold border border-green-200' : 'bg-white border border-neutral-200 text-neutral-500'}`} onClick={() => setTagMappings(p => ({...p, [tag]: { mode: 'new', target: tag }}))}>
+                          Add New
+                        </button>
+                        <button className={`flex-1 text-[9px] py-1 rounded transition-colors ${tagMappings[tag].mode === 'existing' ? 'bg-blue-100 text-blue-700 font-bold border border-blue-200' : 'bg-white border border-neutral-200 text-neutral-500'}`} onClick={() => setTagMappings(p => ({...p, [tag]: { mode: 'existing', target: taxonomyClasses[0]?.name || '' }}))}>
+                          Map To...
+                        </button>
+                      </div>
+
+                      {tagMappings[tag].mode === 'existing' && (
+                        <Select 
+                          value={tagMappings[tag].target} 
+                          onValueChange={(val) => setTagMappings(p => ({...p, [tag]: { mode: 'existing', target: val }}))}
+                        >
+                          <SelectTrigger className="h-6 text-[10px] w-full bg-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {taxonomyClasses.map((c: any) => <SelectItem key={c.id} value={c.name} className="text-[10px]">{c.name}</SelectItem>)}
+                            <SelectItem value="Uncategorized" className="text-[10px] text-amber-600 font-bold">Uncategorized (Skip)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 mt-3 pt-2 border-t border-neutral-100 dark:border-neutral-800">
+                  <Button variant="outline" className="flex-1 h-7 text-[10px]" onClick={() => setMappingModalOpen(false)}>Cancel</Button>
+                  <Button className="flex-1 h-7 text-[10px] bg-blue-600 hover:bg-blue-700" onClick={() => {
+                    // 1. 生成最终字典并入库新分类
+                    const finalDict: Record<string, string> = {};
+                    unmappedTags.forEach(tag => {
+                      const choice = tagMappings[tag];
+                      if (choice.mode === 'new') {
+                        addTaxonomyClass({ id: `class-${Date.now()}-${Math.random()}`, name: tag, color: '#10B981' });
+                        finalDict[tag] = tag;
+                      } else {
+                        finalDict[tag] = choice.target;
+                      }
+                    });
+                    
+                    // 把原本就认识的标签也加进字典
+                    const knownTags = autoTags.filter(t => !unmappedTags.includes(t));
+                    knownTags.forEach(t => finalDict[t] = t);
+
+                    // 2. 关闭弹窗，执行推断！
+                    setMappingModalOpen(false);
+                    onAutoPredict(autoTags, finalDict); 
+                  }}>
+                    Confirm & Run
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
