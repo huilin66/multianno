@@ -2,5 +2,7 @@ node_modules/
 demo/
 .vscode
 
+runs/
+
 *.pyc
 .env

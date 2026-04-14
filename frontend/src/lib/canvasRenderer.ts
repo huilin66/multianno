@@ -19,6 +19,7 @@ export interface RenderParams {
   pendingAnnotation: any;
   hoverPos: { x: number, y: number, viewId: string } | null;
   editorSettings: any;
+  aiPrompts?: { x: number, y: number, label: number }[];
 }
 
 // 1. 绘制背景与图层
@@ -364,20 +365,48 @@ function drawDrawingDraft(params: RenderParams) {
   } else if (tool === 'cuboid' && currentPoints.length >= 2) {
       drawCuboidEngine(ctx, currentPoints[0], currentPoints[1], currentPoints[2]);
   }
+
+  if (params.tool === 'ai_anno' && params.aiPrompts && params.aiPrompts.length > 0) {
+    params.aiPrompts.forEach((pt) => {
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4 / viewport.zoom, 0, Math.PI * 2);
+      ctx.fillStyle = pt.label === 1 ? '#10B981' : '#EF4444'; // 正样本绿，负样本红
+      ctx.fill();
+      ctx.lineWidth = 1.5 / viewport.zoom;
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.stroke();
+    });
+  }
   ctx.setLineDash([]); 
 }
 
 // 4. 绘制待确认弹窗状态
+// 位于 src/lib/canvasRenderer.ts
 function drawPendingConfirm(params: RenderParams) {
   const { ctx, pendingAnnotation, formLabel, taxonomyClasses, viewport } = params;
   if (!pendingAnnotation) return;
 
-  const activeColor = taxonomyClasses?.find((c: any) => c.name === formLabel)?.color || '#3B82F6';
-  ctx.strokeStyle = activeColor;
-  ctx.fillStyle = `${activeColor}40`; 
-  ctx.lineWidth = 2 / viewport.zoom;
-  ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]); 
+  // 🌟 核心增强：识别 AI 预览状态
+  // 当 pendingAnnotation.id 为 'ai_preview' 时，使用专用高对比度蓝色
+  const isAI = pendingAnnotation.id === 'ai_preview';
+  const activeColor = isAI 
+    ? '#3B82F6' 
+    : (taxonomyClasses?.find((c: any) => c.name === formLabel)?.color || '#3B82F6');
 
+  ctx.save();
+  ctx.strokeStyle = activeColor;
+  // AI 预览使用稍深一点的填充色，普通标注预览使用更淡的颜色
+  ctx.fillStyle = isAI ? 'rgba(59, 130, 246, 0.45)' : `${activeColor}40`; 
+  ctx.lineWidth = (isAI ? 3 : 2) / viewport.zoom;
+  
+  // AI 预览边缘使用实线，普通绘制预览使用虚线
+  if (isAI) {
+    ctx.setLineDash([]); 
+  } else {
+    ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]); 
+  }
+
+  // 1. 渲染基础形状 (BBox, Ellipse, Circle)
   if (['bbox', 'ellipse', 'circle'].includes(pendingAnnotation.type)) {
     const [p1, p2] = pendingAnnotation.points;
     const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
@@ -388,25 +417,44 @@ function drawPendingConfirm(params: RenderParams) {
     } else if (pendingAnnotation.type === 'circle') {
       ctx.beginPath(); ctx.arc(x + w/2, y + h/2, Math.max(w, h) / 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
     }
-  } else if (pendingAnnotation.type === 'polygon') {
-    ctx.beginPath(); ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
-    for (let i = 1; i < pendingAnnotation.points.length; i++) ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-  } else if (pendingAnnotation.type === 'line') {
-    ctx.beginPath(); ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
-    for (let i = 1; i < pendingAnnotation.points.length; i++) ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
+  } 
+  // 2. 渲染多边形 (AI 分割结果通常为此类型)
+  else if (pendingAnnotation.type === 'polygon' && pendingAnnotation.points.length > 0) {
+    ctx.beginPath(); 
+    ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
+    for (let i = 1; i < pendingAnnotation.points.length; i++) {
+      ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
+    }
+    ctx.closePath(); 
+    ctx.fill(); 
     ctx.stroke();
-  } else if (pendingAnnotation.type === 'point') {
+  } 
+  // 3. 渲染线段
+  else if (pendingAnnotation.type === 'line' && pendingAnnotation.points.length > 0) {
+    ctx.beginPath(); 
+    ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
+    for (let i = 1; i < pendingAnnotation.points.length; i++) {
+      ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
+    }
+    ctx.stroke();
+  } 
+  // 4. 渲染单点
+  else if (pendingAnnotation.type === 'point' && pendingAnnotation.points.length > 0) {
     ctx.beginPath(); ctx.arc(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y, 3 / viewport.zoom, 0, Math.PI * 2); ctx.stroke(); 
-  } else if (pendingAnnotation.type === 'oriented_bbox' && pendingAnnotation.points.length >= 2) {
-      const pts = getRbboxPoints(pendingAnnotation.points[0], pendingAnnotation.points[1], pendingAnnotation.points[2]);
-      ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
-      for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-  } else if (pendingAnnotation.type === 'cuboid' && pendingAnnotation.points.length >= 2) {
-      drawCuboidEngine(ctx, pendingAnnotation.points[0], pendingAnnotation.points[1], pendingAnnotation.points[2]);
+  } 
+  // 5. 渲染旋转框 (RBox)
+  else if (pendingAnnotation.type === 'oriented_bbox' && pendingAnnotation.points.length >= 2) {
+    const pts = getRbboxPoints(pendingAnnotation.points[0], pendingAnnotation.points[1], pendingAnnotation.points[2]);
+    ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  } 
+  // 6. 渲染 3D 立方体
+  else if (pendingAnnotation.type === 'cuboid' && pendingAnnotation.points.length >= 2) {
+    drawCuboidEngine(ctx, pendingAnnotation.points[0], pendingAnnotation.points[1], pendingAnnotation.points[2]);
   }
-  ctx.setLineDash([]); 
+
+  ctx.restore();
 }
 
 // ==========================================

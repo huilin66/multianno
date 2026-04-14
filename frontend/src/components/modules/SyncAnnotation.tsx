@@ -12,14 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Slider } from '../ui/slider';
 import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
+import { AIToolPanel } from './annotation/AIToolPanel';
+import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM, SAMPoint } from '../../api/client'
 
 // 🌟 定义自定义光标样式
-// 🌟 修复版光标：使用原生 URL 编码，杜绝一切乱码和解析失败
-// 🌟 FOCUS (悬停/聚焦)：中心圆圈为空心，外围 4 个三角也为空心
-// 🌟 FOCUS (悬停)：中心圆和三角均为【空心】，使用深灰代替纯黑，并保留白色护边
 const CURSOR_FOCUS = `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='5' stroke='white' stroke-width='3' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Ccircle cx='12' cy='12' r='5' stroke='%23262626' stroke-width='1.5' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") 12 12, auto`;
-
-// 🌟 DRAG (拖拽)：中心圆【空心】，外围三角变为【深灰实心】
 const CURSOR_DRAG = `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='5' stroke='white' stroke-width='3' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Ccircle cx='12' cy='12' r='5' stroke='%23262626' stroke-width='1.5' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 12 12, auto`;
 
 
@@ -52,8 +49,27 @@ export function SyncAnnotation() {
     setActiveAnnotationId = () => {}, // 兜底空函数
     editorSettings = { showCrosshair: true, showPixelValue: true },
     tempViewSettings, updateAnnotation,
+    setSettingsOpen, aiSettings, setAISettings
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
+
+
+  const [promptMode, setPromptMode] = useState<'positive' | 'negative' | 'box'>('positive');
+  const [isAIPanelOpen, setAIPanelOpen] = useState(false);
+  const [isAIReady, setIsAIReady] = useState(false);
+
+  // 🌟 修复 2.1：新增装载 Loading 状态与 Reset 函数
+  const [isInitializing, setIsInitializing] = useState(false);
+  const handleAIReset = () => {
+    setIsAIReady(false);
+    setAiPrompts([]);
+    setTempActiveAnno(null);
+  };
+  const [autoResultMsg, setAutoResultMsg] = useState('');
+  const [sourceMode, setSourceMode] = useState<'raw' | 'view'>('view');
+  const [aiPrompts, setAiPrompts] = useState<SAMPoint[]>([]);
+  const [isPredicting, setIsPredicting] = useState(false);
   const [mouseQuad, setMouseQuad] = useState<Record<string, { tl: boolean, tr: boolean }>>({});
+  const [selectedAIViewId, setSelectedAIViewId] = useState<string>(views[0]?.id || '');
   type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' | 'circle' | 'lasso' | 'freemask' | 'rbbox' | 'cuboid' | 'ai_anno' | 'cut' | 'cutout';
 
   const [tool, setTool] = useState<ToolType>('pan');
@@ -134,6 +150,14 @@ export function SyncAnnotation() {
 
     return [poly1, poly2];
   };
+
+  // 当视图列表加载完成后，默认选中第一个视图
+  useEffect(() => {
+    if (views.length > 0 && !selectedAIViewId) {
+      setSelectedAIViewId(views[0].id);
+    }
+  }, [views]);
+
 // 初始化图层数据 (🌟 修复：严密的增量初始化，确保 operableLayers 永远不为空)
   useEffect(() => {
     if (views.length > 0 && layerOrder.length !== views.length) {
@@ -256,25 +280,38 @@ export function SyncAnnotation() {
 
     setViewport(newZoom, newPanX, newPanY);
   };
-// 🌟 新增：工具栏选择拦截器
-  const handleToolChange = (newTool: string) => {
-    // 如果用户试图点击 Cut 或 Cutout 工具
-    if (newTool === 'cut' || newTool === 'cutout') {
-      // 检查当前是否有选中的标注，且必须是多边形
-      const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
-      if (!activeAnno || activeAnno.type !== 'polygon') {
-        const actionName = newTool === 'cut' ? "切割" : "擦除";
-        alert(`请先选中一个多边形，然后再使用${actionName}工具。`);
-        
-        // 💡 贴心交互：自动帮用户切换到 Select (选择) 工具，引导他们去选图形
-        setTool('select'); 
-        return; 
-      }
+// 🌟 新增：调用后端推理函数
+const handleAIPredict = async (prompts: SAMPoint[]) => {
+  const targetView = views.find((v: any) => v.id === selectedAIViewId);
+  const fullPath = getFullImagePath(targetView);
+  
+  try {
+    setIsPredicting(true);
+    // 🌟 修复：删除多余的原生 fetch，直接使用封装好的 predictSAM (确保 client.ts 里接收 conf)
+    // 如果 client.ts 还没更新，可以使用如下原生 fetch 替换，但一定要记得 const AI_API_BASE_URL = 'http://localhost:8080/api/sam';
+    const result = await predictSAM(
+    fullPath || '', 
+    prompts, 
+    undefined, 
+    aiSettings.confidence,
+    aiSettings.inferenceSize // 🌟 传入尺寸
+  );
+
+    if (result.polygons && result.polygons.length > 0) {
+      setTempActiveAnno({
+        id: 'ai_preview',
+        type: 'polygon',
+        points: result.polygons[0], 
+        label: formLabel,
+        stem: currentStem
+      });
     }
-    
-    // 如果校验通过，或者切换的是其他工具，正常更新状态
-    setTool(newTool);
-  };
+  } catch (err) {
+    console.error("AI Predict Error:", err);
+  } finally {
+    setIsPredicting(false);
+  }
+};
 // 🌟 将这个函数完整替换，注意参数里连 viewId 都不要了
   const handleMouseDown = (e: React.MouseEvent) => {
     if (popoverOpen) {
@@ -282,12 +319,6 @@ export function SyncAnnotation() {
       return; 
     }
     
-    // 🌟 AI 功能暂不实现拦截
-    if (tool === 'ai_anno') {
-      alert("AI Auto Annotation is temporarily not implemented.");
-      setTool('pan');
-      return;
-    }
 
     const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
     // 🌟 核心：直接获取纯正的 Main View 坐标，绝对不要区分辅视图！
@@ -304,7 +335,19 @@ export function SyncAnnotation() {
         return; // 直接返回，不执行后续的 setIsDrawing(true)
       }
     }
+    if (tool === 'ai_anno') {
+      if (!isAIReady) return;
 
+      // 🌟 修复：严格根据状态机的 promptMode 来决定是正样本还是负样本
+      const label = promptMode === 'positive' ? 1 : 0;
+      const newPoint: SAMPoint = { x: mainX, y: mainY, label };
+      const updatedPrompts = [...aiPrompts, newPoint];
+      setAiPrompts(updatedPrompts);
+
+      // 触发后端推理
+      handleAIPredict(updatedPrompts);
+      return;
+    }
     // 1. Select 工具精准碰撞检测
    // 1. Select 工具精准碰撞检测 (支持所有图形)
     if (e.button === 0 && tool === 'select') { 
@@ -852,6 +895,186 @@ export function SyncAnnotation() {
     }
   };
 
+
+// 🌟 辅助：根据视图计算磁盘物理路径
+const getFullImagePath = (view: any) => {
+  const folder = folders.find((f: any) => f.id === view.folderId);
+  if (!folder) return null;
+  // 按照你的 filesystem 逻辑拼接
+  const fileName = `${currentStem}${folder.suffix || '.tif'}`;
+  return `${folder.path}/${fileName}`;
+};
+
+
+// 🌟 修改工具栏点击拦截
+// 🌟 修复关键：在参数列表前加上 async 关键字
+const handleToolChange = async (newTool: string) => { 
+  if (newTool === 'ai_anno') {
+    // 🌟 核心探针逻辑：点开前先 ping 一下后端
+    // 现在这里可以使用 await 了
+    const status = await checkVisionAIStatus();
+    
+    if (!status.is_loaded) {
+      setAISettings({ isConfigured: false });
+      alert("Vision Engine 处于离线状态。请在设置中配置并装载模型！");
+      setSettingsOpen?.(true);
+      return;
+    } else {
+      setAISettings({ isConfigured: true });
+    }
+
+    if (tool === 'ai_anno') {
+      setAIPanelOpen(!isAIPanelOpen); 
+      return; 
+    } else {
+      setAIPanelOpen(true); 
+    }
+  } else {
+    setAIPanelOpen(false); 
+  }
+    
+  if (newTool === 'cut' || newTool === 'cutout') {
+    const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
+    if (!activeAnno || activeAnno.type !== 'polygon') {
+      const actionName = newTool === 'cut' ? "切割" : "擦除";
+      alert(`请先选中一个多边形，然后再使用${actionName}工具。`);
+      setTool('select'); 
+      return; 
+    }
+  }
+  
+  setTool(newTool as any);
+};
+
+
+// 🌟 核心：AI 初始化函数（带参数修复）
+// src/components/SyncAnnotation.tsx 内部修改
+const handleAIInit = async () => {
+  const targetView = views.find((v: any) => v.id === selectedAIViewId);
+  if (!targetView) return;
+
+  const fullPath = getFullImagePath(targetView);
+
+  try {
+    setIsInitializing(true); 
+    
+    const renderedData = sourceMode === 'view' 
+      ? document.querySelector('img[alt="Base Layer"]')?.getAttribute('src') 
+      : null;
+
+    await initSAM({ 
+      image_path: fullPath || '', 
+      image_data: renderedData || undefined,
+      image_size: aiSettings.inferenceSize
+    });
+    
+    setIsAIReady(true); 
+  } catch (err: any) {
+    console.error("AI Init Error:", err);
+    setIsAIReady(false);
+    
+    // 🌟 核心修复：智能捕捉“模型丢失”错误，自动纠正前端状态
+    if (err.message && err.message.includes("模型尚未装载")) {
+      // 强制把前端状态改回未配置
+      setAISettings({ isConfigured: false });
+      alert("检测到后端服务重启，模型显存已清空。请点击右上角【设置 -> AI Engine Settings】重新装载模型！");
+    } else {
+      alert(`初始化失败: ${err.message}`);
+    }
+  } finally {
+    setIsInitializing(false); 
+  }
+};
+// 🌟 处理 Auto Tab 下的推理点击事件
+// 🌟 替换之前的 handleAutoPredict 函数
+  const handleAutoPredict = async (tags: string[]) => {
+    if (!isAIReady) return;
+    const targetView = views.find((v: any) => v.id === selectedAIViewId);
+    const fullPath = getFullImagePath(targetView);
+
+    try {
+      setIsPredicting(true);
+      setAutoResultMsg(''); // 发起请求前清空旧提示
+      
+      // 1. 调用刚才写好的后端 API
+      const result = await predictAutoSAM(
+        fullPath || '',
+        tags,
+        aiSettings.confidence,
+        aiSettings.inferenceSize || 644
+      );
+      
+      const polys = result.polygons || [];
+      
+      // 2. 将预测出的多边形直接写入全局 Annotation
+      if (polys.length > 0) {
+        polys.forEach((poly: any, index: number) => {
+          const newId = `anno_auto_${Math.random().toString(36).substr(2, 9)}_${index}`;
+          const finalAnno = {
+            id: newId,
+            type: 'polygon',
+            points: poly,
+            label: formLabel, // 默认使用当前侧边栏选中的类别
+            stem: currentStem,
+            attributes: {},
+            difficult: false,
+            occluded: false
+          };
+          addAnnotation(finalAnno);
+          pushAction({ type: 'add', anno: finalAnno });
+        });
+        
+        // 3. 成功反馈
+        setAutoResultMsg(`Found ${polys.length} Objects!`);
+      } else {
+        // 失败或无结果反馈
+        setAutoResultMsg(`Found 0 Objects.`);
+      }
+
+      // 4. 定时器：3 秒后清除状态栏文字，恢复绿色的 Ready 状态
+      setTimeout(() => {
+        setAutoResultMsg('');
+      }, 3000);
+
+    } catch (e: any) {
+      console.error(e);
+      alert(`推理失败: ${e.message}`);
+    } finally {
+      setIsPredicting(false); 
+    }
+  };
+
+
+  const handleAIConfirm = useCallback(() => {
+    if (!tempActiveAnno) return;
+
+    // 1. 生成最终的标注对象
+    const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+    const finalAnno = {
+      ...tempActiveAnno, // 包含 AI 生成的 points
+      id: newId,
+      label: formLabel, // 使用当前选中的类别
+      stem: currentStem,
+      // 补充其他默认业务字段
+      attributes: {}, 
+      difficult: false,
+      occluded: false
+    };
+
+    // 2. 写入全局 Store 并压入历史记录
+    addAnnotation(finalAnno);
+    pushAction({ type: 'add', anno: finalAnno });
+
+    // 3. 清理 AI 临时状态，准备下一次标注
+    setTempActiveAnno(null);
+    setAiPrompts([]);
+    
+    // 如果没有开启“连续标注”，可以退回到 pan 工具
+    if (!state.editorSettings?.continuousDrawing) {
+      setTool('pan');
+      setAIPanelOpen(false);
+    }
+  }, [tempActiveAnno, formLabel, currentStem, addAnnotation, pushAction, state.editorSettings]);
   return (
     <div 
     className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"
@@ -860,9 +1083,9 @@ export function SyncAnnotation() {
       
       {/* 👈 Left Toolbar */}
       <LeftToolbar 
-      tool={tool} setTool={handleToolChange}
+      tool={tool} 
+      setTool={handleToolChange}
       handleUndo={handleUndo} handleRedo={handleRedo} 
-      // 🌟 传下去，加上 currentPoints 的长度判断（用于撤销点）
       canUndo={undoCount > 0 || currentPoints.length > 0}
       canRedo={redoCount > 0 || undonePoints.length > 0}
       handlePrevStem={handlePrevStem}
@@ -870,6 +1093,32 @@ export function SyncAnnotation() {
       hasPrev={stemIndex > 0}
       hasNext={stemIndex < stems.length - 1}
     />
+
+    {/* 🤖 🌟 新增：左侧 AI 二级悬浮面板 */}
+     {/* 🤖 窄版 AI 面板 */}
+      <AIToolPanel 
+        isOpen={isAIPanelOpen}
+        onClose={() => setAIPanelOpen(false)}
+        views={views}
+        selectedViewId={selectedAIViewId}
+        onViewChange={setSelectedAIViewId}
+        taxonomyClasses={taxonomyClasses}
+        aiPrompts={aiPrompts}
+        setAiPrompts={setAiPrompts}
+        isPredicting={isPredicting}
+        onConfirmPreview={handleAIConfirm}
+        sourceMode={sourceMode}
+        setSourceMode={setSourceMode}
+        isAIReady={isAIReady}        
+        promptMode={promptMode}       
+        setPromptMode={setPromptMode}
+        isInitializing={isInitializing} 
+        onConfirmInit={handleAIInit}
+        onResetInit={handleAIReset}
+        onAutoPredict={handleAutoPredict}
+        autoResultMsg={autoResultMsg}
+      />
+
       {/* 🎯 Grid Workspace */}
       <div className="flex-grow p-4 overflow-hidden relative" ref={containerRef} onWheel={handleWheel}>
         
@@ -990,7 +1239,10 @@ export function SyncAnnotation() {
                 <CanvasView 
                   view={view} 
                   // 🌟 核心修改：如果正在拖拽，就用 tempActiveAnno 临时替换掉原来的对象，实现丝滑渲染
-                  annotations={tempActiveAnno ? currentAnnotations.map((a: any) => a.id === tempActiveAnno.id ? tempActiveAnno : a) : currentAnnotations}
+                  // 🌟 修复：普通的图形拖拽用 annotations 替换，AI 预览则跳过这一步
+                  annotations={tempActiveAnno && tempActiveAnno.id !== 'ai_preview' 
+                    ? currentAnnotations.map((a: any) => a.id === tempActiveAnno.id ? tempActiveAnno : a) 
+                    : currentAnnotations}
                   activeAnnotationId={activeAnnotationId}
                   taxonomyClasses={taxonomyClasses}
                   currentPoints={currentPoints}
@@ -1003,7 +1255,7 @@ export function SyncAnnotation() {
                   mainHeight={mainHeight}
                   isFullExtent={!!showFullExtent[view.id]}
                   formLabel={formLabel}
-                  pendingAnnotation={pendingAnnotation}
+                  pendingAnnotation={tool === 'ai_anno' && tempActiveAnno ? tempActiveAnno : pendingAnnotation}
                   onDoubleClick={handleDoubleClick}
                   onMouseDown={handleMouseDown}
                   onMouseMove={(e: any) => handleMouseMove(e, view.id)}

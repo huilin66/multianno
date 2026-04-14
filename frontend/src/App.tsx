@@ -32,6 +32,7 @@ import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
 import { useAutoSave } from './hooks/useAutoSave';
 import { ShortcutSettingsModal } from './components/modules/ShortcutSettingsModal';
+import { AISettingsModal } from './components/modules/AISettingsModal';
 
 export default function App() {
   const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings} = useStore();
@@ -39,6 +40,7 @@ export default function App() {
   const { t, i18n } = useTranslation();
   const { saveStatus } = useAutoSave();
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
+  const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
   // 🌟 监听 Store 里的语言变化，同步给 i18next 引擎
   useEffect(() => {
     i18n.changeLanguage(language);
@@ -190,6 +192,16 @@ export default function App() {
                   >
                     <Keyboard className="w-4 h-4 mr-2" />
                     Shortcut Settings
+                  </Button>
+
+                  {/* 🌟 新增：AI 设置按钮 */}
+                  <Button 
+                    variant="outline" 
+                    className="w-full justify-start text-xs h-8 mt-2" 
+                    onClick={() => setAiSettingsModalOpen(true)}
+                  >
+                    <CloudLightning className="w-4 h-4 mr-2 text-blue-500" />
+                    AI Engine Settings
                   </Button>
               </div>
             </PopoverContent>
@@ -351,6 +363,11 @@ export default function App() {
       <ShortcutSettingsModal 
         open={shortcutModalOpen} 
         onClose={() => setShortcutModalOpen(false)} 
+      />
+
+      <AISettingsModal 
+        open={aiSettingsModalOpen} 
+        onClose={() => setAiSettingsModalOpen(false)} 
       />
     </div>
   );

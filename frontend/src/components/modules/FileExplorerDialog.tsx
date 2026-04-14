@@ -18,9 +18,10 @@ interface FileExplorerDialogProps {
   initialPath: string;
   onClose: () => void;
   onConfirm: (selectedPaths: string[]) => void;
+  selectType?: 'dir' | 'file'; // 🌟 新增：决定是选文件夹还是选文件
 }
 
-export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: FileExplorerDialogProps) {
+export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, selectType }: FileExplorerDialogProps) {
   const { t } = useTranslation(); // 🌟 激活翻译钩子
   const [currentPath, setCurrentPath] = useState(initialPath || '');
   const [parentPath, setParentPath] = useState(''); 
@@ -169,6 +170,9 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
               {items.map((item) => {
                 const isSelected = selectedPaths.has(item.path);
                 const isDir = item.type === 'dir';
+
+                const canSelect = selectType === 'dir' ? isDir : !isDir;
+
                 let displayName = item.name;
                 if (item.tag === 'drive') {
                   displayName = `${t('fileExplorer.localDrive')} (${item.name})`;
@@ -181,16 +185,16 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm }: Fi
                     key={item.path} 
                     className={`flex items-center gap-3 p-1.5 rounded cursor-pointer transition-colors ${isSelected ? 'bg-primary/10 border border-primary/30' : 'hover:bg-muted border border-transparent'}`}
                   >
-                    <div className="px-2" onClick={(e) => { e.stopPropagation(); if (isDir) toggleSelect(item.path); }}>
-                      {isDir ? (
-                         isSelected ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground hover:text-foreground" />
+                    <div className="px-2" onClick={(e) => { e.stopPropagation(); if (canSelect) toggleSelect(item.path); }}>
+                      {canSelect ? (
+                        isSelected ? <CheckSquare className="w-4 h-4 text-primary" /> : <Square className="w-4 h-4 text-muted-foreground hover:text-foreground" />
                       ) : (
-                         <div className="w-4 h-4" /> 
+                        <div className="w-4 h-4" /> 
                       )}
                     </div>
                     
                     <div 
-                      className={`flex items-center gap-2 flex-1 select-none ${!isDir && 'opacity-50'}`}
+                      className={`flex items-center gap-2 flex-1 select-none ${(!isDir && selectType === 'dir') && 'opacity-50'}`}
                       onDoubleClick={() => { if (isDir) fetchDirectory(item.path); }}
                     >
                       {isDir ? <Folder className="w-4 h-4 text-amber-500" /> : <File className="w-4 h-4 text-muted-foreground" />}

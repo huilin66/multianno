@@ -3,6 +3,9 @@
 // 🌟 1. 定义并导出全局的 Base URL
 export const API_BASE_URL = 'http://localhost:8080/api';
 
+export const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
+
+
 // 🌟 2. 改造你现有的方法，使用模板字符串拼接
 export async function scanFolder(path: string) {
   const response = await fetch(`${API_BASE_URL}/scan-folder`, {
@@ -88,22 +91,6 @@ export async function batchDeleteAttribute(payload: {
   return response.json(); // 返回格式: { status: "success", modified_files: 42 }
 }
 
-// export function getPreviewImageUrl(
-//   folderPath: string, 
-//   fileName: string, 
-//   bands: number[], 
-//   colormap: string = 'gray'
-// ): string {
-//   const params = new URLSearchParams({
-//     folderPath: folderPath,
-//     fileName: fileName,
-//     bands: bands.join(','),
-//     colormap: colormap
-//   });
-  
-//   return `${API_BASE_URL}/project/preview?${params.toString()}`;
-// }
-
 
 export function getPreviewImageUrl(
   folderPath: string, 
@@ -176,6 +163,114 @@ export const fetchProjectStatisticsStream = async (
 };
 
 
+export interface SAMPoint {
+  x: number;
+  y: number;
+  label: 1 | 0; // 1 为正样本，0 为负样本
+}
+
+export interface SAMInitRequest {
+  image_path?: string;
+  image_data?: string; // 用于传输 Base64 渲染图
+  image_size?: number; // 🌟 新增
+}
+
+// 2. 🌟 新增：获取后端 AI 真实状态的探针
+export const checkVisionAIStatus = async () => {
+  try {
+    const res = await fetch(`${VISION_AI_API_URL}/status`);
+    if (!res.ok) return { is_loaded: false };
+    return await res.json();
+  } catch (e) {
+    return { is_loaded: false }; // 后端没开或者断联
+  }
+};
+
+// 1. 初始化/预热图片
+export const initSAM = async (req: SAMInitRequest) => {
+  try {
+    const res = await fetch(`${VISION_AI_API_URL}/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Backend Internal Error');
+    }
+    return await res.json();
+  } catch (e) {
+    // 🌟 区分是“没连接”还是“后端报错”
+    if (e instanceof TypeError && e.message === 'Failed to fetch') {
+      throw new Error('无法连接到后端服务，请检查 Python 进程是否启动并监听 8080 端口');
+    }
+    throw e;
+  }
+};
+
+// 2. 半自动交互 (给点/给框)
+export const predictSAM = async (
+  imagePath: string, 
+  points?: SAMPoint[], 
+  box?: number[], 
+  conf?: number, // 🌟 1. 加上这第 4 个可选参数
+  image_size?: number
+) => {
+  const res = await fetch(`${VISION_AI_API_URL}/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // 🌟 2. 把 conf 一起打包发给后端
+    body: JSON.stringify({ image_path: imagePath, points, box, conf, image_size }), 
+    
+  });
+  if (!res.ok) throw new Error('SAM Predict Failed');
+  return res.json();
+};
+
+// 3. 全自动标注 (文本 prompt)
+export const autoPredictSAM = async (imagePath: string, texts: string[]) => {
+  const res = await fetch(`${VISION_AI_API_URL}/auto`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_path: imagePath, texts }),
+  });
+  if (!res.ok) throw new Error('SAM Auto Failed');
+  return res.json();
+};
+
+
+export const updateAIConfig = async (config: {
+  model_path: string;
+  model_type: string;
+  confidence: number;
+}) => {
+  const res = await fetch(`${VISION_AI_API_URL}/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Failed to update AI config');
+  }
+  return await res.json();
+};
+
+
+export const predictAutoSAM = async (
+  imagePath: string, 
+  texts: string[], 
+  conf: number,
+  image_size?: number
+) => {
+  const res = await fetch(`${VISION_AI_API_URL}/auto`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_path: imagePath, texts, conf, image_size }), 
+  });
+  if (!res.ok) throw new Error('Auto Predict Failed');
+  return res.json();
+};
 // 💡 进阶建议：以后你甚至可以把 DataPreload 和 FileExplorerDialog 里的 fetch
 // 也封装成类似上面的函数（例如 exploreFileSystem, analyzeProject）全放在这里，
 // 然后在组件里直接调用函数，这样 UI 组件和网络请求就彻底解耦了！

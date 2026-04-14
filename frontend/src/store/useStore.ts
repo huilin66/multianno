@@ -181,6 +181,19 @@ export interface AppState {
   tempViewSettings: Record<string, any>;
   setTempViewSettings: (stem: string, viewId: string, settings: any) => void;
   applyViewSettingsToAll: (stem: string, viewId: string) => void;
+
+  // 🌟 新增：AI 面板开关与状态
+  isAIPanelOpen: boolean;
+  setAIPanelOpen: (open: boolean) => void;
+  aiPrompts: { x: number, y: number, label: number }[]; // 存鼠标点的正负样本
+  aiSettings: {
+      model: string;
+      modelPath: string;
+      confidence: number;
+      isConfigured: boolean; // 关键：是否已设置
+      inferenceSize: number;
+    };
+  setAISettings: (settings: Partial<AppState['aiSettings']>) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -240,6 +253,20 @@ export const useStore = create<AppState>()(
         editorSettings: { ...state.editorSettings, ...newSettings } 
       })),
       
+      isAIPanelOpen: false,
+      setAIPanelOpen: (open) => set({ isAIPanelOpen: open }),
+      aiPrompts: [],
+      aiSettings: {
+        model: 'SAM-3',
+        modelPath: '',
+        confidence: 0.25,
+        isConfigured: false,
+        inferenceSize: 644,
+      },
+      setAISettings: (newSettings) => set((state) => ({
+        aiSettings: { ...state.aiSettings, ...newSettings }
+      })),
+
       shortcuts: {
         pan: 'h',
         select: 'v',
@@ -457,6 +484,7 @@ export const useStore = create<AppState>()(
         taxonomyClasses: state.taxonomyClasses,
         taxonomyAttributes: state.taxonomyAttributes,
         editorSettings: state.editorSettings,
+        aiSettings: state.aiSettings,
       }),
     }
   )
