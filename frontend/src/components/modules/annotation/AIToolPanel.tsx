@@ -410,7 +410,7 @@ return (
                 <Trash2 className="w-3 h-3 mr-2" /> Reset Prompts
               </Button>
               <Button size="sm" className="w-full bg-blue-600 h-8 text-[10px]" onClick={onConfirmPreview} disabled={isPredicting || aiPrompts.length === 0}>
-                {isPredicting ? <Loader2 className="w-3 h-3 mr-2 animate-spin" /> : <Check className="w-3 h-3 mr-2" />} Confirm Add
+                <Check className="w-3 h-3 mr-2" /> {t('common.confirmAdd', 'Confirm Add')}
               </Button>
             </div>
           </div>

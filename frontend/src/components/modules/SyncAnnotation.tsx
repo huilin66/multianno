@@ -425,7 +425,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       return;
     }
 
-    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+    const rect = (e.currentTarget as HTMLCanvasElement).getBoundingClientRect();
     // 🌟 核心：直接获取纯正的 Main View 坐标，绝对不要区分辅视图！
     const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
