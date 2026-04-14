@@ -158,9 +158,71 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     reader.readAsText(file);
   };
 
-  const handleMergeClass = async () => { /* 保留原有逻辑 */ };
-  const handleDeleteClass = async () => { /* 保留原有逻辑 */ };
-  const fetchGlobalStatistics = () => { /* 保留原有逻辑 */ };
+const handleMergeClass = async () => {
+    if (!activeClass || !mergeTargetId) return;
+    const target = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
+    if (!target) return;
+
+    setIsProcessing(true);
+    try {
+      const saveDirs = folders.map((f: any) => f.path);
+      await batchMergeClass({ save_dirs: saveDirs, old_names: [activeClass.name], new_name: target.name });
+      mergeTaxonomyClasses([activeClass.name], target.name);
+      setMergeTargetId('');
+      setSelectedClassId(null);
+    } catch (error: any) {
+      alert(`Merge failed: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDeleteClass = async () => {
+    if (!activeClass) return;
+    const isHardDelete = window.confirm(
+      `DELETE CLASS: '${activeClass.name}'\n\n[OK] Hard Delete (Destroy boxes)\n[Cancel] Soft Delete (Mark 'Uncategorized')`
+    );
+    const finalConfirm = window.confirm(`Are you absolutely sure?`);
+    if (!finalConfirm) return;
+
+    setIsProcessing(true);
+    try {
+      const saveDirs = folders.map((f: any) => f.path);
+      const res = await batchDeleteClass({ save_dirs: saveDirs, class_name: activeClass.name, hard_delete: isHardDelete });
+      deleteTaxonomyClass(activeClass.id, isHardDelete);
+      alert(`Success! Deleted class '${activeClass.name}'.\nModified ${res.modified_files} files on disk.`);
+      setSelectedClassId(null);
+    } catch (error: any) {
+      alert(`Delete failed: ${error.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const fetchGlobalStatistics = () => {
+    if (!activeClass || folders.length === 0) return;
+    
+    setStatsStatus('loading');
+    setStatsProgress({ current: 0, total: 100 });
+
+    const saveDirs = folders.map((f: any) => f.path);
+
+    fetchProjectStatisticsStream(
+      saveDirs,
+      activeClass.name,
+      (current, total) => {
+        setStatsProgress({ current, total });
+      },
+      (data) => {
+        setStatsData(data);
+        setStatsStatus('done');
+      },
+      (error) => {
+        alert(`Failed to fetch statistics: ${error.message}`);
+        setStatsStatus('idle');
+      }
+    );
+  };
 
   return (
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
@@ -221,18 +283,191 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {/* ================= 右侧详情区 ================= */}
         
         {/* 模式 A：渲染 Class 的详情 (保留原有代码) */}
+        {/* 🌟 模式 A：渲染 Class 的详情 (完整恢复版) */}
         {activeTab === 'classes' && activeClass && (
           <div className="flex-1 flex flex-col overflow-hidden">
-             {/* ... 这里是你原来的 right panel classes 的代码，保持不动即可 ... */}
-             {/* 为节省对话空间，此处省略，你直接保留你原文件的 <div className="p-3 border-b ..."> 和 下方的统计区域即可 */}
-             <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center flex-wrap gap-3 shrink-0 relative z-10">
-                <h1 className="text-lg font-bold truncate max-w-[200px]" title={activeClass.name}>{activeClass.name}</h1>
+            
+            {/* 顶部紧凑操作栏 */}
+            <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center flex-wrap gap-3 shrink-0 relative z-10">
+              
+              <h1 className="text-lg font-bold truncate max-w-[200px]" title={activeClass.name}>
+                {activeClass.name}
+              </h1>
+
+              <div className="relative">
                 <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => { setRenameDialogOpen(true); setColorDialogOpen(false); }}>
                   <Edit3 className="w-3.5 h-3.5 mr-1" /> {t('common.rename', 'Rename')}
                 </Button>
-                {/* 颜色修改器、合并器、删除器等... */}
-             </div>
-             {/* 统计区... */}
+                {renameDialogOpen && (
+                  <div className="absolute top-full left-0 mt-2 p-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 shadow-xl rounded-md flex items-center gap-2 w-64 animate-in fade-in zoom-in-95">
+                    <Input value={renameValue} onChange={e => setRenameValue(e.target.value)} className="h-7 text-xs" autoFocus />
+                    <Button size="sm" className="h-7 w-7 p-0 shrink-0 bg-green-600 hover:bg-green-700" onClick={() => {
+                      if (renameValue.trim() && renameValue !== activeClass.name) updateTaxonomyClass(activeClass.id, { name: renameValue.trim() });
+                      setRenameDialogOpen(false);
+                    }}><Check className="w-4 h-4 text-white"/></Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => setRenameDialogOpen(false)}><X className="w-4 h-4"/></Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 relative">
+                <div className="w-5 h-5 rounded border shadow-sm" style={{ backgroundColor: activeClass.color }} />
+                <Button variant="outline" size="sm" className="h-7 text-xs px-2" onClick={() => { setColorDialogOpen(true); setRenameDialogOpen(false); }}>
+                  <Settings className="w-3.5 h-3.5" />
+                </Button>
+                {colorDialogOpen && (
+                  <div className="absolute top-full left-0 mt-2 p-2 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 shadow-xl rounded-md flex items-center gap-2 animate-in fade-in zoom-in-95">
+                    <input type="color" value={colorValue} onChange={e => setColorValue(e.target.value)} className="w-7 h-7 rounded cursor-pointer shrink-0" />
+                    <Button size="sm" className="h-7 w-7 p-0 shrink-0 bg-green-600 hover:bg-green-700" onClick={() => {
+                      updateTaxonomyClass(activeClass.id, { color: colorValue });
+                      setColorDialogOpen(false);
+                    }}><Check className="w-4 h-4 text-white"/></Button>
+                    <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => setColorDialogOpen(false)}><X className="w-4 h-4"/></Button>
+                  </div>
+                )}
+              </div>
+
+              <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-700 mx-1" />
+
+              <div className="flex items-center gap-1 border border-neutral-200 dark:border-neutral-700 rounded-md p-0.5 bg-neutral-50 dark:bg-neutral-950">
+                <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
+                  <SelectTrigger className="w-32 h-6 text-xs border-none bg-transparent focus:ring-0 shadow-none px-2">
+                    <SelectValue placeholder={t('taxonomy.mergeTarget', 'Merge into...')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {taxonomyClasses
+                      .filter((c: any) => c.id !== activeClass.id)
+                      .map((c: any) => <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>)
+                    }
+                  </SelectContent>
+                </Select>
+                <Button 
+                  size="sm" className="h-6 px-2 text-[10px] bg-orange-600 hover:bg-orange-700 text-white rounded-sm"
+                  disabled={!mergeTargetId} onClick={handleMergeClass} 
+                >
+                  <GitMerge className="w-3 h-3 mr-1" /> {t('common.merge', 'Merge')}
+                </Button>
+              </div>
+
+              <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-700 mx-1" />
+
+              <Button variant="destructive" size="sm" className="h-7 text-xs px-2" onClick={handleDeleteClass}>
+                <Trash2 className="w-3.5 h-3.5 mr-1" /> {t('common.delete', 'Delete')}
+              </Button>
+
+            </div>
+
+            {/* 下方主体：全局异步统计区 */}
+            <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-neutral-50 dark:bg-neutral-950/50">
+              
+              {statsStatus === 'idle' && (
+                <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-neutral-200 dark:border-neutral-800 rounded-2xl bg-white dark:bg-neutral-900/50">
+                  <Database className="w-12 h-12 text-neutral-300 dark:text-neutral-700 mb-4" />
+                  <h3 className="text-lg font-bold text-neutral-700 dark:text-neutral-300">{t('taxonomy.globalStats', 'Global Project Statistics')}</h3>
+                  <p className="text-sm text-neutral-500 mt-2 mb-6 max-w-sm text-center">
+                    Calculate the distribution of shapes and locate all files containing <strong className="text-primary">'{activeClass.name}'</strong> across the entire project.
+                  </p>
+                  <Button onClick={fetchGlobalStatistics} className="bg-primary text-white shadow-md">
+                    <Activity className="w-4 h-4 mr-2" /> {t('taxonomy.calcStats', 'Calculate Statistics')}
+                  </Button>
+                </div>
+              )}
+
+              {statsStatus === 'loading' && (
+                <div className="h-full flex flex-col items-center justify-center border border-neutral-200 dark:border-neutral-800 rounded-2xl bg-white dark:bg-neutral-900 shadow-sm">
+                  <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+                  <h3 className="text-base font-bold">Scanning JSON Files...</h3>
+                  <p className="text-sm text-muted-foreground mt-2 font-mono">
+                    {statsProgress.current} / {statsProgress.total} Files Processed
+                  </p>
+                  <div className="w-64 h-2 bg-neutral-100 dark:bg-neutral-800 rounded-full mt-4 overflow-hidden">
+                    <div className="h-full bg-primary transition-all duration-300" style={{ width: `${Math.min(100, (statsProgress.current / statsProgress.total) * 100)}%` }} />
+                  </div>
+                </div>
+              )}
+
+              {statsStatus === 'done' && statsData && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-white dark:bg-neutral-900 p-4 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground uppercase">Total Objects</p>
+                        <p className="text-3xl font-black mt-1 text-primary">{statsData.total}</p>
+                      </div>
+                      <Database className="w-8 h-8 text-primary/20" />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4 h-64">
+                    <div className="col-span-1 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 flex flex-col">
+                      <h4 className="text-xs font-bold uppercase text-neutral-500 mb-3">Shape Distribution</h4>
+                      <div className="flex-1 overflow-y-auto space-y-1 custom-scrollbar pr-2">
+                        {Object.entries(statsData.shapesCount).map(([shape, count]) => (
+                          <div 
+                            key={shape} 
+                            onClick={() => setShapeFilter(shapeFilter === shape ? null : shape)}
+                            className={`flex justify-between items-center p-2 rounded text-sm cursor-pointer transition-colors border ${
+                              shapeFilter === shape 
+                                ? 'bg-blue-50 border-blue-200 text-blue-700 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400' 
+                                : 'border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                            }`}
+                          >
+                            <span className="capitalize">{shape}</span>
+                            <span className="font-mono font-bold">{count as number}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="col-span-2 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 flex items-center justify-center">
+                      <div className="text-center text-neutral-400">
+                        <Activity className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">Bar Chart & Pie Chart Area</p>
+                        <p className="text-xs mt-1">Ready for Recharts/ECharts integration</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 overflow-hidden flex flex-col h-64">
+                    <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900/50 flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase text-neutral-500">
+                        Files Containing '{activeClass.name}' {shapeFilter && `(${shapeFilter})`}
+                      </h4>
+                      {shapeFilter && (
+                        <Button variant="ghost" size="sm" className="h-6 text-[10px]" onClick={() => setShapeFilter(null)}>Clear Filter</Button>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+                      <table className="w-full text-left text-sm">
+                        <thead className="text-xs text-neutral-400 border-b border-neutral-200 dark:border-neutral-800">
+                          <tr>
+                            <th className="pb-2 font-medium">Stem Name</th>
+                            <th className="pb-2 font-medium">Shape Type</th>
+                            <th className="pb-2 font-medium text-right">Count</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {statsData.fileList
+                            .filter((item: any) => shapeFilter ? item.shape === shapeFilter : true)
+                            .map((item: any, idx: number) => (
+                              <tr key={idx} className="border-b border-neutral-100 dark:border-neutral-800/50 hover:bg-neutral-50 dark:hover:bg-neutral-800/50 transition-colors">
+                                <td className="py-2 font-mono text-primary cursor-pointer hover:underline">{item.stem}</td>
+                                <td className="py-2 text-neutral-600 dark:text-neutral-400 capitalize">{item.shape}</td>
+                                <td className="py-2 text-right font-mono">{item.count}</td>
+                              </tr>
+                            ))}
+                          {statsData.fileList.filter((item: any) => shapeFilter ? item.shape === shapeFilter : true).length === 0 && (
+                            <tr><td colSpan={3} className="text-center py-4 text-neutral-400">No files match the current filter.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                </div>
+              )}
+            </div>
+
           </div>
         )}
 
