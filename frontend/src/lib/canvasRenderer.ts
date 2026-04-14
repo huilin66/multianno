@@ -400,11 +400,7 @@ function drawPendingConfirm(params: RenderParams) {
   ctx.lineWidth = (isAI ? 3 : 2) / viewport.zoom;
   
   // AI 预览边缘使用实线，普通绘制预览使用虚线
-  if (isAI) {
-    ctx.setLineDash([]); 
-  } else {
-    ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]); 
-  }
+  ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]);
 
   // 1. 渲染基础形状 (BBox, Ellipse, Circle)
   if (['bbox', 'ellipse', 'circle'].includes(pendingAnnotation.type)) {
