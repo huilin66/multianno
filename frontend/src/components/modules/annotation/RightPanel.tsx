@@ -10,7 +10,7 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, Route, EyeOff, Check, X
+  Tag, Type, Hash, Route, EyeOff, Check, X, Scan, AlertCircle, Copy
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -58,6 +58,13 @@ export function RightPanel({
 
   const [confirmDeleteAll, setConfirmDeleteAll] = React.useState(false);
 
+  const [nmsPanelOpen, setNmsPanelOpen] = React.useState(false);
+  const [nmsMode, setNmsMode] = React.useState<'iou' | 'ios'>('ios');
+  const [nmsThreshold, setNmsThreshold] = React.useState(80);
+  // 核心数据结构：{ annoId: { groupName: 'OP_1', isMaster: boolean } }
+  const [nmsGroups, setNmsGroups] = React.useState<Record<string, { groupName: string, isMaster: boolean }>>({});
+  const [hasScanned, setHasScanned] = React.useState(false);
+
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
@@ -95,6 +102,126 @@ export function RightPanel({
   );
 
   const currentAnnotations = annotations.filter((a: any) => a.stem === currentStem);
+// 🌟 新增：重置函数
+const handleResetNms = (e: React.MouseEvent) => {
+  e.stopPropagation();
+  setNmsGroups({});
+  setHasScanned(false);
+  // 这里如果需要通知 Canvas 取消高亮，也可以在此处理
+};
+
+// 工具 1：提取对象的 BBox (兼容各类图形)
+  const getBBoxFromPoints = (points: {x: number, y: number}[]) => {
+    if (!points || points.length === 0) return null;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    points.forEach(p => {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    });
+    return { minX, minY, maxX, maxY, area: (maxX - minX) * (maxY - minY) };
+  };
+
+  // 工具 2：计算重叠度
+  const calculateOverlap = (box1: any, box2: any, mode: 'iou' | 'ios') => {
+    if (!box1 || !box2) return 0;
+    const xA = Math.max(box1.minX, box2.minX);
+    const yA = Math.max(box1.minY, box2.minY);
+    const xB = Math.min(box1.maxX, box2.maxX);
+    const yB = Math.min(box1.maxY, box2.maxY);
+
+    const interW = Math.max(0, xB - xA);
+    const interH = Math.max(0, yB - yA);
+    const interArea = interW * interH;
+
+    if (interArea === 0) return 0;
+
+    if (mode === 'ios') {
+      return interArea / Math.min(box1.area, box2.area); // 交小比 (针对嵌套)
+    }
+    return interArea / (box1.area + box2.area - interArea); // 交并比
+  };
+
+  // 🌟 工具：计算重叠并分组 (连通分量算法)
+  const handleScanOverlaps = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const currentAnnos = annotations.filter((a: any) => a.stem === currentStem);
+    if (currentAnnos.length < 2) {
+      setHasScanned(true); // 即使没法扫（数量不够），也标记为扫过
+      setNmsGroups({});
+      return;
+    }
+
+    const candidates = currentAnnos.map(a => ({
+      id: a.id,
+      bbox: getBBoxFromPoints(a.points) // 复用之前的 BBox 提取函数
+    })).filter(c => c.bbox);
+
+    // 构建邻接表
+    const adj: Record<string, string[]> = {};
+    candidates.forEach(c => adj[c.id] = []);
+    
+    for (let i = 0; i < candidates.length; i++) {
+      for (let j = i + 1; j < candidates.length; j++) {
+        const overlap = calculateOverlap(candidates[i].bbox, candidates[j].bbox, nmsMode);
+        if (overlap >= nmsThreshold / 100) {
+          adj[candidates[i].id].push(candidates[j].id);
+          adj[candidates[j].id].push(candidates[i].id);
+        }
+      }
+    }
+
+    // 寻找连通分量 (BFS)
+    const visited = new Set<string>();
+    const newGroups: Record<string, { groupName: string, isMaster: boolean }> = {};
+    let groupCount = 0;
+
+    candidates.forEach(c => {
+      if (!visited.has(c.id) && adj[c.id].length > 0) {
+        groupCount++;
+        const component: string[] = [];
+        const queue = [c.id];
+        visited.add(c.id);
+        
+        while (queue.length > 0) {
+          const curr = queue.shift()!;
+          component.push(curr);
+          adj[curr].forEach(neighbor => {
+            if (!visited.has(neighbor)) {
+              visited.add(neighbor);
+              queue.push(neighbor);
+            }
+          });
+        }
+
+        // 组内决策：面积最大的作为 Master
+        component.sort((a, b) => {
+          const boxA = candidates.find(cand => cand.id === a)!.bbox;
+          const boxB = candidates.find(cand => cand.id === b)!.bbox;
+          return (boxB?.area || 0) - (boxA?.area || 0);
+        });
+
+        component.forEach((id, idx) => {
+          newGroups[id] = { groupName: `OP_${groupCount}`, isMaster: idx === 0 };
+        });
+      }
+    });
+
+    setNmsGroups(newGroups);
+    setHasScanned(true); // 🌟 标记扫描已完成
+  };
+
+  const handleDeleteOverlaps = () => {
+    const idsToDelete = Object.keys(nmsGroups).filter(id => !nmsGroups[id].isMaster);
+    idsToDelete.forEach(id => {
+      const target = annotations.find((a: any) => a.id === id);
+      if (target) pushAction({ type: 'delete', anno: target });
+      removeAnnotation(id);
+    });
+    setNmsGroups({});
+    setNmsPanelOpen(false);
+  };
 
   return (
     <div className="w-80 h-full border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-xl z-10">
@@ -613,7 +740,15 @@ export function RightPanel({
           badge={currentAnnotations.length}
           actionNode={
             currentAnnotations.length > 0 && (
-              <div className="flex items-center h-5">
+              <div className="flex items-center gap-1">
+              <button
+                  onClick={(e) => { e.stopPropagation(); setNmsPanelOpen(!nmsPanelOpen); }}
+                  className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${nmsPanelOpen || hasScanned ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40' : 'text-neutral-400 hover:text-blue-500'}`}
+                  title="Find Overlapping Objects"
+                >
+                  <Copy className="w-3.5 h-3.5" /> {/* 🌟 修改为交叠矩形图标 */}
+                </button>
+
                 {confirmDeleteAll ? (
                   // 🛡️ 点击后展开的原地确认菜单
                   <div className="flex items-center gap-1 bg-red-100 dark:bg-red-900/40 rounded px-1 animate-in fade-in zoom-in-95">
@@ -663,11 +798,72 @@ export function RightPanel({
           }
         />
         {expanded.objects && (
+
+          <div className="flex flex-col max-h-[50vh]">
+          {/* 🌟 2. 嵌入式 Overlap Cleaner 面板 */}
+          {/* 🌟 Overlap Cleaner 面板 (独立一级，类似 Editor) */}
+          {nmsPanelOpen && (
+            <div className="mx-2 mt-2 mb-1 p-3 bg-white dark:bg-neutral-900 rounded-md border border-blue-200 dark:border-blue-900/50 shadow-sm animate-in slide-in-from-top-2">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-bold uppercase text-blue-600 flex items-center gap-1.5">
+                  <Copy className="w-3 h-3" /> Overlap Cleaner
+                </span>
+                <button onClick={() => setNmsPanelOpen(false)}><X className="w-3 h-3 text-neutral-400" /></button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] text-neutral-500 font-bold uppercase">Metric</label>
+                  <Select value={nmsMode} onValueChange={(v: any) => setNmsMode(v)}>
+                    <SelectTrigger className="h-7 text-[10px] font-bold"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ios" className="text-[10px]">IoS (Nested)</SelectItem>
+                      <SelectItem value="iou" className="text-[10px]">IoU (Standard)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[9px] text-neutral-500 font-bold uppercase">
+                    <span>Threshold</span>
+                    <span className="text-blue-600 font-mono">{nmsThreshold}%</span>
+                  </div>
+                  <Slider value={[nmsThreshold]} min={10} max={100} step={1} onValueChange={(v) => setNmsThreshold(v[0])} />
+                </div>
+              </div>
+
+              {/* 🌟 动态按钮区域 */}
+              {!hasScanned ? (
+                <Button className="w-full h-8 text-[11px] font-bold bg-blue-600 hover:bg-blue-700" onClick={handleScanOverlaps}>
+                  Scan Overlapping Objects
+                </Button>
+              ) : (
+                <div className="flex gap-2">
+                  {Object.values(nmsGroups).filter((g: any) => !g.isMaster).length > 0 ? (
+                    <Button className="flex-1 h-8 text-[11px] font-bold bg-red-600 hover:bg-red-700" onClick={handleDeleteOverlaps}>
+                      Delete {Object.values(nmsGroups).filter((g: any) => !g.isMaster).length} Masks
+                    </Button>
+                  ) : (
+                    <Button disabled className="flex-1 h-8 text-[11px] font-bold bg-neutral-100 text-neutral-400 border border-neutral-200 dark:bg-neutral-800 dark:border-neutral-700">
+                      Found 0 Overlaps
+                    </Button>
+                  )}
+                  <Button variant="outline" className="h-8 px-3 text-[11px] font-bold" onClick={handleResetNms}>
+                    Reset
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="max-h-[40vh] overflow-y-auto p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/30 custom-scrollbar">
             {currentAnnotations.map((ann: any) => {
               const clsDef = taxonomyClasses.find((c: any) => c.name === ann.label);
               const color = clsDef?.color || '#3B82F6';
               const isActive = ann.id === activeAnnotationId;
+
+              const groupInfo = nmsGroups[ann.id];
+              const isRedundant = groupInfo && !groupInfo.isMaster;
+              const isMaster = groupInfo && groupInfo.isMaster;
               
               // 🌟 新增：根据标注类型映射对应的 Icon 组件
               const getShapeIcon = (type: string) => {
@@ -690,22 +886,28 @@ export function RightPanel({
               return (
                 <div 
                   key={ann.id} onClick={() => setActiveAnnotationId(ann.id)}
-                  className={`group p-2 rounded border text-[11px] flex items-center justify-between cursor-pointer transition-all ${
-                    isActive ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-400 text-blue-700 dark:text-blue-400 shadow-sm' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-blue-300'
+                  className={`group p-2 rounded border text-[11px] flex items-center justify-between transition-all ${
+                    isRedundant ? 'bg-red-50/50 dark:bg-red-900/10 border-red-300' : 
+                    (groupInfo?.isMaster ? 'bg-blue-50/30 dark:bg-blue-900/10 border-blue-300' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800')
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
-                    <span className="font-medium truncate max-w-[120px]">
-                      {ann.label}
-                    </span>
-                    {/* 🌟 新增：在类别名后方展示图标 */}
                     <ShapeIcon 
                       className={`w-3.5 h-3.5 shrink-0 ml-0.5 ${isActive ? 'text-blue-500 dark:text-blue-400' : 'text-neutral-400'}`} 
                       title={`Type: ${ann.type}`}
                     />
-                    {/* 困难样本标志 */}
-                    {ann.difficult && <AlertTriangle className="w-3.5 h-3.5 inline text-red-500 shrink-0 ml-0.5" title="Difficult"/>}
+                    {ann.difficult && <AlertTriangle className="w-3.5 h-3.5 inline text-orange-500 shrink-0 ml-0.5" title="Difficult"/>}
+                    
+                    {/* 🌟 渲染组标签 */}
+                    {groupInfo && (
+                      <span className={`px-1 rounded-[2px] text-[8px] font-bold shrink-0 ${groupInfo.isMaster ? 'bg-blue-500 text-white' : 'bg-neutral-400 text-white'}`}>
+                        {groupInfo.groupName}
+                      </span>
+                    )}
+                    <span className={`truncate font-medium ${isRedundant ? 'line-through text-red-600/60' : ''}`}>
+                      {ann.label}
+                    </span>
                   </div>
                   
                   <Button 
@@ -727,6 +929,7 @@ export function RightPanel({
             {currentAnnotations.length === 0 && (
                <div className="text-center py-4 text-[10px] text-neutral-400">No objects found</div>
             )}
+          </div>
           </div>
         )}
 
