@@ -34,7 +34,7 @@ export function AIToolPanel({
   aiPrompts, setAiPrompts, onConfirmPreview, isPredicting,
   sourceMode, setSourceMode, promptMode, setPromptMode, 
   onConfirmInit, onResetInit, isAIReady, isInitializing,
-  onAutoPredict, autoResultMsg, activeTab, setActiveTab
+  onAutoPredict, autoResultMsg, activeTab, setActiveTab, onResetPrompts
 }: any) {
   const { t } = useTranslation();
   const {aiSettings, setAISettings, addTaxonomyClass } = useStore() as any;
@@ -425,21 +425,29 @@ return (
               </Button>
             </div>
 
+
             <div className="pt-4 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
-              <Button variant="outline" size="sm" className="w-full text-[10px] h-8" onClick={() => setAiPrompts([])}>
+              {/* 🌟 修复：把 onClick 里的 setAiPrompts([]) 换成 onResetPrompts */}
+              <Button variant="outline" size="sm" className="w-full text-[10px] h-8" onClick={onResetPrompts}>
                 <Trash2 className="w-3 h-3 mr-2" /> Reset Prompts
               </Button>
               <Button size="sm" className="w-full bg-blue-600 h-8 text-[10px]" onClick={onConfirmPreview} disabled={isPredicting || aiPrompts.length === 0}>
-                <Check className="w-3 h-3 mr-2" /> {t('common.confirmAdd', 'Confirm Add')}
+                <Check className="w-3 h-3 mr-2" /> Confirm Add
               </Button>
             </div>
           </div>
         )}
 
         {/* === VQA TAB === */}
+        {/* === VQA TAB === */}
         {activeTab === 'vqa' && (
-          <div className="h-full flex flex-col space-y-3">
-             {/* ... VQA 代码保持不变 ... */}
+          <div className="flex flex-col items-center justify-center h-full text-center space-y-2 opacity-60">
+             <MessageSquare className="w-8 h-8 text-neutral-400 mb-2" />
+             <span className="text-[11px] font-bold text-neutral-500">VQA Not Supported</span>
+             <p className="text-[9px] text-neutral-400 leading-relaxed px-4">
+               SAM3 is a Vision-Language Segmentation model.<br/>
+               Text generation is not available.
+             </p>
           </div>
         )}
       </div>

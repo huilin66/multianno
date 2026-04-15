@@ -85,7 +85,8 @@ export function CanvasView({
   onMouseDown, onMouseMove, onMouseUp,
   formLabel, pendingAnnotation, onDoubleClick, 
   hoverPos, onMouseLeave, editorSettings, mouseQuad,
-  layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent, tempViewSettings, cursorStyle // 🌟 接收引擎数据
+  layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent, tempViewSettings, cursorStyle,
+  aiPrompts
 }: any) {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -287,12 +288,90 @@ export function CanvasView({
       originalDrawImage.apply(this, [img, ...args]);
     };
 
+
+    // 🌟 1. 拦截保护：不让底层引擎处理 ai_preview，防止数据格式不兼容报错
+    const safePendingAnnotation = pendingAnnotation?.id === 'ai_preview' ? null : pendingAnnotation;
+
     // 调用外部渲染引擎
     renderCanvasScene({
       canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 
       imageObj, theme, annotations, activeAnnotationId, taxonomyClasses, 
-      currentPoints, tool, formLabel, pendingAnnotation, hoverPos, editorSettings
+      currentPoints, tool, formLabel, pendingAnnotation: safePendingAnnotation, hoverPos, editorSettings
     });
+
+    // ==========================================
+    // 🌟 2. AI 专属叠加渲染层：手工绘制 Prompts 和 Multi-Polygons
+    // ==========================================
+    ctx.save();
+
+    // A. 绘制 AI 预测出的所有多边形预览
+    if (pendingAnnotation && pendingAnnotation.id === 'ai_preview' && pendingAnnotation.allPolygons) {
+      
+      // 🌟 核心修复 2：动态获取当前选用类别的颜色
+      const targetLabel = pendingAnnotation.label || formLabel;
+      const targetClass = taxonomyClasses?.find((c: any) => c.name === targetLabel);
+      const strokeColor = targetClass?.color || '#00FFFF'; // 找不到默认青色
+      
+      // 将 Hex 颜色转换为带有透明度的 RGBA 用于填充
+      let fillColor = 'rgba(0, 255, 255, 0.25)';
+      if (strokeColor.startsWith('#') && strokeColor.length === 7) {
+        const r = parseInt(strokeColor.slice(1, 3), 16);
+        const g = parseInt(strokeColor.slice(3, 5), 16);
+        const b = parseInt(strokeColor.slice(5, 7), 16);
+        fillColor = `rgba(${r}, ${g}, ${b}, 0.3)`; // 0.3 透明度
+      }
+
+      pendingAnnotation.allPolygons.forEach((poly: any) => {
+        if (!poly || poly.length < 2) return;
+
+        ctx.beginPath();
+        if (pendingAnnotation.type === 'bbox' && poly.length === 2) {
+          const tlX = (poly[0].x * viewport.zoom) + viewport.panX;
+          const tlY = (poly[0].y * viewport.zoom) + viewport.panY;
+          const brX = (poly[1].x * viewport.zoom) + viewport.panX;
+          const brY = (poly[1].y * viewport.zoom) + viewport.panY;
+          ctx.rect(tlX, tlY, brX - tlX, brY - tlY);
+        } else {
+          const startX = (poly[0].x * viewport.zoom) + viewport.panX;
+          const startY = (poly[0].y * viewport.zoom) + viewport.panY;
+          ctx.moveTo(startX, startY);
+          for (let i = 1; i < poly.length; i++) {
+            const x = (poly[i].x * viewport.zoom) + viewport.panX;
+            const y = (poly[i].y * viewport.zoom) + viewport.panY;
+            ctx.lineTo(x, y);
+          }
+          ctx.closePath();
+        }
+
+        // 🌟 应用动态颜色
+        ctx.fillStyle = fillColor;
+        ctx.fill();
+        
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2;
+        ctx.setLineDash([8, 6]); 
+        ctx.stroke();
+        ctx.setLineDash([]); 
+      });
+    }
+
+    // B. 绘制用户点下的 Prompts 红绿点
+    if (tool === 'ai_anno' && aiPrompts && aiPrompts.length > 0) {
+      aiPrompts.forEach((pt: any) => {
+        const x = (pt.x * viewport.zoom) + viewport.panX;
+        const y = (pt.y * viewport.zoom) + viewport.panY;
+        
+        ctx.beginPath();
+        ctx.arc(x, y, 5, 0, Math.PI * 2); // 5px 半径
+        ctx.fillStyle = pt.label === 1 ? '#10B981' : '#EF4444'; // 1 = 绿, 0 = 红
+        ctx.fill();
+        ctx.strokeStyle = '#ffffff'; // 白色描边增加对比度
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      });
+    }
+    
+    ctx.restore();
 
     // 恢复原生的画图能力
     ctx.drawImage = originalDrawImage;

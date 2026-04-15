@@ -357,6 +357,13 @@ export function SyncAnnotation() {
 
     setViewport(newZoom, newPanX, newPanY);
   };
+
+// 🌟 1. 新增：专门用于清空 Semi 绘图状态的函数
+  const handleResetPrompts = useCallback(() => {
+    setAiPrompts([]);
+    setTempActiveAnno(null); // 彻底清空画面上的蓝色预览块
+  }, []);
+
 // 🌟 新增：调用后端推理函数
 const handleAIPredict = async (prompts: SAMPoint[]) => {
     const targetView = views.find((v: any) => v.id === selectedAIViewId);
@@ -382,26 +389,30 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       );
 
       if (result.polygons && result.polygons.length > 0) {
-        // 🌟 2. 逆向转换：将后端吐出的 Infer Size 坐标转回 Main View 坐标！
-        let finalPoints = result.polygons[0].map((pt: any) => 
-          mapInferToMain(pt, targetView, inferSize)
+        // 🌟 核心修复 A：映射所有的 polygons，而不是只取 [0]
+        const allMappedPolygons = result.polygons.map((poly: any) => 
+          poly.map((pt: any) => mapInferToMain(pt, targetView, inferSize))
         );
 
         let finalType = 'polygon';
+        let displayPolys = allMappedPolygons;
         
-        // 如果用户选择了 BBox，将多边形点阵转换为两个角点
         if (aiSettings.outputType === 'bbox') {
-           finalPoints = polygonToBBox(finalPoints);
+           displayPolys = allMappedPolygons.map(p => polygonToBBox(p));
            finalType = 'bbox';
         }
 
+        // 🌟 核心修复 B：使用 allPolygons 字段存储多维数组
         setTempActiveAnno({
           id: 'ai_preview',
-          type: 'polygon',
-          points: finalPoints, // 必须使用投影后的坐标渲染
+          type: finalType,
+          allPolygons: displayPolys, 
           label: formLabel,
           stem: currentStem
         });
+      } else {
+        // 没找到任何对象时清空预览
+        setTempActiveAnno(null);
       }
     } catch (err) {
       console.error("AI Predict Error:", err);
@@ -1263,28 +1274,27 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       ? aiSettings.semiClass 
       : formLabel;
 
-    // 1. 生成最终的标注对象
-    const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
-    const finalAnno = {
-      ...tempActiveAnno, // 包含 AI 生成的 points
-      id: newId,
-      label: targetLabel, // 使用当前选中的类别
-      stem: currentStem,
-      // 补充其他默认业务字段
-      attributes: {}, 
-      difficult: false,
-      occluded: false
-    };
+    // 遍历所有生成的预览块，转化为正式的 Annotation
+    tempActiveAnno.allPolygons.forEach((polyPoints: any) => {
+      const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+      const finalAnno = {
+        id: newId,
+        type: tempActiveAnno.type, 
+        points: polyPoints,
+        label: targetLabel,
+        stem: currentStem,
+        attributes: {}, 
+        difficult: false,
+        occluded: false
+      };
+      addAnnotation(finalAnno);
+      pushAction({ type: 'add', anno: finalAnno });
+    });
 
-    // 2. 写入全局 Store 并压入历史记录
-    addAnnotation(finalAnno);
-    pushAction({ type: 'add', anno: finalAnno });
-
-    // 3. 清理 AI 临时状态，准备下一次标注
+    // 确认后彻底重置状态
     setTempActiveAnno(null);
     setAiPrompts([]);
     
-    // 如果没有开启“连续标注”，可以退回到 pan 工具
     if (!state.editorSettings?.continuousDrawing) {
       setTool('pan');
       setAIPanelOpen(false);
@@ -1335,6 +1345,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
         onResetInit={handleAIReset}
         onAutoPredict={handleAutoPredict}
         autoResultMsg={autoResultMsg}
+        onResetPrompts={handleResetPrompts}
       />
 
       {/* 🎯 Grid Workspace */}
@@ -1491,6 +1502,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   showFullExtent={showFullExtent} // 🌟 修复 2：把裁剪范围控制权传给覆盖层引擎
                   tempViewSettings={tempViewSettings}
                   cursorStyle={cursorStyle}
+                  aiPrompts={aiPrompts}
                 />
               </div>
             ))}

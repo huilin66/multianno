@@ -170,27 +170,61 @@ async def predict_interactive(req: SAMInteractiveRequest):
         vision_engine.predictor.reset_prompts()  # 1. 调用官方方法清空 Embedding 缓存
     if hasattr(vision_engine.predictor, "args"):
         vision_engine.predictor.args.text = None  # 2. 强行抹除配置项中的文本记忆
-    pts = [[p.x, p.y] for p in req.points] if req.points else None
-    labels = [p.label for p in req.points] if req.points else None
+
+    pts = [[[p.x, p.y] for p in req.points]] if req.points else None
+    labels = [[p.label for p in req.points]] if req.points else None
+
     print(f"--> [AI Predict] Points: {pts}, Labels: {labels}, Box: {req.box}")
     try:
         # 直接推理，由于 set_image 已执行，这里耗时只有几十毫秒
         results = vision_engine.predictor(
-            points=pts, labels=labels, bboxes=req.box, conf=req.conf
+            points=pts,
+            labels=labels,
+            bboxes=req.box,
+            conf=req.conf,
         )
 
         result = results[0]
         response_data = {"polygons": [], "bboxes": []}
 
-        if result.masks is not None:
+        if result.masks is not None and len(result.masks.data) > 0:
+            best_mask_np = None
+
+            # 获取原图尺寸，计算当前图片的物理总面积
+            img_h, img_w = (
+                result.orig_shape if hasattr(result, "orig_shape") else (644, 644)
+            )
+            total_area = img_h * img_w
+
+            # 🌟 修复 2：智能防爆屏过滤 (Anti-Background Explosion)
+            # 遍历 SAM 给出的所有候选 Mask
             for i in range(len(result.masks.data)):
                 mask_np = result.masks.data[i].cpu().numpy()
-                response_data["polygons"].extend(
-                    vision_engine.mask_to_polygons(mask_np)
-                )
                 bbox = vision_engine.mask_to_bbox(mask_np)
+
                 if bbox:
-                    response_data["bboxes"].append(bbox)
+                    w = bbox[2] - bbox[0]
+                    h = bbox[3] - bbox[1]
+                    area = w * h
+
+                    # 💡 核心逻辑：只要这个 Mask 面积小于整张图的 90%，
+                    # 说明它是一个具体的物体，而不是“全屏背景”，直接采纳并跳出！
+                    if area < total_area * 0.90:
+                        best_mask_np = mask_np
+                        break
+
+            # 兜底逻辑：如果所有 Mask 都超过 90%（说明用户真的在选一个填满全屏的超级大物体）
+            # 或者找不到符合条件的，就回退到使用分数最高的第一张
+            if best_mask_np is None:
+                best_mask_np = result.masks.data[0].cpu().numpy()
+
+            # 解析多边形并返回
+            response_data["polygons"].extend(
+                vision_engine.mask_to_polygons(best_mask_np)
+            )
+            bbox = vision_engine.mask_to_bbox(best_mask_np)
+            if bbox:
+                response_data["bboxes"].append(bbox)
         print(f"--> [AI Predict] Result: {response_data}")
         return response_data
     except Exception as e:
