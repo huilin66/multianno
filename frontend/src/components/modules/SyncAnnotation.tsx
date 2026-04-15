@@ -1197,7 +1197,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
 
           // 🌟 4. 内层循环：处理该 Prompt 下的所有多边形
           polygons.forEach((poly: any, index: number) => {
-            totalFound++;
+
             const { rawWidth, rawHeight } = getViewDimensions(targetView);
             const { scaleX = 1, scaleY = 1 } = targetView.transform || {};
             const trueMainWidth = rawWidth * scaleX;
@@ -1216,6 +1216,8 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
               }
             }
 
+            totalFound++;
+
             let finalType = 'polygon';
             if (aiSettings.outputType === 'bbox') {
               mappedPoly = polygonToBBox(mappedPoly);
@@ -1227,7 +1229,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
               id: newId,
               type: finalType, 
               points: mappedPoly, 
-              label: finalClassName, // 🌟 核心：写入真正映射好的类别名！
+              label: finalClassName,
               stem: currentStem,
               attributes: {},
               difficult: false,

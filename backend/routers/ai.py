@@ -133,8 +133,6 @@ async def init_image(req: SAMInitRequest):
         if vision_engine.current_image_key == cache_key:
             return {"status": "success", "msg": "Features already cached"}
 
-        print(f"--> [AI Init] Extracting features. Image size: {req.image_size or 644}")
-
         # 1. 读取图像 (无论是 Base64 还是本地路径，此时都是未经裁剪的全尺寸大图)
         if req.image_data:
             header, encoded = req.image_data.split(",", 1)
@@ -159,6 +157,8 @@ async def init_image(req: SAMInitRequest):
 
             # 使用 Numpy 进行物理切片
             img = img[max(0, y) : y_end, max(0, x) : x_end]
+
+        print(f"--> [AI Init] Extracting features. Image size: {req.image_size or 644}")
 
         # 2. 对已经裁剪好的精准区域，进行缩放以满足 AI 的 Inference Size
         if req.image_size and req.image_size > 0:
@@ -198,7 +198,7 @@ async def predict_interactive(req: SAMInteractiveRequest):
 
     pts = [[p.x, p.y] for p in req.points] if req.points else None
     labels = [p.label for p in req.points] if req.points else None
-
+    print(f"--> [AI Predict] Points: {pts}, Labels: {labels}, Box: {req.box}")
     try:
         # 直接推理，由于 set_image 已执行，这里耗时只有几十毫秒
         results = vision_engine.predictor(
@@ -221,7 +221,7 @@ async def predict_interactive(req: SAMInteractiveRequest):
                 bbox = vision_engine.mask_to_bbox(mask_np)
                 if bbox:
                     response_data["bboxes"].append(bbox)
-
+        print(f"--> [AI Predict] Result: {response_data}")
         return response_data
     except Exception as e:
         import traceback
