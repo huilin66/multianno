@@ -1257,12 +1257,18 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
   const handleAIConfirm = useCallback(() => {
     if (!tempActiveAnno) return;
 
+    // 🌟 核心拦截：如果有预设的 semiClass 且不为 'None'，则优先使用它；
+    // 否则退回使用主界面的全局预设类别 formLabel
+    const targetLabel = (aiSettings.semiClass && aiSettings.semiClass !== 'None') 
+      ? aiSettings.semiClass 
+      : formLabel;
+
     // 1. 生成最终的标注对象
     const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
     const finalAnno = {
       ...tempActiveAnno, // 包含 AI 生成的 points
       id: newId,
-      label: formLabel, // 使用当前选中的类别
+      label: targetLabel, // 使用当前选中的类别
       stem: currentStem,
       // 补充其他默认业务字段
       attributes: {}, 
@@ -1283,7 +1289,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       setTool('pan');
       setAIPanelOpen(false);
     }
-  }, [tempActiveAnno, formLabel, currentStem, addAnnotation, pushAction, state.editorSettings]);
+  }, [tempActiveAnno, formLabel, aiSettings.semiClass, currentStem, addAnnotation, pushAction, state.editorSettings]);
   return (
     <div 
     className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"

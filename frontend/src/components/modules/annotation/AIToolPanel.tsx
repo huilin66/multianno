@@ -393,6 +393,26 @@ return (
         {/* === SEMI TAB === */}
         {activeTab === 'semi' && (
           <div className="space-y-4">
+
+            {/* 🌟 新增：Semi 专属类别选择器 */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Assign Class</label>
+              <Select 
+                value={aiSettings.semiClass || 'None'} 
+                onValueChange={(val) => setAISettings({ semiClass: val })}
+              >
+                <SelectTrigger className="h-8 text-[11px] bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 shadow-sm focus:ring-1 focus:ring-blue-500">
+                  <SelectValue placeholder="Auto (None)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {/* 默认项：如果不选，就 fallback 到外层画图工具选中的类别 */}
+                  <SelectItem value="None" className="text-xs text-neutral-400 italic">None (Use Global)</SelectItem>
+                  {taxonomyClasses.map((c: any) => (
+                    <SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-1 gap-1.5">
               <Button variant={promptMode === 'positive' ? 'default' : 'outline'} className={`h-9 justify-start px-3 gap-2 ${promptMode === 'positive' ? 'bg-green-600 hover:bg-green-700' : ''}`} onClick={() => setPromptMode('positive')}>
                 <PlusCircle className="w-4 h-4" /> <span className="text-xs">Positive Pt</span>

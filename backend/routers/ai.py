@@ -1,11 +1,8 @@
 # routers/ai.py
 import base64
-import gc
-import os
 
 import cv2
 import numpy as np
-import torch
 from fastapi import APIRouter, HTTPException
 from models import (
     AIConfigRequest,
@@ -14,58 +11,38 @@ from models import (
     SAMInteractiveRequest,
 )
 
-os.environ["KMP_DUPLICATE_LIB_OK"] = "True"
+from .engine import UnifiedSAM3Predcitor
+
 router = APIRouter(prefix="/api/ai/vision", tags=["Vision AI"])
 
 
 class InteractiveVisionEngine:
-    """
-    终极版视觉引擎：严格映射前端交互逻辑。
-    全局唯一维护一个 SAM3SemanticPredictor 实例。
-    """
-
     def __init__(self):
-        self.predictor = None
+        self.engine = None
         self.model_path = ""
+        self.current_image_key = ""
         self.model_type = ""
-        self.current_image_key = ""  # 记录当前缓存在显存中的图片标识
 
     @property
     def is_loaded(self):
-        return self.predictor is not None
+        return self.engine is not None
 
     def load_model(self, path: str, model_type: str, conf: float = 0.25):
-        if not os.path.exists(path):
-            raise FileNotFoundError(f"模型文件不存在: {path}")
-
         if self.model_path == path and self.is_loaded:
             return
 
-        # 🌟 阶段 1：装载模型。暴力清理旧模型，确保显存绝对安全
-        if self.predictor is not None:
-            del self.predictor
-            self.predictor = None
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-
-        print(f"Initializing SAM3 Semantic Predictor with model: {path}")
-        from ultralytics.models.sam import SAM3SemanticPredictor
-
-        # 核心：将全局唯一的预测器实例化
         overrides = dict(
             conf=conf,
             task="segment",
             mode="predict",
             model=path,
-            half=True,  # 使用 FP16 节省一半显存并加速
-            save=False,
-            show=False,
+            half=True,
+            compile=False,
         )
-        self.predictor = SAM3SemanticPredictor(overrides=overrides)
+        # 实例化统一引擎
+        self.predictor = UnifiedSAM3Predcitor(overrides=overrides)
         self.model_path = path
-        self.model_type = model_type
-        self.current_image_key = ""  # 模型切换，强制失效旧图片缓存
+        self.engine = True
 
     @staticmethod
     def mask_to_bbox(mask_array: np.ndarray):
@@ -128,8 +105,6 @@ async def init_image(req: SAMInitRequest):
 
     try:
         cache_key = req.image_path or "base64_temp_image"
-
-        # 如果是同一张图，直接跳过，保护显存！
         if vision_engine.current_image_key == cache_key:
             return {"status": "success", "msg": "Features already cached"}
 
@@ -168,12 +143,8 @@ async def init_image(req: SAMInitRequest):
             img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         # 3. 动态更新 predictor 的内部参数以匹配前端尺寸
-        vision_engine.predictor.args.imgsz = req.image_size or 644
-
-        # 4. 调用底层 set_image 提取特征
         vision_engine.predictor.set_image(img)
         vision_engine.current_image_key = cache_key
-
         return {"status": "success"}
     except Exception as e:
         import traceback
@@ -195,18 +166,17 @@ async def predict_interactive(req: SAMInteractiveRequest):
     if vision_engine.current_image_key != req.image_path:
         vision_engine.predictor.set_image(req.image_path)
         vision_engine.current_image_key = req.image_path
-
+    if hasattr(vision_engine.predictor, "reset_prompts"):
+        vision_engine.predictor.reset_prompts()  # 1. 调用官方方法清空 Embedding 缓存
+    if hasattr(vision_engine.predictor, "args"):
+        vision_engine.predictor.args.text = None  # 2. 强行抹除配置项中的文本记忆
     pts = [[p.x, p.y] for p in req.points] if req.points else None
     labels = [p.label for p in req.points] if req.points else None
     print(f"--> [AI Predict] Points: {pts}, Labels: {labels}, Box: {req.box}")
     try:
         # 直接推理，由于 set_image 已执行，这里耗时只有几十毫秒
         results = vision_engine.predictor(
-            points=pts,
-            labels=labels,
-            bboxes=req.box,
-            conf=req.conf,
-            verbose=False,
+            points=pts, labels=labels, bboxes=req.box, conf=req.conf
         )
 
         result = results[0]
@@ -243,13 +213,15 @@ async def predict_auto(req: SAMAutoRequest):
     if vision_engine.current_image_key != req.image_path:
         vision_engine.predictor.set_image(req.image_path)
         vision_engine.current_image_key = req.image_path
-
+    # 🌟🌟🌟 双保险强杀：清理上一次 Semi 任务的残留
+    if hasattr(vision_engine.predictor, "reset_prompts"):
+        vision_engine.predictor.reset_prompts()  # 1. 清空特征与 Prompt 缓存
+    if hasattr(vision_engine.predictor, "args"):
+        vision_engine.predictor.args.points = None  # 2. 强行抹除几何坐标记忆
+        vision_engine.predictor.args.labels = None
+        vision_engine.predictor.args.bboxes = None
     try:
-        results = vision_engine.predictor(
-            text=req.texts,
-            conf=req.conf,
-            verbose=False,
-        )
+        results = vision_engine.predictor(text=req.texts, conf=req.conf)
 
         # 🌟 1. 初始化一个字典，用来按 prompt 收集多边形
         grouped_polygons = {text: [] for text in req.texts}
