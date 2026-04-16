@@ -23,6 +23,7 @@ interface TaxonomyDashboardProps {
 // ============================================================================
 
 // 1. 带 XY 坐标轴的直方图
+// 1. 带 XY 坐标轴的直方图 (修复超宽数据遮挡，支持横向滚动)
 const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
   const entries = Object.entries(data || {});
   if (entries.length === 0) return <div className="h-full flex items-center justify-center text-neutral-400">No data</div>;
@@ -30,32 +31,47 @@ const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
   
   return (
     <div className="flex flex-col h-64 w-full">
-      <h5 className="text-[11px] font-bold text-neutral-600 dark:text-neutral-300 uppercase tracking-wider mb-4">{title}</h5>
-      <div className="flex-1 flex">
-        {/* Y 轴 */}
-        <div className="w-10 border-r-2 border-neutral-200 dark:border-neutral-700 flex flex-col justify-between items-end pr-2 text-[9px] text-neutral-500 pb-6 relative">
+      <h5 className="text-[11px] font-bold text-neutral-600 dark:text-neutral-300 uppercase tracking-wider mb-4 shrink-0">{title}</h5>
+      
+      <div className="flex-1 flex min-h-0">
+        {/* Y 轴 (固定在左侧不随之滚动) */}
+        <div className="w-10 shrink-0 border-r-2 border-neutral-200 dark:border-neutral-700 flex flex-col justify-between items-end pr-2 text-[9px] text-neutral-500 pb-6 relative z-10 bg-white dark:bg-neutral-900">
           <span className="absolute -left-6 top-1/2 -translate-y-1/2 -rotate-90 text-[9px] font-bold tracking-widest whitespace-nowrap">{yLabel}</span>
           <span>{maxVal}</span>
           <span>{Math.round(maxVal / 2)}</span>
           <span>0</span>
         </div>
-        {/* 柱状图区 */}
-        <div className="flex-1 flex flex-col relative">
-           <div className="flex-1 flex items-end gap-1 px-2 border-b-2 border-neutral-200 dark:border-neutral-700">
-             {entries.map(([k, v]: any) => (
-                <div key={k} className="flex-1 flex flex-col items-center justify-end group h-full relative">
-                   <span className="text-[9px] font-mono text-neutral-600 dark:text-neutral-300 mb-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-4">{v}</span>
-                   <div className={`w-full ${colorClass} rounded-t-sm transition-all hover:brightness-110`} style={{ height: `${(v / maxVal) * 100}%` }} />
-                </div>
-             ))}
+        
+        {/* 柱状图展示区 (超过宽度时出现横向滚动条) */}
+        <div className="flex-1 flex flex-col relative overflow-hidden">
+           
+           {/* 🌟 核心修复区：允许横向滚动 */}
+           <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar pb-1">
+             <div className="h-full flex flex-col min-w-max px-2">
+               
+               {/* 柱子区域 */}
+               <div className="flex-1 flex items-end gap-1 border-b-2 border-neutral-200 dark:border-neutral-700">
+                 {entries.map(([k, v]: any) => (
+                    // 🌟 核心修复：增加 min-w-[28px] 保证每根柱子和下方的字不被压扁
+                    <div key={k} className="flex-1 flex flex-col items-center justify-end group h-full relative min-w-[28px]">
+                       <span className="text-[9px] font-mono text-neutral-600 dark:text-neutral-300 mb-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-4">{v}</span>
+                       <div className={`w-full ${colorClass} rounded-t-sm transition-all hover:brightness-110`} style={{ height: `${(v / maxVal) * 100}%` }} />
+                    </div>
+                 ))}
+               </div>
+               
+               {/* X 轴刻度标签 */}
+               <div className="flex pt-2">
+                 {entries.map(([k]: any) => (
+                    <div key={k} className="flex-1 text-center text-[8px] text-neutral-500 truncate min-w-[28px]" title={k}>{k}</div>
+                 ))}
+               </div>
+
+             </div>
            </div>
-           {/* X 轴 */}
-           <div className="flex px-2 pt-2">
-             {entries.map(([k]: any) => (
-                <div key={k} className="flex-1 text-center text-[8px] text-neutral-500 truncate" title={k}>{k}</div>
-             ))}
-           </div>
-           <div className="text-center text-[9px] text-neutral-400 font-bold tracking-widest mt-1">{xLabel}</div>
+
+           {/* X 轴全局标题 (固定在底部正中央) */}
+           <div className="text-center text-[9px] text-neutral-400 font-bold tracking-widest mt-2 shrink-0">{xLabel}</div>
         </div>
       </div>
     </div>
@@ -440,26 +456,36 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       {/* 检查当前 Tab 是否已实现 */}
                       {['bbox', 'polygon'].includes(activeShapeTab) ? (
                         statsData.shapes && statsData.shapes[activeShapeTab] ? (
-                          <div className="grid grid-cols-2 gap-x-16 gap-y-12 animate-in fade-in slide-in-from-right-4">
-                            <AxisBarChart 
-                              title={`Boxes Per Image (${activeShapeTab.toUpperCase()})`} 
-                              xLabel="Objects Count" yLabel="Images" 
-                              colorClass="bg-purple-500/60"
-                              data={statsData.shapes[activeShapeTab].box_number_distribution} 
-                            />
-                            <AxisBarChart 
-                              title={`Area % Distribution (${activeShapeTab.toUpperCase()})`} 
-                              xLabel="Relative Area (%)" yLabel="Objects" 
-                              colorClass="bg-blue-500/60"
-                              data={statsData.shapes[activeShapeTab].area_distribution} 
-                            />
-                            <AxisBarChart 
-                              title={`Shape Rate (W/H) (${activeShapeTab.toUpperCase()})`} 
-                              xLabel="Aspect Ratio" yLabel="Objects" 
-                              colorClass="bg-teal-500/60"
-                              data={statsData.shapes[activeShapeTab].shape_rate_distribution} 
-                            />
-                            <div className="flex justify-center">
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4">
+                            {/* 🌟 修复：每个图表外层套一个独立的卡片，增加 min-w-0 防止文字撑爆容器 */}
+                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                              <AxisBarChart 
+                                title={`Boxes Per Image (${activeShapeTab.toUpperCase()})`} 
+                                xLabel="Objects Count" yLabel="Images" 
+                                colorClass="bg-purple-500/60"
+                                data={statsData.shapes[activeShapeTab].box_number_distribution} 
+                              />
+                            </div>
+                            
+                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                              <AxisBarChart 
+                                title={`Area % Distribution (${activeShapeTab.toUpperCase()})`} 
+                                xLabel="Relative Area (%)" yLabel="Objects" 
+                                colorClass="bg-blue-500/60"
+                                data={statsData.shapes[activeShapeTab].area_distribution} 
+                              />
+                            </div>
+                            
+                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                              <AxisBarChart 
+                                title={`Shape Rate (W/H) (${activeShapeTab.toUpperCase()})`} 
+                                xLabel="Aspect Ratio" yLabel="Objects" 
+                                colorClass="bg-teal-500/60"
+                                data={statsData.shapes[activeShapeTab].shape_rate_distribution} 
+                              />
+                            </div>
+                            
+                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden flex justify-center">
                               <JointPlotHeatmap 
                                 title={`Spatial Joint Distribution (${activeShapeTab.toUpperCase()})`} 
                                 matrix={statsData.shapes[activeShapeTab].heatmap_center?.flat().reduce((rows:any, key:any, index:number) => (index % 10 == 0 ? rows.push([key]) : rows[rows.length-1].push(key)) && rows, [])} 
@@ -612,26 +638,35 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <div className="flex-1 p-8 overflow-y-auto custom-scrollbar bg-white dark:bg-neutral-900">
                       {['bbox', 'polygon'].includes(activeClassShapeTab) ? (
                         statsData.classes[activeClass.name].shapes && statsData.classes[activeClass.name].shapes[activeClassShapeTab] ? (
-                          <div className="grid grid-cols-2 gap-x-16 gap-y-12 animate-in fade-in slide-in-from-right-4">
-                            <AxisBarChart 
-                              title={`Boxes Per Image (${activeClassShapeTab.toUpperCase()})`} 
-                              xLabel="Objects Count" yLabel="Images" 
-                              colorClass="bg-purple-500/60"
-                              data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].box_number_distribution} 
-                            />
-                            <AxisBarChart 
-                              title={`Area % Distribution (${activeClassShapeTab.toUpperCase()})`} 
-                              xLabel="Relative Area (%)" yLabel="Objects" 
-                              colorClass="bg-blue-500/60"
-                              data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].area_distribution} 
-                            />
-                            <AxisBarChart 
-                              title={`Shape Rate (W/H) (${activeClassShapeTab.toUpperCase()})`} 
-                              xLabel="Aspect Ratio" yLabel="Objects" 
-                              colorClass="bg-teal-500/60"
-                              data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].shape_rate_distribution} 
-                            />
-                            <div className="flex justify-center">
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4">
+                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                              <AxisBarChart 
+                                title={`Boxes Per Image (${activeClassShapeTab.toUpperCase()})`} 
+                                xLabel="Objects Count" yLabel="Images" 
+                                colorClass="bg-purple-500/60"
+                                data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].box_number_distribution} 
+                              />
+                            </div>
+
+                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                              <AxisBarChart 
+                                title={`Area % Distribution (${activeClassShapeTab.toUpperCase()})`} 
+                                xLabel="Relative Area (%)" yLabel="Objects" 
+                                colorClass="bg-blue-500/60"
+                                data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].area_distribution} 
+                              />
+                            </div>
+
+                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                              <AxisBarChart 
+                                title={`Shape Rate (W/H) (${activeClassShapeTab.toUpperCase()})`} 
+                                xLabel="Aspect Ratio" yLabel="Objects" 
+                                colorClass="bg-teal-500/60"
+                                data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].shape_rate_distribution} 
+                              />
+                            </div>
+
+                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden flex justify-center">
                               <JointPlotHeatmap 
                                 title={`Spatial Joint Distribution (${activeClassShapeTab.toUpperCase()})`} 
                                 matrix={statsData.classes[activeClass.name].shapes[activeClassShapeTab].heatmap_center?.flat().reduce((rows:any, key:any, index:number) => (index % 10 == 0 ? rows.push([key]) : rows[rows.length-1].push(key)) && rows, [])} 
