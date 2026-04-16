@@ -59,6 +59,9 @@ export async function batchMergeClass(payload: {
 // ==========================================
 // 🌟 3. 批量删除类别 (支持软硬删除)
 // ==========================================
+// ==========================================
+// 🌟 3. 批量删除类别 (支持软硬删除)
+// ==========================================
 export async function batchDeleteClass(payload: {
   save_dirs: string[];
   class_name: string;
@@ -70,8 +73,16 @@ export async function batchDeleteClass(payload: {
     body: JSON.stringify(payload),
   });
   
-  if (!response.ok) throw new Error('Failed to delete class');
-  return response.json(); // 返回格式: { status: "success", modified_files: 8 }
+  if (!response.ok) {
+    // 🌟 核心升级：拦截并解析 FastAPI 的具体校验报错
+    const errorData = await response.json().catch(() => ({}));
+    const errorDetail = errorData.detail 
+      ? JSON.stringify(errorData.detail, null, 2) 
+      : 'Unknown Backend Error';
+    throw new Error(`\n[FastAPI 422 Rejection]:\n${errorDetail}`);
+  }
+  
+  return response.json(); 
 }
 
 // ==========================================

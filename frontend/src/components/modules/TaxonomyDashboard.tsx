@@ -378,13 +378,20 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState<string>('');
   const [renameValue, setRenameValue] = useState('');
-
+  const [showClassDeleteConfirm, setShowClassDeleteConfirm] = useState(false);
+  
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
   const activeAttribute = taxonomyAttributes.find((a: any) => a.id === selectedAttributeId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (folders.length > 0) loadStatistics(false); }, []);
-  useEffect(() => { if (activeClass) { setRenameValue(activeClass.name); setMergeTargetId(''); } }, [activeClass]);
+  useEffect(() => { 
+    if (activeClass) { 
+      setRenameValue(activeClass.name); 
+      setMergeTargetId(''); 
+      setShowClassDeleteConfirm(false); // 🌟 切换类别时重置删除状态
+    } 
+  }, [activeClass]);
 
   const loadStatistics = async (forceRefresh: boolean) => {
     if (folders.length === 0) return;
@@ -467,17 +474,31 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     } catch (e: any) { alert(`Merge failed: ${e.message}`); } finally { setIsProcessing(false); }
   };
 
-  const handleDeleteClass = async () => {
+  // 🌟 1. 替换原有的 handleDeleteClass 为接收明确布尔值的执行函数
+  const executeDeleteClass = async (isHardDelete: boolean) => {
     if (!activeClass) return;
-    const isHardDelete = window.confirm(`DELETE CLASS: '${activeClass.name}'\n\n[OK] Hard Delete (Destroy boxes)\n[Cancel] Soft Delete (Mark 'Uncategorized')`);
-    if (!window.confirm(`Are you sure?`)) return;
     setIsProcessing(true);
     try {
-      await batchDeleteClass({ save_dirs: folders.map((f: any) => f.path), class_name: activeClass.name, hard_delete: isHardDelete });
+      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+
+      const payload = { 
+        save_dirs: safeSaveDirs, 
+        class_name: activeClass.name, 
+        hard_delete: isHardDelete 
+      };
+
+      await batchDeleteClass(payload);
+      
       deleteTaxonomyClass(activeClass.id, isHardDelete);
       setSelectedClassId(null);
-    } catch (e: any) { alert(`Delete failed: ${e.message}`); } finally { setIsProcessing(false); }
+      setShowClassDeleteConfirm(false); // 执行完毕后收起菜单
+    } catch (err: any) { 
+      alert(`Delete failed: ${err.message}`); 
+    } finally { 
+      setIsProcessing(false); 
+    }
   };
+
 
   return (
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
@@ -734,8 +755,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {activeTab === 'classes' && activeClass && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
             
-            {/* 顶栏：干净内联的编辑工具栏 */}
+            {/* 顶栏：干净内联的编辑工具栏 (已去重合并) */}
             <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center justify-between shrink-0 shadow-sm z-10">
+              
+              {/* 左侧：颜色修改与名称重命名 */}
               <div className="flex items-center gap-4">
                 <div className="relative w-8 h-8 rounded-md shadow-sm border border-neutral-200 overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
                   <input type="color" value={activeClass.color} onChange={e => updateTaxonomyClass(activeClass.id, { color: e.target.value })} className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer" />
@@ -743,7 +766,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 <Input value={renameValue} onChange={e => setRenameValue(e.target.value)} onBlur={() => { if (renameValue.trim() && renameValue !== activeClass.name) updateTaxonomyClass(activeClass.id, { name: renameValue.trim() }); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="text-xl font-black border-transparent hover:border-neutral-200 focus:border-blue-500 bg-transparent px-2 h-10 w-64 shadow-none" placeholder="Class Name" />
               </div>
 
+              {/* 右侧：Merge合并 与 删除操作 */}
               <div className="flex items-center gap-3">
+                
+                {/* Merge 模块 */}
                 <div className="flex items-center bg-neutral-50 dark:bg-neutral-800 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
                     <SelectTrigger className="h-7 w-32 text-xs border-none bg-transparent focus:ring-0 shadow-none">
@@ -757,10 +783,54 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge
                   </Button>
                 </div>
+                
                 <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
-                <Button variant="destructive" size="sm" className="h-9 px-4 font-bold shadow-sm" onClick={handleDeleteClass} disabled={isProcessing}>
-                  <Trash2 className="w-4 h-4 mr-2" /> Delete
-                </Button>
+                
+                {/* 🌟 核心亮点：内联确认菜单 (取代 window.confirm) */}
+                {showClassDeleteConfirm ? (
+                  <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in fade-in zoom-in-95">
+                    <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">Confirm:</span>
+                    <Button
+                      size="sm"
+                      className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold"
+                      onClick={() => executeDeleteClass(true)}
+                      disabled={isProcessing}
+                      title="Destroy all boxes of this class"
+                    >
+                      Hard Delete
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-3 text-[10px] border-red-200 text-red-600 hover:bg-red-100 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/50 font-bold"
+                      onClick={() => executeDeleteClass(false)}
+                      disabled={isProcessing}
+                      title="Keep boxes, but mark as 'background'"
+                    >
+                      Soft Delete
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                      onClick={() => setShowClassDeleteConfirm(false)}
+                      disabled={isProcessing}
+                    >
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    className="h-9 px-4 font-bold shadow-sm" 
+                    onClick={() => setShowClassDeleteConfirm(true)} 
+                    disabled={isProcessing}
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" /> Delete
+                  </Button>
+                )}
+                
               </div>
             </div>
 

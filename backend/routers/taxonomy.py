@@ -2,7 +2,6 @@ import json
 import math
 import os
 from datetime import datetime
-from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -121,11 +120,11 @@ async def batch_delete_class(request: BatchDeleteClassRequest):
                     ]
                     changed = len(anno_data["shapes"]) != original_len
                 else:
-                    # 软删除：把类别名改成 'Uncategorized'
+                    # 软删除：把类别名改成 'background'
                     changed = False
                     for shape in anno_data.get("shapes", []):
                         if shape.get("label") == request.class_name:
-                            shape["label"] = "Uncategorized"
+                            shape["label"] = "background"
                             changed = True
 
                 if changed:
@@ -133,7 +132,7 @@ async def batch_delete_class(request: BatchDeleteClassRequest):
                         json.dump(anno_data, f, indent=2, ensure_ascii=False)
                     modified_count += 1
             except Exception as e:
-                pass
+                print(f"Error processing {file_path}: {e}")
 
     return {"status": "success", "modified_files": modified_count}
 
@@ -171,7 +170,7 @@ async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
                         json.dump(anno_data, f, indent=2, ensure_ascii=False)
                     modified_count += 1
             except Exception as e:
-                pass
+                print(f"Error processing {file_path}: {e}")
 
     return {"status": "success", "modified_files": modified_count}
 
