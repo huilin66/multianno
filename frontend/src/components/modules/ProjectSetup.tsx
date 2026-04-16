@@ -12,8 +12,9 @@ import { useTranslation } from 'react-i18next'; // 🌟 引入国际化钩子
 // 1. Load Project Modal (加载现有项目)
 // ==========================================
 export function LoadProject({onClose}: {onClose: () => void}) {
-  const { t } = useTranslation(); // 🌟 激活翻译钩子
-  const { loadProjectMeta, setActiveModule } = useStore();
+  const { t } = useTranslation();
+  // 🌟 引入 resetProject
+  const { loadProjectMeta, setActiveModule, resetProject } = useStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string>('');
 
@@ -21,14 +22,22 @@ export function LoadProject({onClose}: {onClose: () => void}) {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    // 🌟 拦截 1：提醒用户保存
+    const confirmMsg = t('createProject.confirmReset', "⚠️ Current workspace will be cleared. Please ensure you have exported your annotations. Continue?");
+    if (!window.confirm(confirmMsg)) {
+      if (fileInputRef.current) fileInputRef.current.value = ''; // 允许重复选同一文件
+      return;
+    }
+
     try {
       setError('');
       const meta = await readProjectJsonFile(file);
-      loadProjectMeta(meta); // 写入 Store
+      
+      resetProject(); // 🌟 拦截 2：彻底清空旧项目
+      loadProjectMeta(meta); 
       
       setActiveModule('meta');
     } catch (err: any) {
-      // 🌟 错误提示国际化
       setError(err.message || t('loadProject.failLoad'));
     }
   };
@@ -39,7 +48,6 @@ export function LoadProject({onClose}: {onClose: () => void}) {
         <FileJson className="w-8 h-8 text-primary" />
       </div>
       <p className="text-sm text-muted-foreground text-center">
-        {/* 🌟 巧妙处理带有代码高亮格式的文本 */}
         {t('loadProject.descPre')} 
         <span className="text-foreground font-mono font-medium">project_meta.json</span> 
         {t('loadProject.descPost')}
@@ -50,7 +58,7 @@ export function LoadProject({onClose}: {onClose: () => void}) {
       <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
       
       <Button onClick={() => fileInputRef.current?.click()} className="w-full mt-2 font-semibold">
-        {t('loadProject.browse')} {/* 🌟 按钮文案国际化 */}
+        {t('loadProject.browse')}
       </Button>
     </div>
   );
@@ -60,14 +68,14 @@ export function LoadProject({onClose}: {onClose: () => void}) {
 // 2. Create New Project Modal (创建新项目)
 // ==========================================
 export function CreateProject({onClose }: {onClose: () => void }) {
-  const { t } = useTranslation(); // 🌟 激活翻译钩子
+  const { t } = useTranslation();
   
-  const { setProjectName, loadProjectMeta, setActiveModule } = useStore();
-  // 🌟 默认名称国际化
+  // 🌟 引入 resetProject
+  const { resetProject, setProjectName, loadProjectMeta, setActiveModule } = useStore();
   const [name, setName] = useState(t('createProject.defaultName'));
   const [importedMeta, setImportedMeta] = useState<ProjectMetaContract | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -75,17 +83,27 @@ export function CreateProject({onClose }: {onClose: () => void }) {
       const meta = await readProjectJsonFile(file);
       setImportedMeta(meta); 
     } catch (err) {
-      // 🌟 弹窗警告国际化
       alert(t('createProject.invalidJson'));
     }
   };
 
+  // 🌟 修复原本有语法冲突的函数，统一走 handleConfirm
   const handleConfirm = () => {
+    if (!name.trim()) return;
+
+    // 🌟 拦截 1：提醒用户保存
+    const confirmMsg = t('createProject.confirmReset', "⚠️ Current workspace will be cleared. Please ensure you have exported your annotations. Continue?");
+    if (!window.confirm(confirmMsg)) return;
+
+    // 🌟 拦截 2：彻底清空旧项目
+    resetProject();
+
+    // 🌟 拦截 3：如果有导入的 meta 则加载
     if (importedMeta) {
       loadProjectMeta(importedMeta);
     }
-    setProjectName(name);
     
+    setProjectName(name);
     setActiveModule('preload');
     setImportedMeta(null); 
   };
@@ -94,22 +112,22 @@ export function CreateProject({onClose }: {onClose: () => void }) {
     <div className="p-6 space-y-6 bg-background h-full flex flex-col">
       <div className="space-y-2">
         <label className="text-xs font-bold text-muted-foreground uppercase">
-          {t('createProject.nameLabel')} {/* 🌟 标签国际化 */}
+          {t('createProject.nameLabel')}
         </label>
         <Input 
           value={name} 
           onChange={(e) => setName(e.target.value)} 
           className="bg-muted border-input focus:border-primary font-medium text-foreground"
-          placeholder={t('createProject.namePlaceholder')} // 🌟 占位符国际化
+          placeholder={t('createProject.namePlaceholder')}
         />
       </div>
 
       <div className="p-4 rounded-lg border border-border bg-muted/50 space-y-3">
         <label className="text-xs font-bold text-muted-foreground uppercase block">
-          {t('createProject.importLabel')} {/* 🌟 标签国际化 */}
+          {t('createProject.importLabel')}
         </label>
         <p className="text-[10px] text-muted-foreground">
-          {t('createProject.importDesc')} {/* 🌟 描述文字国际化 */}
+          {t('createProject.importDesc')}
         </p>
         
         <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
@@ -119,7 +137,6 @@ export function CreateProject({onClose }: {onClose: () => void }) {
           onClick={() => fileInputRef.current?.click()}
           className={`w-full text-xs transition-colors ${importedMeta ? 'border-primary/50 text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}
         >
-          {/* 🌟 导入状态按钮文案国际化 */}
           {importedMeta ? (
             <><Check className="w-3 h-3 mr-2" /> {t('createProject.paramsLoaded')}</>
           ) : (
@@ -129,7 +146,6 @@ export function CreateProject({onClose }: {onClose: () => void }) {
       </div>
 
       <div className="flex justify-end gap-2 pt-2 mt-auto">
-        {/* 🌟 底部操作按钮国际化 */}
         <Button variant="outline" onClick={onClose}>{t('createProject.cancel')}</Button>
         <Button className="font-semibold" onClick={handleConfirm}>
           {t('createProject.submit')}

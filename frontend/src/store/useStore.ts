@@ -147,6 +147,7 @@ export interface AppState {
   setCompletedViews: (views: string[]) => void;
   setProjectMetadata: (data: FolderMetadata[]) => void;
   loadProjectMeta: (meta: ProjectMetaContract) => void; 
+  resetProject: () => void;
 
   addFolder: (folder: FolderData) => void;
   updateFolder: (id: string, data: Partial<FolderData>) => void;
@@ -237,7 +238,22 @@ export const useStore = create<AppState>()(
           // 应用后可以选择清理暂态，也可以保留，这里保留让 UI 不会闪烁
         };
       }),
-
+      // 🌟 修复后的重置逻辑 (清空所有当前项目残留)
+      resetProject: () => set({
+        projectName: 'Untitled Project',
+        folders: [],
+        views: [],              // 必须清空视图
+        stems: [],
+        currentStem: null,      // 类型必须是 null 而不是 ''
+        annotations: [],
+        taxonomyClasses: [],    
+        taxonomyAttributes: [],
+        stemMetadata: {},
+        projectMetadata: [],    // 类型必须是 []
+        sceneGroups: {},        // 类型必须是 {}
+        completedViews: [],
+        activeAnnotationId: null
+      }),
       setSceneGroups: (groups) => set({ sceneGroups: groups }),
       setProjectName: (name) => set({ projectName: name }),
       setTheme: (theme) => set({ theme }),
@@ -409,7 +425,21 @@ export const useStore = create<AppState>()(
       updateAnnotation: (id, data) => set((state) => ({annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)})),
       removeAnnotation: (id) => set((state) => ({ annotations: state.annotations.filter(a => a.id !== id) })),
 
-      addTaxonomyClass: (cls) => set((state) => ({ taxonomyClasses: [...state.taxonomyClasses, cls] })),
+      // 🌟 终极防御：在 Store 数据写入层彻底拦截重复类别
+      addTaxonomyClass: (cls) => set((state) => {
+        // 检查是否已经存在相同 ID 或者相同名字（忽略大小写）的类别
+        const isExist = state.taxonomyClasses.some(
+          (c) => c.id === cls.id || c.name.trim().toLowerCase() === cls.name.trim().toLowerCase()
+        );
+        
+        // 如果已经存在，直接返回原状态，坚决不重复添加！
+        if (isExist) {
+          return state; 
+        }
+
+        // 只有不存在时，才允许写入
+        return { taxonomyClasses: [...state.taxonomyClasses, cls] };
+      }),
       updateTaxonomyClass: (id, updates) => set((state) => {
         const oldClass = state.taxonomyClasses.find(c => c.id === id);
         const newClasses = state.taxonomyClasses.map(c => c.id === id ? { ...c, ...updates } : c);

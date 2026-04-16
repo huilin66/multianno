@@ -379,11 +379,35 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [mergeTargetId, setMergeTargetId] = useState<string>('');
   const [renameValue, setRenameValue] = useState('');
   const [showClassDeleteConfirm, setShowClassDeleteConfirm] = useState(false);
-  
+  const initRef = useRef(false);
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
   const activeAttribute = taxonomyAttributes.find((a: any) => a.id === selectedAttributeId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 🌟 修改 TaxonomyDashboard.tsx 中的初始化逻辑
+  useEffect(() => {
+    // 1. 修复：只拦截 null/undefined，【允许空数组通过】，否则新项目永远加不了 background！
+    if (!taxonomyClasses) return;
+
+    // 2. 检查是否已经存在任何大小写变体的 background
+    const hasBackground = taxonomyClasses.some(
+      (c: any) => c.name.trim().toLowerCase() === 'background'
+    );
+    
+    // 3. 如果已经存在，或者当前组件生命周期内已经触发过，就跳过
+    if (initRef.current || hasBackground) return;
+
+    // 4. 执行添加
+    initRef.current = true; 
+    
+    addTaxonomyClass({
+      // 🌟 核心：使用固定 ID 字符串，防止重复
+      id: 'system-default-background-class', 
+      name: 'background',
+      color: '#9CA3AF',
+      description: 'System reserved class for soft-deleted items.',
+    });
+  }, [taxonomyClasses, addTaxonomyClass]);
   useEffect(() => { if (folders.length > 0) loadStatistics(false); }, []);
   useEffect(() => { 
     if (activeClass) { 
@@ -392,7 +416,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setShowClassDeleteConfirm(false); // 🌟 切换类别时重置删除状态
     } 
   }, [activeClass]);
-
+  // 只要发现类别被彻底清空（比如刚调用了 resetProject），就把锁重置
+    useEffect(() => {
+      if (taxonomyClasses && taxonomyClasses.length === 0) {
+        initRef.current = false;
+      }
+    }, [taxonomyClasses]);
   const loadStatistics = async (forceRefresh: boolean) => {
     if (folders.length === 0) return;
     setStatsStatus('loading');
@@ -464,14 +493,39 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
   const handleMergeClass = async () => {
     if (!activeClass || !mergeTargetId) return;
-    const target = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
-    if (!target) return;
+    const targetClass = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
+    if (!targetClass) return;
+
+    if (!window.confirm(`Merge all '${activeClass.name}' into '${targetClass.name}'?\n\nThis will re-assign all boxes. \n${activeClass.name.toLowerCase() !== 'background' ? 'The original class will be deleted.' : 'The background class will be kept empty.'}`)) return;
+
     setIsProcessing(true);
     try {
-      await batchMergeClass({ save_dirs: folders.map((f: any) => f.path), old_names: [activeClass.name], new_name: target.name });
-      mergeTaxonomyClasses([activeClass.name], target.name);
-      setMergeTargetId(''); setSelectedClassId(null);
-    } catch (e: any) { alert(`Merge failed: ${e.message}`); } finally { setIsProcessing(false); }
+      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      
+      await batchMergeClass({ 
+        save_dirs: safeSaveDirs, 
+        old_names: [activeClass.name], 
+        new_name: targetClass.name 
+      });
+
+      // 🌟 核心特权逻辑：如果是 background，只转移数据，不销毁类别！
+      if (activeClass.name.toLowerCase() === 'background') {
+        // 不执行 deleteTaxonomyClass，保留类别
+        // 最好在这里触发一次全局的统计数据刷新，让界面上的数量归 0
+        // fetchProjectStatistics(safeSaveDirs);
+        setMergeTargetId('');
+        alert(`Successfully moved all shapes to '${targetClass.name}'. The 'background' class remains active.`);
+      } else {
+        // 普通类别：转移完数据后，销毁自己
+        deleteTaxonomyClass(activeClass.id, true); 
+        setSelectedClassId(null);
+      }
+
+    } catch (err: any) {
+      alert(`Merge failed: ${err.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // 🌟 1. 替换原有的 handleDeleteClass 为接收明确布尔值的执行函数
@@ -525,12 +579,16 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               </div>
               {expanded.classes && (
                 <div className="mt-1 ml-3 border-l-2 border-neutral-100 dark:border-neutral-800 pl-2 space-y-0.5">
-                  {taxonomyClasses.map((cls: any) => (
-                    <div key={cls.id} onClick={() => { setActiveTab('classes'); setSelectedClassId(cls.id); }} 
-                         className={`flex items-center p-2 rounded-md text-xs cursor-pointer transition-colors ${selectedClassId === cls.id && activeTab === 'classes' ? 'bg-neutral-100 dark:bg-neutral-800 font-bold shadow-sm' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50 text-neutral-600 dark:text-neutral-400'}`}>
-                      <div className="w-2.5 h-2.5 rounded-full mr-2.5 shrink-0 shadow-sm" style={{ backgroundColor: cls.color }} />
-                      <span className="truncate flex-1">{cls.name}</span>
-                    </div>
+                  {Array.from(new Map(taxonomyClasses.map((c: any) => [c.id, c])).values())
+                    .map((cls: any, index: number) => (
+                      <div 
+                        key={`${cls.id}-${index}`} // 🌟 就算 ID 重复，加上 index 后 key 也绝对唯一，彻底干掉警告
+                        onClick={() => { setActiveTab('classes'); setSelectedClassId(cls.id); }} 
+                        className={`flex items-center p-2 rounded-md text-xs cursor-pointer transition-colors ${selectedClassId === cls.id && activeTab === 'classes' ? 'bg-neutral-100 dark:bg-neutral-800 font-bold shadow-sm' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50 text-neutral-600 dark:text-neutral-400'}`}
+                      >
+                        <div className="w-2.5 h-2.5 rounded-full mr-2.5 shrink-0 shadow-sm" style={{ backgroundColor: cls.color }} />
+                        <span className="truncate flex-1">{cls.name}</span>
+                      </div>
                   ))}
                   {/* 干净排版的行动按钮 */}
                   <div className="flex gap-2 mt-3 mb-1 pr-1">
@@ -763,13 +821,34 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 <div className="relative w-8 h-8 rounded-md shadow-sm border border-neutral-200 overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
                   <input type="color" value={activeClass.color} onChange={e => updateTaxonomyClass(activeClass.id, { color: e.target.value })} className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer" />
                 </div>
-                <Input value={renameValue} onChange={e => setRenameValue(e.target.value)} onBlur={() => { if (renameValue.trim() && renameValue !== activeClass.name) updateTaxonomyClass(activeClass.id, { name: renameValue.trim() }); }} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} className="text-xl font-black border-transparent hover:border-neutral-200 focus:border-blue-500 bg-transparent px-2 h-10 w-64 shadow-none" placeholder="Class Name" />
+                
+                {/* 🌟 保护 1：禁止修改 background 的名字 */}
+                <div className="flex flex-col">
+                  <Input 
+                    value={renameValue} 
+                    onChange={e => setRenameValue(e.target.value)} 
+                    onBlur={() => { if (renameValue.trim() && renameValue !== activeClass.name) updateTaxonomyClass(activeClass.id, { name: renameValue.trim() }); }} 
+                    onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} 
+                    disabled={activeClass.name.toLowerCase() === 'background'} 
+                    className={`text-xl font-black border-transparent bg-transparent px-2 h-8 w-64 shadow-none ${
+                      activeClass.name.toLowerCase() === 'background' 
+                        ? 'opacity-60 cursor-not-allowed' 
+                        : 'hover:border-neutral-200 focus:border-blue-500'
+                    }`} 
+                    placeholder="Class Name" 
+                  />
+                  {activeClass.name.toLowerCase() === 'background' && (
+                    <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest px-2">
+                      System Class (Recycle Bin)
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* 右侧：Merge合并 与 删除操作 */}
               <div className="flex items-center gap-3">
                 
-                {/* Merge 模块 */}
+                {/* Merge 模块 (全部放开) */}
                 <div className="flex items-center bg-neutral-50 dark:bg-neutral-800 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
                     <SelectTrigger className="h-7 w-32 text-xs border-none bg-transparent focus:ring-0 shadow-none">
@@ -786,49 +865,63 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 
                 <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
                 
-                {/* 🌟 核心亮点：内联确认菜单 (取代 window.confirm) */}
-                {showClassDeleteConfirm ? (
-                  <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in fade-in zoom-in-95">
-                    <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">Confirm:</span>
-                    <Button
-                      size="sm"
-                      className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold"
-                      onClick={() => executeDeleteClass(true)}
-                      disabled={isProcessing}
-                      title="Destroy all boxes of this class"
-                    >
-                      Hard Delete
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-7 px-3 text-[10px] border-red-200 text-red-600 hover:bg-red-100 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/50 font-bold"
-                      onClick={() => executeDeleteClass(false)}
-                      disabled={isProcessing}
-                      title="Keep boxes, but mark as 'background'"
-                    >
-                      Soft Delete
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
-                      onClick={() => setShowClassDeleteConfirm(false)}
-                      disabled={isProcessing}
-                    >
-                      <X className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <Button 
-                    variant="destructive" 
-                    size="sm" 
-                    className="h-9 px-4 font-bold shadow-sm" 
-                    onClick={() => setShowClassDeleteConfirm(true)} 
-                    disabled={isProcessing}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" /> Delete
+                {/* 🌟 只有这里有一份 Delete 逻辑：非黑即白，绝不重复 */}
+                {activeClass.name.toLowerCase() === 'background' ? (
+                  
+                  // 如果是背景类：显示灰色保护按钮
+                  <Button disabled variant="outline" size="sm" className="h-9 px-4 font-bold shadow-sm border-dashed text-neutral-400 bg-neutral-50 dark:bg-neutral-900 cursor-not-allowed">
+                    <ShieldCheck className="w-4 h-4 mr-2" /> Protected
                   </Button>
+
+                ) : (
+
+                  // 如果是普通类：显示确认删除菜单
+                  <>
+                    {showClassDeleteConfirm ? (
+                      <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in fade-in zoom-in-95">
+                        <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">Confirm:</span>
+                        <Button
+                          size="sm"
+                          className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold"
+                          onClick={() => executeDeleteClass(true)}
+                          disabled={isProcessing}
+                          title="Destroy all boxes of this class"
+                        >
+                          Hard Delete
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-3 text-[10px] border-red-200 text-red-600 hover:bg-red-100 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/50 font-bold"
+                          onClick={() => executeDeleteClass(false)}
+                          disabled={isProcessing}
+                          title="Keep boxes, but mark as 'background'"
+                        >
+                          Soft Delete
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                          onClick={() => setShowClassDeleteConfirm(false)}
+                          disabled={isProcessing}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        className="h-9 px-4 font-bold shadow-sm" 
+                        onClick={() => setShowClassDeleteConfirm(true)} 
+                        disabled={isProcessing}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" /> Delete
+                      </Button>
+                    )}
+                  </>
+
                 )}
                 
               </div>

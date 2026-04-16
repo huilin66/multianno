@@ -4,23 +4,37 @@ import { saveAnnotation } from '../api/client'; // 确保路径正确
 
 export function useAutoSave() {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
+  // 🌟 新增：记录最后保存时间
+  const [lastSavedTime, setLastSavedTime] = useState<string | null>(null); 
   
-  // 🌟 优化 1：只从 Hook 中解构最核心的触发依赖
   const { currentStem, annotations } = useStore() as any;
 
   useEffect(() => {
-    // 🌟 优化 2：去掉了 length === 0 的拦截。只要存在 currentStem 就允许执行，确保删除所有标注后能存入空数组
     if (!currentStem) return;
 
     const timer = setTimeout(async () => {
       setSaveStatus('saving');
       try {
-        // 🌟 优化 3：在保存触发的瞬间，动态抓取最新的全局状态，避免将庞大对象塞进依赖数组导致无限重渲染
         const state = useStore.getState();
-        const currentAnnotations = state.annotations.filter((a: any) => a.stem === currentStem);
-        const mainViewFolder = state.folders.find((f: any) => f.id === state.views.find((v: any) => v.isMain)?.folderId);
+        
+        // 🌟 拦截 1：如果项目被重置，根本没有文件夹，直接静默退出！
+        if (!state.folders || state.folders.length === 0) {
+          setSaveStatus('idle');
+          return;
+        }
 
-        // 组装标准 Scene JSON 数据格式
+        const currentAnnotations = state.annotations.filter((a: any) => a.stem === currentStem);
+        const mainViewFolder = state.folders.find((f: any) => f.id === state.views.find((v: any) => v.isMain)?.folderId) || state.folders[0];
+
+        const saveDir = mainViewFolder?.path || '';
+        
+        // 🌟 拦截 2：如果提取不到有效路径，直接静默退出，避免后端报空路径错误！
+        if (!saveDir) {
+          setSaveStatus('idle');
+          return;
+        }
+
+        const fileName = `${currentStem}.json`;
         const payload = {
           version: "1.0.0",
           flags: {},
@@ -50,21 +64,22 @@ export function useAutoSave() {
           }))
         };
 
-        const saveDir = mainViewFolder?.path || '';
-        const fileName = `${currentStem}.json`;
-
         if (typeof saveAnnotation === 'function') {
            await saveAnnotation({ save_dir: saveDir, file_name: fileName, content: payload });
+           
+           // 🌟 成功写入后，记录当前精确时间 (例如: "14:35:22")
+           setLastSavedTime(new Date().toLocaleTimeString(undefined, { hour12: false }));
         }
         setSaveStatus('idle');
       } catch (error) {
         console.error("Auto-save failed:", error);
         setSaveStatus('error');
       }
-    }, 1000); // 1秒防抖
+    }, 1000); 
 
     return () => clearTimeout(timer);
-  }, [annotations, currentStem]); // 🌟 优化 4：依赖项极致精简，只有画图或切图时才触发！
+  }, [annotations, currentStem]); 
 
-  return { saveStatus };
+  // 🌟 将最后保存时间暴露给 UI 层
+  return { saveStatus, lastSavedTime };
 }

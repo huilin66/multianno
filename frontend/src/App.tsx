@@ -26,7 +26,7 @@ import {
   DialogTitle 
 } from '@/components/ui/dialog';
 // 🌟 引入新的图标: FolderPlus 和 Upload
-import { Menu, Settings,Cloud, CloudCog, CloudLightning,  Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags, Keyboard } from 'lucide-react';
+import { Menu, Settings, Loader2, Check, AlertCircle,CloudLightning,  Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags, Keyboard } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -38,7 +38,7 @@ export default function App() {
   const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings} = useStore();
   // 🌟 拿到翻译函数 t，和 i18n 实例
   const { t, i18n } = useTranslation();
-  const { saveStatus } = useAutoSave();
+  const { saveStatus, lastSavedTime } = useAutoSave();
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
   // 🌟 监听 Store 里的语言变化，同步给 i18next 引擎
@@ -130,9 +130,13 @@ export default function App() {
             <>
               <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors" />
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-medium transition-colors">
-                {saveStatus === 'idle' && <><Cloud className="w-3.5 h-3.5 text-green-500" /> <span className="text-neutral-500">{t('workspace.autoSaved', 'Saved')}</span></>}
-                {saveStatus === 'saving' && <><CloudCog className="w-3.5 h-3.5 text-blue-500 animate-spin" /> <span className="text-neutral-500">{t('workspace.saving', 'Saving...')}</span></>}
-                {saveStatus === 'error' && <><CloudLightning className="w-3.5 h-3.5 text-red-500" /> <span className="text-neutral-500">{t('workspace.saveError', 'Error')}</span></>}
+                {saveStatus === 'saving' && <><Loader2 className="w-3 h-3 animate-spin inline mr-1"/> Saving...</>}
+                {saveStatus === 'error' && <><AlertCircle className="w-3 h-3 text-red-500 inline mr-1"/> Save Failed</>}
+                {saveStatus === 'idle' && (
+                  lastSavedTime 
+                    ? <><Check className="w-3 h-3 text-green-500 inline mr-1"/> Auto Saved: {lastSavedTime}</>
+                    : 'Ready'
+                )}
               </div>
             </>
           )}

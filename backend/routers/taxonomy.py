@@ -315,10 +315,22 @@ async def get_project_statistics(req: StatRequest):
 
     # 如果完全没有标注数据，直接返回空
     if not records:
+        empty_stats = {
+            "total_objects": 0,
+            "shape_types": {},
+            "attribute_counts": {},
+            "attribute_details": {},
+            "shape_rate_distribution": {},
+            "area_distribution": {},
+            "box_number_distribution": {},
+            "heatmap_center": [],
+        }
+
         return {
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "global": {"total_images": total_images, "total_objects": 0},
+            "global": {**empty_stats, "total_images": total_images, "class_counts": {}},
             "classes": {},
+            "shapes": {"bbox": empty_stats, "polygon": empty_stats},
         }
 
     # 🌟 2. 转换为 DataFrame 享受降维打击
