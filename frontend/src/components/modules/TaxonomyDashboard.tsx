@@ -384,8 +384,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
   const activeAttribute = taxonomyAttributes.find((a: any) => a.id === selectedAttributeId);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // 🌟 修改：从布尔值改为数字状态 (0: 初始, 1: 一级确认, 2: 终极确认)
+  const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0); 
+  const [mergeStage, setMergeStage] = useState<0 | 1>(0); // Merge 比较安全，两段即可
 
-  // 🌟 修改 TaxonomyDashboard.tsx 中的初始化逻辑
   useEffect(() => {
     // 1. 修复：只拦截 null/undefined，【允许空数组通过】，否则新项目永远加不了 background！
     if (!taxonomyClasses) return;
@@ -508,32 +510,44 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     try {
       const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
       
-      // 1. 发送后端合并请求
+      // 1. 后端合并：将所有标注从 old_name 改为 new_name
       await batchMergeClass({ 
         save_dirs: safeSaveDirs, 
         old_names: [activeClass.name], 
         new_name: targetClass.name 
       });
 
-      // 🌟 2. 核心修复：更新本地状态 (将旧框的 label 全部更新为新类，不再粗暴删除)
-      mergeTaxonomyClasses([activeClass.name], targetClass.name);
-
-      // 3. 特权处理：因为 mergeTaxonomyClasses 默认会清理掉源类别，
-      // 如果是 background，我们需要无缝地把它立刻加回来，保持金身不灭！
+      // 2. 本地标注重命名 (使用我们自定义的逻辑，避免销毁类)
+      // 如果直接调用 store.mergeTaxonomyClasses，它会删掉源类
+      // 所以我们针对 background 做特殊处理
       if (activeClass.name.toLowerCase() === 'background') {
+        // 🌟 核心：手动更新本地标注的 label，但不删除 background 类
+        const state = useStore.getState() as any;
+        const updatedAnnotations = state.annotations.map((a: any) => 
+          a.label === activeClass.name ? { ...a, label: targetClass.name } : a
+        );
+        // 使用 set 直接更新 store (假设你的 store 暴露了 set 接口，或者使用 updateAnnotation)
+        // 这里最简单的方式是调用 updateAnnotation 循环，或者在 store 里加个专门的 reassign 方法
+        // 临时方案：利用现有 merge 逻辑后立即加回 background
+        mergeTaxonomyClasses([activeClass.name], targetClass.name); 
+        
+        // 立即加回 background
         addTaxonomyClass({
-          id: activeClass.id, // 保持原ID不变
+          id: activeClass.id,
           name: activeClass.name,
           color: activeClass.color,
           description: activeClass.description
         });
+        
         setMergeTargetId('');
       } else {
+        // 普通类别：正常合并并销毁
+        mergeTaxonomyClasses([activeClass.name], targetClass.name);
         setSelectedClassId(null);
       }
       
-      setShowMergeConfirm(false); // 收起确认菜单
-
+      setMergeStage(0);
+      alert(`Merged successfully into ${targetClass.name}`);
     } catch (err: any) {
       alert(`Merge failed: ${err.message}`);
     } finally {
@@ -542,23 +556,29 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   };
 
   // 🌟 1. 替换原有的 handleDeleteClass 为接收明确布尔值的执行函数
-  const executeDeleteClass = async (isHardDelete: boolean) => {
+const executeDeleteClass = async (isHardDelete: boolean) => {
     if (!activeClass) return;
+
+    // 🌟 如果是硬删除，且还没到最后一级确认，就进入下一级
+    if (isHardDelete && deleteStage < 2) {
+      setDeleteStage((prev) => (prev + 1) as any);
+      return;
+    }
+    
+    // 如果是软删除，点击一次直接执行（或者你也可以给它加一级）
+    
     setIsProcessing(true);
     try {
       const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
-
-      const payload = { 
+      await batchDeleteClass({ 
         save_dirs: safeSaveDirs, 
         class_name: activeClass.name, 
         hard_delete: isHardDelete 
-      };
-
-      await batchDeleteClass(payload);
+      });
       
       deleteTaxonomyClass(activeClass.id, isHardDelete);
       setSelectedClassId(null);
-      setShowClassDeleteConfirm(false); // 执行完毕后收起菜单
+      setDeleteStage(0); // 重置状态
     } catch (err: any) { 
       alert(`Delete failed: ${err.message}`); 
     } finally { 
@@ -859,98 +879,99 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               </div>
 
               {/* 右侧：Merge合并 与 删除操作 */}
-              <div className="flex items-center gap-3">
-                
-                {/* 🌟 修复后的 Merge 模块：加入内联二次确认 */}
-                <div className="flex items-center bg-neutral-50 dark:bg-neutral-800 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                  <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
-                    <SelectTrigger className="h-7 w-32 text-xs border-none bg-transparent focus:ring-0 shadow-none">
-                      <SelectValue placeholder="Merge into..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {taxonomyClasses.filter((c: any) => c.id !== activeClass.id).map((c: any) => <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+              {/* 🌟 进化版：多级内联确认菜单 */}
+                <div className="flex items-center gap-3">
                   
-                  {/* 🌟 内联二次确认取代了不可靠的 window.confirm */}
-                  {showMergeConfirm ? (
-                    <div className="flex items-center gap-1 ml-2 animate-in fade-in">
-                      <Button size="sm" className="h-7 px-2 text-[10px] bg-orange-500 hover:bg-orange-600 text-white font-bold" disabled={isProcessing} onClick={executeMergeClass}>
-                        Confirm
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700" onClick={() => setShowMergeConfirm(false)}>
-                        <X className="w-3 h-3" />
-                      </Button>
+                  {/* 🌟 Merge 模块：无论什么类都显示，方便 background 导出内容 */}
+                  <div className="flex items-center bg-neutral-50 dark:bg-neutral-800 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
+                    <Select value={mergeTargetId} onValueChange={(v) => { setMergeTargetId(v); setMergeStage(0); }}>
+                      <SelectTrigger className="h-7 w-32 text-xs border-none bg-transparent focus:ring-0 shadow-none">
+                        {/* 🌟 修复：手动通过 ID 查找 Name 进行显示，确保选中后不显示 ID */}
+                        <SelectValue placeholder="Merge into...">
+                          {taxonomyClasses.find(c => c.id === mergeTargetId)?.name}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {taxonomyClasses
+                          .filter((c: any) => c.id !== activeClass.id)
+                          .map((c: any) => (
+                            <SelectItem key={c.id} value={c.id} className="text-xs">
+                              {c.name}
+                            </SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                    
+                    {mergeStage === 1 ? (
+                        <div className="flex items-center gap-1 ml-2 animate-in zoom-in-95">
+                          <Button size="sm" className="h-7 px-2 text-[10px] bg-orange-600 text-white font-bold" onClick={executeMergeClass}>Confirm</Button>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setMergeStage(0)}><X className="w-3 h-3"/></Button>
+                        </div>
+                      ) : (
+                        <Button 
+                          size="sm" 
+                          className="h-7 px-3 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded ml-1" 
+                          disabled={!mergeTargetId || isProcessing} 
+                          onClick={() => setMergeStage(1)}
+                        >
+                          <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge
+                        </Button>
+                      )}
                     </div>
-                  ) : (
-                    <Button size="sm" className="h-7 px-3 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded ml-1" disabled={!mergeTargetId || isProcessing} onClick={() => setShowMergeConfirm(true)}>
-                      <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge
-                    </Button>
+
+                  <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
+
+                    {/* 🌟 Delete 模块：仅对 background 锁定 */}
+                    {activeClass.name.toLowerCase() === 'background' ? (
+                      <Button disabled variant="outline" size="sm" className="h-9 px-4 text-neutral-400 bg-neutral-50 dark:bg-neutral-900 border-dashed">
+                        <ShieldCheck className="w-4 h-4 mr-2" /> Protected
+                      </Button>
+                    ) : (
+                    <div className="flex items-center">
+                      {deleteStage === 0 ? (
+                        <Button variant="destructive" size="sm" className="h-9 px-4 font-bold" onClick={() => setDeleteStage(1)}>
+                          <Trash2 className="w-4 h-4 mr-2" /> Delete
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1.5 rounded-lg border border-red-200 animate-in slide-in-from-right-2">
+                          {/* 硬删除按钮：随点击次数改变颜色和文字 */}
+                          <Button
+                            size="sm"
+                            className={`h-7 px-3 text-[10px] font-black transition-all ${
+                              deleteStage === 1 
+                                ? 'bg-red-500 hover:bg-red-600' 
+                                : 'bg-red-700 hover:bg-red-800 scale-105 shadow-lg ring-2 ring-red-400 animate-pulse'
+                            }`}
+                            onClick={() => executeDeleteClass(true)}
+                          >
+                            {deleteStage === 1 ? 'HARD DELETE?' : 'ARE YOU ABSOLUTELY SURE?'}
+                          </Button>
+
+                          {/* 只有在第一级确认时才显示软删除，降低干扰 */}
+                          {deleteStage === 1 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-3 text-[10px] border-red-200 text-red-600 font-bold"
+                              onClick={() => executeDeleteClass(false)}
+                            >
+                              SOFT DELETE
+                            </Button>
+                          )}
+
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200"
+                            onClick={() => setDeleteStage(0)}
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
-                
-                <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
-                
-                {/* 🌟 只有这里有一份 Delete 逻辑：非黑即白，绝不重复 */}
-                {activeClass.name.toLowerCase() === 'background' ? (
-                  
-                  // 如果是背景类：显示灰色保护按钮
-                  <Button disabled variant="outline" size="sm" className="h-9 px-4 font-bold shadow-sm border-dashed text-neutral-400 bg-neutral-50 dark:bg-neutral-900 cursor-not-allowed">
-                    <ShieldCheck className="w-4 h-4 mr-2" /> Protected
-                  </Button>
-
-                ) : (
-
-                  // 如果是普通类：显示确认删除菜单
-                  <>
-                    {showClassDeleteConfirm ? (
-                      <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in fade-in zoom-in-95">
-                        <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">Confirm:</span>
-                        <Button
-                          size="sm"
-                          className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold"
-                          onClick={() => executeDeleteClass(true)}
-                          disabled={isProcessing}
-                          title="Destroy all boxes of this class"
-                        >
-                          Hard Delete
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-3 text-[10px] border-red-200 text-red-600 hover:bg-red-100 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-900/50 font-bold"
-                          onClick={() => executeDeleteClass(false)}
-                          disabled={isProcessing}
-                          title="Keep boxes, but mark as 'background'"
-                        >
-                          Soft Delete
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
-                          onClick={() => setShowClassDeleteConfirm(false)}
-                          disabled={isProcessing}
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    ) : (
-                      <Button 
-                        variant="destructive" 
-                        size="sm" 
-                        className="h-9 px-4 font-bold shadow-sm" 
-                        onClick={() => setShowClassDeleteConfirm(true)} 
-                        disabled={isProcessing}
-                      >
-                        <Trash2 className="w-4 h-4 mr-2" /> Delete
-                      </Button>
-                    )}
-                  </>
-
-                )}
-                
-              </div>
             </div>
 
             {/* 主体：该类别的专属统计 */}

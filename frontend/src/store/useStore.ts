@@ -464,7 +464,7 @@ export const useStore = create<AppState>()(
           newAnnotations = state.annotations.filter(a => a.label !== classToDelete.name);
         } else {
           newAnnotations = state.annotations.map(a => 
-            a.label === classToDelete.name ? { ...a, label: 'Uncategorized' } : a
+            a.label === classToDelete.name ? { ...a, label: 'background' } : a
           );
         }
         return { taxonomyClasses: newClasses, annotations: newAnnotations };
