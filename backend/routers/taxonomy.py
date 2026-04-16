@@ -363,11 +363,25 @@ async def get_project_statistics(req: StatRequest):
         class_stats[str(label)] = aggregate_stats(group_df)
         class_stats[str(label)]["stems"] = group_df["image"].unique().tolist()
 
+        # 🌟 新增：在当前类别下，继续按照 shape_type 细分统计
+        c_shapes = {}
+        for shape_t, s_df in group_df.groupby("shape_type"):
+            if str(shape_t) in ["bbox", "polygon"]:
+                c_shapes[str(shape_t)] = aggregate_stats(s_df)
+        class_stats[str(label)]["shapes"] = c_shapes  # 挂载到该 class 下
+
     # 🌟 3. 组装最终结果，加入时间戳
+    # 🌟 新增：对不同 shape_type 的独立统计 (满足前端的 Shape Tab 切换)
+    shape_stats = {}
+    for shape_t, group_df in df.groupby("shape_type"):
+        if str(shape_t) in ["bbox", "polygon"]:  # 目前仅支持这两种
+            shape_stats[str(shape_t)] = aggregate_stats(group_df)
+
     final_result = {
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "global": global_stats,
         "classes": class_stats,
+        "shapes": shape_stats,  # 🌟 把新增的数据传给前端
     }
 
     # 🌟 4. 将结果持久化写入磁盘缓存
