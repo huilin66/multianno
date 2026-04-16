@@ -2,14 +2,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
-  Tags, Settings, Trash2, Edit3, GitMerge,
-  Plus, Check, X, Loader2, ArrowRight, Upload, Database, Activity,
+  Tags, Settings, Trash2, ArrowRight, GitMerge,
+  Plus, Check, X, Loader2, AlertCircle, Upload, Database, Activity,
   List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, Layers, ShieldCheck
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { batchMergeClass, batchDeleteClass, fetchProjectStatistics } from '../../api/client';
+import { batchMergeClass, batchDeleteClass, fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 
@@ -362,7 +362,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
-    folders, editorSettings
+    folders, editorSettings, setCurrentStem, setActiveModule
   } = useStore() as any;
 
   const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'attributes'>('overview');
@@ -384,9 +384,16 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
   const activeAttribute = taxonomyAttributes.find((a: any) => a.id === selectedAttributeId);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // 🌟 修改：从布尔值改为数字状态 (0: 初始, 1: 一级确认, 2: 终极确认)
   const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0); 
   const [mergeStage, setMergeStage] = useState<0 | 1>(0); // Merge 比较安全，两段即可
+  const [attrDraft, setAttrDraft] = useState<{options: string[], defaultValue: string} | null>(null);
+  const [showAttrDeleteConfirm, setShowAttrDeleteConfirm] = useState(false);
+
+  // 监听切换属性时，清空草稿
+  useEffect(() => {
+    setAttrDraft(null);
+    setShowAttrDeleteConfirm(false);
+  }, [activeAttribute?.id]);
 
   useEffect(() => {
     // 1. 修复：只拦截 null/undefined，【允许空数组通过】，否则新项目永远加不了 background！
@@ -411,12 +418,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       description: 'System reserved class for soft-deleted items.',
     });
   }, [taxonomyClasses, addTaxonomyClass]);
+
   // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
   useEffect(() => { 
     if (folders.length > 0) {
       loadStatistics(editorSettings.autoRefreshStats === true);
     } 
   }, []);
+
   useEffect(() => { 
     if (activeClass) { 
       setRenameValue(activeClass.name); 
@@ -425,12 +434,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setShowMergeConfirm(false);
     } 
   }, [activeClass]);
+
   // 只要发现类别被彻底清空（比如刚调用了 resetProject），就把锁重置
-    useEffect(() => {
-      if (taxonomyClasses && taxonomyClasses.length === 0) {
-        initRef.current = false;
-      }
-    }, [taxonomyClasses]);
+  useEffect(() => {
+    if (taxonomyClasses && taxonomyClasses.length === 0) {
+      initRef.current = false;
+    }
+  }, [taxonomyClasses]);
+
   const loadStatistics = async (forceRefresh: boolean) => {
     if (folders.length === 0) return;
     setStatsStatus('loading');
@@ -556,36 +567,105 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   };
 
   // 🌟 1. 替换原有的 handleDeleteClass 为接收明确布尔值的执行函数
-const executeDeleteClass = async (isHardDelete: boolean) => {
-    if (!activeClass) return;
+  const executeDeleteClass = async (isHardDelete: boolean) => {
+      if (!activeClass) return;
 
-    // 🌟 如果是硬删除，且还没到最后一级确认，就进入下一级
-    if (isHardDelete && deleteStage < 2) {
-      setDeleteStage((prev) => (prev + 1) as any);
-      return;
-    }
-    
-    // 如果是软删除，点击一次直接执行（或者你也可以给它加一级）
-    
+      // 🌟 如果是硬删除，且还没到最后一级确认，就进入下一级
+      if (isHardDelete && deleteStage < 2) {
+        setDeleteStage((prev) => (prev + 1) as any);
+        return;
+      }
+      
+      // 如果是软删除，点击一次直接执行（或者你也可以给它加一级）
+      
+      setIsProcessing(true);
+      try {
+        const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+        await batchDeleteClass({ 
+          save_dirs: safeSaveDirs, 
+          class_name: activeClass.name, 
+          hard_delete: isHardDelete 
+        });
+        
+        deleteTaxonomyClass(activeClass.id, isHardDelete);
+        setSelectedClassId(null);
+        setDeleteStage(0); // 重置状态
+      } catch (err: any) { 
+        alert(`Delete failed: ${err.message}`); 
+      } finally { 
+        setIsProcessing(false); 
+      }
+    };
+
+    // 🌟 新增：执行属性的批量应用与同步
+// 🌟 修复后的完整版：执行属性的批量应用与同步
+  const executeApplyAttribute = async () => {
+    if (!activeAttribute || !attrDraft) return;
     setIsProcessing(true);
     try {
       const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
-      await batchDeleteClass({ 
-        save_dirs: safeSaveDirs, 
-        class_name: activeClass.name, 
-        hard_delete: isHardDelete 
-      });
       
-      deleteTaxonomyClass(activeClass.id, isHardDelete);
-      setSelectedClassId(null);
-      setDeleteStage(0); // 重置状态
-    } catch (err: any) { 
-      alert(`Delete failed: ${err.message}`); 
-    } finally { 
-      setIsProcessing(false); 
+      // 1. 同步到所有后端的 JSON 文件
+      await batchApplyAttribute({
+        save_dirs: safeSaveDirs,
+        attribute_name: activeAttribute.name,
+        new_default: attrDraft.defaultValue,
+        old_default: activeAttribute.defaultValue
+      });
+
+      // 2. 更新本地 Store 中关于该 Attribute 的全局定义
+      updateTaxonomyAttribute(activeAttribute.id, { 
+        options: attrDraft.options, 
+        defaultValue: attrDraft.defaultValue 
+      });
+
+      // 3. 🌟 关键修复：同步更新 Store 里当前图片所有标注的值
+      // 这样你在画布上看到的框才会立刻带上新默认值，无需刷新
+      const state = useStore.getState();
+      const updatedAnnotations = state.annotations.map((ann: any) => {
+        const newAttrs = { ...ann.attributes };
+        
+        // 如果标注没有这个属性，或者属性值等于旧的默认值，则更新它
+        if (!(activeAttribute.name in newAttrs) || newAttrs[activeAttribute.name] === activeAttribute.defaultValue) {
+          newAttrs[activeAttribute.name] = attrDraft.defaultValue;
+        }
+        
+        return { ...ann, attributes: newAttrs };
+      });
+
+      // 强行把洗过一遍的标注数据塞回 Store
+      useStore.setState({ annotations: updatedAnnotations }); 
+
+      // 4. 清理 UI 状态
+      setAttrDraft(null); // 清空草稿，退出编辑状态
+      alert(`Attribute synchronized to all JSON files successfully!`);
+    } catch (err: any) {
+      alert(`Sync failed: ${err.message}`);
+    } finally {
+      setIsProcessing(false);
     }
   };
 
+  // 🌟 新增：带二次确认的删除属性执行
+  const executeDeleteAttribute = async () => {
+    if (!activeAttribute) return;
+    setIsProcessing(true);
+    try {
+      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      
+      // 同步删除后端 JSON 里的该属性
+      await batchDeleteAttribute({ save_dirs: safeSaveDirs, attribute_name: activeAttribute.name });
+      
+      // 删本地 Store
+      deleteTaxonomyAttribute(activeAttribute.id);
+      setSelectedAttributeId(null);
+      setShowAttrDeleteConfirm(false);
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
@@ -982,78 +1062,59 @@ const executeDeleteClass = async (isHardDelete: boolean) => {
                   <div className="flex flex-col xl:flex-row gap-6 shrink-0 animate-in fade-in">
                     
                     <div className="w-full xl:w-1/3 flex flex-col gap-6">
-                      <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col justify-center">
-                        <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-2">Class Objects</h4>
-                        <div className="text-5xl font-black text-neutral-800 dark:text-neutral-100">{statsData.classes[activeClass.name].total}</div>
-                      </div>
-                      
-                      <div className="bg-white dark:bg-neutral-900 p-6 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm flex flex-col flex-1 max-h-[300px]">
-                        <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-3 border-b border-neutral-100 dark:border-neutral-800 pb-2">Scenes Involved ({statsData.classes[activeClass.name].stems.length})</h4>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1 pr-1">
-                          {statsData.classes[activeClass.name].stems.map((stem: string) => (
-                            <div key={stem} className="text-[10px] font-mono p-1.5 hover:bg-blue-50 text-neutral-600 hover:text-blue-600 rounded cursor-pointer truncate border border-transparent hover:border-blue-100 dark:hover:bg-neutral-800 dark:hover:border-neutral-700">
-                              {stem}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
 
-                    <div className="w-full xl:w-2/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col">
-                      <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-2">Class Shape Types</h4>
-                      <ShapeDistribution data={statsData.classes[activeClass.name].shape_types} />
+                      
+                      {/* 🌟 2. 修改后的 Scenes Involved 列表 */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col h-[400px]">
+            <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Layers className="w-4 h-4 text-blue-500" />
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+                  Scenes Involved
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500">
+                {statsData?.classes?.[activeClass.name]?.stems?.length || 0} files
+              </span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+              <div className="flex flex-col gap-1">
+                {statsData?.classes?.[activeClass.name]?.stems?.map((stem: string) => (
+                  <div 
+                    key={stem}
+                    onDoubleClick={() => {
+                      setCurrentStem(stem);        // 切换到该图片
+                      setActiveModule('workspace'); // 切换到工作区
+                      onClose?.();                  // 关闭管理面板
+                    }}
+                    title="Double click to open in Workspace"
+                    className="group flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-all border border-transparent hover:border-blue-100 dark:hover:border-blue-800"
+                  >
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <div className="w-1 h-1 rounded-full bg-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400 truncate">
+                        {stem}
+                      </span>
                     </div>
+                    <ArrowRight className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
                   </div>
+                ))}
+                
+                {(!statsData?.classes?.[activeClass.name]?.stems || statsData.classes[activeClass.name].stems.length === 0) && (
+                  <div className="py-10 text-center text-neutral-400 text-xs italic">
+                    No scenes found for this class.
+                  </div>
+                )}
+              </div>
+            </div>
+            
+            <div className="p-2 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/30 text-[9px] text-center text-neutral-400 font-bold uppercase tracking-tighter">
+              Tip: Double-click a row to open scene
+            </div>
+          </div>
+        </div>
 
-                  {/* --- 下半部分：类的 Shape 专属 Tab 与 Seaborn 图表 --- */}
-                  <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex overflow-hidden min-h-[600px] shrink-0 animate-in fade-in slide-in-from-bottom-4">
-                    
-                    {/* 左侧：Shape 垂直导航栏 */}
-                    <div className="w-56 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex flex-col p-3 gap-1 shrink-0">
-                      <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-3 px-2 flex items-center gap-2">
-                        <Layers className="w-3 h-3" /> Geometry Filter
-                      </h4>
-                      
-                      {[
-                        { id: 'bbox', label: 'Bounding Box', implemented: true },
-                        { id: 'polygon', label: 'Polygon', implemented: true },
-                        { id: 'point', label: 'Point', implemented: false },
-                        { id: 'linestrip', label: 'Line / Strip', implemented: false },
-                        { id: 'ellipse', label: 'Ellipse / Circle', implemented: false }
-                      ].map((item) => {
-                        const count = statsData.classes[activeClass.name].shape_types[item.id] || 0;
-                        const isActive = activeClassShapeTab === item.id;
-                        
-                        return (
-                          <button 
-                            key={item.id}
-                            onClick={() => setActiveClassShapeTab(item.id)} 
-                            className={`group text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
-                              isActive 
-                                ? 'bg-white dark:bg-neutral-800 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-neutral-200 dark:ring-neutral-700' 
-                                : 'text-neutral-500 hover:bg-neutral-200/50 dark:text-neutral-400 dark:hover:bg-neutral-800/50'
-                            }`}
-                          >
-                            <span className="flex items-center gap-2">
-                              {item.label}
-                              {!item.implemented && (
-                                <span className="text-[8px] px-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-400 rounded-sm font-normal">WIP</span>
-                              )}
-                            </span>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
-                                isActive ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-600' : 'bg-neutral-100 dark:bg-neutral-900 text-neutral-400'
-                              }`}>
-                                {count}
-                              </span>
-                              {isActive && <ChevronRight className="w-3.5 h-3.5" />}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* 右侧：内容展示区 */}
                     {/* 右侧：内容展示区 */}
                     <div className="flex-1 p-8 overflow-y-auto custom-scrollbar bg-white dark:bg-neutral-900">
                       {['bbox', 'polygon'].includes(activeClassShapeTab) ? (
@@ -1150,6 +1211,7 @@ const executeDeleteClass = async (isHardDelete: boolean) => {
         )}
 
         {/* 🌟 模式 C：Attributes 详情与统计看板 */}
+        {/* 🌟 模式 C：Attributes 详情与统计看板 */}
         {activeTab === 'attributes' && activeAttribute && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
             
@@ -1170,89 +1232,137 @@ const executeDeleteClass = async (isHardDelete: boolean) => {
                 </div>
               </div>
 
-              <Button variant="destructive" size="sm" className="h-9 px-4 font-bold shadow-sm" onClick={() => deleteTaxonomyAttribute(activeAttribute.id)}>
-                <Trash2 className="w-4 h-4 mr-2" /> Delete Attribute
-              </Button>
+              {/* 🌟 删除按钮：引入内联二次确认 */}
+              {showAttrDeleteConfirm ? (
+                <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in slide-in-from-right-2">
+                  <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">Delete from all files?</span>
+                  <Button size="sm" className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold" onClick={executeDeleteAttribute} disabled={isProcessing}>
+                    Yes, Delete
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500" onClick={() => setShowAttrDeleteConfirm(false)} disabled={isProcessing}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <Button variant="destructive" size="sm" className="h-9 px-4 font-bold shadow-sm" onClick={() => setShowAttrDeleteConfirm(true)}>
+                  <Trash2 className="w-4 h-4 mr-2" /> Delete Attribute
+                </Button>
+              )}
             </div>
 
-            {/* 2. 主体区：上下两部分 */}
+            {/* 2. 主体区 */}
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar flex flex-col gap-6">
               
-              {/* --- 上半部分：配置 (左) & 全局大盘 (右) --- */}
               <div className="flex flex-col xl:flex-row gap-6 animate-in fade-in shrink-0">
                 
-                {/* 🌟 左上角：Dropdown Options 编辑器 (保持不变) */}
-                <div className="w-full xl:w-1/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col">
-                  {/* ... 这里的代码完全保持你刚才确认过的样子 ... */}
-                  <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex items-center justify-between rounded-t-xl">
-                    <div className="flex items-center gap-2">
-                      <List className="w-4 h-4 text-purple-500" />
-                      <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
-                        Dropdown Options
-                      </h3>
-                    </div>
-                    <Button 
-                      size="sm" variant="outline" className="h-7 text-[10px] font-bold border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-900 dark:text-purple-400 dark:hover:bg-purple-900/30"
-                      onClick={() => {
-                        const newOptions = [...(activeAttribute.options || []), `new_option_${(activeAttribute.options?.length||0)+1}`];
-                        updateTaxonomyAttribute(activeAttribute.id, { options: newOptions, defaultValue: newOptions[0] });
-                      }}
-                    >
-                      <Plus className="w-3 h-3 mr-1" /> Add
-                    </Button>
-                  </div>
+                {/* 🌟 左上角：Dropdown Options 编辑器 (支持草稿与确认) */}
+                <div className="w-full xl:w-1/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col overflow-hidden relative">
+                  
+                  {/* 提取当前使用的渲染数据 (如果有草稿读草稿，没有草稿读原始数据) */}
+                  {(() => {
+                    const currentOptions = attrDraft ? attrDraft.options : (activeAttribute.options || []);
+                    const currentDefault = attrDraft ? attrDraft.defaultValue : (activeAttribute.defaultValue || '');
+                    const isDirty = attrDraft !== null;
 
-                  <div className="p-5 flex-1 overflow-y-auto custom-scrollbar max-h-[300px]">
-                    <div className="flex flex-col gap-3">
-                      {activeAttribute.options?.map((opt: string, idx: number) => (
-                        <div key={idx} className="flex items-center gap-2 group p-1.5 rounded-lg border border-neutral-100 dark:border-neutral-800 hover:border-purple-200 dark:hover:border-purple-900 bg-neutral-50/50 dark:bg-neutral-950 transition-all">
-                          <div className="flex-1 relative flex items-center">
-                            <div className={`w-3 h-3 rounded-full border shrink-0 ml-2 ${activeAttribute.defaultValue === opt ? 'bg-purple-500 border-purple-500' : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800'}`} />
-                            <Input 
-                              value={opt}
-                              onChange={(e) => {
-                                const newOptions = [...activeAttribute.options];
-                                newOptions[idx] = e.target.value;
-                                updateTaxonomyAttribute(activeAttribute.id, { options: newOptions });
-                              }}
-                              className={`pl-3 h-8 text-xs font-bold border-transparent focus:ring-0 shadow-none bg-transparent ${activeAttribute.defaultValue === opt ? 'text-purple-700 dark:text-purple-400' : ''}`}
-                            />
-                            
-                            {/* Default 文字角标 */}
-                            {activeAttribute.defaultValue === opt && (
-                              <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 text-[8px] font-black uppercase tracking-widest rounded-sm shrink-0 mr-2 shadow-sm select-none">
-                                Default
-                              </span>
+                    return (
+                      <>
+                        <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex items-center justify-between shrink-0">
+                          <div className="flex items-center gap-2">
+                            <List className="w-4 h-4 text-purple-500" />
+                            <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+                              Dropdown Options
+                            </h3>
+                          </div>
+                          <Button 
+                            size="sm" variant="outline" className="h-7 text-[10px] font-bold border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-900 dark:text-purple-400 dark:hover:bg-purple-900/30"
+                            onClick={() => {
+                              const newOptions = [...currentOptions, `new_option_${currentOptions.length + 1}`];
+                              setAttrDraft({ options: newOptions, defaultValue: currentDefault || newOptions[0] });
+                            }}
+                          >
+                            <Plus className="w-3 h-3 mr-1" /> Add
+                          </Button>
+                        </div>
+
+                        <div className="p-5 flex-1 overflow-y-auto custom-scrollbar max-h-[300px]">
+                          <div className="flex flex-col gap-3">
+                            {currentOptions.map((opt: string, idx: number) => (
+                              <div key={idx} className={`flex items-center gap-2 group p-1.5 rounded-lg border transition-all ${isDirty ? 'border-purple-300 bg-purple-50/30 dark:border-purple-800 dark:bg-purple-900/10' : 'border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950'}`}>
+                                <div className="flex-1 relative flex items-center">
+                                  <div className={`w-3 h-3 rounded-full border shrink-0 ml-2 ${currentDefault === opt ? 'bg-purple-500 border-purple-500' : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800'}`} />
+                                  <Input 
+                                    value={opt}
+                                    onChange={(e) => {
+                                      const val = e.target.value;
+                                      const newOptions = [...currentOptions];
+                                      newOptions[idx] = val;
+                                      // 若修改的是 Default 选项名字，同步更新 default value
+                                      const newDefault = currentDefault === opt ? val : currentDefault;
+                                      setAttrDraft({ options: newOptions, defaultValue: newDefault });
+                                    }}
+                                    className={`pl-3 h-8 text-xs font-bold border-transparent focus:ring-0 shadow-none bg-transparent ${currentDefault === opt ? 'text-purple-700 dark:text-purple-400' : ''}`}
+                                  />
+                                  
+                                  {currentDefault === opt && (
+                                    <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 text-[8px] font-black uppercase tracking-widest rounded-sm shrink-0 mr-2 shadow-sm select-none">
+                                      Default
+                                    </span>
+                                  )}
+                                </div>
+                                
+                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-1">
+                                  <Button variant="ghost" size="sm" className={`h-6 text-[9px] font-bold px-2 ${currentDefault === opt ? 'hidden' : 'text-neutral-500 hover:text-purple-600'}`} 
+                                    onClick={() => setAttrDraft({ options: currentOptions, defaultValue: opt })}
+                                  >
+                                    Set Default
+                                  </Button>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30" 
+                                    onClick={() => {
+                                      const newOptions = currentOptions.filter((_:any, i:number) => i !== idx);
+                                      setAttrDraft({ options: newOptions, defaultValue: currentDefault === opt ? (newOptions[0] || '') : currentDefault });
+                                    }}
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                            {currentOptions.length === 0 && (
+                              <div className="text-center py-6 text-neutral-400 border-2 border-dashed border-neutral-100 dark:border-neutral-800 rounded-xl">
+                                <p className="text-xs">No options defined.</p>
+                              </div>
                             )}
                           </div>
-                          
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-1">
-                            <Button variant="ghost" size="sm" className={`h-6 text-[9px] font-bold px-2 ${activeAttribute.defaultValue === opt ? 'hidden' : 'text-neutral-500'}`} onClick={() => updateTaxonomyAttribute(activeAttribute.id, { defaultValue: opt })}>
-                              Set Default
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={() => {
-                                const newOptions = activeAttribute.options.filter((_:any, i:number) => i !== idx);
-                                updateTaxonomyAttribute(activeAttribute.id, { options: newOptions, defaultValue: newOptions[0] || '' });
-                              }}>
-                              <X className="w-3 h-3" />
-                            </Button>
+                        </div>
+                        
+                        {/* 🌟 核心：悬浮底部的 Confirm & Cancel 面板 (仅在有草稿时显示) */}
+                        {isDirty ? (
+                          <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/40 border-t border-blue-200 dark:border-blue-900 flex justify-between items-center shrink-0 animate-in slide-in-from-bottom-2">
+                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400 flex items-center">
+                              <AlertCircle className="w-3.5 h-3.5 mr-1" /> Unsaved Changes
+                            </span>
+                            <div className="flex gap-2">
+                              <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold" onClick={() => setAttrDraft(null)} disabled={isProcessing}>
+                                Cancel
+                              </Button>
+                              <Button size="sm" className="h-7 px-3 text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={executeApplyAttribute} disabled={isProcessing}>
+                                {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Check className="w-3 h-3 mr-1"/>}
+                                Sync to Files
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
-                      {(!activeAttribute.options || activeAttribute.options.length === 0) && (
-                        <div className="text-center py-6 text-neutral-400 border-2 border-dashed border-neutral-100 dark:border-neutral-800 rounded-xl">
-                          <p className="text-xs">No options defined.</p>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                  
-                  {/* 附加一个总体统计角标 */}
-                  <div className="px-5 py-3 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/30 flex justify-between items-center text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
-                    <span>Total Tags in Project:</span>
-                    <span className="text-purple-600 text-sm">{Object.values(statsData?.global?.attribute_details?.[activeAttribute.name] || {}).reduce((a:any, b:any) => a + b, 0) as number}</span>
-                  </div>
+                        ) : (
+                          /* 如果没草稿，展示默认的全局统计数据 */
+                          <div className="px-5 py-3 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/30 flex justify-between items-center text-[10px] text-neutral-500 font-bold uppercase tracking-wider shrink-0">
+                            <span>Total Tags in Project:</span>
+                            <span className="text-purple-600 text-sm">{Object.values(statsData?.global?.attribute_details?.[activeAttribute.name] || {}).reduce((a:any, b:any) => a + b, 0) as number}</span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
+
 
                 {/* 🌟 极致精简：右上角全局大盘直接调用 Wrapper */}
                 <div className="w-full xl:w-2/3 flex flex-col h-fit">

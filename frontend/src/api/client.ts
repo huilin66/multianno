@@ -85,23 +85,6 @@ export async function batchDeleteClass(payload: {
   return response.json(); 
 }
 
-// ==========================================
-// 🌟 4. 批量删除属性
-// ==========================================
-export async function batchDeleteAttribute(payload: {
-  save_dirs: string[];
-  attribute_name: string;
-}) {
-  const response = await fetch(`${API_BASE_URL}/taxonomy/delete_attribute`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  
-  if (!response.ok) throw new Error('Failed to delete attribute');
-  return response.json(); // 返回格式: { status: "success", modified_files: 42 }
-}
-
 
 export function getPreviewImageUrl(
   folderPath: string, 
@@ -306,6 +289,39 @@ export const predictAutoSAM = async (
   if (!res.ok) throw new Error('Auto Predict Failed');
   return res.json();
 };
-// 💡 进阶建议：以后你甚至可以把 DataPreload 和 FileExplorerDialog 里的 fetch
-// 也封装成类似上面的函数（例如 exploreFileSystem, analyzeProject）全放在这里，
-// 然后在组件里直接调用函数，这样 UI 组件和网络请求就彻底解耦了！
+// src/api/client.ts (最后两个函数替换)
+
+export const batchApplyAttribute = async (payload: { save_dirs: string[], attribute_name: string, new_default: string, old_default?: string }) => {
+  console.log("🚀 [Frontend] Sending payload to backend:", payload); 
+  
+  try {
+    // 🌟 修复：加上 `${API_BASE_URL}` 前缀！
+    const response = await fetch(`${API_BASE_URL}/taxonomy/apply_attribute`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ [Frontend] HTTP Error ${response.status}:`, errorText);
+      throw new Error(`Server error ${response.status}: ${errorText}`);
+    }
+    
+    return await response.json();
+  } catch (err) {
+    console.error("💥 [Frontend] Request completely failed (Aborted or Network Error):", err);
+    throw err;
+  }
+};
+
+export const batchDeleteAttribute = async (payload: { save_dirs: string[], attribute_name: string }) => {
+  // 🌟 修复：加上 `${API_BASE_URL}` 前缀！
+  const response = await fetch(`${API_BASE_URL}/taxonomy/delete_attribute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error('Failed to delete attribute');
+  return response.json();
+};

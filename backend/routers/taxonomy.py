@@ -1,14 +1,17 @@
 import json
 import math
 import os
+import traceback
 from datetime import datetime
 
 import numpy as np
 import pandas as pd
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 # 从咱们新建的模型文件里引入需要的 Model
 from models import (
+    ApplyAttributeRequest,
     BatchDeleteAttributeRequest,
     BatchDeleteClassRequest,
     BatchMergeClassRequest,
@@ -443,3 +446,68 @@ async def get_project_statistics(req: StatRequest):
         print(f"写入缓存失败: {e}")
 
     return final_result
+
+
+@router.post("/apply_attribute")
+async def batch_apply_attribute(request: ApplyAttributeRequest):
+    print("\n" + "-" * 40)
+    print(f"📥 [Backend] Received Request: {request.dict()}")
+
+    modified_count = 0
+    import json
+    import os
+
+    try:
+        for folder in request.save_dirs:
+            print(f"📂 Checking folder: {folder}")
+            if not os.path.exists(folder):
+                print(f"⚠️ Folder not found, skipping: {folder}")
+                continue
+
+            for file_name in os.listdir(folder):
+                if not file_name.endswith(".json") or file_name.endswith("_meta.json"):
+                    continue
+
+                file_path = os.path.join(folder, file_name)
+                try:
+                    with open(file_path, "r", encoding="utf-8") as f:
+                        anno_data = json.load(f)
+
+                    changed = False
+                    for shape in anno_data.get("shapes", []):
+                        if "attributes" not in shape:
+                            shape["attributes"] = {}
+
+                        if request.attribute_name not in shape["attributes"]:
+                            shape["attributes"][request.attribute_name] = (
+                                request.new_default
+                            )
+                            changed = True
+                        elif (
+                            request.old_default is not None
+                            and shape["attributes"].get(request.attribute_name)
+                            == request.old_default
+                        ):
+                            shape["attributes"][request.attribute_name] = (
+                                request.new_default
+                            )
+                            changed = True
+
+                    if changed:
+                        with open(file_path, "w", encoding="utf-8") as f:
+                            json.dump(anno_data, f, indent=2, ensure_ascii=False)
+                        modified_count += 1
+
+                except Exception as e:
+                    print(f"❌ [File Error] Failed on {file_path}: {e}")
+                    traceback.print_exc()
+
+        print(f"✅ [Backend] Finished! Modified {modified_count} files.")
+        print("-" * 40 + "\n")
+        return {"status": "success", "modified_files": modified_count}
+
+    except Exception as e:
+        # 3. 捕获一切内部致命错误
+        print(f"💥 [FATAL ERROR] Backend crashed inside apply_attribute: {e}")
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"detail": str(e)})

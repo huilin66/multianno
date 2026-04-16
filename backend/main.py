@@ -1,9 +1,27 @@
 import uvicorn
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from routers import ai, annotation, filesystem, project, taxonomy
 
 app = FastAPI(title="MultiAnno Backend")
+
+
+# 🌟 把这个无敌显微镜加在这里（紧跟在 app = FastAPI() 之后）
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    body = await request.body()
+    print("\n" + "=" * 40)
+    print("🚨 [Backend] DATA VALIDATION ERROR!")
+    print(f"Received Body: {body.decode('utf-8') if body else 'Empty'}")
+    print(f"Missing/Wrong Fields: {exc.errors()}")
+    print("=" * 40 + "\n")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors(), "body": body.decode("utf-8") if body else ""},
+    )
+
 
 # 跨域配置
 app.add_middleware(

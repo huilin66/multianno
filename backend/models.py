@@ -80,3 +80,10 @@ class AIConfigRequest(BaseModel):
 class StatRequest(BaseModel):
     save_dirs: List[str]
     force_refresh: Optional[bool] = False  # 🌟 新增强制刷新参数
+
+
+class ApplyAttributeRequest(BaseModel):
+    save_dirs: List[str]
+    attribute_name: str
+    new_default: str
+    old_default: Optional[str] = None
