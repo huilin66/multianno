@@ -75,3 +75,8 @@ class AIConfigRequest(BaseModel):
     model_path: str
     model_type: str
     confidence: float
+
+
+class StatRequest(BaseModel):
+    save_dirs: List[str]
+    force_refresh: Optional[bool] = False  # 🌟 新增强制刷新参数

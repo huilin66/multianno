@@ -162,6 +162,26 @@ export const fetchProjectStatisticsStream = async (
   }
 };
 
+// ==========================================
+// 🌟 5. 获取全局项目统计数据大盘
+// ==========================================
+export const fetchProjectStatistics = async (saveDirs: string[], forceRefresh: boolean = false) => {
+  const response = await fetch(`${API_BASE_URL}/taxonomy/statistics`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      save_dirs: saveDirs,
+      force_refresh: forceRefresh // 🌟 新增参数
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to fetch project statistics');
+  }
+
+  return response.json();
+};
 
 export interface SAMPoint {
   x: number;
