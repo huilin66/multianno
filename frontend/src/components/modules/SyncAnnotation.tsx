@@ -1177,12 +1177,18 @@ const handleAIInit = async () => {
   }
 };
 // 🌟 处理 Auto Tab 下的推理点击事件
-// 🌟 替换之前的 handleAutoPredict 函数
+// 🌟 替换 1：彻底对齐手工工具的默认属性提取逻辑 (Auto 模式)
 const handleAutoPredict = async (tags: string[], mappingDict: Record<string, string>) => {
     if (!isAIReady) return;
     const targetView = views.find((v: any) => v.id === selectedAIViewId);
     const fullPath = getFullImagePath(targetView);
     const inferSize = aiSettings.inferenceSize || 644;
+
+    // 🎯 核心：直接使用组件顶层解构出的 taxonomyAttributes，和手工工具 100% 一致
+    const defaultAttrs: Record<string, any> = {};
+    taxonomyAttributes?.forEach((attr: any) => {
+      defaultAttrs[attr.name] = attr.defaultValue || (attr.options?.[0] || '');
+    });
 
     try {
       setIsPredicting(true);
@@ -1195,20 +1201,15 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
         inferSize
       );
       
-      // 🌟 2. 适配后端新结构：result.results 是一个对象数组
       const groupedResults = result.results || [];
       let totalFound = 0;
       
       if (groupedResults.length > 0) {
-        // 🌟 3. 外层循环：遍历每一个 Prompt 组
         groupedResults.forEach((group: { prompt: string, polygons: any[] }) => {
           const { prompt, polygons } = group;
-          // 💡 查字典：根据后端返回的 prompt，找出用户刚才确认的真实类别
           const finalClassName = mappingDict[prompt] || 'Uncategorized'; 
 
-          // 🌟 4. 内层循环：处理该 Prompt 下的所有多边形
           polygons.forEach((poly: any, index: number) => {
-
             const { rawWidth, rawHeight } = getViewDimensions(targetView);
             const { scaleX = 1, scaleY = 1 } = targetView.transform || {};
             const trueMainWidth = rawWidth * scaleX;
@@ -1216,7 +1217,6 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
 
             let mappedPoly = poly.map((pt: any) => mapInferToMain(pt, targetView, inferSize));
 
-            // 尺寸过滤逻辑
             const filterVal = Number(aiSettings.filterThreshold || 0);
             if (filterVal > 0) {
               const bbox = polygonToBBox(mappedPoly);
@@ -1242,7 +1242,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
               points: mappedPoly, 
               label: finalClassName,
               stem: currentStem,
-              attributes: {},
+              attributes: { ...defaultAttrs }, // 🎯 注入计算好的默认属性
               difficult: false,
               occluded: false
             };
@@ -1262,19 +1262,22 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     } finally {
       setIsPredicting(false); 
     }
-  };
+};
 
-
+// 🌟 替换 2：彻底对齐手工工具的默认属性提取逻辑 (Semi 模式)
   const handleAIConfirm = useCallback(() => {
     if (!tempActiveAnno) return;
 
-    // 🌟 核心拦截：如果有预设的 semiClass 且不为 'None'，则优先使用它；
-    // 否则退回使用主界面的全局预设类别 formLabel
+    // 🎯 核心：直接使用组件顶层解构出的 taxonomyAttributes
+    const defaultAttrs: Record<string, any> = {};
+    taxonomyAttributes?.forEach((attr: any) => {
+      defaultAttrs[attr.name] = attr.defaultValue || (attr.options?.[0] || '');
+    });
+
     const targetLabel = (aiSettings.semiClass && aiSettings.semiClass !== 'None') 
       ? aiSettings.semiClass 
       : formLabel;
 
-    // 遍历所有生成的预览块，转化为正式的 Annotation
     tempActiveAnno.allPolygons.forEach((polyPoints: any) => {
       const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
       const finalAnno = {
@@ -1283,7 +1286,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
         points: polyPoints,
         label: targetLabel,
         stem: currentStem,
-        attributes: {}, 
+        attributes: { ...defaultAttrs }, // 🎯 注入计算好的默认属性
         difficult: false,
         occluded: false
       };
@@ -1291,7 +1294,6 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       pushAction({ type: 'add', anno: finalAnno });
     });
 
-    // 确认后彻底重置状态
     setTempActiveAnno(null);
     setAiPrompts([]);
     
@@ -1299,7 +1301,9 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       setTool('pan');
       setAIPanelOpen(false);
     }
-  }, [tempActiveAnno, formLabel, aiSettings.semiClass, currentStem, addAnnotation, pushAction, state.editorSettings]);
+  }, [tempActiveAnno, formLabel, aiSettings.semiClass, currentStem, addAnnotation, pushAction, state.editorSettings, taxonomyAttributes]); 
+  // 🎯 极度关键：必须把 taxonomyAttributes 放在依赖数组里！否则 React 会永远记住你刚刷新页面时空的属性列表。
+  
   return (
     <div 
     className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"

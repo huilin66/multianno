@@ -288,11 +288,16 @@ async def get_project_statistics(req: StatRequest):
                         )
                     )
 
+                    attrs = shape.get("attributes", {})
+                    attr_num = len(attrs)
+
                     records.append(
                         {
                             "image": stem,
                             "label": shape.get("label", "unknown"),
                             "shape_type": shape.get("shape_type", "unknown"),
+                            "attr_num": attr_num,  # 🌟 新增：挂载属性数量
+                            "attributes": attrs,  # 🌟 新增：挂载具体属性字典
                             "area": area,
                             "width": w,
                             "height": h,
@@ -328,16 +333,41 @@ async def get_project_statistics(req: StatRequest):
     df["shape_rate_bin"] = pd.cut(df["shape_rate"], bins=SHP_RATE_BINS, right=False)
     df["rel_area_bin"] = pd.cut(df["rel_area"], bins=AREA_RATE_BINS, right=False)
 
-    # 🌟 3. 封装统计聚合函数
+    # 🌟 3. 封装统计聚合函数 (升级版：加入属性深度聚合)
     def aggregate_stats(sub_df: pd.DataFrame):
-        # 每张图片的 Box 数量分布 (box_number_per_image)
+        # 1. 基础图像/框数分布
         boxes_per_img = (
             sub_df.groupby("image").size().value_counts().sort_index().to_dict()
         )
 
+        # 🌟 2. 属性密度分布 (每个对象有几个属性：0个, 1个, 2个...)
+        attr_counts_raw = (
+            sub_df["attr_num"].value_counts().sort_index().to_dict()
+            if "attr_num" in sub_df
+            else {}
+        )
+        attr_counts = {str(k): int(v) for k, v in attr_counts_raw.items()}
+
+        # 🌟 3. 属性详情分布 (统计每个属性具体值的出现次数)
+        attr_details = {}
+        if "attributes" in sub_df:
+            for attrs in sub_df["attributes"]:
+                if not isinstance(attrs, dict):
+                    continue
+                for k, v in attrs.items():
+                    if k not in attr_details:
+                        attr_details[k] = {}
+
+                    # 处理空值 (有些标签标了属性但是没选值)
+                    val_str = str(v).strip() if str(v).strip() != "" else "(empty)"
+                    attr_details[k][val_str] = attr_details[k].get(val_str, 0) + 1
+
         return {
             "total_objects": len(sub_df),
             "shape_types": sub_df["shape_type"].value_counts().to_dict(),
+            # 🌟 新增的数据结构：喂给前端的属性图表
+            "attribute_counts": attr_counts,
+            "attribute_details": attr_details,
             "shape_rate_distribution": format_bins(
                 sub_df["shape_rate_bin"].value_counts().sort_index()
             ),
@@ -347,7 +377,7 @@ async def get_project_statistics(req: StatRequest):
             "box_number_distribution": {
                 str(k): int(v) for k, v in boxes_per_img.items()
             },
-            # 热力图矩阵 (10x10) 供前端渲染
+            # 热力图矩阵
             "heatmap_center": get_2d_heatmap(sub_df, "cx_rel", "cy_rel"),
             "heatmap_start": get_2d_heatmap(sub_df, "sx_rel", "sy_rel"),
             "heatmap_end": get_2d_heatmap(sub_df, "ex_rel", "ey_rel"),

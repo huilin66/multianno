@@ -4,7 +4,7 @@ import { useStore } from '../../store/useStore';
 import { 
   Tags, Settings, Trash2, Edit3, GitMerge,
   Plus, Check, X, Loader2, ArrowRight, Upload, Database, Activity,
-  List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, Layers
+  List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, Layers, ShieldCheck
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
 import { Button } from '../ui/button';
@@ -22,7 +22,6 @@ interface TaxonomyDashboardProps {
 // 🌟 高级图表组件库 (纯 CSS 无依赖实现)
 // ============================================================================
 
-// 1. 带 XY 坐标轴的直方图
 // 1. 带 XY 坐标轴的直方图 (修复超宽数据遮挡，支持横向滚动)
 const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
   const entries = Object.entries(data || {});
@@ -129,7 +128,6 @@ const JointPlotHeatmap = ({ matrix, title }: { matrix: number[][], title: string
   )
 }
 
-// 3. 饼图 + 条形图 联合展示器
 // 3. 饼图 + 条形图 联合展示器 (彻底修复自适应高度)
 const ShapeDistribution = ({ data }: { data: Record<string, number> }) => {
    const entries = Object.entries(data || {});
@@ -164,10 +162,201 @@ const ShapeDistribution = ({ data }: { data: Record<string, number> }) => {
    )
 }
 
+// 4. 合并后的属性看板：左侧所有累计条，右侧紧凑饼图矩阵 (🌟 独立分离 QA 质检指标, 饼图随容器完美自适应缩放)
+// 4. 合并后的属性看板：左侧所有累计条，右侧紧凑饼图矩阵 (🌟 彻底修复高度自适应拉伸问题)
+const CombinedAttributeView = ({ densityData, detailsData }: { densityData: Record<string, number>, detailsData: Record<string, Record<string, number>> }) => {
+  const attributes = Object.keys(detailsData || {});
+  if (attributes.length === 0 && (!densityData || Object.keys(densityData).length === 0)) return null;
+  
+  const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ef4444', '#14b8a6', '#6366f1'];
+
+  const getConicGradient = (data: Record<string, number>) => {
+    const entries = Object.entries(data);
+    const total = entries.reduce((acc, [_, v]) => acc + (v as number), 0) || 1;
+    let cumulative = 0;
+    return entries.map(([_, v], i) => {
+      const pct = ((v as number) / total) * 100;
+      const start = cumulative; cumulative += pct;
+      return `${colors[i % colors.length]} ${start}% ${cumulative}%`;
+    }).join(', ');
+  };
+
+  return (
+    // 🌟 核心修复 1：使用 items-start，绝对禁止左右两个盒子为了对齐而互相拉伸高度！
+    <div className="flex flex-col xl:flex-row gap-5 w-full items-start animate-in fade-in">
+      
+      {/* ================= 左侧：条形图列表 ================= */}
+      <div className="w-full xl:w-1/2 flex flex-col bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm">
+        <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-4 border-b border-neutral-100 dark:border-neutral-800 pb-2 shrink-0">
+          Attribute Values Distribution (Stacked Bars)
+        </h4>
+        
+        {/* 🌟 核心修复 2：去掉 min-h，只保留 max-h。内容少时自动收缩，内容多时出现滚动条 */}
+        <div className="overflow-y-auto custom-scrollbar pr-2 max-h-[300px]">
+          
+          {/* QA 质检卡片 (如果有密度数据才显示) */}
+          {densityData && Object.keys(densityData).length > 0 && (
+            <div className="mb-6 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/50 rounded-lg shadow-sm">
+              <div className="flex justify-between items-center mb-3">
+                <span className="text-[11px] font-bold text-amber-700 dark:text-amber-500 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4"/> Annotation Completeness
+                </span>
+                <span className="text-[9px] bg-amber-200 dark:bg-amber-800/60 text-amber-800 dark:text-amber-400 px-1.5 py-0.5 rounded uppercase font-black tracking-widest shadow-sm">
+                  QA Metric
+                </span>
+              </div>
+              <div className="flex h-5 w-full rounded overflow-hidden shadow-inner bg-amber-100 dark:bg-neutral-900">
+                {Object.entries(densityData).map(([k, v], i) => {
+                  const total = Object.values(densityData).reduce((a: number, b: any) => a + (b as number), 0) || 1;
+                  return <div key={k} style={{ width: `${((v as number)/total)*100}%`, backgroundColor: colors[i % colors.length] }} title={`${k} attrs: ${v}`} className="h-full hover:brightness-110 transition-all border-r border-white/20 dark:border-black/20 last:border-0 cursor-crosshair" />
+                })}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
+                {Object.entries(densityData).map(([k, v], i) => (
+                  <div key={k} className="flex items-center gap-1.5 text-[10px] text-amber-700/80 dark:text-amber-500/80 font-medium">
+                    <div className="w-2.5 h-2.5 rounded-sm shadow-sm" style={{ backgroundColor: colors[i % colors.length] }} />
+                    <span>{k} attrs <span className="font-mono opacity-60">({v})</span></span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 业务属性的值分布 */}
+          {densityData && Object.keys(densityData).length > 0 && (
+             <h5 className="text-[9px] font-black uppercase text-neutral-400 tracking-widest mb-3 flex items-center gap-2">
+               <Tags className="w-3 h-3"/> Semantic Attributes
+             </h5>
+          )}
+
+          <div className="space-y-5">
+            {attributes.map((attrName) => {
+              const entries = Object.entries(detailsData[attrName] || {});
+              const total = entries.reduce((acc, [_, v]) => acc + (v as number), 0) || 1;
+              if (entries.length === 0) return null;
+              
+              return (
+                <div key={attrName} className="flex flex-col gap-1.5">
+                  <div className="flex justify-between items-end">
+                    <span className="text-xs font-bold text-neutral-700 dark:text-neutral-300">{attrName}</span>
+                    <span className="text-[9px] text-neutral-400 font-mono">{total} tags</span>
+                  </div>
+                  <div className="flex h-5 w-full rounded overflow-hidden shadow-inner bg-neutral-100 dark:bg-neutral-800">
+                    {entries.map(([k, v], i) => (
+                      <div key={k} style={{ width: `${((v as number)/total)*100}%`, backgroundColor: colors[i % colors.length] }} title={`${k}: ${v}`} className="h-full hover:brightness-110 transition-all border-r border-white/20 dark:border-black/20 last:border-0 cursor-crosshair" />
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-0.5">
+                    {entries.map(([k, v], i) => (
+                      <div key={k} className="flex items-center gap-1.5 text-[9px] text-neutral-500">
+                        <div className="w-2.5 h-2.5 rounded-sm shadow-sm" style={{ backgroundColor: colors[i % colors.length] }} />
+                        <span className="truncate max-w-[80px]" title={k}>{k}</span> <span className="font-mono text-neutral-400">({v})</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ================= 右侧：饼图矩阵 ================= */}
+      <div className="w-full xl:w-1/2 flex flex-col bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm">
+        <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-4 border-b border-neutral-100 dark:border-neutral-800 pb-2 shrink-0">
+          Proportions Summary (Pies)
+        </h4>
+        
+        {/* 🌟 核心修复 3：移除饼图区的 min-h，同步为 max-h-[300px] */}
+        <div className="overflow-y-auto custom-scrollbar max-h-[300px] pr-2">
+          
+          {densityData && Object.keys(densityData).length > 0 && (
+            <div className="flex items-center gap-4 p-3 mb-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800/50 shadow-sm">
+              <div className="w-12 h-12 rounded-full shadow-sm border-2 border-white dark:border-neutral-800 shrink-0" style={{ background: `conic-gradient(${getConicGradient(densityData)})` }} />
+              <div className="flex flex-col">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-[10px] font-black text-amber-700 dark:text-amber-500 uppercase tracking-widest">Tags Per Object</span>
+                  <span className="text-[8px] bg-amber-200 dark:bg-amber-800/60 text-amber-800 dark:text-amber-400 px-1 rounded font-bold">QA</span>
+                </div>
+                <span className="text-[9px] text-amber-600/70 dark:text-amber-500/70 leading-tight pr-2">
+                  Inspect if objects are missing mandatory tags.
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))' }}>
+            {attributes.map((attrName) => {
+              if (Object.keys(detailsData[attrName] || {}).length === 0) return null;
+              return (
+                <div key={attrName} className="flex flex-col items-center justify-between p-4 bg-neutral-50 dark:bg-neutral-800/40 rounded-xl border border-neutral-200 dark:border-neutral-700 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all aspect-square">
+                  <span className="text-[10px] font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-widest truncate w-full text-center px-1 mb-2" title={attrName}>{attrName}</span>
+                  <div className="w-[80%] aspect-square rounded-full shadow-sm border-[3px] border-white dark:border-neutral-600 shrink-0" style={{ background: `conic-gradient(${getConicGradient(detailsData[attrName])})` }} />
+                </div>
+              );
+            })}
+          </div>
+          
+        </div>
+      </div>
+
+    </div>
+  );
+};
+
+// 🌟 新增：提取高复用的统一属性包裹卡片 (Wrapper)
+const AttributeAnalysisCard = ({ title, icon: Icon, totalTags, densityData, detailsData, variant = "default", emptyMsg }: any) => {
+  // 防御性空数据校验
+  if (!detailsData || Object.values(detailsData)[0] === undefined || Object.keys(Object.values(detailsData)[0] as any).length === 0) {
+     return (
+       <div className="h-48 flex flex-col items-center justify-center text-neutral-400 opacity-50 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm">
+         <Tags className="w-10 h-10 mb-3 opacity-30" />
+         <p className="text-xs font-bold">{emptyMsg || `No data found for '${title}'`}</p>
+       </div>
+     );
+  }
+
+  const isPurple = variant === "purple";
+  const isClass = variant === "class";
+
+  return (
+    <div className={`bg-white dark:bg-neutral-950 border ${isPurple ? 'border-purple-200 dark:border-purple-900/50 border-2 shadow-md' : 'border-neutral-200 dark:border-neutral-800 shadow-sm'} rounded-xl p-5 relative overflow-hidden animate-in fade-in`}>
+      
+      {/* 紫色模式的侧边高亮条 */}
+      {isPurple && <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500" />}
+      
+      {/* 统一的头部设计 */}
+      <div className={`flex items-center gap-3 mb-5 pb-3 border-b ${isPurple ? 'border-purple-100 dark:border-purple-900/30' : 'border-neutral-100 dark:border-neutral-800'}`}>
+        
+        {/* 如果是单类模式，Icon 传进来的是颜色 Hex 代码 */}
+        {isClass && typeof Icon === 'string' && (
+          <div className="w-3.5 h-3.5 rounded shadow-sm border border-black/10 shrink-0" style={{ backgroundColor: Icon }} />
+        )}
+        {/* 常规模式传入的是 React 组件图标 */}
+        {!isClass && typeof Icon !== 'string' && Icon && (
+          <Icon className={`w-4 h-4 shrink-0 ${isPurple ? 'text-purple-600' : 'text-neutral-500'}`} />
+        )}
+        
+        <h4 className={`text-sm font-black uppercase tracking-widest ${isPurple ? 'text-purple-700 dark:text-purple-400' : 'text-neutral-700 dark:text-neutral-200'}`}>
+          {title}
+        </h4>
+        
+        {totalTags !== undefined && (
+          <span className={`ml-auto text-[10px] font-mono font-bold px-2 py-0.5 rounded uppercase tracking-wider ${isPurple ? 'text-purple-600 dark:text-purple-300 bg-purple-50 dark:bg-purple-900/40' : 'text-neutral-500 bg-neutral-100 dark:bg-neutral-800'}`}>
+            {isClass ? 'Tags: ' : 'Total Tags: '} {totalTags}
+          </span>
+        )}
+      </div>
+      
+      {/* 渲染自适应的高度数据流 */}
+      <CombinedAttributeView densityData={densityData} detailsData={detailsData} />
+    </div>
+  );
+};
+
 // ============================================================================
 // 🌟 主页面组件
 // ============================================================================
-
 export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const { t } = useTranslation();
   const { 
@@ -185,6 +374,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [statsData, setStatsData] = useState<any>(null); 
   const [activeShapeTab, setActiveShapeTab] = useState<'bbox' | 'polygon'>('polygon'); // Overview 下方的 Shape Tab
   const [activeClassShapeTab, setActiveClassShapeTab] = useState<string>('polygon'); // 🌟 新增：单类别的 Shape 切换状态
+  const [activeAttrShapeTab, setActiveAttrShapeTab] = useState<string>('polygon'); // 🌟 新增：Attribute 页面的 Shape 切换
   const [isProcessing, setIsProcessing] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState<string>('');
   const [renameValue, setRenameValue] = useState('');
@@ -384,20 +574,39 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               {statsData?.global && (
                 <>
                   {/* --- 上半部分：全局紧凑视图 (干掉 h-36，让它自适应撑开) --- */}
-                  <div className="flex flex-col xl:flex-row gap-6 shrink-0">
+                  <div className="flex flex-col gap-6">
                     
-                    {/* 左侧：精简信息卡片 */}
+                    {/* --- 第一行：全局紧凑视图 --- */}
+                  <div className="flex flex-col xl:flex-row gap-6 shrink-0">
                     <div className="w-full xl:w-1/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center">
                       <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-4">Dataset Footprint</h4>
                       <div className="text-5xl font-black text-blue-600 dark:text-blue-500 mb-2">{statsData.global.total_objects} <span className="text-base text-neutral-400 font-bold">Objects</span></div>
                       <p className="text-sm text-neutral-500 flex items-center"><Layers className="w-4 h-4 mr-1.5"/> Across {statsData.global.total_images} Scanned Images</p>
                     </div>
-                    
-                    {/* 右侧：饼图+条形图 复合组件 */}
-                    <div className="w-full xl:w-2/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center">
+                    <div className="w-full xl:w-2/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center overflow-hidden">
                       <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-2">Shape Type Distribution</h4>
                       <ShapeDistribution data={statsData.global.shape_types} />
                     </div>
+                  </div>
+
+                  {/* --- 第二行：属性分布大盘 (另起一行！) --- */}
+                  {statsData.global.attribute_details && Object.keys(statsData.global.attribute_details).length > 0 && (
+                    <div className="flex flex-col gap-4 shrink-0">
+                      <div className="flex items-center gap-2 px-1">
+                        <div className="w-1.5 h-4 bg-purple-500 rounded-full" />
+                        <h3 className="text-sm font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">
+                          Attributes Analytics
+                        </h3>
+                      </div>
+                      
+                      {/* 🌟 核心：一键渲染合并后的新看板 */}
+                      <CombinedAttributeView 
+                        densityData={statsData.global.attribute_counts} 
+                        detailsData={statsData.global.attribute_details} 
+                      />
+                      
+                    </div>
+                  )}
                   </div>
 
                   {/* --- 下半部分：Shape 专属 Tab 与 Seaborn 风格图表 --- */}
@@ -635,44 +844,65 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     </div>
 
                     {/* 右侧：内容展示区 */}
+                    {/* 右侧：内容展示区 */}
                     <div className="flex-1 p-8 overflow-y-auto custom-scrollbar bg-white dark:bg-neutral-900">
                       {['bbox', 'polygon'].includes(activeClassShapeTab) ? (
                         statsData.classes[activeClass.name].shapes && statsData.classes[activeClass.name].shapes[activeClassShapeTab] ? (
-                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4">
-                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
-                              <AxisBarChart 
-                                title={`Boxes Per Image (${activeClassShapeTab.toUpperCase()})`} 
-                                xLabel="Objects Count" yLabel="Images" 
-                                colorClass="bg-purple-500/60"
-                                data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].box_number_distribution} 
-                              />
+                          
+                          <div className="flex flex-col w-full gap-10">
+                            
+                            {/* 上半部分：4个基础图形图表 (维持 2 列网格) */}
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4">
+                              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                                <AxisBarChart 
+                                  title={`Boxes Per Image (${activeClassShapeTab.toUpperCase()})`} 
+                                  xLabel="Objects Count" yLabel="Images" 
+                                  colorClass="bg-purple-500/60"
+                                  data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].box_number_distribution} 
+                                />
+                              </div>
+                              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                                <AxisBarChart 
+                                  title={`Area % Distribution (${activeClassShapeTab.toUpperCase()})`} 
+                                  xLabel="Relative Area (%)" yLabel="Objects" 
+                                  colorClass="bg-blue-500/60"
+                                  data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].area_distribution} 
+                                />
+                              </div>
+                              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
+                                <AxisBarChart 
+                                  title={`Shape Rate (W/H) (${activeClassShapeTab.toUpperCase()})`} 
+                                  xLabel="Aspect Ratio" yLabel="Objects" 
+                                  colorClass="bg-teal-500/60"
+                                  data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].shape_rate_distribution} 
+                                />
+                              </div>
+                              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden flex justify-center">
+                                <JointPlotHeatmap 
+                                  title={`Spatial Joint Distribution (${activeClassShapeTab.toUpperCase()})`} 
+                                  matrix={statsData.classes[activeClass.name].shapes[activeClassShapeTab].heatmap_center?.flat().reduce((rows:any, key:any, index:number) => (index % 10 == 0 ? rows.push([key]) : rows[rows.length-1].push(key)) && rows, [])} 
+                                />
+                              </div>
                             </div>
 
-                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
-                              <AxisBarChart 
-                                title={`Area % Distribution (${activeClassShapeTab.toUpperCase()})`} 
-                                xLabel="Relative Area (%)" yLabel="Objects" 
-                                colorClass="bg-blue-500/60"
-                                data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].area_distribution} 
-                              />
-                            </div>
-
-                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
-                              <AxisBarChart 
-                                title={`Shape Rate (W/H) (${activeClassShapeTab.toUpperCase()})`} 
-                                xLabel="Aspect Ratio" yLabel="Objects" 
-                                colorClass="bg-teal-500/60"
-                                data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].shape_rate_distribution} 
-                              />
-                            </div>
-
-                            <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden flex justify-center">
-                              <JointPlotHeatmap 
-                                title={`Spatial Joint Distribution (${activeClassShapeTab.toUpperCase()})`} 
-                                matrix={statsData.classes[activeClass.name].shapes[activeClassShapeTab].heatmap_center?.flat().reduce((rows:any, key:any, index:number) => (index % 10 == 0 ? rows.push([key]) : rows[rows.length-1].push(key)) && rows, [])} 
-                              />
-                            </div>
+                            {/* 🌟 下半部分：属性统计大盘 (脱离网格，独占 100% 宽度) */}
+                            {statsData.classes[activeClass.name].shapes[activeClassShapeTab].attribute_details && 
+                             Object.keys(statsData.classes[activeClass.name].shapes[activeClassShapeTab].attribute_details).length > 0 && (
+                              <div className="animate-in fade-in slide-in-from-bottom-4">
+                                {/* 完美复用刚刚抽离出来的 Wrapper 卡片 */}
+                                <AttributeAnalysisCard 
+                                  title={`${activeClass.name} - ${activeClassShapeTab} Attributes`}
+                                  icon={activeClass.color}
+                                  variant="class"
+                                  totalTags={Object.values(statsData.classes[activeClass.name].shapes[activeClassShapeTab].attribute_counts || {}).reduce((a:any, b:any) => a + b, 0)}
+                                  densityData={statsData.classes[activeClass.name].shapes[activeClassShapeTab].attribute_counts}
+                                  detailsData={statsData.classes[activeClass.name].shapes[activeClassShapeTab].attribute_details}
+                                />
+                              </div>
+                            )}
+                            
                           </div>
+
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center text-neutral-400 opacity-50">
                             <Activity className="w-12 h-12 mb-4 opacity-50" />
@@ -680,7 +910,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                           </div>
                         )
                       ) : (
-                        /* 未实现页面的优雅占位符 */
                         <div className="h-full flex flex-col items-center justify-center space-y-4 animate-in fade-in zoom-in-95">
                           <div className="w-20 h-20 rounded-full bg-neutral-50 dark:bg-neutral-800 flex items-center justify-center border border-dashed border-neutral-200 dark:border-neutral-700">
                              <Settings className="w-10 h-10 text-neutral-300 dark:text-neutral-600 animate-spin-slow" />
@@ -695,6 +924,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         </div>
                       )}
                     </div>
+
+                    
                   </div>
                 </>
               ) : (
@@ -708,64 +939,215 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
           </div>
         )}
 
-        {/* 🌟 模式 C：Attributes 编辑器 */}
+        {/* 🌟 模式 C：Attributes 详情与统计看板 */}
         {activeTab === 'attributes' && activeAttribute && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
+            
+            {/* 1. 顶部：内联编辑工具栏 */}
             <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center justify-between shrink-0 shadow-sm z-10">
-              <div className="flex items-center gap-3">
-                <Settings className="w-6 h-6 text-primary" />
-                <Input 
-                  value={activeAttribute.name}
-                  onChange={e => updateTaxonomyAttribute(activeAttribute.id, { name: e.target.value })}
-                  className="text-xl font-black border-transparent hover:border-neutral-200 focus:border-blue-500 bg-transparent px-2 h-10 w-64 shadow-none"
-                />
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center border border-purple-100 dark:border-purple-800">
+                  <Settings className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="flex flex-col">
+                  <Input 
+                    value={activeAttribute.name}
+                    onChange={e => updateTaxonomyAttribute(activeAttribute.id, { name: e.target.value })}
+                    className="text-xl font-black border-transparent hover:border-neutral-200 focus:border-blue-500 bg-transparent px-1 h-8 w-64 shadow-none"
+                    placeholder="Attribute Name"
+                  />
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest px-1">Global Semantic Attribute</span>
+                </div>
               </div>
+
               <Button variant="destructive" size="sm" className="h-9 px-4 font-bold shadow-sm" onClick={() => deleteTaxonomyAttribute(activeAttribute.id)}>
                 <Trash2 className="w-4 h-4 mr-2" /> Delete Attribute
               </Button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-              <div className="max-w-2xl mx-auto bg-white dark:bg-neutral-900 border rounded-xl shadow-sm p-6 animate-in fade-in">
-                <h3 className="font-bold text-neutral-700 dark:text-neutral-300 mb-4 flex items-center justify-between">
-                  Dropdown Options ({activeAttribute.options?.length || 0})
-                  <Button size="sm" variant="outline" className="h-8 text-xs font-bold" onClick={() => {
-                      const newOptions = [...(activeAttribute.options || []), `new_option_${(activeAttribute.options?.length||0)+1}`];
-                      updateTaxonomyAttribute(activeAttribute.id, { options: newOptions, defaultValue: newOptions[0] });
-                    }}>
-                    <Plus className="w-3.5 h-3.5 mr-1" /> Add Option
-                  </Button>
-                </h3>
-
-                <div className="space-y-2">
-                  {activeAttribute.options?.map((opt: string, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2 group p-1 hover:bg-neutral-50 dark:hover:bg-neutral-800 rounded-lg transition-colors">
-                      <div className="flex-1 relative">
-                        <Input value={opt} onChange={e => {
-                            const newOptions = [...activeAttribute.options];
-                            newOptions[idx] = e.target.value;
-                            updateTaxonomyAttribute(activeAttribute.id, { options: newOptions });
-                          }}
-                          className={`pl-8 h-9 text-sm ${activeAttribute.defaultValue === opt ? 'border-primary ring-1 ring-primary shadow-sm' : ''}`}
-                        />
-                        {activeAttribute.defaultValue === opt && <Check className="w-4 h-4 text-primary absolute left-2.5 top-2.5" />}
-                      </div>
-                      <Button variant="ghost" size="sm" className={`h-9 px-3 font-bold ${activeAttribute.defaultValue === opt ? 'text-primary bg-blue-50' : 'text-neutral-400'}`}
-                        onClick={() => updateTaxonomyAttribute(activeAttribute.id, { defaultValue: opt })}>
-                        Set Default
-                      </Button>
-                      <Button variant="ghost" size="icon" className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity h-9 w-9"
-                        onClick={() => {
-                          const newOptions = activeAttribute.options.filter((_:any, i:number) => i !== idx);
-                          updateTaxonomyAttribute(activeAttribute.id, { options: newOptions, defaultValue: newOptions[0] || '' });
-                        }}>
-                        <X className="w-4 h-4" />
-                      </Button>
+            {/* 2. 主体区：上下两部分 */}
+            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar flex flex-col gap-6">
+              
+              {/* --- 上半部分：配置 (左) & 全局大盘 (右) --- */}
+              <div className="flex flex-col xl:flex-row gap-6 animate-in fade-in shrink-0">
+                
+                {/* 🌟 左上角：Dropdown Options 编辑器 (保持不变) */}
+                <div className="w-full xl:w-1/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col">
+                  {/* ... 这里的代码完全保持你刚才确认过的样子 ... */}
+                  <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex items-center justify-between rounded-t-xl">
+                    <div className="flex items-center gap-2">
+                      <List className="w-4 h-4 text-purple-500" />
+                      <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+                        Dropdown Options
+                      </h3>
                     </div>
-                  ))}
-                  {(!activeAttribute.options || activeAttribute.options.length === 0) && (
-                    <div className="text-center py-10 text-neutral-400 border-2 border-dashed border-neutral-200 rounded-xl">
-                      No options defined. Click "Add Option" above.
+                    <Button 
+                      size="sm" variant="outline" className="h-7 text-[10px] font-bold border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-900 dark:text-purple-400 dark:hover:bg-purple-900/30"
+                      onClick={() => {
+                        const newOptions = [...(activeAttribute.options || []), `new_option_${(activeAttribute.options?.length||0)+1}`];
+                        updateTaxonomyAttribute(activeAttribute.id, { options: newOptions, defaultValue: newOptions[0] });
+                      }}
+                    >
+                      <Plus className="w-3 h-3 mr-1" /> Add
+                    </Button>
+                  </div>
+
+                  <div className="p-5 flex-1 overflow-y-auto custom-scrollbar max-h-[300px]">
+                    <div className="flex flex-col gap-3">
+                      {activeAttribute.options?.map((opt: string, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 group p-1.5 rounded-lg border border-neutral-100 dark:border-neutral-800 hover:border-purple-200 dark:hover:border-purple-900 bg-neutral-50/50 dark:bg-neutral-950 transition-all">
+                          <div className="flex-1 relative flex items-center">
+                            <div className={`w-3 h-3 rounded-full border shrink-0 ml-2 ${activeAttribute.defaultValue === opt ? 'bg-purple-500 border-purple-500' : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800'}`} />
+                            <Input 
+                              value={opt}
+                              onChange={(e) => {
+                                const newOptions = [...activeAttribute.options];
+                                newOptions[idx] = e.target.value;
+                                updateTaxonomyAttribute(activeAttribute.id, { options: newOptions });
+                              }}
+                              className={`pl-3 h-8 text-xs font-bold border-transparent focus:ring-0 shadow-none bg-transparent ${activeAttribute.defaultValue === opt ? 'text-purple-700 dark:text-purple-400' : ''}`}
+                            />
+                            
+                            {/* Default 文字角标 */}
+                            {activeAttribute.defaultValue === opt && (
+                              <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 text-[8px] font-black uppercase tracking-widest rounded-sm shrink-0 mr-2 shadow-sm select-none">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-1">
+                            <Button variant="ghost" size="sm" className={`h-6 text-[9px] font-bold px-2 ${activeAttribute.defaultValue === opt ? 'hidden' : 'text-neutral-500'}`} onClick={() => updateTaxonomyAttribute(activeAttribute.id, { defaultValue: opt })}>
+                              Set Default
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={() => {
+                                const newOptions = activeAttribute.options.filter((_:any, i:number) => i !== idx);
+                                updateTaxonomyAttribute(activeAttribute.id, { options: newOptions, defaultValue: newOptions[0] || '' });
+                              }}>
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                      {(!activeAttribute.options || activeAttribute.options.length === 0) && (
+                        <div className="text-center py-6 text-neutral-400 border-2 border-dashed border-neutral-100 dark:border-neutral-800 rounded-xl">
+                          <p className="text-xs">No options defined.</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {/* 附加一个总体统计角标 */}
+                  <div className="px-5 py-3 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/30 flex justify-between items-center text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
+                    <span>Total Tags in Project:</span>
+                    <span className="text-purple-600 text-sm">{Object.values(statsData?.global?.attribute_details?.[activeAttribute.name] || {}).reduce((a:any, b:any) => a + b, 0) as number}</span>
+                  </div>
+                </div>
+
+                {/* 🌟 极致精简：右上角全局大盘直接调用 Wrapper */}
+                <div className="w-full xl:w-2/3 flex flex-col h-fit">
+                  <AttributeAnalysisCard 
+                    title="Global Distribution Overview"
+                    icon={Layers}
+                    totalTags={Object.values(statsData?.global?.attribute_details?.[activeAttribute.name] || {}).reduce((a:any, b:any) => a + b, 0)}
+                    densityData={{}} 
+                    detailsData={{ [activeAttribute.name]: statsData?.global?.attribute_details?.[activeAttribute.name] }}
+                    emptyMsg={`No global data found for '${activeAttribute.name}'.`}
+                  />
+                </div>
+
+              </div>
+
+              {/* --- 下半部分：Shape Tab 切换 & Class 细分 --- */}
+              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex overflow-hidden min-h-[500px] shrink-0 animate-in fade-in slide-in-from-bottom-4">
+
+
+                {/* 1. 左侧：Shape 垂直导航栏 */}
+                <div className="w-56 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex flex-col p-3 gap-1 shrink-0">
+                  <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-3 px-2 flex items-center gap-2">
+                    <Layers className="w-3 h-3" /> Geometry Filter
+                  </h4>
+                  
+                  {['bbox', 'polygon', 'point', 'linestrip', 'ellipse'].map((shapeId) => {
+                    const isActive = activeAttrShapeTab === shapeId;
+                    const isImplemented = ['bbox', 'polygon'].includes(shapeId);
+                    
+                    return (
+                      <button 
+                        key={shapeId}
+                        onClick={() => setActiveAttrShapeTab(shapeId)} 
+                        className={`group text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+                          isActive 
+                            ? 'bg-white dark:bg-neutral-800 text-purple-600 dark:text-purple-400 shadow-sm ring-1 ring-neutral-200 dark:ring-neutral-700' 
+                            : 'text-neutral-500 hover:bg-neutral-200/50 dark:text-neutral-400 dark:hover:bg-neutral-800/50'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2 capitalize">
+                          {shapeId === 'bbox' ? 'Bounding Box' : shapeId}
+                          {!isImplemented && <span className="text-[8px] px-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-400 rounded-sm font-normal">WIP</span>}
+                        </span>
+                        {isActive && <ChevronRight className="w-3.5 h-3.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* 🌟 极致精简：右侧明细列表直接复用 Wrapper */}
+                <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-neutral-50/30 dark:bg-neutral-900">
+                  {['bbox', 'polygon'].includes(activeAttrShapeTab) ? (
+                    <div className="space-y-6">
+                      
+                      {/* 1. 当前 Shape 的全局大盘 */}
+                      {statsData?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name] && (
+                        <AttributeAnalysisCard 
+                          title={`Total in ${activeAttrShapeTab.toUpperCase()}`}
+                          icon={Layers}
+                          variant="purple"
+                          totalTags={Object.values(statsData.shapes[activeAttrShapeTab].attribute_details[activeAttribute.name]).reduce((a:any, b:any) => a + b, 0)}
+                          densityData={{}}
+                          detailsData={{ [activeAttribute.name]: statsData.shapes[activeAttrShapeTab].attribute_details[activeAttribute.name] }}
+                        />
+                      )}
+
+                      {/* 分割线 */}
+                      {taxonomyClasses.some((cls: any) => statsData?.classes?.[cls.name]?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name]) && (
+                        <div className="flex items-center gap-3 opacity-50 py-2">
+                           <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
+                           <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Breakdown by Class</span>
+                           <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
+                        </div>
+                      )}
+
+                      {/* 2. 遍历各 Class 的分布 */}
+                      {taxonomyClasses.map((cls: any) => {
+                        const clsData = statsData?.classes?.[cls.name]?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name];
+                        if (!clsData || Object.keys(clsData).length === 0) return null;
+
+                        return (
+                          <AttributeAnalysisCard 
+                            key={cls.id}
+                            title={`Class: ${cls.name}`}
+                            icon={cls.color} // 传颜色代码
+                            variant="class"
+                            totalTags={Object.values(clsData).reduce((a:any, b:any) => a + b, 0)}
+                            densityData={{}}
+                            detailsData={{ [activeAttribute.name]: clsData }}
+                          />
+                        );
+                      })}
+
+                      {/* 兜底状态 */}
+                      {(!statsData?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name]) && (
+                        <div className="h-64 flex flex-col items-center justify-center text-neutral-400 opacity-50">
+                          <Tags className="w-12 h-12 mb-4" />
+                          <p className="text-sm font-bold">No '{activeAttribute.name}' tags found in '{activeAttrShapeTab}'</p>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-50">
+                       <Settings className="w-10 h-10 text-neutral-400 animate-spin-slow" />
+                       <h3 className="text-lg font-black uppercase tracking-widest text-neutral-500">Under Development</h3>
                     </div>
                   )}
                 </div>
@@ -773,7 +1155,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             </div>
           </div>
         )}
-
       </div>
 
       {/* ================= 3. 底部持久状态栏 ================= */}
