@@ -126,8 +126,8 @@ export interface AppState {
   setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
   viewport: {zoom: number;panX: number;panY: number;};
 
-  editorSettings: { showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean; showToolLabels: boolean };
-  updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean; showToolLabels: boolean }>) => void;
+  editorSettings: { showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean; showToolLabels: boolean; autoRefreshStats: boolean; };
+  updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean; showToolLabels: boolean; autoRefreshStats: boolean }>) => void;
 
   shortcuts: Record<string, string>;
   updateShortcut: (tool: string, key: string) => void;
@@ -266,7 +266,7 @@ export const useStore = create<AppState>()(
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
 
-      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false },
+      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false, autoRefreshStats: false },
       updateEditorSettings: (newSettings) => set((state) => ({ 
         editorSettings: { ...state.editorSettings, ...newSettings } 
       })),

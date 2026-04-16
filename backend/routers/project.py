@@ -31,7 +31,6 @@ def calculate_list_stats(*lists):
 
     # 计算交集
     intersection_set = set.intersection(*sets) if len(sets) > 1 else sets[0]
-    intersection_count = len(intersection_set)
 
     # 计算每个列表不在交集中的元素个数
     list_stats = {}

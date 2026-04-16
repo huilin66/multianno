@@ -362,7 +362,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
-    folders
+    folders, editorSettings
   } = useStore() as any;
 
   const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'attributes'>('overview');
@@ -408,7 +408,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       description: 'System reserved class for soft-deleted items.',
     });
   }, [taxonomyClasses, addTaxonomyClass]);
-  useEffect(() => { if (folders.length > 0) loadStatistics(false); }, []);
+  // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
+  useEffect(() => { 
+    if (folders.length > 0) {
+      loadStatistics(editorSettings.autoRefreshStats === true);
+    } 
+  }, []);
   useEffect(() => { 
     if (activeClass) { 
       setRenameValue(activeClass.name); 

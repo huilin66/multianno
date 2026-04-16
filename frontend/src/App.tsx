@@ -187,7 +187,14 @@ export default function App() {
                       onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })} 
                     />
                   </div>
-
+                  {/* 🌟🌟🌟 新增：打开标签管理时是否自动强制重新统计 🌟🌟🌟 */}
+                  <div className="flex items-center justify-between" title="Force recalculate statistics when opening Taxonomy Manager">
+                    <Label className="text-xs">Auto-refresh Stats</Label>
+                    <Switch 
+                      checked={editorSettings.autoRefreshStats} 
+                      onCheckedChange={(v) => updateEditorSettings({ autoRefreshStats: v })} 
+                    />
+                  </div>
                   {/* 🌟 新增：快捷键设置按钮 */}
                   <Button 
                     variant="outline" 

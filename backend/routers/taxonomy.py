@@ -324,14 +324,24 @@ async def get_project_statistics(req: StatRequest):
             "area_distribution": {},
             "box_number_distribution": {},
             "heatmap_center": [],
+            "heatmap_start": [],
+            "heatmap_end": [],
         }
 
-        return {
+        final_result = {
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "global": {**empty_stats, "total_images": total_images, "class_counts": {}},
             "classes": {},
-            "shapes": {"bbox": empty_stats, "polygon": empty_stats},
+            "shapes": {"bbox": {}, "polygon": {}},
         }
+        # 🌟 关键：就算没数据，也要把这个“空结果”写进缓存，覆盖掉旧项目的脏数据！
+        try:
+            with open(cache_file, "w", encoding="utf-8") as f:
+                json.dump(final_result, f, ensure_ascii=False)
+        except Exception:
+            pass
+
+        return final_result
 
     # 🌟 2. 转换为 DataFrame 享受降维打击
     df = pd.DataFrame(records)
