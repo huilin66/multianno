@@ -941,17 +941,32 @@ const handleResetNms = (e: React.MouseEvent) => {
         />
         {expanded.scenes && (
           <div className="max-h-[25vh] overflow-y-auto p-2 space-y-1 bg-neutral-100 dark:bg-black/20 custom-scrollbar shrink-0">
-            {stems.map((stem: string) => (
-              <button
-                key={stem}
-                onClick={() => { setCurrentStem(stem); setActiveAnnotationId(null); }}
-                className={`w-full text-left px-3 py-1.5 text-[11px] rounded transition-all flex items-center justify-between group ${
-                  currentStem === stem ? 'bg-blue-600 text-white shadow-md font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
-                }`}
-              >
-                <span className="font-mono truncate">{stem}</span>
-              </button>
-            ))}
+            {stems.map((stem: string) => {
+              // 🌟 核心：计算该场景下包含多少个标注对象
+              const annoCount = annotations.filter((a: any) => a.stem === stem).length;
+
+              return (
+                <button
+                  key={stem}
+                  onClick={() => { setCurrentStem(stem); setActiveAnnotationId(null); }}
+                  className={`w-full text-left px-3 py-1.5 text-[11px] rounded transition-all flex items-center justify-between group ${
+                    currentStem === stem ? 'bg-blue-600 text-white shadow-md font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
+                  }`}
+                >
+                  {/* 左侧：文件名 */}
+                  <span className="font-mono truncate pr-2" title={stem}>{stem}</span>
+                  
+                  {/* 🌟 右侧：新增的标注数量 Badge */}
+                  <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono shrink-0 transition-colors ${
+                    currentStem === stem 
+                      ? 'bg-white/20 text-white' 
+                      : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-500'
+                  }`}>
+                    {annoCount}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
 
