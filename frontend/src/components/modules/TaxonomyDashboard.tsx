@@ -379,6 +379,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [mergeTargetId, setMergeTargetId] = useState<string>('');
   const [renameValue, setRenameValue] = useState('');
   const [showClassDeleteConfirm, setShowClassDeleteConfirm] = useState(false);
+  const [showMergeConfirm, setShowMergeConfirm] = useState(false); // 🌟 新增：Merge 的内联确认状态
   const initRef = useRef(false);
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
   const activeAttribute = taxonomyAttributes.find((a: any) => a.id === selectedAttributeId);
@@ -418,7 +419,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     if (activeClass) { 
       setRenameValue(activeClass.name); 
       setMergeTargetId(''); 
-      setShowClassDeleteConfirm(false); // 🌟 切换类别时重置删除状态
+      setShowClassDeleteConfirm(false); 
+      setShowMergeConfirm(false);
     } 
   }, [activeClass]);
   // 只要发现类别被彻底清空（比如刚调用了 resetProject），就把锁重置
@@ -496,35 +498,41 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     reader.readAsText(file);
   };
 
-  const handleMergeClass = async () => {
+  // 🌟 修复：不再使用 window.confirm，且正确调用本地的 mergeTaxonomyClasses
+  const executeMergeClass = async () => {
     if (!activeClass || !mergeTargetId) return;
     const targetClass = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
     if (!targetClass) return;
-
-    if (!window.confirm(`Merge all '${activeClass.name}' into '${targetClass.name}'?\n\nThis will re-assign all boxes. \n${activeClass.name.toLowerCase() !== 'background' ? 'The original class will be deleted.' : 'The background class will be kept empty.'}`)) return;
 
     setIsProcessing(true);
     try {
       const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
       
+      // 1. 发送后端合并请求
       await batchMergeClass({ 
         save_dirs: safeSaveDirs, 
         old_names: [activeClass.name], 
         new_name: targetClass.name 
       });
 
-      // 🌟 核心特权逻辑：如果是 background，只转移数据，不销毁类别！
+      // 🌟 2. 核心修复：更新本地状态 (将旧框的 label 全部更新为新类，不再粗暴删除)
+      mergeTaxonomyClasses([activeClass.name], targetClass.name);
+
+      // 3. 特权处理：因为 mergeTaxonomyClasses 默认会清理掉源类别，
+      // 如果是 background，我们需要无缝地把它立刻加回来，保持金身不灭！
       if (activeClass.name.toLowerCase() === 'background') {
-        // 不执行 deleteTaxonomyClass，保留类别
-        // 最好在这里触发一次全局的统计数据刷新，让界面上的数量归 0
-        // fetchProjectStatistics(safeSaveDirs);
+        addTaxonomyClass({
+          id: activeClass.id, // 保持原ID不变
+          name: activeClass.name,
+          color: activeClass.color,
+          description: activeClass.description
+        });
         setMergeTargetId('');
-        alert(`Successfully moved all shapes to '${targetClass.name}'. The 'background' class remains active.`);
       } else {
-        // 普通类别：转移完数据后，销毁自己
-        deleteTaxonomyClass(activeClass.id, true); 
         setSelectedClassId(null);
       }
+      
+      setShowMergeConfirm(false); // 收起确认菜单
 
     } catch (err: any) {
       alert(`Merge failed: ${err.message}`);
@@ -853,7 +861,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               {/* 右侧：Merge合并 与 删除操作 */}
               <div className="flex items-center gap-3">
                 
-                {/* Merge 模块 (全部放开) */}
+                {/* 🌟 修复后的 Merge 模块：加入内联二次确认 */}
                 <div className="flex items-center bg-neutral-50 dark:bg-neutral-800 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
                   <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
                     <SelectTrigger className="h-7 w-32 text-xs border-none bg-transparent focus:ring-0 shadow-none">
@@ -863,9 +871,22 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       {taxonomyClasses.filter((c: any) => c.id !== activeClass.id).map((c: any) => <SelectItem key={c.id} value={c.id} className="text-xs">{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
-                  <Button size="sm" className="h-7 px-3 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded" disabled={!mergeTargetId || isProcessing} onClick={handleMergeClass}>
-                    <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge
-                  </Button>
+                  
+                  {/* 🌟 内联二次确认取代了不可靠的 window.confirm */}
+                  {showMergeConfirm ? (
+                    <div className="flex items-center gap-1 ml-2 animate-in fade-in">
+                      <Button size="sm" className="h-7 px-2 text-[10px] bg-orange-500 hover:bg-orange-600 text-white font-bold" disabled={isProcessing} onClick={executeMergeClass}>
+                        Confirm
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700" onClick={() => setShowMergeConfirm(false)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button size="sm" className="h-7 px-3 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded ml-1" disabled={!mergeTargetId || isProcessing} onClick={() => setShowMergeConfirm(true)}>
+                      <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge
+                    </Button>
+                  )}
                 </div>
                 
                 <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
