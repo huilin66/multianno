@@ -54,7 +54,7 @@ export function ClassFormPopover({
   return (
     <div 
       ref={popoverRef}
-      className="absolute z-40 w-[300px] bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden animate-in zoom-in-95 fade-in duration-200"
+      className="absolute z-40 w-[300px] bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800"
       style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
       onPointerDown={(e) => e.stopPropagation()} 
       onWheel={(e) => e.stopPropagation()}
@@ -86,9 +86,22 @@ export function ClassFormPopover({
         />
 
         <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 mt-2">
-          <Button onClick={savePendingAnnotationToStore} className="w-full h-8 text-xs text-white shadow-sm hover:brightness-110 transition-all" style={{ backgroundColor: activeColor }}>
-            <Check className="w-3.5 h-3.5 mr-1" /> Save ↵
+          <div className="flex items-center gap-2 pt-3 border-t border-neutral-100 dark:border-neutral-800 mt-2">
+          <Button 
+            variant="outline"
+            onClick={handleCancelDrawing} 
+            className="flex-1 h-8 text-xs font-bold text-neutral-600 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            Cancel
           </Button>
+          <Button 
+            onClick={savePendingAnnotationToStore} 
+            className="flex-1 h-8 text-xs text-white shadow-sm hover:brightness-110 transition-all font-bold"
+            style={{ backgroundColor: activeColor }}
+          >
+            Save
+          </Button>
+        </div>
         </div>
       </div>
     </div>
