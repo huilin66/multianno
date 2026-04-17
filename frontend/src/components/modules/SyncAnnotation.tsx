@@ -57,7 +57,8 @@ export function SyncAnnotation() {
   const [activeAITab, setActiveAITab] = useState<'auto' | 'semi' | 'vqa'>('auto');
   const [isAIPanelOpen, setAIPanelOpen] = useState(false);
   const [isAIReady, setIsAIReady] = useState(false);
-
+  const [formTruncated, setFormTruncated] = useState(false);
+  
   // 🌟 修复 2.1：新增装载 Loading 状态与 Reset 函数
   const [isInitializing, setIsInitializing] = useState(false);
   const handleAIReset = () => {
@@ -994,7 +995,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
       
       // 🌟 1. 对主图形执行裁剪与越界检测
-      const { clampedPoints, truncated } = clampAndFlag(pendingAnnotation.points);
+      const { clampedPoints } = clampAndFlag(pendingAnnotation.points);
 
       // 🌟 2. 对可能存在的孔洞执行裁剪
       let holesTruncated = false;
@@ -1009,7 +1010,6 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
         ...pendingAnnotation,
         points: clampedPoints,       // 🌟 写入裁剪后的点
         holes: clampedHoles,         // 🌟 写入裁剪后的孔洞
-        truncated: truncated || holesTruncated, // 🌟 写入截断标志
         label: formLabel,
         text: formText, // 🌟 对象的描述
         group_id: formGroupId ? Number(formGroupId) : null, // 🌟 确保转换为数字或 null
@@ -1017,17 +1017,17 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
         stem: currentStem,
         difficult: formDifficult,
         occluded: formOccluded,
+        truncated: formTruncated,
         attributes: formAttributes // 🌟 核心修正：使用弹窗中实际修改的属性，而不是 defaultAttrs
       };
 
       addAnnotation(fullAnno);
       pushAction({ type: 'add', anno: fullAnno });
-    // 3. 安全清理草图点位 (确保你没删掉 const [undonePoints, setUndonePoints] = useState([]))
-        if (typeof setUndonePoints === 'function') {
-          setUndonePoints([]);
-        }
-    
 
+      if (typeof setUndonePoints === 'function') {
+        setUndonePoints([]);
+      }
+  
       setPopoverOpen(false);
       setPendingAnnotation(null);
       setFormText('');
@@ -1037,6 +1037,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       setFormTrackId('');
       setFormAttributes({});
       setActiveAnnotationId(newId);
+      setFormTruncated(false);
     }
 
     if (!state.editorSettings?.continuousDrawing) {

@@ -3,7 +3,7 @@ import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
 import { Switch } from '../../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
-import { Tag, Type, Hash, Route, AlertTriangle, EyeOff } from 'lucide-react';
+import { Tag, Type, Hash, Route, AlertTriangle, EyeOff, Crop } from 'lucide-react';
 
 export interface ObjectEditorFormProps {
   label: string; onLabelChange: (v: string) => void;
@@ -12,6 +12,7 @@ export interface ObjectEditorFormProps {
   trackId: string | number; onTrackIdChange: (v: string) => void;
   difficult: boolean; onDifficultChange: (v: boolean) => void;
   occluded: boolean; onOccludedChange: (v: boolean) => void;
+  truncated: boolean; onTruncatedChange: (v: boolean) => void;
   attributes: Record<string, any>; onAttributesChange: (v: Record<string, any>) => void;
   taxonomyClasses: any[];
   taxonomyAttributes: any[];
@@ -21,7 +22,9 @@ export interface ObjectEditorFormProps {
 export function ObjectEditorForm({
   label, onLabelChange, text, onTextChange,
   groupId, onGroupIdChange, trackId, onTrackIdChange,
-  difficult, onDifficultChange, occluded, onOccludedChange,
+  difficult, onDifficultChange, 
+  occluded, onOccludedChange,
+  truncated, onTruncatedChange,
   attributes, onAttributesChange, taxonomyClasses, taxonomyAttributes, activeColor
 }: ObjectEditorFormProps) {
   
@@ -85,20 +88,24 @@ export function ObjectEditorForm({
       </div>
 
       {/* 🌟 修复 2：先显示文字，再显示 Switch，调整了 origin 保证缩放中心点正确 */}
-      <div className="flex items-center gap-4 py-1.5 border-t border-neutral-100 dark:border-neutral-800">
-        <label className="flex items-center gap-2 cursor-pointer group">
-          <span className="text-[10px] font-medium text-neutral-500 group-hover:text-neutral-700 dark:group-hover:text-neutral-300 flex items-center">
-            <AlertTriangle className="w-3 h-3 inline mr-1 text-red-500"/> Difficult
-          </span>
-          <Switch checked={difficult} onCheckedChange={onDifficultChange} className="data-[state=checked]:bg-red-500 scale-75 origin-left" />
-        </label>
-        <label className="flex items-center gap-2 cursor-pointer group">
-          <span className="text-[10px] font-medium text-neutral-500 group-hover:text-neutral-700 dark:group-hover:text-neutral-300 flex items-center">
-            <EyeOff className="w-3 h-3 inline mr-1 text-amber-500"/> Occluded
-          </span>
-          <Switch checked={occluded} onCheckedChange={onOccludedChange} className="data-[state=checked]:bg-amber-500 scale-75 origin-left" />
-        </label>
-      </div>
+      <div className="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 mt-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Switch checked={difficult} onCheckedChange={onDifficultChange} />
+              <Label className="text-xs text-neutral-600">Difficult</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={occluded} onCheckedChange={onOccludedChange} />
+              <Label className="text-xs text-neutral-600">Occluded</Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <Switch checked={truncated} onCheckedChange={onTruncatedChange} />
+              <Label className="text-xs text-neutral-600 flex items-center gap-1">
+                <Crop className="w-3 h-3" /> Truncated
+              </Label>
+            </div>
+          </div>
+        </div>
 
       {taxonomyAttributes && taxonomyAttributes.length > 0 && (
         <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">

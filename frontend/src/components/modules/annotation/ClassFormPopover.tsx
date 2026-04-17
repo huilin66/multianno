@@ -7,7 +7,7 @@ import { ObjectEditorForm } from './ObjectEditorForm'; // 🌟 引入刚封装�
 export function ClassFormPopover({
   popoverPos, formLabel, setFormLabel, formText, setFormText,
   formGroupId, setFormGroupId, formTrackId, setFormTrackId,
-  formDifficult, setFormDifficult, formOccluded, setFormOccluded,
+  formDifficult, setFormDifficult, formOccluded, setFormOccluded, formTruncated, setFormTruncated,
   formAttributes, setFormAttributes, handleCancelDrawing, savePendingAnnotationToStore, taxonomyClasses
 }: any) {
   
@@ -81,6 +81,7 @@ export function ClassFormPopover({
           trackId={formTrackId} onTrackIdChange={setFormTrackId}
           difficult={formDifficult} onDifficultChange={setFormDifficult}
           occluded={formOccluded} onOccludedChange={setFormOccluded}
+          truncated={formTruncated} onTruncatedChange={setFormTruncated}
           attributes={formAttributes} onAttributesChange={setFormAttributes}
           taxonomyClasses={taxonomyClasses} taxonomyAttributes={taxonomyAttributes} activeColor={activeColor}
         />

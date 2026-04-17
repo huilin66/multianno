@@ -722,6 +722,7 @@ const handleResetNms = (e: React.MouseEvent) => {
                         trackId={activeAnno.track_id || ''} onTrackIdChange={(val) => updateAnnotation(activeAnno.id, { track_id: val ? Number(val) : null })}
                         difficult={!!activeAnno.difficult} onDifficultChange={(val) => updateAnnotation(activeAnno.id, { difficult: val })}
                         occluded={!!activeAnno.occluded} onOccludedChange={(val) => updateAnnotation(activeAnno.id, { occluded: val })}
+                        truncated={!!activeAnno.truncated} onTruncatedChange={(val) => updateAnnotation(activeAnno.id, { truncated: val })}
                         attributes={activeAnno.attributes || {}} onAttributesChange={(val) => updateAnnotation(activeAnno.id, { attributes: val })}
                         taxonomyClasses={taxonomyClasses} taxonomyAttributes={taxonomyAttributes} activeColor={activeColor}
                       />
