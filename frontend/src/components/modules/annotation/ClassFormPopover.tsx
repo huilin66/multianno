@@ -54,7 +54,7 @@ export function ClassFormPopover({
   return (
     <div 
       ref={popoverRef}
-      className="absolute z-[9999] w-[300px] bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden animate-in zoom-in-95 fade-in duration-200"
+      className="absolute z-40 w-[300px] bg-white/95 dark:bg-neutral-900/95 backdrop-blur-xl rounded-xl shadow-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden animate-in zoom-in-95 fade-in duration-200"
       style={{ left: `${pos.x}px`, top: `${pos.y}px` }}
       onPointerDown={(e) => e.stopPropagation()} 
       onWheel={(e) => e.stopPropagation()}
