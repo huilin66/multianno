@@ -23,6 +23,7 @@ export interface RenderParams {
 }
 
 // 1. 绘制背景与图层
+// 1. 绘制背景与图层
 function drawCanvasBackground(params: RenderParams, colors: any) {
   const { ctx, view, viewport, isFullExtent, mainWidth, mainHeight, imageObj, theme } = params;
 
@@ -30,9 +31,16 @@ function drawCanvasBackground(params: RenderParams, colors: any) {
   ctx.translate(viewport.panX, viewport.panY);
   ctx.scale(viewport.zoom, viewport.zoom);
 
-  // 2. 执行裁剪 (如果未开启全景，且是辅视图)
+  // ==========================================
+  // 🌟 核心修改 1：开启全局状态保护，隔离蒙版
+  // ==========================================
+  ctx.save(); 
+
+  // 2. 执行裁剪 (现在这个裁剪只对 save/restore 内部有效)
   if (!isFullExtent && !view.isMain) {
-    ctx.beginPath(); ctx.rect(0, 0, mainWidth, mainHeight); ctx.clip(); 
+    ctx.beginPath(); 
+    ctx.rect(0, 0, mainWidth, mainHeight); 
+    ctx.clip(); 
   }
 
   // 3. 绘制真实图片 (进入 Aug View 局部坐标系)
@@ -56,7 +64,13 @@ function drawCanvasBackground(params: RenderParams, colors: any) {
   }
   ctx.restore(); // 恢复到主视图世界坐标系
 
+  // ==========================================
+  // 🌟 核心修复 2：立即恢复状态，清除裁剪蒙版
+  // ==========================================
+  ctx.restore(); 
+
   // 4. 绘制全景模式下的“裁剪参考框”
+  // 注意：此处必须在上面的 restore 之后，否则参考框外部的半透明遮罩也会被裁剪掉
   if (isFullExtent && !view.isMain && imageObj) {
     ctx.strokeStyle = theme === 'dark' ? 'rgba(250, 204, 21, 0.8)' : 'rgba(234, 88, 12, 0.8)';
     ctx.lineWidth = 2 / viewport.zoom;
