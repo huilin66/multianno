@@ -886,6 +886,9 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     annoType: string, 
     points: {x: number, y: number}[]
   ) => {
+    const { truncated: isMathTruncated } = clampAndFlag(points);
+    setFormTruncated(isMathTruncated); // 将预判结果自动赋给弹窗的开关
+
     // 1. 统一初始化默认属性
     const initialAttrs: Record<string, any> = {};
     taxonomyAttributes?.forEach((attr: any) => {
@@ -1572,6 +1575,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           setFormGroupId={setFormGroupId} formTrackId={formTrackId} setFormTrackId={setFormTrackId}
           formDifficult={formDifficult} setFormDifficult={setFormDifficult}
           formOccluded={formOccluded} setFormOccluded={setFormOccluded}
+          formTruncated={formTruncated} setFormTruncated={setFormTruncated}
           formAttributes={formAttributes} 
           setFormAttributes={setFormAttributes}
           handleCancelDrawing={handleCancelDrawing} savePendingAnnotationToStore={savePendingAnnotationToStore}

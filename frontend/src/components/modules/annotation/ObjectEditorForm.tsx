@@ -88,23 +88,45 @@ export function ObjectEditorForm({
       </div>
 
       {/* 🌟 修复 2：先显示文字，再显示 Switch，调整了 origin 保证缩放中心点正确 */}
-      <div className="space-y-2 pt-2 border-t border-neutral-100 dark:border-neutral-800 mt-2">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Switch checked={difficult} onCheckedChange={onDifficultChange} />
-              <Label className="text-xs text-neutral-600">Difficult</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={occluded} onCheckedChange={onOccludedChange} />
-              <Label className="text-xs text-neutral-600">Occluded</Label>
-            </div>
-            <div className="flex items-center gap-2">
-              <Switch checked={truncated} onCheckedChange={onTruncatedChange} />
-              <Label className="text-xs text-neutral-600 flex items-center gap-1">
-                <Crop className="w-3 h-3" /> Truncated
-              </Label>
-            </div>
+        {/* 🌟 优化后的状态开关区域：字在前，开关在后，极简紧凑 */}
+        {/* 🌟 优化后的状态开关区域：强制三等分 + origin-left 解决右侧粘连 */}
+        <div className="flex items-center justify-between pt-3 mt-3 border-t border-neutral-100 dark:border-neutral-800">
+          
+          {/* Difficult (强制左对齐) */}
+          <div 
+            className="flex flex-1 items-center justify-start gap-1 cursor-pointer group" 
+            onClick={() => onDifficultChange(!difficult)}
+          >
+            <Label className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 cursor-pointer group-hover:text-neutral-900 dark:group-hover:text-white transition-colors">
+              Difficult
+            </Label>
+            {/* 🌟 改用 origin-left，让缩放产生的留白留在右侧，推开下一个词 */}
+            <Switch checked={difficult} onCheckedChange={onDifficultChange} className="scale-[0.7] origin-left m-0 shadow-none" />
           </div>
+
+          {/* Occluded (强制居中) */}
+          <div 
+            className="flex flex-1 items-center justify-center gap-1 cursor-pointer group" 
+            onClick={() => onOccludedChange(!occluded)}
+          >
+            <Label className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 cursor-pointer group-hover:text-neutral-900 dark:group-hover:text-white transition-colors">
+              Occluded
+            </Label>
+            <Switch checked={occluded} onCheckedChange={onOccludedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+          </div>
+
+          {/* Truncated (强制右对齐) */}
+          <div 
+            className="flex flex-1 items-center justify-end gap-1 cursor-pointer group" 
+            onClick={() => onTruncatedChange(!truncated)}
+          >
+            <Label className="text-[11px] font-medium text-neutral-500 dark:text-neutral-400 cursor-pointer flex items-center gap-1 group-hover:text-neutral-900 dark:group-hover:text-white transition-colors">
+              <Crop className="w-3 h-3 text-neutral-400 group-hover:text-neutral-700 dark:group-hover:text-neutral-300" /> 
+              Truncated
+            </Label>
+            <Switch checked={truncated} onCheckedChange={onTruncatedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+          </div>
+
         </div>
 
       {taxonomyAttributes && taxonomyAttributes.length > 0 && (
