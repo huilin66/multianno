@@ -295,6 +295,22 @@ export function SyncAnnotation() {
   const mainWidth = mainViewFolder?.metadata?.width || 1024;
   const mainHeight = mainViewFolder?.metadata?.height || 1024;
 
+  // ==========================================
+  // 🌟 核心引擎：坐标越界静默裁剪与截断检测
+  // ==========================================
+  const clampAndFlag = useCallback((points: {x: number, y: number}[]) => {
+    let truncated = false;
+    const clampedPoints = points.map(pt => {
+      let cx = pt.x, cy = pt.y;
+      if (cx < 0) { cx = 0; truncated = true; }
+      if (cx > mainWidth) { cx = mainWidth; truncated = true; }
+      if (cy < 0) { cy = 0; truncated = true; }
+      if (cy > mainHeight) { cy = mainHeight; truncated = true; }
+      return { x: cx, y: cy };
+    });
+    return { clampedPoints, truncated };
+  }, [mainWidth, mainHeight]);
+
   // 🌟 1. 修复版的重置视口方法 (Home)
   const handleHomeViewport = useCallback(() => {
     if (!containerRef.current || !mainWidth || !mainHeight) return;
@@ -706,11 +722,26 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 
     // 🌟 结束拖拽顶点并保存到全局 Store
     if (tool === 'select' && dragVertex && tempActiveAnno) {
-      updateAnnotation(tempActiveAnno.id, { points: tempActiveAnno.points }); // Zustand 数据库
-      pushAction({ type: 'edit', anno: tempActiveAnno }); // Undo/Redo 历史记录
+      // 🌟 在松手保存的瞬间执行裁剪！
+      const { clampedPoints, truncated } = clampAndFlag(tempActiveAnno.points);
+      const clampedHoles = tempActiveAnno.holes?.map((hole: any) => clampAndFlag(hole).clampedPoints);
+
+      const finalEditedAnno = {
+        ...tempActiveAnno,
+        points: clampedPoints,
+        holes: clampedHoles,
+        truncated // 🌟 写入截断标记
+      };
+
+      updateAnnotation(tempActiveAnno.id, { 
+        points: clampedPoints, 
+        holes: clampedHoles, 
+        truncated 
+      }); 
+      pushAction({ type: 'edit', anno: finalEditedAnno }); 
       setDragVertex(null);
       setTempActiveAnno(null);
-      setCursorStyle('default'); // 抬手，变回箭头
+      setCursorStyle('default'); 
       return;
     }
 
@@ -962,9 +993,23 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     if (pendingAnnotation && currentStem) {
       const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
       
+      // 🌟 1. 对主图形执行裁剪与越界检测
+      const { clampedPoints, truncated } = clampAndFlag(pendingAnnotation.points);
+
+      // 🌟 2. 对可能存在的孔洞执行裁剪
+      let holesTruncated = false;
+      const clampedHoles = pendingAnnotation.holes?.map((hole: any) => {
+        const res = clampAndFlag(hole);
+        if (res.truncated) holesTruncated = true;
+        return res.clampedPoints;
+      });
+      
       const fullAnno = {
         id: newId,
         ...pendingAnnotation,
+        points: clampedPoints,       // 🌟 写入裁剪后的点
+        holes: clampedHoles,         // 🌟 写入裁剪后的孔洞
+        truncated: truncated || holesTruncated, // 🌟 写入截断标志
         label: formLabel,
         text: formText, // 🌟 对象的描述
         group_id: formGroupId ? Number(formGroupId) : null, // 🌟 确保转换为数字或 null
@@ -1234,17 +1279,19 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
               mappedPoly = polygonToBBox(mappedPoly);
               finalType = 'bbox';
             }
-
+            
+            const { clampedPoints, truncated } = clampAndFlag(mappedPoly);
             const newId = `anno_auto_${Math.random().toString(36).substr(2, 9)}_${totalFound}`;
             const finalAnno = {
               id: newId,
               type: finalType, 
-              points: mappedPoly, 
+              points: clampedPoints, 
               label: finalClassName,
               stem: currentStem,
               attributes: { ...defaultAttrs }, // 🎯 注入计算好的默认属性
               difficult: false,
-              occluded: false
+              occluded: false,
+              truncated: truncated
             };
             addAnnotation(finalAnno);
             pushAction({ type: 'add', anno: finalAnno });
@@ -1279,16 +1326,18 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       : formLabel;
 
     tempActiveAnno.allPolygons.forEach((polyPoints: any) => {
+      const { clampedPoints, truncated } = clampAndFlag(polyPoints);
       const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
       const finalAnno = {
         id: newId,
         type: tempActiveAnno.type, 
-        points: polyPoints,
+        points: clampedPoints,
         label: targetLabel,
         stem: currentStem,
         attributes: { ...defaultAttrs }, // 🎯 注入计算好的默认属性
         difficult: false,
-        occluded: false
+        occluded: false,
+        truncated: truncated,        // 🌟 截断标志
       };
       addAnnotation(finalAnno);
       pushAction({ type: 'add', anno: finalAnno });
@@ -1303,7 +1352,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     }
   }, [tempActiveAnno, formLabel, aiSettings.semiClass, currentStem, addAnnotation, pushAction, state.editorSettings, taxonomyAttributes]); 
   // 🎯 极度关键：必须把 taxonomyAttributes 放在依赖数组里！否则 React 会永远记住你刚刷新页面时空的属性列表。
-  
+
   return (
     <div 
     className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"

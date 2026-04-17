@@ -90,7 +90,8 @@ class ApplyAttributeRequest(BaseModel):
 
 
 class ExchangeRequest(BaseModel):
-    source_dirs: List[str]  # 涉及的项目文件夹
-    target_dir: str  # 导出/导入的目标路径
-    format: str  # 'multianno', 'yolo', 'coco', 'image_only'
-    mode: str  # 'export' or 'import'
+    source_dirs: List[str]
+    target_dir: str
+    format: str
+    mode: str
+    generate_report: bool = True  # 🌟 新增可选项，默认 True

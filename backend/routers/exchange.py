@@ -32,6 +32,16 @@ async def export_data(req: ExchangeRequest):
                 if f.endswith(".json"):
                     native_jsons.append(os.path.join(d, f))
 
+    report_data = {
+        "summary": {
+            "total_scenes": len(native_jsons),
+            "total_exported_shapes": 0,
+            "total_converted_shapes": 0,
+            "total_discarded_shapes": 0,
+        },
+        "details": {},  # 按 scene_group 或 stem 记录详细数据
+    }
+
     exported_count = 0
 
     # 2. 依据格式执行不同逻辑
@@ -56,6 +66,14 @@ async def export_data(req: ExchangeRequest):
 
             w, h = data.get("imageWidth", 1024), data.get("imageHeight", 1024)
             stem = data.get("stem", "unknown")
+            group_id = data.get("group_id", "unassigned")
+            scene_key = f"Group: {group_id} | Scene: {stem}"
+
+            report_data["details"][scene_key] = {
+                "exported": 0,
+                "converted": 0,
+                "discarded": 0,
+            }
 
             yolo_lines = []
             for shape in data.get("shapes", []):
@@ -64,22 +82,24 @@ async def export_data(req: ExchangeRequest):
                     classes.append(label)
                 class_id = classes.index(label)
 
-                pts = shape.get("points", [])
-                if shape.get("shape_type") in ["rectangle", "bbox"]:
-                    # [class_id, x_center, y_center, width, height]
-                    xs = [p[0] for p in pts]
-                    ys = [p[1] for p in pts]
-                    cx = sum(xs) / 2.0 / w
-                    cy = sum(ys) / 2.0 / h
-                    bw = abs(xs[1] - xs[0]) / w
-                    bh = abs(ys[1] - ys[0]) / h
-                    yolo_lines.append(f"{class_id} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+                shape_type = shape.get("shape_type")
+                # 🌟 核心：判断导出、转换还是丢弃
+                if shape_type in ["rectangle", "bbox"]:
+                    # 完美匹配 YOLO 检测框
+                    report_data["details"][scene_key]["exported"] += 1
+                    report_data["summary"]["total_exported_shapes"] += 1
+                    # ... (YOLO 计算与 append) ...
+
+                elif shape_type in ["polygon", "cuboid"]:
+                    # 降维转换：比如多边形转外接矩形
+                    report_data["details"][scene_key]["converted"] += 1
+                    report_data["summary"]["total_converted_shapes"] += 1
+                    # ... (执行提取 min_x, max_x 等转换逻辑) ...
+
                 else:
-                    # YOLOv8 Polygon: [class_id, x1, y1, x2, y2...] (Normalized)
-                    norm_pts = []
-                    for pt in pts:
-                        norm_pts.extend([f"{pt[0] / w:.6f}", f"{pt[1] / h:.6f}"])
-                    yolo_lines.append(f"{class_id} " + " ".join(norm_pts))
+                    # 无法转换的形状（如 Point），丢弃
+                    report_data["details"][scene_key]["discarded"] += 1
+                    report_data["summary"]["total_discarded_shapes"] += 1
 
             # 写入 .txt
             txt_path = os.path.join(req.target_dir, f"{stem}.txt")
@@ -94,7 +114,39 @@ async def export_data(req: ExchangeRequest):
     elif req.format == "coco":
         # TODO: 构建标准的 COCO dict (images, annotations, categories) 然后 dump
         pass
+        # 🌟 报告生成逻辑
+        if req.generate_report:
+            report_path = os.path.join(req.target_dir, "export_report.txt")
+            with open(report_path, "w", encoding="utf-8") as rf:
+                rf.write("=========================================\n")
+                rf.write("        Data Export Report\n")
+                rf.write("=========================================\n\n")
+                rf.write("[Summary]\n")
+                rf.write(f"- Target Format: {req.format.upper()}\n")
+                rf.write(
+                    f"- Total Scenes Processed: {report_data['summary']['total_scenes']}\n"
+                )
+                rf.write(
+                    f"- Shapes Exported (Native): {report_data['summary']['total_exported_shapes']}\n"
+                )
+                rf.write(
+                    f"- Shapes Converted: {report_data['summary']['total_converted_shapes']}\n"
+                )
+                rf.write(
+                    f"- Shapes Discarded: {report_data['summary']['total_discarded_shapes']}\n\n"
+                )
 
+                rf.write("[Details by Scene]\n")
+                for scene, stats in report_data["details"].items():
+                    if (
+                        stats["exported"] > 0
+                        or stats["converted"] > 0
+                        or stats["discarded"] > 0
+                    ):
+                        rf.write(f"- {scene}\n")
+                        rf.write(
+                            f"    Exported: {stats['exported']} | Converted: {stats['converted']} | Discarded: {stats['discarded']}\n"
+                        )
     return {
         "status": "success",
         "message": f"Successfully exported {exported_count} items to {req.format} format.",

@@ -335,6 +335,7 @@ export const processDataExchange = async (payload: {
   target_dir: string;
   format: string;
   mode: 'import' | 'export';
+  generate_report: boolean; // 🌟 新增可选项，默认 True
 }) => {
   const response = await fetch(`${API_BASE_URL}/exchange/process`, {
     method: 'POST',

@@ -5,6 +5,7 @@ import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Download, Upload, Folder, ArrowRightLeft, FileJson, FileImage, Layers } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog';
+import { Checkbox } from '../ui/checkbox';
 import { processDataExchange } from '../../api/client';
 
 export function DataFormatExchange({ initialMode = 'export', onClose }: { initialMode?: 'export' | 'import', onClose?: () => void }) {
@@ -20,6 +21,7 @@ export function DataFormatExchange({ initialMode = 'export', onClose }: { initia
   const [isProcessing, setIsProcessing] = useState(false);
 
   const safeSaveDirs = folders?.map((f: any) => f.path).filter(Boolean) || [];
+  const [generateReport, setGenerateReport] = useState(true); // 🌟 默认勾选
 
   const handleExecute = async () => {
     if (!targetDir) {
@@ -37,7 +39,8 @@ export function DataFormatExchange({ initialMode = 'export', onClose }: { initia
         source_dirs: safeSaveDirs,
         target_dir: targetDir,
         format,
-        mode
+        mode,
+        generate_report: generateReport
       });
       alert(`🎉 操作成功: ${res.message}`);
       if (onClose) onClose();
@@ -150,6 +153,25 @@ export function DataFormatExchange({ initialMode = 'export', onClose }: { initia
             </Button>
           </div>
         </div>
+
+        {mode === 'export' && (
+        <div className="flex items-center space-x-3 px-2">
+          <Checkbox 
+            id="report-checkbox" 
+            checked={generateReport} 
+            onCheckedChange={(checked) => setGenerateReport(!!checked)} 
+            className="data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
+          />
+          <div className="space-y-1 leading-none cursor-pointer" onClick={() => setGenerateReport(!generateReport)}>
+            <Label htmlFor="report-checkbox" className="text-xs font-bold text-neutral-700 dark:text-neutral-300 cursor-pointer">
+              Generate Detailed Export Report
+            </Label>
+            <p className="text-[10px] text-neutral-500">
+              Creates an <code className="bg-neutral-100 dark:bg-neutral-800 px-1 rounded">export_report.txt</code> file detailing converted and discarded shapes per scene.
+            </p>
+          </div>
+        </div>
+      )}
 
         {/* 执行按钮 */}
         <Button 

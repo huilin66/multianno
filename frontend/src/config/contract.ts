@@ -18,6 +18,7 @@ export interface AnnotationShape {
   attributes: Record<string, string | number | boolean>;
   difficult: boolean;
   occluded: boolean;
+  truncated?: boolean;
 }
 export interface SceneAnnotationJSON {
   version: string;
