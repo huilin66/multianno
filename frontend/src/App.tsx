@@ -88,8 +88,10 @@ export default function App() {
               <DropdownMenuItem onClick={() => setActiveModule('taxonomy')}>
                 <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
               </DropdownMenuItem>
-
-              <DropdownMenuItem onClick={() => setActiveModule('export')}>
+              <DropdownMenuItem onClick={() => setActiveModule('exchange_import')}>
+                <Upload className="w-4 h-4 mr-2" /> {t('menu.importData')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveModule('exchange_export')}>
                 <Download className="w-4 h-4 mr-2" /> {t('menu.exportData')}
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -370,7 +372,21 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
-
+      {/* 🌟 数据导入/导出 统一弹窗 */}
+      <Dialog 
+        open={activeModule === 'exchange_import' || activeModule === 'exchange_export'} 
+        onOpenChange={(open) => !open && setActiveModule('workspace')}
+      >
+        <DialogContent className="max-w-3xl sm:max-w-3xl h-[80vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
+          {/* 去掉了头部，因为我们在 Dashboard 内部自己写了精美的标题和 Tabs */}
+          <div className="flex-grow overflow-hidden relative">
+            <DataFormatExchange 
+              initialMode={activeModule === 'exchange_import' ? 'import' : 'export'} 
+              onClose={() => setActiveModule('workspace')} 
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
       <ShortcutSettingsModal 
         open={shortcutModalOpen} 
         onClose={() => setShortcutModalOpen(false)} 

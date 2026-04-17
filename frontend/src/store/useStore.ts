@@ -105,7 +105,7 @@ export interface EditorSettings {
   continuousDrawing: boolean; // 🌟 新增：连续绘制开关
 }
 
-type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy';
+type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy' | 'exchange_import' | 'exchange_export';
 
 export interface AppState {
   projectName: string;

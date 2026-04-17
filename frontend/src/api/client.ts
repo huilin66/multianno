@@ -325,3 +325,27 @@ export const batchDeleteAttribute = async (payload: { save_dirs: string[], attri
   if (!response.ok) throw new Error('Failed to delete attribute');
   return response.json();
 };
+
+
+// ==========================================
+// 🌟 6. 数据格式导入与导出
+// ==========================================
+export const processDataExchange = async (payload: {
+  source_dirs: string[];
+  target_dir: string;
+  format: string;
+  mode: 'import' | 'export';
+}) => {
+  const response = await fetch(`${API_BASE_URL}/exchange/process`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || `Failed to process ${payload.mode}`);
+  }
+
+  return response.json();
+};

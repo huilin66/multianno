@@ -439,7 +439,6 @@ return (
         )}
 
         {/* === VQA TAB === */}
-        {/* === VQA TAB === */}
         {activeTab === 'vqa' && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-2 opacity-60">
              <MessageSquare className="w-8 h-8 text-neutral-400 mb-2" />

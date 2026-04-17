@@ -189,6 +189,7 @@
     "dataPreload": "Data Preload",
     "viewExtentCheck": "View Extent Check",
     "projectMeta": "Project Meta",
+    "importData": "Import Data",
     "exportData": "Export Data",
     "taxonomyManager": "Taxonomy Manager"
   },

@@ -202,6 +202,7 @@
     "loadProject": "加载项目",
     "dataPreload": "数据预加载",
     "viewExtentCheck": "视图对齐校验",
+    "importData": "导入数据",
     "exportData": "导出数据",
     "projectMeta": "项目元数据看板",
     "taxonomyManager": "标注体系管理器"

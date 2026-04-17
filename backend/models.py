@@ -87,3 +87,10 @@ class ApplyAttributeRequest(BaseModel):
     attribute_name: str
     new_default: str
     old_default: Optional[str] = None
+
+
+class ExchangeRequest(BaseModel):
+    source_dirs: List[str]  # 涉及的项目文件夹
+    target_dir: str  # 导出/导入的目标路径
+    format: str  # 'multianno', 'yolo', 'coco', 'image_only'
+    mode: str  # 'export' or 'import'
