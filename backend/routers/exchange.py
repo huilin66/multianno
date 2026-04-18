@@ -16,8 +16,9 @@ from utils.format_converters import (
     convert_to_coco_anns,
     convert_to_yolo,
     filter_multianno,
+    mask_to_shapes,  # <- 新增
     render_mask_array,
-    yolo_to_shapes,  # <- 导入所需
+    yolo_to_shapes,
 )
 
 router = APIRouter(prefix="/api/exchange", tags=["Data Exchange"])
@@ -245,10 +246,16 @@ async def export_to_images_only(req: ExportRequest):
 async def handle_import(req: ImportRequest):
     if not os.path.exists(req.target_dir):
         os.makedirs(req.target_dir, exist_ok=True)
+
     if req.format == "yolo":
         return await import_from_yolo(req)
     elif req.format == "coco":
         return await import_from_coco(req)
+    # 🌟 新增的两种格式分发
+    elif req.format == "multianno":
+        return await import_from_multianno(req)
+    elif req.format == "images_only":
+        return await import_from_images_only(req)
     else:
         raise HTTPException(status_code=400, detail="不支持的导入格式")
 
@@ -266,7 +273,10 @@ async def import_from_yolo(req: ImportRequest):
         if not txt_file.endswith(".txt") or txt_file == "classes.txt":
             continue
         stem = Path(txt_file).stem
-        target_json = os.path.join(req.target_dir, f"{stem}.json")
+        base_stem = stem
+        if req.custom_suffix and stem.endswith(req.custom_suffix):
+            base_stem = stem[: -len(req.custom_suffix)]
+        target_json = os.path.join(req.target_dir, f"{base_stem}.json")
 
         img_w, img_h = 1024, 1024
         existing_data = {"shapes": []}
@@ -334,7 +344,10 @@ async def import_from_coco(req: ImportRequest):
         if img_id not in img_info:
             continue
         info = img_info[img_id]
-        target_json = os.path.join(req.target_dir, f"{info['stem']}.json")
+        base_stem = info["stem"]
+        if req.custom_suffix and info["stem"].endswith(req.custom_suffix):
+            base_stem = info["stem"][: -len(req.custom_suffix)]
+        target_json = os.path.join(req.target_dir, f"{base_stem}.json")
 
         existing_data = {"shapes": []}
         if os.path.exists(target_json):
@@ -360,4 +373,130 @@ async def import_from_coco(req: ImportRequest):
     return {
         "status": "success",
         "message": f"成功从 COCO 导入 {imported_count} 张图像的标注。",
+    }
+
+
+# ==========================================
+# 🌟 新增：导入 MultiAnno
+# ==========================================
+async def import_from_multianno(req: ImportRequest):
+    """
+    直接导入原生的 JSON 标注文件，重点在于处理冲突合并策略
+    """
+    if not os.path.exists(req.source_path):
+        raise HTTPException(status_code=404, detail="源目录不存在")
+
+    imported_count = 0
+    for json_file in os.listdir(req.source_path):
+        if not json_file.endswith(".json"):
+            continue
+
+        # 1. 读取外部 JSON
+        source_json_path = os.path.join(req.source_path, json_file)
+        with open(source_json_path, "r", encoding="utf-8") as f:
+            source_data = json.load(f)
+
+        stem = source_data.get("stem", Path(json_file).stem)
+        base_stem = stem
+        if req.custom_suffix and stem.endswith(req.custom_suffix):
+            base_stem = stem[: -len(req.custom_suffix)]
+        target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
+
+        # 2. 读取或初始化目标 JSON
+        existing_data = {"shapes": []}
+        if os.path.exists(target_json_path):
+            with open(target_json_path, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+
+        # 3. 冲突策略拦截
+        if req.merge_strategy == "skip" and existing_data.get("shapes"):
+            continue
+        if req.merge_strategy == "overwrite":
+            existing_data["shapes"] = []
+
+        # 4. 执行合并写入
+        new_shapes = source_data.get("shapes", [])
+        if new_shapes:
+            existing_data["shapes"].extend(new_shapes)
+            existing_data["stem"] = stem
+            existing_data["imageWidth"] = source_data.get(
+                "imageWidth", existing_data.get("imageWidth", 1024)
+            )
+            existing_data["imageHeight"] = source_data.get(
+                "imageHeight", existing_data.get("imageHeight", 1024)
+            )
+
+            with open(target_json_path, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, ensure_ascii=False, indent=2)
+            imported_count += 1
+
+    return {
+        "status": "success",
+        "message": f"成功合并导入 {imported_count} 个 MultiAnno 场景。",
+    }
+
+
+# ==========================================
+# 🌟 新增：导入纯图像 (Semantic Mask 逆向解析)
+# ==========================================
+async def import_from_images_only(req: ImportRequest):
+    """
+    从灰度掩码图像中提取多边形
+    """
+    if not os.path.exists(req.source_path):
+        raise HTTPException(status_code=404, detail="源目录不存在")
+
+    # 掩码图中的像素值(0,1,2...)需要依赖 classes.txt 还原为真实的 Label 名称
+    classes_map = []
+    if req.classes_file and os.path.exists(req.classes_file):
+        with open(req.classes_file, "r", encoding="utf-8") as f:
+            classes_map = [line.strip() for line in f if line.strip()]
+
+    if not classes_map:
+        raise HTTPException(
+            status_code=400, detail="导入掩码图必须提供有效的 classes.txt"
+        )
+
+    valid_exts = (".png", ".tif", ".bmp", ".jpg", ".jpeg")
+    imported_count = 0
+
+    for mask_file in os.listdir(req.source_path):
+        if not mask_file.lower().endswith(valid_exts):
+            continue
+
+        stem = Path(mask_file).stem
+        mask_path = os.path.join(req.source_path, mask_file)
+        base_stem = stem
+        if req.custom_suffix and stem.endswith(req.custom_suffix):
+            base_stem = stem[: -len(req.custom_suffix)]
+        target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
+
+        # 读取或初始化目标 JSON
+        existing_data = {"shapes": []}
+        if os.path.exists(target_json_path):
+            with open(target_json_path, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+
+        # 冲突策略拦截
+        if req.merge_strategy == "skip" and existing_data.get("shapes"):
+            continue
+        if req.merge_strategy == "overwrite":
+            existing_data["shapes"] = []
+
+        # 调用逆向提取引擎
+        new_shapes, _, img_w, img_h = mask_to_shapes(mask_path, classes_map)
+
+        if new_shapes:
+            existing_data["shapes"].extend(new_shapes)
+            existing_data["stem"] = stem
+            existing_data["imageWidth"] = img_w
+            existing_data["imageHeight"] = img_h
+
+            with open(target_json_path, "w", encoding="utf-8") as f:
+                json.dump(existing_data, f, ensure_ascii=False, indent=2)
+            imported_count += 1
+
+    return {
+        "status": "success",
+        "message": f"成功从 {imported_count} 张掩码图中逆向提取了多边形标注。",
     }

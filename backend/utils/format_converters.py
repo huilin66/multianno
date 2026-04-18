@@ -411,3 +411,66 @@ def coco_ann_to_shape(ann: dict, categories_map: dict) -> dict:
             "attributes": {},
         }
     return None
+
+
+# ==========================================
+# 🌟 新增：从语义分割 Mask 逆向提取多边形
+# ==========================================
+def mask_to_shapes(mask_path: str, classes_map: list) -> tuple:
+    """
+    读取单通道灰度掩码图，使用寻边算法还原出系统的 shapes 多边形
+    返回: (解析后的 shapes 列表, 统计字典, 图像宽, 图像高)
+    """
+    shapes = []
+    stats = {"imported_polygons": 0, "dropped": 0}
+
+    # 强制以单通道灰度模式读取
+    mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
+    if mask is None:
+        return shapes, stats, 0, 0
+
+    img_h, img_w = mask.shape[:2]
+
+    # 获取图中所有存在的像素值 (Class IDs)
+    unique_ids = np.unique(mask)
+
+    for class_id in unique_ids:
+        # 通常像素 0 是背景，如果 classes_map 中 0 号确实是背景，则跳过提取
+        if class_id == 0 and (
+            not classes_map or classes_map[0].lower() in ["background", "bg", "背景"]
+        ):
+            continue
+
+        label = (
+            classes_map[class_id]
+            if class_id < len(classes_map)
+            else f"Class_{class_id}"
+        )
+
+        # 剥离出当前类别的二值化 Mask
+        binary_mask = (mask == class_id).astype(np.uint8) * 255
+
+        # 使用 OpenCV 提取外层轮廓 (RETR_EXTERNAL)
+        contours, _ = cv2.findContours(
+            binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+
+        for contour in contours:
+            # 过滤掉噪点 (至少需要 3 个点才能构成多边形)
+            if len(contour) >= 3:
+                # contour 的 shape 是 (N, 1, 2)，将其展平为 [[x, y], [x, y]...]
+                points = contour.reshape(-1, 2).tolist()
+                shapes.append(
+                    {
+                        "label": label,
+                        "type": "polygon",
+                        "shape_type": "polygon",
+                        "points": points,
+                        "attributes": {},
+                    }
+                )
+                stats["imported_polygons"] += 1
+            else:
+                stats["dropped"] += 1
+
+    return shapes, stats, img_w, img_h
