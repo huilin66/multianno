@@ -1,7 +1,55 @@
 import json
 import os
 import shutil
+from datetime import datetime
 from pathlib import Path
+
+
+class ExportReporter:
+    def __init__(self, target_dir, generate_report=True):
+        self.target_dir = target_dir
+        self.generate_report = generate_report
+        self.summary = {"total_scenes": 0, "native": 0, "converted": 0, "discarded": 0}
+        self.details = {}
+
+    def log_scene(self, scene_name, native=0, converted=0, discarded=0):
+        self.summary["total_scenes"] += 1
+        self.summary["native"] += native
+        self.summary["converted"] += converted
+        self.summary["discarded"] += discarded
+
+        self.details[scene_name] = {
+            "native": native,
+            "converted": converted,
+            "discarded": discarded,
+        }
+
+    def save_report(self, task_type, format_name):
+        if not self.generate_report:
+            return
+
+        report_path = os.path.join(self.target_dir, "export_report.txt")
+        with open(report_path, "w", encoding="utf-8") as f:
+            f.write(f"=== Dataset Export Report ===\n")
+            f.write(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"Task: {task_type.upper()} | Format: {format_name.upper()}\n\n")
+
+            f.write("[Global Summary]\n")
+            f.write(f"- Total Scenes Processed: {self.summary['total_scenes']}\n")
+            f.write(f"- Shapes Exported (Native): {self.summary['native']}\n")
+            f.write(f"- Shapes Auto-Converted: {self.summary['converted']}\n")
+            f.write(f"- Shapes Discarded: {self.summary['discarded']}\n\n")
+
+            f.write("[Details by Scene Group]\n")
+            for scene, stats in self.details.items():
+                if (
+                    stats["native"] > 0
+                    or stats["converted"] > 0
+                    or stats["discarded"] > 0
+                ):
+                    f.write(
+                        f"- {scene}: Native({stats['native']}), Converted({stats['converted']}), Discarded({stats['discarded']})\n"
+                    )
 
 
 def get_native_jsons(source_dirs):
