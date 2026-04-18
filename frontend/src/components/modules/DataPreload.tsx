@@ -26,6 +26,7 @@ export function DataPreload() {
   const [activePlaceholderId, setActivePlaceholderId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
+  const [explorerMode, setExplorerMode] = useState<'dir' | 'file'>('dir');
 
   useEffect(() => {
     const savedHistory = localStorage.getItem('multiAnno_recentPaths');
@@ -548,6 +549,7 @@ export function DataPreload() {
         initialPath={activePlaceholderId ? placeholders.find(p => p.id === activePlaceholderId)?.path || '' : ''}
         onClose={() => setExplorerOpen(false)}
         onConfirm={handleExplorerConfirm}
+        selectType={explorerMode}
       />
     </div>
   );
