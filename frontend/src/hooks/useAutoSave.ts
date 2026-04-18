@@ -60,7 +60,9 @@ export function useAutoSave() {
               })(),
             flags: {},
             attributes: ann.attributes || {},
-            difficult: ann.difficult || false
+            difficult: ann.difficult || false,
+            occluded: ann.occluded || false,
+            truncated: ann.truncated || false
           }))
         };
 
