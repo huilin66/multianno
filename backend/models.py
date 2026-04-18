@@ -92,9 +92,15 @@ class ApplyAttributeRequest(BaseModel):
 class ExchangeRequest(BaseModel):
     source_dirs: List[str]
     target_dir: str
+    task_type: str
     format: str
     mode: str
-    generate_report: bool = True  # 🌟 新增可选项，默认 True
+    selected_classes: List[str] = []
+    custom_suffix: str = ""
+    extension: str = ""
+    allowed_shapes: List[str] = []
+    generate_report: bool = False
+    yolo_config: Optional[dict] = None
 
 
 class MkdirRequest(BaseModel):
