@@ -331,11 +331,24 @@ export const batchDeleteAttribute = async (payload: { save_dirs: string[], attri
 // 🌟 6. 数据格式导入与导出
 // ==========================================
 export const processDataExchange = async (payload: {
-  source_dirs: string[];
+source_dirs: string[];
   target_dir: string;
   format: string;
   mode: 'import' | 'export';
-  generate_report: boolean; // 🌟 新增可选项，默认 True
+  
+  // -- 之前的可选参数 --
+  task_type?: string;
+  allowed_shapes?: string[];
+  generate_report?: boolean;
+  
+  // -- 🌟 本次新增的可选参数 --
+  selected_classes?: string[];
+  custom_suffix?: string;
+  locked_extension?: string;
+  yolo_config?: {
+    source: 'current' | 'file';
+    file: string;
+  } | null;
 }) => {
   const response = await fetch(`${API_BASE_URL}/exchange/process`, {
     method: 'POST',
@@ -349,4 +362,10 @@ export const processDataExchange = async (payload: {
   }
 
   return response.json();
+};
+
+
+export const getFileContent = async (path: string) => {
+  const res = await fetch(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`);
+  return res.json();
 };

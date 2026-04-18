@@ -6,8 +6,9 @@ import { SyncAnnotation } from './modules/SyncAnnotation';
 import { DataPreload } from './modules/DataPreload';
 import { ViewExtentCheck } from './modules/ViewExtentCheck';
 import { ProjectMetaDashboard } from './modules/ProjectMetaDashboard';
-import { DataFormatExchange } from './modules/DataFormatExchange';
 import { TaxonomyDashboard } from './modules/TaxonomyDashboard';
+import { DataExport } from './modules/DataExport';
+import { DataImport } from './modules/DataImport';
 
 // 统一导出给 App.tsx 使用
 export {
@@ -17,6 +18,7 @@ export {
   DataPreload,
   ViewExtentCheck,
   ProjectMetaDashboard,
-  DataFormatExchange,
-  TaxonomyDashboard
+  TaxonomyDashboard,
+  DataExport,
+  DataImport
 };

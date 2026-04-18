@@ -8,9 +8,10 @@ import {
   DataPreload, 
   ViewExtentCheck, 
   SyncAnnotation, 
-  DataFormatExchange, 
   ProjectMetaDashboard,
-  TaxonomyDashboard
+  TaxonomyDashboard,
+  DataExport,
+  DataImport
 } from './components/Modules';
 import { Button } from '@/components/ui/button';
 import { 
@@ -322,20 +323,6 @@ export default function App() {
         </DialogContent>
       </Dialog>
 
-      {/* 原有的 Export Data 弹窗 */}
-      <Dialog 
-        open={activeModule === 'export'} 
-        onOpenChange={(open) => !open && setActiveModule('workspace')}
-      >
-        <DialogContent className="max-w-3xl sm:max-w-3xl h-[70vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800">
-          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-            <DialogTitle>{t('dialog.exportData')}</DialogTitle>
-          </DialogHeader>
-          <div className="flex-grow overflow-hidden relative">
-            <DataFormatExchange />
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* 统一格式的 Project Meta 弹窗 */}
       <Dialog 
@@ -373,18 +360,23 @@ export default function App() {
         </DialogContent>
       </Dialog>
       {/* 🌟 数据导入/导出 统一弹窗 */}
+      {/* 🌟 导入弹窗 */}
       <Dialog 
-        open={activeModule === 'exchange_import' || activeModule === 'exchange_export'} 
+        open={activeModule === 'exchange_import'} 
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-3xl sm:max-w-3xl h-[80vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
-          {/* 去掉了头部，因为我们在 Dashboard 内部自己写了精美的标题和 Tabs */}
-          <div className="flex-grow overflow-hidden relative">
-            <DataFormatExchange 
-              initialMode={activeModule === 'exchange_import' ? 'import' : 'export'} 
-              onClose={() => setActiveModule('workspace')} 
-            />
-          </div>
+        <DialogContent className="max-w-2xl sm:max-w-2xl h-[70vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
+          <DataImport onClose={() => setActiveModule('workspace')} />
+        </DialogContent>
+      </Dialog>
+
+      {/* 🌟 导出弹窗 */}
+      <Dialog 
+        open={activeModule === 'exchange_export'} 
+        onOpenChange={(open) => !open && setActiveModule('workspace')}
+      >
+        <DialogContent className="max-w-3xl sm:max-w-3xl h-[85vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
+          <DataExport onClose={() => setActiveModule('workspace')} />
         </DialogContent>
       </Dialog>
       <ShortcutSettingsModal 

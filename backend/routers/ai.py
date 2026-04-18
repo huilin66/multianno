@@ -10,8 +10,7 @@ from models import (
     SAMInitRequest,
     SAMInteractiveRequest,
 )
-
-from .engine import UnifiedSAM3Predcitor
+from utils.engine import UnifiedSAM3Predcitor
 
 router = APIRouter(prefix="/api/ai/vision", tags=["Vision AI"])
 
