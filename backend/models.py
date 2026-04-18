@@ -95,3 +95,8 @@ class ExchangeRequest(BaseModel):
     format: str
     mode: str
     generate_report: bool = True  # 🌟 新增可选项，默认 True
+
+
+class MkdirRequest(BaseModel):
+    path: str
+    name: str

@@ -2,8 +2,9 @@ import os
 import platform
 from typing import List
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
+from models import MkdirRequest
 
 router = APIRouter(prefix="/api/fs", tags=["FileSystem"])
 
@@ -93,3 +94,20 @@ def explore_file_system(
         "parent_path": parent_path.replace("\\", "/"),
         "items": items,
     }
+
+
+# 根据你的项目情况，把这个路由加到对应的 APIRouter 下
+@router.post("/mkdir")
+async def make_directory(req: MkdirRequest):
+    """在指定路径下新建文件夹"""
+    # 安全检查：防止目录穿越漏洞 (例如 name 传了 "../../../etc")
+    safe_name = os.path.basename(req.name)
+    target_dir = os.path.join(req.path, safe_name)
+
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        return {"status": "success", "path": target_dir}
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="没有权限在此目录创建文件夹")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
