@@ -89,20 +89,26 @@ class ApplyAttributeRequest(BaseModel):
     old_default: Optional[str] = None
 
 
-class ExchangeRequest(BaseModel):
-    source_dirs: List[str]
-    target_dir: str
-    task_type: str
-    format: str
-    mode: str
-    selected_classes: List[str] = []
-    custom_suffix: str = ""
-    extension: str = ""
-    allowed_shapes: List[str] = []
-    generate_report: bool = False
-    yolo_config: Optional[dict] = None
-
-
 class MkdirRequest(BaseModel):
     path: str
     name: str
+
+
+class ExportRequest(BaseModel):
+    source_dirs: List[str]
+    target_dir: str
+    format: str
+    task_type: str
+    selected_classes: List[str]
+    allowed_shapes: List[str]
+    custom_suffix: str = ""
+    extension: str = ""
+    generate_report: bool = True
+
+
+class ImportRequest(BaseModel):
+    source_path: str
+    target_dir: str
+    format: str
+    merge_strategy: str = "append"
+    classes_file: Optional[str] = None

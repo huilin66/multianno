@@ -327,45 +327,28 @@ export const batchDeleteAttribute = async (payload: { save_dirs: string[], attri
 };
 
 
-// ==========================================
-// 🌟 6. 数据格式导入与导出
-// ==========================================
-export const processDataExchange = async (payload: {
-source_dirs: string[];
-  target_dir: string;
-  format: string;
-  mode: 'import' | 'export';
-  
-  // -- 之前的可选参数 --
-  task_type?: string;
-  allowed_shapes?: string[];
-  generate_report?: boolean;
-  
-  // -- 🌟 本次新增的可选参数 --
-  selected_classes?: string[];
-  custom_suffix?: string;
-  locked_extension?: string;
-  yolo_config?: {
-    source: 'current' | 'file';
-    file: string;
-  } | null;
-}) => {
-  const response = await fetch(`${API_BASE_URL}/exchange/process`, {
+export const getFileContent = async (path: string) => {
+  const res = await fetch(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`);
+  return res.json();
+};
+
+// 🌟 只保留这两个，删掉 processDataExchange
+export const exportData = async (payload: any) => {
+  const response = await fetch(`${API_BASE_URL}/exchange/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || `Failed to process ${payload.mode}`);
-  }
-
+  if (!response.ok) throw new Error(await response.text());
   return response.json();
 };
 
-
-export const getFileContent = async (path: string) => {
-  const res = await fetch(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`);
-  return res.json();
+export const importData = async (payload: any) => {
+  const response = await fetch(`${API_BASE_URL}/exchange/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
 };

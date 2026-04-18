@@ -7,7 +7,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
 import { Download, Folder, GripVertical, FileText, RotateCcw } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog';
-import { processDataExchange, getFileContent } from '../../api/client';
+import { exportData, getFileContent } from '../../api/client';
 
 // --- 🌟 1. 静态字典与映射配置 ---
 
@@ -137,17 +137,15 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       target_dir: targetDir,
       task_type: taskType,
       format,
-      mode: 'export' as const,
       selected_classes: selectedClassNames,
       custom_suffix: customSuffix, 
       extension: extension,
       allowed_shapes: allowedShapes,
       generate_report: generateReport,
-      yolo_config: format === 'yolo' ? { source: yoloClassSource, file: externalClassFile } : null
     };
 
     try {
-      const res = await processDataExchange(payload);
+      const res = await exportData(payload); // 🌟 改用 exportData
       alert(`导出成功: ${res.message}`);
       if (onClose) onClose();
     } catch (err: any) {

@@ -312,3 +312,102 @@ def render_mask_array(
             stats["converted"] += 1
     print(np.unique(mask))
     return mask, stats
+
+
+def yolo_to_shapes(
+    yolo_lines: list, img_w: int, img_h: int, classes_map: list
+) -> tuple:
+    """
+    将 YOLO txt 行逆向解析为系统的 shapes
+    返回: (解析后的 shapes 列表, 统计字典)
+    """
+    shapes = []
+    stats = {"imported_bboxes": 0, "imported_polygons": 0, "dropped": 0}
+
+    img_w = max(1, img_w)
+    img_h = max(1, img_h)
+
+    for line in yolo_lines:
+        parts = line.strip().split()
+        if not parts or len(parts) < 5:
+            stats["dropped"] += 1
+            continue
+
+        class_id = int(parts[0])
+        label = (
+            classes_map[class_id]
+            if class_id < len(classes_map)
+            else f"Class_{class_id}"
+        )
+
+        # 目标检测 (5个值 -> 还原为 bbox)
+        if len(parts) == 5:
+            xc, yc, w, h = map(float, parts[1:5])
+            abs_xc, abs_yc = xc * img_w, yc * img_h
+            abs_w, abs_h = w * img_w, h * img_h
+
+            xmin, ymin = abs_xc - abs_w / 2, abs_yc - abs_h / 2
+            xmax, ymax = abs_xc + abs_w / 2, abs_yc + abs_h / 2
+
+            shapes.append(
+                {
+                    "label": label,
+                    "type": "bbox",
+                    "shape_type": "rectangle",
+                    "points": [[xmin, ymin], [xmax, ymax]],
+                    "attributes": {},
+                }
+            )
+            stats["imported_bboxes"] += 1
+
+        # 实例分割 (多边形点阵 -> 还原为 polygon)
+        elif len(parts) > 5:
+            points_flat = list(map(float, parts[1:]))
+            points = []
+            for i in range(0, len(points_flat), 2):
+                points.append([points_flat[i] * img_w, points_flat[i + 1] * img_h])
+
+            shapes.append(
+                {
+                    "label": label,
+                    "type": "polygon",
+                    "shape_type": "polygon",
+                    "points": points,
+                    "attributes": {},
+                }
+            )
+            stats["imported_polygons"] += 1
+
+    return shapes, stats
+
+
+def coco_ann_to_shape(ann: dict, categories_map: dict) -> dict:
+    """将单个 COCO annotation 还原为 shape"""
+    cat_id = ann.get("category_id")
+    label = categories_map.get(cat_id, f"Class_{cat_id}")
+
+    # 优先还原 Segmentation (多边形)
+    seg = ann.get("segmentation", [])
+    if seg and isinstance(seg, list) and len(seg[0]) >= 6:
+        flat_pts = seg[0]
+        points = [[flat_pts[i], flat_pts[i + 1]] for i in range(0, len(flat_pts), 2)]
+        return {
+            "label": label,
+            "type": "polygon",
+            "shape_type": "polygon",
+            "points": points,
+            "attributes": {},
+        }
+
+    # 回退还原 BBox
+    bbox = ann.get("bbox", [])
+    if len(bbox) == 4:
+        xmin, ymin, w, h = bbox
+        return {
+            "label": label,
+            "type": "bbox",
+            "shape_type": "rectangle",
+            "points": [[xmin, ymin], [xmin + w, ymin + h]],
+            "attributes": {},
+        }
+    return None

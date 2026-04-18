@@ -3,80 +3,188 @@ import { useStore } from '../../store/useStore';
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Upload, Folder, FileJson, Layers } from 'lucide-react';
+import { Upload, Folder, FileText, AlertTriangle } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog';
-import { processDataExchange } from '../../api/client';
+import { importData } from '../../api/client';
+
+const FORMAT_EN_DISPLAY: Record<string, string> = {
+  yolo: 'YOLO Format (.txt)',
+  coco: 'COCO Format (.json)',
+};
 
 export function DataImport({ onClose }: { onClose?: () => void }) {
   const { folders } = useStore() as any;
-  const safeSaveDirs = folders?.map((f: any) => f.path).filter(Boolean) || [];
+  const safeWorkspaceDir = folders?.map((f: any) => f.path).filter(Boolean)[0] || '';
 
+  // --- 状态定义 ---
   const [format, setFormat] = useState('yolo');
-  const [sourceDir, setSourceDir] = useState('');
+  const [mergeStrategy, setMergeStrategy] = useState<'append' | 'overwrite' | 'skip'>('append');
   
+  const [sourceDataPath, setSourceDataPath] = useState(''); // YOLO的目录，或COCO的json文件
+  const [targetWorkspaceDir, setTargetWorkspaceDir] = useState(safeWorkspaceDir);
+  const [externalClassFile, setExternalClassFile] = useState('');
+  
+  const [explorerMode, setExplorerMode] = useState<'dir' | 'file'>('dir');
+  const [explorerTarget, setExplorerTarget] = useState<'source' | 'target' | 'yolo_file'>('source');
   const [explorerOpen, setExplorerOpen] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
 
+  // --- 动作函数 ---
   const handleExecute = async () => {
-    if (!sourceDir) return alert("Please select a source directory to import from.");
+    if (!sourceDataPath) return alert("请选择要导入的外部数据源路径！");
+    if (!targetWorkspaceDir) return alert("请选择系统目标工作区！");
+    if (format === 'yolo' && !externalClassFile) return alert("导入 YOLO 必须提供 classes.txt！");
+
+    const payload = {
+      source_path: sourceDataPath,
+      target_dir: targetWorkspaceDir,
+      format: format,
+      merge_strategy: mergeStrategy,
+      classes_file: externalClassFile
+    };
     
-    setIsProcessing(true);
     try {
-      const res = await processDataExchange({
-        source_dirs: [sourceDir], // 告诉后端数据在哪里
-        target_dir: safeSaveDirs[0], // 导入到当前工作区的第一个文件夹
-        format,
-        mode: 'import'
-      });
-      alert(`🎉 Import Success: ${res.message}`);
+      const res = await importData(payload); // 🌟 只留这一个干净的调用！
+      alert(`导入成功: ${res.message}`);
       if (onClose) onClose();
     } catch (err: any) {
-      alert(`Import Failed: ${err.message}`);
-    } finally {
-      setIsProcessing(false);
+      alert(`导入失败: ${err.message}`);
     }
   };
 
   return (
-    <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 p-8 max-w-xl mx-auto w-full overflow-y-auto space-y-8">
+    <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 w-full overflow-hidden">
       
-      <div className="text-center space-y-2 mb-4">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 mb-2">
-          <Upload className="w-7 h-7" />
+      {/* 顶部标题栏 */}
+      <div className="shrink-0 bg-white dark:bg-neutral-900 border-b border-neutral-200 dark:border-neutral-800 z-10 px-6 py-4 shadow-sm">
+        <div className="max-w-5xl mx-auto w-full">
+          <h2 className="text-xl font-black flex items-center gap-2 text-neutral-800 dark:text-neutral-100">
+            <Upload className="text-emerald-500" /> 导入外部标注数据
+          </h2>
         </div>
-        <h2 className="text-2xl font-black text-neutral-800 dark:text-neutral-100">Import Annotations</h2>
-        <p className="text-sm text-neutral-500">Load external dataset formats into your current workspace.</p>
       </div>
 
-      <div className="space-y-3 p-6 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-        <Label className="text-xs font-black uppercase text-neutral-400 tracking-wider">Source Format</Label>
-        <Select value={format} onValueChange={setFormat}>
-          <SelectTrigger className="h-12 font-bold"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="yolo">YOLOv8 Format (.txt)</SelectItem>
-            <SelectItem value="coco">COCO Format (.json)</SelectItem>
-            <SelectItem value="multianno">Native (.json)</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+      <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+        <div className="max-w-5xl mx-auto w-full space-y-6">
 
-      <div className="space-y-3 p-6 bg-white dark:bg-neutral-900 rounded-xl border border-neutral-200 dark:border-neutral-800 shadow-sm">
-        <Label className="text-xs font-black uppercase text-neutral-400 tracking-wider">Source Directory</Label>
-        <div className="flex gap-2">
-          <div className="flex-1 px-3 py-2 bg-neutral-100 dark:bg-neutral-950 border border-neutral-200 dark:border-neutral-800 rounded-md font-mono text-xs text-neutral-600 overflow-hidden text-ellipsis whitespace-nowrap leading-6">
-            {sourceDir || 'Choose a directory containing labels...'}
-          </div>
-          <Button onClick={() => setExplorerOpen(true)} className="shrink-0 font-bold px-6">
-            <Folder className="w-4 h-4 mr-2" /> Browse
+          {/* 1. 格式与策略 */}
+          <section className="p-5 bg-white dark:bg-neutral-900 rounded-xl border shadow-sm space-y-4">
+            <Label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">1. 数据格式与合并策略</Label>
+            <div className="grid grid-cols-2 gap-8">
+              
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Label className="w-16 text-right text-xs font-bold">外部格式：</Label>
+                  <Select value={format} onValueChange={(val) => { setFormat(val); setSourceDataPath(''); }}>
+                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{FORMAT_EN_DISPLAY[format]}</span></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="yolo">YOLO 格式 (.txt 文件夹)</SelectItem>
+                      <SelectItem value="coco">COCO 格式 (单一 .json 文件)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Label className="w-16 text-right text-xs font-bold">冲突策略：</Label>
+                  <Select value={mergeStrategy} onValueChange={(val: any) => setMergeStrategy(val)}>
+                    <SelectTrigger className="flex-1 font-bold"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="append">🟢 融合追加 (保留原标注，合并新标注)</SelectItem>
+                      <SelectItem value="overwrite">🔴 强制覆盖 (清空原标注，只留新标注)</SelectItem>
+                      <SelectItem value="skip">🟡 安全跳过 (若图片已有标注，则跳过导入)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+            </div>
+          </section>
+
+          {/* 2. 路径配置 */}
+          <section className="grid grid-cols-2 gap-6">
+            
+            {/* 左侧：数据源 (外部) */}
+            <div className="p-5 bg-white dark:bg-neutral-900 rounded-xl border shadow-sm space-y-4 border-emerald-100 dark:border-emerald-900/30">
+              <Label className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest flex items-center gap-1">
+                <Upload className="w-3 h-3" /> 2. 外部数据源 (Source)
+              </Label>
+              
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold text-neutral-500">
+                  {format === 'yolo' ? '选择包含 YOLO .txt 文件的文件夹' : '选择 COCO instances.json 文件'}
+                </Label>
+                <Button variant="outline" className="w-full justify-start text-xs font-bold truncate border-dashed hover:bg-emerald-50 dark:hover:bg-emerald-900/20" 
+                  onClick={() => { 
+                    setExplorerTarget('source'); 
+                    setExplorerMode(format === 'yolo' ? 'dir' : 'file'); 
+                    setExplorerOpen(true); 
+                  }}>
+                  {format === 'yolo' ? <Folder className="w-4 h-4 mr-2 text-emerald-500 shrink-0" /> : <FileText className="w-4 h-4 mr-2 text-emerald-500 shrink-0" />}
+                  {sourceDataPath || "点击选择外部路径..."}
+                </Button>
+              </div>
+
+              {format === 'yolo' && (
+                <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 space-y-1.5">
+                  <Label className="text-[11px] font-bold text-neutral-500 flex items-center gap-1">
+                    必需的 classes.txt <AlertTriangle className="w-3 h-3 text-amber-500" />
+                  </Label>
+                  <Button variant="ghost" className="w-full justify-start text-[10px] border-dashed border h-8" 
+                    onClick={() => { setExplorerTarget('yolo_file'); setExplorerMode('file'); setExplorerOpen(true); }}>
+                    <FileText className="w-3 h-3 mr-2 text-amber-500 shrink-0" />
+                    <span className="truncate">{externalClassFile || "必须指定 classes.txt 以还原类别名称"}</span>
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {/* 右侧：目标工作区 (内部) */}
+            <div className="p-5 bg-white dark:bg-neutral-900 rounded-xl border shadow-sm space-y-4">
+              <Label className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 tracking-widest flex items-center gap-1">
+                <Folder className="w-3 h-3" /> 3. 系统目标工作区 (Target)
+              </Label>
+              
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold text-neutral-500">选择包含图像素材的系统工作区</Label>
+                <Button variant="outline" className="w-full justify-start text-xs font-bold truncate border-blue-200 dark:border-blue-900/50 hover:bg-blue-50 dark:hover:bg-blue-900/20" 
+                  onClick={() => { setExplorerTarget('target'); setExplorerMode('dir'); setExplorerOpen(true); }}>
+                  <Folder className="w-4 h-4 mr-2 text-blue-500 shrink-0" /> 
+                  {targetWorkspaceDir || "选择写入目标文件夹..."}
+                </Button>
+              </div>
+              
+              <div className="p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-md border border-blue-100 dark:border-blue-900/30">
+                <p className="text-[10px] text-blue-700/80 dark:text-blue-300/80 leading-relaxed">
+                  系统会自动在此文件夹中寻找同名图像以获取绝对物理尺寸，并将逆向计算后的原生 <code>.json</code> 文件保存在此。
+                </p>
+              </div>
+            </div>
+          </section>
+
+          {/* 执行按钮 */}
+          <Button 
+            size="lg" 
+            className="w-full font-black py-7 shadow-xl shadow-emerald-500/20 bg-emerald-600 hover:bg-emerald-700 text-white transition-all mt-4 mb-8" 
+            onClick={handleExecute}
+          >
+            启动数据导入引擎
           </Button>
         </div>
       </div>
 
-      <Button size="lg" disabled={isProcessing || !sourceDir} onClick={handleExecute} className="w-full font-black bg-emerald-600 hover:bg-emerald-700 text-white">
-        {isProcessing ? 'Processing...' : 'Start Importing'}
-      </Button>
-
-      <FileExplorerDialog open={explorerOpen} initialPath="/" selectType="dir" onClose={() => setExplorerOpen(false)} onConfirm={(paths) => { if (paths.length > 0) setSourceDir(paths[0]); setExplorerOpen(false); }} />
+      <FileExplorerDialog 
+        open={explorerOpen} 
+        initialPath="/" 
+        selectType={explorerMode}
+        onClose={() => setExplorerOpen(false)} 
+        onConfirm={async (paths) => {
+          if (explorerTarget === 'source') setSourceDataPath(paths[0]);
+          else if (explorerTarget === 'target') setTargetWorkspaceDir(paths[0]);
+          else if (explorerTarget === 'yolo_file') setExternalClassFile(paths[0]);
+          setExplorerOpen(false);
+        }} 
+      />
     </div>
   );
 }
