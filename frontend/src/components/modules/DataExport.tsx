@@ -52,14 +52,18 @@ const TASK_MAPPINGS: Record<string, Record<string, ShapeStatus>> = {
 // --- 🌟 2. 主组件 ---
 
 export function DataExport({ onClose }: { onClose?: () => void }) {
-  const { folders, taxonomyClasses = [] } = useStore() as any;
-  const safeSaveDirs = folders?.map((f: any) => f.path).filter(Boolean) || [];
+  const { folders, views, taxonomyClasses = [] } = useStore() as any;
+  const mainViewFolder = folders?.find((f: any) => 
+    f.id === views?.find((v: any) => v.isMain)?.folderId
+  ) || folders?.[0];
+  
+  const safeWorkspacePath = mainViewFolder?.path || '';
 
   // --- 状态定义 ---
   const [taskType, setTaskType] = useState('object_detection');
   const [format, setFormat] = useState('yolo');
   const [targetDir, setTargetDir] = useState('');
-  
+
   const [customSuffix, setCustomSuffix] = useState(''); 
   const [extension, setExtension] = useState('.txt');
   
@@ -72,9 +76,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const [explorerMode, setExplorerMode] = useState<'dir' | 'file'>('dir');
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [generateReport, setGenerateReport] = useState(true);
-
-  // --- 联动钩子 (Hooks) ---
-
+  
   // 🌟 提取初始化类别的函数（用于首次加载和重置按钮）
   const resetClasses = () => {
     const mappedClasses = taxonomyClasses.map((c: any) => ({
@@ -133,7 +135,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     const allowedShapes = Object.entries(shapeSelection).filter(([_, checked]) => checked).map(([s]) => s);
 
     const payload = {
-      source_dirs: safeSaveDirs,
+      source_dirs: [safeWorkspacePath],
       target_dir: targetDir,
       task_type: taskType,
       format,
