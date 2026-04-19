@@ -329,6 +329,9 @@ export const batchDeleteAttribute = async (payload: { save_dirs: string[], attri
 
 export const getFileContent = async (path: string) => {
   const res = await fetch(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`);
+  if (!res.ok) {
+    throw new Error(`Failed to read file at ${path}`);
+  }
   return res.json();
 };
 

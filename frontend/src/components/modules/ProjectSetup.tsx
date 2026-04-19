@@ -9,7 +9,7 @@ import { Input } from '../ui/input';
 import { readProjectJsonFile } from '../../lib/projectUtils';
 import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入国际化钩子
-
+import { loadAllProjectAnnotations } from '../../lib/projectUtils';
 
 // ==========================================
 // Create New Project Modal (创建新项目)
@@ -151,6 +151,14 @@ export function LoadProject({onClose}: {onClose: () => void}) {
             useStore.getState().setStems(result.commonStems);
             useStore.getState().setSceneGroups(result.sceneGroups);
             useStore.getState().setCurrentStem(result.commonStems[0]);
+
+            const mainViewFolderId = meta.views.find((v:any) => v.isMain)?.["folder id"];
+            const mainFolder = meta.folders.find((f:any) => f.Id === mainViewFolderId) || meta.folders[0];
+            
+            if (mainFolder && mainFolder.path) {
+               // 不用 await 阻塞它，让它在后台默默去扫，我们直接进入工作区即可！
+               loadAllProjectAnnotations(result.commonStems, mainFolder.path);
+            }
           }
         } catch (analyzeError) {
           console.warn("静默扫描文件夹失败，可能是移动了硬盘或目录:", analyzeError);

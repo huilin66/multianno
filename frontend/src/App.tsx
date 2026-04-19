@@ -42,6 +42,7 @@ export default function App() {
   const { t, i18n } = useTranslation();
   const { saveStatus, lastSavedTime } = useAutoSave();
   const { metaSaveStatus, metaLastSavedTime } = useMetaAutoSave();
+
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
   // 🌟 监听 Store 里的语言变化，同步给 i18next 引擎
