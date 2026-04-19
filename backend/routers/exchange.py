@@ -1,6 +1,7 @@
 # backend/routers/exchange.py
 import json
 import os
+import uuid
 import warnings
 from datetime import datetime
 from pathlib import Path
@@ -381,26 +382,52 @@ async def import_from_coco(req: ImportRequest):
 # ==========================================
 async def import_from_multianno(req: ImportRequest):
     """
-    直接导入原生的 JSON 标注文件，重点在于处理冲突合并策略
+    直接导入原生的 JSON 标注文件，重点在于处理冲突合并策略、ID去重、以及 Stem 校准
     """
     if not os.path.exists(req.source_path):
         raise HTTPException(status_code=404, detail="源目录不存在")
 
+    print(f"import_from {req.source_path}")
     imported_count = 0
+
     for json_file in os.listdir(req.source_path):
         if not json_file.endswith(".json"):
             continue
 
-        # 1. 读取外部 JSON
+        file_stem = Path(json_file).stem
+
+        # ==========================================
+        # 🌟 修正 1：精准过滤源文件
+        # 如果前端传了 _src2，我们就只认 _src2 结尾的文件，其余一律无视！
+        # ==========================================
+        if req.custom_suffix and not file_stem.endswith(req.custom_suffix):
+            continue
+
+        # ==========================================
+        # 🌟 修正 2：拨乱反正！
+        # base_stem 必须是剥离了后缀的纯净 scene group 名字
+        # ==========================================
+        base_stem = file_stem
+        if req.custom_suffix:
+            base_stem = file_stem[: -len(req.custom_suffix)]
+
         source_json_path = os.path.join(req.source_path, json_file)
+
+        # 🌟 修正 3：目标路径必须是绝对纯净的 base_stem.json
+        target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
+
+        print(f"try to load {target_json_path} base {json_file}")
+
+        # 🌟 增加一道保险：防止用户把 source 和 target 选成同一个文件夹导致死循环追加
+        if (
+            os.path.abspath(source_json_path) == os.path.abspath(target_json_path)
+            and req.merge_strategy == "append"
+        ):
+            continue
+
+        # 1. 读取外部 JSON
         with open(source_json_path, "r", encoding="utf-8") as f:
             source_data = json.load(f)
-
-        stem = source_data.get("stem", Path(json_file).stem)
-        base_stem = stem
-        if req.custom_suffix and stem.endswith(req.custom_suffix):
-            base_stem = stem[: -len(req.custom_suffix)]
-        target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
 
         # 2. 读取或初始化目标 JSON
         existing_data = {"shapes": []}
@@ -409,16 +436,26 @@ async def import_from_multianno(req: ImportRequest):
                 existing_data = json.load(f)
 
         # 3. 冲突策略拦截
-        if req.merge_strategy == "skip" and existing_data.get("shapes"):
+        if req.merge_strategy == "skip" and len(existing_data.get("shapes", [])) > 0:
             continue
         if req.merge_strategy == "overwrite":
             existing_data["shapes"] = []
 
-        # 4. 执行合并写入
+        # 4. 执行合并写入 (核心修复区)
         new_shapes = source_data.get("shapes", [])
         if new_shapes:
-            existing_data["shapes"].extend(new_shapes)
-            existing_data["stem"] = stem
+            # Append 模式下绝对不能直接 extend，必须遍历赋予新 ID
+            for shape in new_shapes:
+                shape["id"] = str(uuid.uuid4())  # 强制生成全新、唯一的 UUID
+                shape["stem"] = (
+                    base_stem  # 强制将图形内部归属修正为不带后缀的工作区 Stem
+                )
+                existing_data["shapes"].append(shape)
+
+            # 统一内部全局 stem 为纯净的 base_stem
+            existing_data["stem"] = base_stem
+
+            # 保留或更新宽高信息
             existing_data["imageWidth"] = source_data.get(
                 "imageWidth", existing_data.get("imageWidth", 1024)
             )
