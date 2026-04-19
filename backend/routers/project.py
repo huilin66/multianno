@@ -5,9 +5,9 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from models import AnalyzeRequest, StatsRequest
+from models import AnalyzeRequest, ProjectMetaPayload, StatsRequest
 from skimage import io
 
 router = APIRouter(prefix="/api", tags=["Project"])
@@ -325,3 +325,33 @@ async def get_preview(folderPath: str, fileName: str = "", bands: str = ""):
 
         traceback.print_exc()
         return Response(status_code=500)
+
+
+@router.post("/project/save_meta")
+async def save_project_meta(payload: ProjectMetaPayload):
+    """静默保存 project meta 到指定完整路径"""
+    # 提取目录并确保存在
+    save_dir = os.path.dirname(payload.file_path)
+    if save_dir and not os.path.exists(save_dir):
+        os.makedirs(save_dir, exist_ok=True)
+
+    try:
+        with open(payload.file_path, "w", encoding="utf-8") as f:
+            json.dump(payload.content, f, ensure_ascii=False, indent=2)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/project/load_meta")
+async def load_project_meta(file_path: str):
+    """直接读取指定的 project meta 文件"""
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="Meta file not found")
+
+    try:
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

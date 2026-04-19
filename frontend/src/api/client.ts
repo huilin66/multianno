@@ -352,3 +352,19 @@ export const importData = async (payload: any) => {
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 };
+
+export const saveProjectMeta = async (payload: { file_path: string; content: any }) => {
+  const response = await fetch(`${API_BASE_URL}/project/save_meta`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error('Failed to save project meta');
+  return response.json();
+};
+
+export const loadProjectMetaFromServer = async (file_path: string) => {
+  const response = await fetch(`${API_BASE_URL}/project/load_meta?file_path=${encodeURIComponent(file_path)}`);
+  if (!response.ok) throw new Error('Failed to load project meta');
+  return response.json();
+};

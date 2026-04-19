@@ -1,78 +1,25 @@
 // src/components/modals/ProjectSetupModals.tsx
 import React, { useState, useRef } from 'react';
 import { useStore } from '../../store/useStore';
-import { X, FolderPlus, Upload, FileJson, Check, AlertCircle } from 'lucide-react';
+import { X, FolderPlus, Upload, FileJson, Check, AlertCircle, FolderSearch } from 'lucide-react';
+import { saveProjectMeta, loadProjectMetaFromServer } from '../../api/client';
+import { FileExplorerDialog } from './FileExplorerDialog'; // 引入你的文件选择器
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { readProjectJsonFile } from '../../lib/projectUtils';
 import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next'; // 🌟 引入国际化钩子
 
-// ==========================================
-// 1. Load Project Modal (加载现有项目)
-// ==========================================
-export function LoadProject({onClose}: {onClose: () => void}) {
-  const { t } = useTranslation();
-  // 🌟 引入 resetProject
-  const { loadProjectMeta, setActiveModule, resetProject } = useStore();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [error, setError] = useState<string>('');
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // 🌟 拦截 1：提醒用户保存
-    const confirmMsg = t('createProject.confirmReset', "⚠️ Current workspace will be cleared. Please ensure you have exported your annotations. Continue?");
-    if (!window.confirm(confirmMsg)) {
-      if (fileInputRef.current) fileInputRef.current.value = ''; // 允许重复选同一文件
-      return;
-    }
-
-    try {
-      setError('');
-      const meta = await readProjectJsonFile(file);
-      
-      resetProject(); // 🌟 拦截 2：彻底清空旧项目
-      loadProjectMeta(meta); 
-      
-      setActiveModule('meta');
-    } catch (err: any) {
-      setError(err.message || t('loadProject.failLoad'));
-    }
-  };
-
-  return (
-    <div className="p-6 flex flex-col items-center justify-center space-y-4 bg-background h-full">
-      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-2">
-        <FileJson className="w-8 h-8 text-primary" />
-      </div>
-      <p className="text-sm text-muted-foreground text-center">
-        {t('loadProject.descPre')} 
-        <span className="text-foreground font-mono font-medium">project_meta.json</span> 
-        {t('loadProject.descPost')}
-      </p>
-      
-      {error && <div className="text-xs text-destructive flex items-center gap-1"><AlertCircle className="w-3 h-3"/> {error}</div>}
-
-      <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
-      
-      <Button onClick={() => fileInputRef.current?.click()} className="w-full mt-2 font-semibold">
-        {t('loadProject.browse')}
-      </Button>
-    </div>
-  );
-}
 
 // ==========================================
-// 2. Create New Project Modal (创建新项目)
+// Create New Project Modal (创建新项目)
 // ==========================================
 export function CreateProject({onClose }: {onClose: () => void }) {
   const { t } = useTranslation();
-  
-  // 🌟 引入 resetProject
-  const { resetProject, setProjectName, loadProjectMeta, setActiveModule } = useStore();
+  const { resetProject, setProjectName, loadProjectMeta, setProjectMetaPath, setActiveModule } = useStore();
   const [name, setName] = useState(t('createProject.defaultName'));
+  const [metaPath, setMetaPath] = useState(''); // 🌟 用户指定的保存路径
+  const [explorerOpen, setExplorerOpen] = useState(false);
   const [importedMeta, setImportedMeta] = useState<ProjectMetaContract | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -88,69 +35,139 @@ export function CreateProject({onClose }: {onClose: () => void }) {
   };
 
   // 🌟 修复原本有语法冲突的函数，统一走 handleConfirm
-  const handleConfirm = () => {
-    if (!name.trim()) return;
-
-    // 🌟 拦截 1：提醒用户保存
-    const confirmMsg = t('createProject.confirmReset', "⚠️ Current workspace will be cleared. Please ensure you have exported your annotations. Continue?");
-    if (!window.confirm(confirmMsg)) return;
-
-    // 🌟 拦截 2：彻底清空旧项目
-    resetProject();
-
-    // 🌟 拦截 3：如果有导入的 meta 则加载
-    if (importedMeta) {
-      loadProjectMeta(importedMeta);
-    }
+  const handleConfirm = async () => {
+    if (!name.trim() || !metaPath.trim()) return alert("请填写项目名称并选择保存位置！");
     
+    resetProject();
     setProjectName(name);
-    setActiveModule('preload');
-    setImportedMeta(null); 
+    setProjectMetaPath(metaPath); // 🌟 记录路径到全局状态
+
+    // 🌟 首次静默建档 (初始化空项目)
+    try {
+      await saveProjectMeta({
+        file_path: metaPath,
+        content: {
+          projectName: name,
+          folders: [], views: [], taxonomyClasses: [], taxonomyAttributes: []
+        }
+      });
+      setActiveModule('preload');
+    } catch (e) {
+      alert("无法在目标路径创建项目文件！");
+    }
   };
 
   return (
     <div className="p-6 space-y-6 bg-background h-full flex flex-col">
       <div className="space-y-2">
-        <label className="text-xs font-bold text-muted-foreground uppercase">
-          {t('createProject.nameLabel')}
-        </label>
-        <Input 
-          value={name} 
-          onChange={(e) => setName(e.target.value)} 
-          className="bg-muted border-input focus:border-primary font-medium text-foreground"
-          placeholder={t('createProject.namePlaceholder')}
-        />
+        <label className="text-xs font-bold text-muted-foreground uppercase">{t('createProject.nameLabel')}</label>
+        <Input value={name} onChange={(e) => setName(e.target.value)} className="bg-muted" />
       </div>
 
-      <div className="p-4 rounded-lg border border-border bg-muted/50 space-y-3">
-        <label className="text-xs font-bold text-muted-foreground uppercase block">
-          {t('createProject.importLabel')}
-        </label>
-        <p className="text-[10px] text-muted-foreground">
-          {t('createProject.importDesc')}
-        </p>
-        
-        <input type="file" accept=".json" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
-        
-        <Button 
-          variant="outline" 
-          onClick={() => fileInputRef.current?.click()}
-          className={`w-full text-xs transition-colors ${importedMeta ? 'border-primary/50 text-primary bg-primary/10' : 'text-muted-foreground hover:text-foreground'}`}
-        >
-          {importedMeta ? (
-            <><Check className="w-3 h-3 mr-2" /> {t('createProject.paramsLoaded')}</>
-          ) : (
-            <><Upload className="w-3 h-3 mr-2" /> {t('createProject.loadJson')}</>
-          )}
+      <div className="space-y-2">
+        <label className="text-xs font-bold text-muted-foreground uppercase">项目元数据保存位置</label>
+        <Button variant="outline" className="w-full justify-start text-xs font-mono truncate" onClick={() => setExplorerOpen(true)}>
+          <Upload className="w-4 h-4 mr-2" /> {metaPath || "点击选择存放路径..."}
         </Button>
       </div>
 
       <div className="flex justify-end gap-2 pt-2 mt-auto">
         <Button variant="outline" onClick={onClose}>{t('createProject.cancel')}</Button>
-        <Button className="font-semibold" onClick={handleConfirm}>
-          {t('createProject.submit')}
-        </Button>
+        <Button className="font-semibold" onClick={handleConfirm}>{t('createProject.submit')}</Button>
       </div>
+
+      <FileExplorerDialog 
+        open={explorerOpen} initialPath="/" 
+        selectType="save" 
+        defaultSaveName={`${name.replace(/\s+/g, '_')}_meta.json`} // 自动生成默认名
+        onClose={() => setExplorerOpen(false)}
+        onConfirm={(paths) => { setMetaPath(paths[0]); setExplorerOpen(false); }}
+      />
+    </div>
+  );
+}
+
+
+// ==========================================
+// 2. Load Project Modal (加载现有项目)
+// ==========================================
+export function LoadProject({onClose}: {onClose: () => void}) {
+  const { t } = useTranslation();
+  // 🌟 引入 resetProject
+  const { loadProjectMeta, setActiveModule, resetProject } = useStore();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState<string>('');
+  const [explorerOpen, setExplorerOpen] = useState(false);
+
+  const handleScanDirectory = async (paths: string[]) => {
+    if (!paths || paths.length === 0) return;
+    const targetDir = paths[0];
+
+    const confirmMsg = t('createProject.confirmReset', "⚠️ 当前工作区将被清空，请确保已保存数据。继续？");
+    if (!window.confirm(confirmMsg)) return;
+
+    try {
+      setError('');
+      // 去后端查这个目录下有没有 project_meta.json
+      const meta = await loadProjectMetaFromServer(targetDir);
+      
+      if (!meta) {
+        setError(`在目录 ${targetDir} 中未发现 project_meta.json，这是一个新项目。请使用"Create Project"创建。`);
+        return;
+      }
+
+      resetProject();
+      loadProjectMeta(meta); 
+      setActiveModule('meta');
+      if (onClose) onClose();
+    } catch (err: any) {
+      setError(err.message || t('loadProject.failLoad'));
+    }
+  };
+const handleLoadFile = async (paths: string[]) => {
+    if (!paths || paths.length === 0) return;
+    const filePath = paths[0];
+
+    try {
+      const meta = await loadProjectMetaFromServer(filePath);
+      resetProject();
+      useStore.getState().setProjectMetaPath(filePath); // 🌟 记住路径
+      loadProjectMeta(meta); 
+      setActiveModule('meta');
+      if (onClose) onClose();
+    } catch (err: any) {
+      setError("读取项目失败，请确保选择了合法的 meta.json 文件");
+    }
+  };
+  return (
+    <div className="p-6 flex flex-col items-center justify-center space-y-4 bg-background h-full">
+      <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-2">
+        <FolderSearch className="w-8 h-8 text-primary" />
+      </div>
+      <p className="text-sm text-muted-foreground text-center">
+        选择包含 
+        <span className="text-foreground font-mono font-medium mx-1">project_meta.json</span> 
+        的工作区文件夹，系统将自动恢复您的所有图层、类别和属性设置。
+      </p>
+      
+      {error && <div className="text-xs text-destructive bg-destructive/10 p-2 rounded flex items-start gap-1 text-left w-full"><AlertCircle className="w-4 h-4 shrink-0 mt-0.5"/> {error}</div>}
+      
+      {/* 🌟 核心：改为打开目录选择器 */}
+      <Button onClick={() => setExplorerOpen(true)} className="w-full mt-2 font-semibold">
+        扫描并加载工作区 (Scan Workspace)
+      </Button>
+
+      {/* 复用你已有的文件浏览器组件 */}
+      <FileExplorerDialog 
+        open={explorerOpen} 
+        initialPath="/" 
+        selectType="file"
+        onClose={() => setExplorerOpen(false)} 
+        onConfirm={(paths) => {
+          setExplorerOpen(false);
+          handleScanDirectory(paths);
+        }} 
+      />
     </div>
   );
 }

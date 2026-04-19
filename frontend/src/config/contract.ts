@@ -79,4 +79,17 @@ export interface ProjectMetaContract {
       binarize?: { enabled: boolean; threshold: number };
     };
   }[];
+  taxonomyClasses?: {
+    id: string;
+    name: string;
+    color: string;
+    description?: string;
+  }[];
+  taxonomyAttributes?: {
+    id: string;
+    name: string;
+    type: 'boolean' | 'select' | 'text';
+    options?: string[];
+    applyToAll: boolean;
+  }[];
 }

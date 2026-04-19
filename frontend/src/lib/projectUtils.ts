@@ -23,23 +23,26 @@ export const readProjectJsonFile = (file: File): Promise<ProjectMetaContract> =>
 };
 
 export function generateProjectMetaConfig(state: AppState): ProjectMetaContract {
-  const { folders, views } = state;
+  const { folders, views, taxonomyClasses, taxonomyAttributes, sceneGroups } = state;
 
   return {
         projectName: state.projectName || "Untitled Project",
+        sceneGroups: sceneGroups || {},
+        taxonomyClasses: taxonomyClasses || [],
+        taxonomyAttributes: taxonomyAttributes || [],
         folders: folders.map((f, i) => ({
-        Id: i + 1,
-        path: f.path,
-        suffix: f.suffix || "",
-        "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
-        "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
-        "files total": f.files ? f.files.length : 0,
-        "image meta": {
-          width: f.metadata?.width || 'Unknown',
-          height: f.metadata?.height || 'Unknown',
-          bands: f.metadata?.bands || 'Unknown',
-          "data type": f.metadata?.fileType || 'uint8'
-          }
+          Id: i + 1,
+          path: f.path,
+          suffix: f.suffix || "",
+          "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
+          "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
+          "files total": f.files ? f.files.length : 0,
+          "image meta": {
+            width: f.metadata?.width || 'Unknown',
+            height: f.metadata?.height || 'Unknown',
+            bands: f.metadata?.bands || 'Unknown',
+            "data type": f.metadata?.fileType || 'uint8'
+            }
         })),
         views: views.map((v, i) => {
           const fIndex = folders.findIndex(f => f.id === v.folderId);

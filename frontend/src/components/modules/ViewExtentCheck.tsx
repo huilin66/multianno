@@ -5,7 +5,6 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Slider } from '../ui/slider';
 
-import type { ProjectMetaContract } from '../../config/contract';
 import { 
   Layers, FolderOpen, Check,  CheckCircle2,
   Eye, EyeOff, Maximize, Move, MousePointer2, Square, RotateCcw,Zap,
@@ -14,6 +13,7 @@ import {
 import { useTranslation } from 'react-i18next'; // 🌟 引入
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { getPreviewImageUrl } from '../../api/client';
+import { saveProjectMeta } from '../../api/client';
 
 export function ViewExtentCheck() {
   const { t } = useTranslation();
@@ -36,13 +36,6 @@ export function ViewExtentCheck() {
       </div>
     );
   }
-  // const previewStem = stems[0];
-  // 假设正在渲染 folderId 对应的视图
-  // const exactFileName = sceneGroups?.[previewStem]?.[folder.path];
-  // const fileName = exactFileName || `${previewStem}${folder.suffix || '.tif'}`; // 兜底
-
-  // // 生成带明确 fileName 的 URL
-  // const url = getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap);
 
   const mainView = views.find(v => v.isMain);
   const augViews = views.filter(v => !v.isMain);
@@ -53,9 +46,7 @@ export function ViewExtentCheck() {
   const [alignSubMode, setAlignSubMode] = useState<'crop' | 'transform'>('transform');
   const [activeAugId, setActiveAugId] = useState<string>(augViews[0]?.id || '');
   const activeAugView = augViews.find(v => v.id === activeAugId) || augViews[0];
-  // const [topBarConfig, setTopBarConfig] = useState({ opacity: 0.6, curtain: 100, isBlinking: false, showOutsideCrop: true });
-  // 【修改1】：将透明度、水平卷帘、垂直卷帘整合为一个互斥模式
-// 【修改1】：将 isBlinking 改为 showAugView，默认开启 (true)
+
   const [topBarConfig, setTopBarConfig] = useState({ 
     mode: 'opacity' as 'opacity' | 'swipeX' | 'swipeY', 
     value: 0.6, 
@@ -526,40 +517,24 @@ const getPreviewUrl = (view: typeof mainView) => {
     }
   };
 
-  // 【修改】：使用标准元数据并保存为 project_meta.json
+
   const proceedToExport = async () => {
     if (completedViews.length < augViews.length) {
       alert(t('viewExtent.alerts.saveAllFirst'));
       return;
     }
 
-    // 调用规范化元数据生成器
-    const projectMeta: ProjectMetaContract = generateProjectMetaConfig(useStore.getState())
-    const jsonStr = JSON.stringify(projectMeta, null, 2);
+    const projectMeta = generateProjectMetaConfig(useStore.getState());
+    const metaPath = useStore.getState().projectMetaPath;
 
     try {
-      if ('showSaveFilePicker' in window) {
-        const handle = await (window as any).showSaveFilePicker({
-          suggestedName: `${projectName}_meta.json`,
-          types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(jsonStr);
-        await writable.close();
-      } else {
-        const blob = new Blob([jsonStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${projectName}_meta.json`;
-        a.click();
-        URL.revokeObjectURL(url);
+      // 🌟 静默写入硬盘
+      if (metaPath) {
+        await saveProjectMeta({ file_path: metaPath, content: projectMeta });
       }
-    // 🌟 新增：阻塞式的成功交互反馈
-      alert(t('viewExtent.alerts.exportSuccess'));
 
+      // 如果有 activeAugView，保存最后一次对齐视角记录
       if (activeAugView) {
-        // 顺手优化了一下分钟的显示，保证个位数分钟前面补 0 (如 10:05)
         const minutes = new Date().getMinutes().toString().padStart(2, '0');
         addSavedAlignment({
           id: Math.random().toString(36).substr(2, 9),
@@ -568,12 +543,13 @@ const getPreviewUrl = (view: typeof mainView) => {
           transform: { ...tempTransformRef.current } 
         });
       }
+      
+      // 🌟 直接无缝切换到工作区，把 showSaveFilePicker 全删了！
       setActiveModule('workspace'); 
     } catch (err) {
-      console.warn("Save cancelled or failed", err);
-      if (window.confirm(t('viewExtent.alerts.saveCancelled'))) {
-         setActiveModule('workspace');
-      }
+      console.warn("Save failed", err);
+      alert("配置保存失败，请检查路径权限");
+      setActiveModule('workspace');
     }
   };
 

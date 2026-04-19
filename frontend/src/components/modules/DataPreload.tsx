@@ -16,6 +16,7 @@ import { FileExplorerDialog } from './FileExplorerDialog';
 import { Alert, AlertDescription } from '../ui/alert';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { API_BASE_URL } from '../../api/client';
+import { saveProjectMeta } from '../../api/client';
 
 export function DataPreload() {
   const { t } = useTranslation();
@@ -167,42 +168,29 @@ export function DataPreload() {
     if (views.length === 0) return;
 
     if (views.length > 1) {
-      if (window.confirm(t('dataPreload.alerts.confirmExtent'))) { // 🌟
+      if (window.confirm(t('dataPreload.alerts.confirmExtent'))) { 
         setActiveModule('extent');
       }
       return;
     }
 
     if (views.length === 1) {
-      if (!window.confirm(t('dataPreload.alerts.confirmSingleView'))) return; // 🌟
-      const projectMeta: ProjectMetaContract = generateProjectMetaConfig(useStore.getState())
-
-      const jsonStr = JSON.stringify(projectMeta, null, 2);
+      if (!window.confirm(t('dataPreload.alerts.confirmSingleView'))) return; 
+      
+      const projectMeta = generateProjectMetaConfig(useStore.getState());
+      const metaPath = useStore.getState().projectMetaPath;
+      
       try {
-        if ('showSaveFilePicker' in window) {
-          const handle = await (window as any).showSaveFilePicker({
-            suggestedName: `${projectName}_meta.json`,
-            types: [{ description: 'JSON File', accept: { 'application/json': ['.json'] } }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(jsonStr);
-          await writable.close();
-        } else {
-          const blob = new Blob([jsonStr], { type: 'application/json' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `${projectName}_meta.json`,
-          a.click();
-          URL.revokeObjectURL(url);
+        // 🌟 如果路径存在，静默写入硬盘
+        if (metaPath) {
+          await saveProjectMeta({ file_path: metaPath, content: projectMeta });
         }
-        
-        alert(t('dataPreload.alerts.exportSuccess')); // 🌟
+        // 直接进入工作区，把下面的 showSaveFilePicker 全删了！
         setActiveModule('workspace'); 
       } catch (err) {
-        if (window.confirm(t('dataPreload.alerts.exportCancelled'))) { // 🌟
-           setActiveModule('workspace');
-        }
+        alert("配置保存失败，请检查路径权限");
+        // 失败的话也可以强行进入或者让用户检查
+        setActiveModule('workspace');
       }
     }
   };

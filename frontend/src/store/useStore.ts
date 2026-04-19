@@ -111,6 +111,8 @@ type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'cr
 export interface AppState {
   projectName: string;
   setProjectName: (name: string) => void;
+  projectMetaPath: string | null;
+  setProjectMetaPath: (path: string | null) => void;
   theme: 'dark' | 'light';
   setTheme: (theme: 'dark' | 'light') => void;
   language: 'en' | 'zh';
@@ -204,6 +206,8 @@ export const useStore = create<AppState>()(
   persist(
     (set) => ({
       projectName: 'multianno project1',
+      projectMetaPath: null,
+
       theme: 'dark', 
       language: 'en',
       projectMetadata: [],
@@ -226,6 +230,8 @@ export const useStore = create<AppState>()(
       taxonomyAttributes: [],
       sceneGroups: {},
 
+
+      setProjectMetaPath: (path) => set({ projectMetaPath: path }),
       // 🌟 新增：暂态初始化与方法
       tempViewSettings: {},
       setTempViewSettings: (stem, viewId, settings) => set((state) => ({
@@ -241,6 +247,7 @@ export const useStore = create<AppState>()(
       }),
       // 🌟 修复后的重置逻辑 (清空所有当前项目残留)
       resetProject: () => set({
+        projectMetaPath: null, // 🌟 重置时清空路径
         projectName: 'Untitled Project',
         folders: [],
         views: [],              // 必须清空视图
@@ -331,7 +338,9 @@ export const useStore = create<AppState>()(
 
       loadProjectMeta: (meta) => set({
         projectName: meta.projectName || 'Untitled Project',
-        sceneGroups: meta.sceneGroups || {}, // 🌟 加载时读取
+        sceneGroups: meta.sceneGroups || {},
+        taxonomyClasses: meta.taxonomyClasses || [],
+        taxonomyAttributes: meta.taxonomyAttributes || [],
         folders: meta.folders.map(f => ({
           id: String(f.Id),
           path: f.path,
@@ -500,6 +509,7 @@ export const useStore = create<AppState>()(
       name: 'multiAnno_workspace_state', 
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
+        projectMetaPath: state.projectMetaPath,
         projectName: state.projectName,
         theme: state.theme,
         sceneGroups: state.sceneGroups,

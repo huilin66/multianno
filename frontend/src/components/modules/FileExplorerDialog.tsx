@@ -18,11 +18,13 @@ interface FileExplorerDialogProps {
   initialPath: string;
   onClose: () => void;
   onConfirm: (selectedPaths: string[]) => void;
-  selectType?: 'dir' | 'file'; 
+  selectType?: 'dir' | 'file' | 'save'; // 🌟 新增 'save'
+  defaultSaveName?: string;             // 🌟 新增默认文件名
 }
 
-export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, selectType }: FileExplorerDialogProps) {
+export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, selectType, defaultSaveName }: FileExplorerDialogProps) {
   const { t } = useTranslation();
+  const [saveFileName, setSaveFileName] = useState(defaultSaveName || 'project_meta.json');
   const [currentPath, setCurrentPath] = useState(initialPath || '');
   const [items, setItems] = useState<ExplorerItem[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
@@ -75,6 +77,10 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+      if (open && defaultSaveName) setSaveFileName(defaultSaveName);
+    }, [open, defaultSaveName]);
 
   useEffect(() => {
     if (open) {
@@ -293,15 +299,42 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
         </div>
 
         <DialogFooter className="flex items-center justify-between mt-4">
-          <span className="text-sm text-muted-foreground">
-            {selectedPaths.size} {t('fileExplorer.selectedCount')}
-          </span>
-          <div className="flex gap-2">
+          
+          {/* 🌟 核心修改：如果是 Save 模式，显示文件名输入框 */}
+          {selectType === 'save' ? (
+            <div className="flex-1 flex items-center gap-2 mr-4">
+              <span className="text-sm font-bold text-muted-foreground whitespace-nowrap">文件名:</span>
+              <Input 
+                value={saveFileName}
+                onChange={(e) => setSaveFileName(e.target.value)}
+                className="h-8 text-sm font-mono"
+                placeholder="例如: my_project_meta.json"
+              />
+            </div>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              {selectedPaths.size} {t('fileExplorer.selectedCount')}
+            </span>
+          )}
+
+          <div className="flex gap-2 shrink-0">
             <Button variant="outline" onClick={onClose}>{t('common.cancel')}</Button>
             <Button 
               variant="default"
-              onClick={() => onConfirm(Array.from(selectedPaths))}
-              disabled={selectedPaths.size === 0}
+              onClick={() => {
+                if (selectType === 'save') {
+                  const separator = currentPath.includes('\\') ? '\\' : '/';
+                  const cleanPath = currentPath.endsWith(separator) ? currentPath : currentPath + separator;
+                  onConfirm([cleanPath + saveFileName]);
+                } else {
+                  onConfirm(Array.from(selectedPaths));
+                }
+              }}
+              // 控制 Save 模式下必须有路径和文件名才能确认
+              disabled={
+                (selectType !== 'save' && selectedPaths.size === 0) || 
+                (selectType === 'save' && (!currentPath || !saveFileName.trim()))
+              }
             >
               {t('fileExplorer.confirm')}
             </Button>

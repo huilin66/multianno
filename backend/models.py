@@ -113,3 +113,8 @@ class ImportRequest(BaseModel):
     merge_strategy: str = "append"
     classes_file: Optional[str] = None
     custom_suffix: str = ""  # 🌟 新增：接住前端传来的后缀
+
+
+class ProjectMetaPayload(BaseModel):
+    file_path: str
+    content: dict
