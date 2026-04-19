@@ -2,7 +2,7 @@
 import React, { useState, useRef } from 'react';
 import { useStore } from '../../store/useStore';
 import { X, FolderPlus, Upload, FileJson, Check, AlertCircle, FolderSearch } from 'lucide-react';
-import { saveProjectMeta, loadProjectMetaFromServer } from '../../api/client';
+import { saveProjectMeta, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
 import { FileExplorerDialog } from './FileExplorerDialog'; // 引入你的文件选择器
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -124,16 +124,41 @@ export function LoadProject({onClose}: {onClose: () => void}) {
       setError(err.message || t('loadProject.failLoad'));
     }
   };
-const handleLoadFile = async (paths: string[]) => {
+
+  const handleLoadFile = async (paths: string[]) => {
     if (!paths || paths.length === 0) return;
     const filePath = paths[0];
 
     try {
+      // 1. 读取并恢复配置
       const meta = await loadProjectMetaFromServer(filePath);
       resetProject();
-      useStore.getState().setProjectMetaPath(filePath); // 🌟 记住路径
+      useStore.getState().setProjectMetaPath(filePath); 
       loadProjectMeta(meta); 
-      setActiveModule('meta');
+
+      // 🌟 2. 核心：调用统一的 API 进行静默扫描
+      if (meta.folders && meta.folders.length > 0) {
+        try {
+          const payloadData = meta.folders.map((f: any) => ({
+            path: f.path,
+            suffix: f.suffix || ''
+          }));
+
+          // 使用刚刚封装的 API，代码一目了然
+          const result = await analyzeWorkspaceFolders(payloadData);
+          
+          if (result.commonStems && result.commonStems.length > 0) {
+            useStore.getState().setStems(result.commonStems);
+            useStore.getState().setSceneGroups(result.sceneGroups);
+            useStore.getState().setCurrentStem(result.commonStems[0]);
+          }
+        } catch (analyzeError) {
+          console.warn("静默扫描文件夹失败，可能是移动了硬盘或目录:", analyzeError);
+        }
+      }
+
+      // 3. 进入工作区
+      setActiveModule('workspace');
       if (onClose) onClose();
     } catch (err: any) {
       setError("读取项目失败，请确保选择了合法的 meta.json 文件");
@@ -165,7 +190,7 @@ const handleLoadFile = async (paths: string[]) => {
         onClose={() => setExplorerOpen(false)} 
         onConfirm={(paths) => {
           setExplorerOpen(false);
-          handleScanDirectory(paths);
+          handleLoadFile(paths);
         }} 
       />
     </div>

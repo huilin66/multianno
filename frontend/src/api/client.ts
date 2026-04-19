@@ -368,3 +368,17 @@ export const loadProjectMetaFromServer = async (file_path: string) => {
   if (!response.ok) throw new Error('Failed to load project meta');
   return response.json();
 };
+
+export const analyzeWorkspaceFolders = async (folders: { path: string; suffix?: string }[]) => {
+  const response = await fetch(`${API_BASE_URL}/project/analyze`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    // 注意：后端需要的外层包装是 { "folders": [...] }
+    body: JSON.stringify({ folders }), 
+  });
+  
+  if (!response.ok) {
+    throw new Error('Failed to analyze workspace folders');
+  }
+  return response.json();
+};

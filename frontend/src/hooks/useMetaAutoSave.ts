@@ -30,10 +30,8 @@ export function useMetaAutoSave() {
         
         setMetaSaveStatus('idle');
         
-        // 🌟 2. 补上缺失的时间记录逻辑 (格式化为 HH:mm:ss)
         const now = new Date();
         setMetaLastSavedTime(now.toLocaleTimeString('zh-CN', { hour12: false }));
-        
       } catch (error) {
         console.error("Meta auto-save failed:", error);
         setMetaSaveStatus('error');

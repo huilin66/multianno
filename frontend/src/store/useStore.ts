@@ -336,47 +336,57 @@ export const useStore = create<AppState>()(
         }
       })),
 
-      loadProjectMeta: (meta) => set({
-        projectName: meta.projectName || 'Untitled Project',
-        sceneGroups: meta.sceneGroups || {},
-        taxonomyClasses: meta.taxonomyClasses || [],
-        taxonomyAttributes: meta.taxonomyAttributes || [],
-        folders: meta.folders.map(f => ({
-          id: String(f.Id),
-          path: f.path,
-          suffix: f.suffix || '',
-          files: [], 
-          metadata: {
-            height: f["image meta"].height === 'Unknown' ? 0 : Number(f["image meta"].height),
-            width: f["image meta"].width === 'Unknown' ? 0 : Number(f["image meta"].width),
-            bands: f["image meta"].bands === 'Unknown' ? 0 : Number(f["image meta"].bands),
-            fileType: f["image meta"]["data type"],
-            dataType: f["image meta"]["data type"],
-            sceneGroupsLoaded: f["files in sceneGroups"],
-            sceneGroupsSkipped: f["files Skipped"],
-          }
-        })),
-        
-        // 🌟 终极防线：无论 JSON 里有多少个视图，强制只截取前 9 个！
-        views: meta.views.slice(0, 9).map(v => ({
-          id: v.id,
-          folderId: String(v["folder id"]),
-          bands: v.bands,
-          isMain: v.isMain,
-          opacity: 1,
-          colormap: (v.bands.length === 1 && v.renderMode !== 'rgb' ? (v.renderMode || 'gray') : 'gray') as any,
-          transform: v.transform,
-          settings: v.settings || { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100],
-            gamma: 1.0, enhancementMode: 'manual', spatialFilter: 'none', invert: false,
-            binarize: { enabled: false, threshold: 128 }
-           },
-        })),
-        
-        currentStem: null, 
-        annotations: [],
-        stemMetadata: {}, // 🌟 加载新项目时清空
-        completedViews: [],
-      }),
+      loadProjectMeta: (meta) => {
+        // 🌟 1. 动态计算 stems：提取字典的 keys 并按字母排序
+        const loadedStems = meta.sceneGroups ? Object.keys(meta.sceneGroups).sort() : [];
+
+        set({
+          projectName: meta.projectName || 'Untitled Project',
+          sceneGroups: meta.sceneGroups || {},
+          taxonomyClasses: meta.taxonomyClasses || [],
+          taxonomyAttributes: meta.taxonomyAttributes || [],
+          
+          folders: meta.folders.map(f => ({
+            id: String(f.Id),
+            path: f.path,
+            suffix: f.suffix || '',
+            files: [], 
+            metadata: {
+              height: f["image meta"].height === 'Unknown' ? 0 : Number(f["image meta"].height),
+              width: f["image meta"].width === 'Unknown' ? 0 : Number(f["image meta"].width),
+              bands: f["image meta"].bands === 'Unknown' ? 0 : Number(f["image meta"].bands),
+              fileType: f["image meta"]["data type"],
+              dataType: f["image meta"]["data type"],
+              sceneGroupsLoaded: f["files in sceneGroups"],
+              sceneGroupsSkipped: f["files Skipped"],
+            }
+          })),
+          
+          views: meta.views.slice(0, 9).map(v => ({
+            id: v.id,
+            folderId: String(v["folder id"]),
+            bands: v.bands,
+            isMain: v.isMain,
+            opacity: 1,
+            colormap: (v.bands.length === 1 && v.renderMode !== 'rgb' ? (v.renderMode || 'gray') : 'gray') as any,
+            transform: v.transform,
+            settings: v.settings || { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100],
+              gamma: 1.0, enhancementMode: 'manual', spatialFilter: 'none', invert: false,
+              binarize: { enabled: false, threshold: 128 }
+             },
+          })),
+          
+          // 🌟 2. 将计算好的 stems 放入内存，唤醒左侧文件树
+          stems: loadedStems,
+          
+          // 🌟 3. 自动选中第一张图，唤醒主绘图区
+          currentStem: loadedStems.length > 0 ? loadedStems[0] : null, 
+
+          annotations: [],
+          stemMetadata: {}, 
+          completedViews: [],
+        });
+      },
 
       addSavedAlignment: (newAlignment) => set((state) => {
         const filteredAlignments = state.savedAlignments.filter(a => {

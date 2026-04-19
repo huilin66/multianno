@@ -6,7 +6,6 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../../config/colors';
-import type { ProjectMetaContract } from '../../config/contract';
 import { useTranslation } from 'react-i18next';
 
 import { 
@@ -16,7 +15,7 @@ import { FileExplorerDialog } from './FileExplorerDialog';
 import { Alert, AlertDescription } from '../ui/alert';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { API_BASE_URL } from '../../api/client';
-import { saveProjectMeta } from '../../api/client';
+import { saveProjectMeta, analyzeWorkspaceFolders } from '../../api/client';
 
 export function DataPreload() {
   const { t } = useTranslation();
@@ -99,15 +98,9 @@ export function DataPreload() {
     
     try {
       const payloadData = validPlaceholders.map(p => ({ path: p.path.trim(), suffix: p.suffix.trim() }));
-      const response = await fetch(`${API_BASE_URL}/project/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ folders: payloadData }),
-      });
 
-      if (!response.ok) throw new Error("Backend analysis failed");
-      const result = await response.json();
-      const backendData = result.data; 
+      const result = await analyzeWorkspaceFolders(payloadData);
+      const backendData = result.data;
 
       if (!backendData || backendData.length === 0) {
         alert(t('dataPreload.alerts.noImagesFound')); // 🌟
@@ -138,6 +131,7 @@ export function DataPreload() {
       if (result.commonStems && result.commonStems.length > 0) {
         useStore.getState().setStems(result.commonStems);
         useStore.getState().setCurrentStem(result.commonStems[0]);
+        useStore.getState().setSceneGroups(result.sceneGroups);
       } else {
         alert(t('dataPreload.alerts.noCommonStems')); // 🌟
       }
