@@ -27,19 +27,21 @@ import {
   DialogTitle 
 } from '@/components/ui/dialog';
 // 🌟 引入新的图标: FolderPlus 和 Upload
-import { Menu, Settings, Loader2, Check, AlertCircle,CloudLightning,  Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags, Keyboard } from 'lucide-react';
+import { Menu, Settings, Loader2, Edit3, Check, AlertCircle,CloudLightning, Tag, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags, Keyboard } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
 import { useAutoSave } from './hooks/useAutoSave';
 import { ShortcutSettingsModal } from './components/modules/ShortcutSettingsModal';
 import { AISettingsModal } from './components/modules/AISettingsModal';
+import { useMetaAutoSave } from './hooks/useMetaAutoSave';
 
 export default function App() {
-  const { activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings} = useStore();
+  const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings} = useStore();
   // 🌟 拿到翻译函数 t，和 i18n 实例
   const { t, i18n } = useTranslation();
   const { saveStatus, lastSavedTime } = useAutoSave();
+  const { metaSaveStatus, metaLastSavedTime } = useMetaAutoSave();
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
   // 🌟 监听 Store 里的语言变化，同步给 i18next 引擎
@@ -53,7 +55,7 @@ export default function App() {
     root.classList.remove('light', 'dark');
     root.classList.add(theme);
   }, [theme]);
-
+  
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
       {/* Top Navigation Bar */}
@@ -118,7 +120,6 @@ export default function App() {
           </span>
 
           {/* 🌟 4. 当前切片 (Stem) 药丸标签：日间浅灰底深色字，夜间深灰底浅色字 */}
-          {/* 🌟 4. 当前切片 (Stem) 药丸标签 */}
           {currentStem && (
             <>
               <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors" />
@@ -128,21 +129,58 @@ export default function App() {
             </>
           )}
           
-          {/* 🌟 5. 自动保存状态：去掉 absolute，直接融入 flex 队列 */}
-          {currentStem && (
-            <>
-              <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors" />
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 text-xs font-medium transition-colors">
-                {saveStatus === 'saving' && <><Loader2 className="w-3 h-3 animate-spin inline mr-1"/> Saving...</>}
-                {saveStatus === 'error' && <><AlertCircle className="w-3 h-3 text-red-500 inline mr-1"/> Save Failed</>}
-                {saveStatus === 'idle' && (
-                  lastSavedTime 
-                    ? <><Check className="w-3 h-3 text-green-500 inline mr-1"/> Auto Saved: {lastSavedTime}</>
-                    : 'Ready'
-                )}
-              </div>
-            </>
-          )}
+          {/* 🌟 5. 自动保存状态区 */}
+          <div className="flex items-center gap-0">
+            
+            {/* A. Project Meta 状态 (数据库图标) */}
+            {folders && folders.length > 0 && (metaSaveStatus === 'error' || metaLastSavedTime) && (
+              <>
+                <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-3" />
+                <div 
+                  // 🌟 悬停显示完整时间
+                  title={metaSaveStatus === 'error' ? 'Project meta sync failed' : `project meta saved at ${metaLastSavedTime}`}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all cursor-help ${
+                    metaSaveStatus === 'error' 
+                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400' 
+                      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300'
+                  }`}
+                >
+                  <Database className="w-3 h-3 opacity-70" />
+                  {metaSaveStatus === 'error' ? (
+                    'Error'
+                  ) : (
+                    // 🌟 界面只显示 时:分 (截取前5位)
+                    `Saved ${metaLastSavedTime?.substring(0, 5)}`
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* B. Annotation 状态 (标签图标) */}
+            {currentStem && (saveStatus === 'error' || lastSavedTime) && (
+              <>
+                <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-3" />
+                <div 
+                  // 🌟 悬停显示完整时间
+                  title={saveStatus === 'error' ? 'Annotation sync failed' : `annotation saved at ${lastSavedTime}`}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all cursor-help ${
+                    saveStatus === 'error'
+                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400'
+                      : 'bg-neutral-50 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-300'
+                  }`}
+                >
+                  <Tag className="w-3 h-3 opacity-70" />
+                  {saveStatus === 'error' ? (
+                    'Error'
+                  ) : (
+                    // 🌟 界面只显示 时:分
+                    `Saved ${lastSavedTime?.substring(0, 5)}`
+                  )}
+                </div>
+              </>
+            )}
+
+          </div>
         </div>
 
         {/* 右侧区域：放置主题切换按钮 */}
