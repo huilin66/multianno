@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { Label } from '../ui/label';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 // 🌟 1. 补全 Loader2 图标
 import { Upload, Folder, FileText, AlertTriangle, Image as ImageIcon, Loader2 } from 'lucide-react';
@@ -36,7 +37,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [explorerTarget, setExplorerTarget] = useState<'source' | 'target' | 'yolo_file'>('source');
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [customSuffix, setCustomSuffix] = useState('');
-  
+  const [importZeroClass, setImportZeroClass] = useState(false);
+
   // 🌟 增加一个 Loading 状态
   const [isImporting, setIsImporting] = useState(false);
 
@@ -56,7 +58,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       format: format,
       merge_strategy: mergeStrategy,
       classes_file: externalClassFile,
-      custom_suffix: customSuffix 
+      custom_suffix: customSuffix,
+      import_zero_class: importZeroClass
     };
 
     try {
@@ -216,6 +219,23 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                   </Button>
                 </div>
               )}
+
+              {/* 🌟 3. 新增：只有选择 images_only 时才显示该开关 */}
+                {format === 'images_only' && (
+                  <div className="flex items-center gap-3 pt-2">
+                    <Label className="w-16 text-right text-[11px] font-bold">背景类：</Label>
+                    <div className="flex items-center space-x-2 flex-1 bg-neutral-100 dark:bg-neutral-800/50 p-1.5 rounded-md border border-neutral-200 dark:border-neutral-800">
+                      <Switch 
+                        id="import-zero" 
+                        checked={importZeroClass} 
+                        onCheckedChange={setImportZeroClass} 
+                      />
+                      <Label htmlFor="import-zero" className="text-[11px] text-neutral-500 cursor-pointer">
+                        提取像素值为 <code className="text-neutral-700 dark:text-neutral-300 font-bold">0</code> 的区域作为多边形
+                      </Label>
+                    </div>
+                  </div>
+                )}
             </div>
 
             <div className="p-5 bg-white dark:bg-neutral-900 rounded-xl border shadow-sm space-y-4">

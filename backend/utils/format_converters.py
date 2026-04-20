@@ -416,7 +416,9 @@ def coco_ann_to_shape(ann: dict, categories_map: dict) -> dict:
 # ==========================================
 # 🌟 新增：从语义分割 Mask 逆向提取多边形
 # ==========================================
-def mask_to_shapes(mask_path: str, classes_map: list) -> tuple:
+def mask_to_shapes(
+    mask_path: str, classes_map: list, import_zero_class: bool = False
+) -> tuple:
     """
     读取单通道灰度掩码图，使用寻边算法还原出系统的 shapes 多边形
     返回: (解析后的 shapes 列表, 统计字典, 图像宽, 图像高)
@@ -436,9 +438,7 @@ def mask_to_shapes(mask_path: str, classes_map: list) -> tuple:
 
     for class_id in unique_ids:
         # 通常像素 0 是背景，如果 classes_map 中 0 号确实是背景，则跳过提取
-        if class_id == 0 and (
-            not classes_map or classes_map[0].lower() in ["background", "bg", "背景"]
-        ):
+        if class_id == 0 and not import_zero_class:
             continue
 
         label = (

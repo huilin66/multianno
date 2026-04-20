@@ -47,7 +47,7 @@ class ExportReporter:
             return
         report_path = os.path.join(self.parent_dir, "export_report.txt")
         with open(report_path, "w", encoding="utf-8") as f:
-            f.write(f"=== Dataset Export Report ===\n")
+            f.write("=== Dataset Export Report ===\n")
             f.write(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
             f.write(f"Task: {task_type.upper()} | Format: {format_name.upper()}\n\n")
             f.write("[Global Summary]\n")
@@ -521,7 +521,9 @@ async def import_from_images_only(req: ImportRequest):
             existing_data["shapes"] = []
 
         # 调用逆向提取引擎
-        new_shapes, _, img_w, img_h = mask_to_shapes(mask_path, classes_map)
+        new_shapes, _, img_w, img_h = mask_to_shapes(
+            mask_path, classes_map, import_zero_class=req.import_zero_class
+        )
 
         if new_shapes:
             existing_data["shapes"].extend(new_shapes)
