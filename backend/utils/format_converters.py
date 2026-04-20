@@ -420,7 +420,8 @@ def mask_to_shapes(
     mask_path: str, classes_map: list, import_zero_class: bool = False
 ) -> tuple:
     """
-    读取单通道灰度掩码图，使用寻边算法还原出系统的 shapes 多边形
+    读取单通道灰度掩码图，使用寻边算法还原出系统的 shapes 多边形。
+    🌟 支持提取带“洞”的复杂多边形（如包裹着其他对象的背景类），并自动缝合为单路径。
     返回: (解析后的 shapes 列表, 统计字典, 图像宽, 图像高)
     """
     shapes = []
@@ -432,12 +433,10 @@ def mask_to_shapes(
         return shapes, stats, 0, 0
 
     img_h, img_w = mask.shape[:2]
-
-    # 获取图中所有存在的像素值 (Class IDs)
     unique_ids = np.unique(mask)
 
     for class_id in unique_ids:
-        # 通常像素 0 是背景，如果 classes_map 中 0 号确实是背景，则跳过提取
+        # 拦截 0 类（如果前端未开启导入 0 类开关）
         if class_id == 0 and not import_zero_class:
             continue
 
@@ -447,30 +446,75 @@ def mask_to_shapes(
             else f"Class_{class_id}"
         )
 
-        # 剥离出当前类别的二值化 Mask
         binary_mask = (mask == class_id).astype(np.uint8) * 255
 
-        # 使用 OpenCV 提取外层轮廓 (RETR_EXTERNAL)
-        contours, _ = cv2.findContours(
-            binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        # 🌟 核心突破 1：使用 RETR_CCOMP 提取两层拓扑结构（0层是外轮廓，1层是洞）
+        contours, hierarchy = cv2.findContours(
+            binary_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
         )
 
-        for contour in contours:
-            # 过滤掉噪点 (至少需要 3 个点才能构成多边形)
-            if len(contour) >= 3:
-                # contour 的 shape 是 (N, 1, 2)，将其展平为 [[x, y], [x, y]...]
-                points = contour.reshape(-1, 2).tolist()
-                shapes.append(
-                    {
-                        "label": label,
-                        "type": "polygon",
-                        "shape_type": "polygon",
-                        "points": points,
-                        "attributes": {},
-                    }
-                )
-                stats["imported_polygons"] += 1
-            else:
+        if hierarchy is None:
+            continue
+
+        hierarchy = hierarchy[0]
+
+        # 找到所有的【纯外层轮廓】 (其 parent 属性等于 -1)
+        outer_indices = [i for i, h in enumerate(hierarchy) if h[3] == -1]
+
+        for i in outer_indices:
+            outer_contour = contours[i].reshape(-1, 2)
+            if len(outer_contour) < 3:
                 stats["dropped"] += 1
+                continue
+
+            # 找到属于当前这个外轮廓的所有【内层的洞】 (其 parent 等于当前外轮廓的索引 i)
+            inner_contours = []
+            for j, h in enumerate(hierarchy):
+                if h[3] == i:
+                    inner_contour = contours[j].reshape(-1, 2)
+                    if len(inner_contour) >= 3:
+                        inner_contours.append(inner_contour)
+
+            # 🌟 核心突破 2：将带有洞的结构“缝合”成一个连续的一笔画多边形
+            polygon = outer_contour.tolist()
+
+            for inner in inner_contours:
+                poly_arr = np.array(polygon)
+                min_dist = float("inf")
+                best_i, best_j = 0, 0
+
+                # 利用 numpy 矩阵运算极速寻找外轮廓和洞之间“最近的两个点”
+                for j_idx, p_in in enumerate(inner):
+                    # 计算洞上的一个点到当前外轮廓所有点的平方距离
+                    dists = np.sum((poly_arr - p_in) ** 2, axis=1)
+                    min_idx = np.argmin(dists)
+                    if dists[min_idx] < min_dist:
+                        min_dist = dists[min_idx]
+                        best_i = min_idx
+                        best_j = j_idx
+
+                inner_list = inner.tolist()
+
+                # 搭建隐形桥梁 (Seam / Bridge)
+                # 路线：原外侧[...起点] -> 进洞走一圈 -> 原路退出 -> 原外侧[接续...]
+                bridge = inner_list[best_j:] + inner_list[: best_j + 1]
+                polygon = (
+                    polygon[: best_i + 1]
+                    + bridge
+                    + [polygon[best_i]]
+                    + polygon[best_i + 1 :]
+                )
+
+            # 最终的 polygon 是一个单一的数组，前端的普通多边形渲染组件能直接完美渲染它，且自动产生洞！
+            shapes.append(
+                {
+                    "label": label,
+                    "type": "polygon",
+                    "shape_type": "polygon",
+                    "points": polygon,
+                    "attributes": {},
+                }
+            )
+            stats["imported_polygons"] += 1
 
     return shapes, stats, img_w, img_h
