@@ -388,7 +388,7 @@ export const analyzeWorkspaceFolders = async (folders: { path: string; suffix?: 
 
 
 /**
- * 🌟 获取本地可视化预览 (返回图片 Blob)
+ * 🌟 获取本地可视化预览 (返回 JSON 字典)
  */
 export const requestVisPreview = async (payload: any) => {
   const response = await fetch(`${API_BASE_URL}/vis/preview`, {
@@ -397,7 +397,9 @@ export const requestVisPreview = async (payload: any) => {
     body: JSON.stringify(payload),
   });
   if (!response.ok) throw new Error(await response.text());
-  return response.blob(); // 核心：接收二进制图片流
+  
+  // 🌟 核心修复：这里必须返回 JSON，而不是 blob()
+  return response.json(); 
 };
 
 /**

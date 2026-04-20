@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from routers import ai, annotation, exchange, filesystem, project, taxonomy
+from routers import ai, annotation, exchange, filesystem, project, taxonomy, vis
 
 app = FastAPI(title="MultiAnno Backend")
 
@@ -37,6 +37,7 @@ app.include_router(project.router)
 app.include_router(annotation.router)
 app.include_router(taxonomy.router)
 app.include_router(ai.router)
+app.include_router(vis.router)
 app.include_router(exchange.router)
 
 

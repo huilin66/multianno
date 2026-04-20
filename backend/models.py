@@ -120,3 +120,13 @@ class ImportRequest(BaseModel):
 class ProjectMetaPayload(BaseModel):
     file_path: str
     content: dict
+
+
+class VisPreviewRequest(BaseModel):
+    stem: str
+    source_type: str
+    view_configs: Optional[List[Dict[str, Any]]] = None
+    local_configs: Optional[List[Dict[str, Any]]] = None
+    render_settings: Dict[str, Any]
+    anno_config: Optional[Dict[str, Any]] = None
+    pred_configs: Optional[List[Dict[str, Any]]] = None

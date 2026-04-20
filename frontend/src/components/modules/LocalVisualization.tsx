@@ -7,7 +7,9 @@ import { Slider } from '../ui/slider';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Loader2, MonitorPlay, Download, Layers, Database, Search, Info, Plus, Trash2, FolderOpen } from 'lucide-react';
+import { Loader2, MonitorPlay, Download, Layers, Database, Search, Info, Plus, Trash2, FolderOpen, 
+    Cpu, LayoutTemplate, FileText, RefreshCw, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight 
+} from 'lucide-react';
 import { requestVisPreview, requestVisExport, getFileContent, analyzeWorkspaceFolders} from '../../api/client';
 import { FileExplorerDialog } from './FileExplorerDialog'; 
 
@@ -23,9 +25,8 @@ interface ViewMeta {
 export function LocalVisualization() {
   const { stems, projectMetaPath } = useStore() as any;
   const [sourceType, setSourceType] = useState<'project' | 'local'>('project');
-  const [localPath, setLocalPath] = useState('');
-  const [suffix, setSuffix] = useState('');
   const [scannedStems, setScannedStems] = useState<string[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [isScanning, setIsScanning] = useState(false);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [viewMetas, setViewMetas] = useState<ViewMeta[]>([]);
@@ -34,6 +35,120 @@ export function LocalVisualization() {
   const [currentProjectPath, setCurrentProjectPath] = useState(projectMetaPath || '');
   const [placeholders, setPlaceholders] = useState<{ id: string, path: string, suffix: string }[]>([]);
   const [activePlaceholderId, setActivePlaceholderId] = useState<string | null>(null);
+
+  // 🌟 第二部分：真实标注 (Ground Truth) 状态
+  const [enableAnno, setEnableAnno] = useState(false);
+  const [annoTaskType, setAnnoTaskType] = useState('bbox'); // bbox, instance_seg, semantic_seg
+  const [annoFormat, setAnnoFormat] = useState('yolo');
+  const [annoSuffix, setAnnoSuffix] = useState('');
+  const [annoPath, setAnnoPath] = useState('');
+  const [annoClassFile, setAnnoClassFile] = useState('');
+  const [annoScannedCount, setAnnoScannedCount] = useState<number | null>(null);
+  const [isScanningAnno, setIsScanningAnno] = useState(false);
+
+  // --- 3. 预览图与交互状态 ---
+  // 🌟 核心修复 1：废弃单一的 previewUrl，使用对象存储多张 Base64 图
+  const [previewImages, setPreviewImages] = useState<Record<string, string>>({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // ==========================================
+  // 🌟 第三部分：预测结果 (Predictions) 状态 (支持多组)
+  const [enablePred, setEnablePred] = useState(false);
+  const [predictions, setPredictions] = useState([{ 
+    id: crypto.randomUUID(), 
+    name: 'Model A', 
+    taskType: 'bbox',
+    format: 'yolo', 
+    path: '', 
+    suffix: '', 
+    classFile: '',
+    scoreThreshold: 0.5,
+    scannedCount: null as number | null,
+    isScanning: false,
+  }]);
+
+  // ==========================================
+  // 🌟 统一的资源管理器调度核心
+  // target: 告诉弹窗把选中的路径填给谁
+  const [explorerConfig, setExplorerConfig] = useState<{
+    open: boolean;
+    type: 'dir' | 'file';
+    target: 'meta' | 'local_dir' | 'anno_dir' | 'anno_class' | 'pred_dir' | 'pred_class';
+    activeId?: string; // 用于标记是哪一行的 pred 或 local 占位符
+    initialPath?: string;
+  }>({ open: false, type: 'dir', target: 'meta' });
+// 🌟 新增：扫描真实标注 (GT) 与图像的匹配情况
+  const handleScanAnno = async () => {
+    if (!annoPath) return alert("请先指定标注路径！");
+    if (scannedStems.length === 0) return alert("请先完成第一部分的图像数据扫描！");
+    
+    setIsScanningAnno(true);
+    try {
+      // 针对 COCO 这种单文件格式，前端可以直接跳过目录扫描验证，或者调用专门的解析接口
+      if (annoFormat === 'coco') {
+        setAnnoScannedCount(scannedStems.length); // 暂时假设 COCO 全匹配
+        return;
+      }
+
+      // 复用后端的 analyzeWorkspaceFolders 来扫目录
+      const result = await analyzeWorkspaceFolders([{ path: annoPath, suffix: annoSuffix }]);
+      if (result.commonStems) {
+        // 求交集：计算有多少个图像 Stem 在标注文件夹中也找到了对应的文件
+        const matched = result.commonStems.filter((stem: string) => scannedStems.includes(stem));
+        setAnnoScannedCount(matched.length);
+      }
+    } catch (error) {
+      alert("标注目录扫描失败，请检查路径。");
+    } finally {
+      setIsScanningAnno(false);
+    }
+  };
+
+  // 🌟 新增：扫描单组预测结果 (Pred) 与图像的匹配情况
+  const handleScanPred = async (predId: string) => {
+    const pred = predictions.find(p => p.id === predId);
+    if (!pred || !pred.path) return alert("请先指定预测结果路径！");
+    if (scannedStems.length === 0) return alert("请先完成第一部分的图像数据扫描！");
+
+    setPredictions(prev => prev.map(p => p.id === predId ? { ...p, isScanning: true } : p));
+    try {
+      if (pred.format === 'coco') {
+        setPredictions(prev => prev.map(p => p.id === predId ? { ...p, scannedCount: scannedStems.length } : p));
+        return;
+      }
+
+      const result = await analyzeWorkspaceFolders([{ path: pred.path, suffix: pred.suffix }]);
+      if (result.commonStems) {
+        const matched = result.commonStems.filter((stem: string) => scannedStems.includes(stem));
+        setPredictions(prev => prev.map(p => p.id === predId ? { ...p, scannedCount: matched.length } : p));
+      }
+    } catch (error) {
+      alert("预测目录扫描失败，请检查路径。");
+    } finally {
+      setPredictions(prev => prev.map(p => p.id === predId ? { ...p, isScanning: false } : p));
+    }
+  };
+  // 统一的 Explorer 确认处理函数
+  const handleUniversalExplorerConfirm = (paths: string[]) => {
+    if (paths.length === 0) return;
+    const selectedPath = paths[0];
+    const { target, activeId } = explorerConfig;
+
+    if (target === 'meta') setCurrentProjectPath(selectedPath);
+    else if (target === 'local_dir' && activeId) {
+      setPlaceholders(prev => prev.map(p => p.id === activeId ? { ...p, path: selectedPath } : p));
+    }
+    else if (target === 'anno_dir') setAnnoPath(selectedPath);
+    else if (target === 'anno_class') setAnnoClassFile(selectedPath);
+    else if (target === 'pred_dir' && activeId) {
+      setPredictions(prev => prev.map(p => p.id === activeId ? { ...p, path: selectedPath } : p));
+    }
+    else if (target === 'pred_class' && activeId) {
+      setPredictions(prev => prev.map(p => p.id === activeId ? { ...p, classFile: selectedPath } : p));
+    }
+    setExplorerConfig(prev => ({ ...prev, open: false }));
+  };
 
   // 页面加载时，默认给一个空的输入行
   useEffect(() => {
@@ -55,33 +170,6 @@ export function LocalVisualization() {
     setPlaceholders(placeholders.map(p => p.id === id ? { ...p, [field]: value } : p));
   };
 
-  // 处理资源管理器返回
-  // 🌟 修复：处理资源管理器返回，确保更新到正确的行
-  const handleExplorerConfirm = (selectedPaths: string[]) => {
-  if (activePlaceholderId && selectedPaths.length > 0) {
-    const newPath = selectedPaths[0];
-    
-    setPlaceholders(prev => prev.map(p => 
-      p.id === activePlaceholderId ? { ...p, path: newPath } : p
-    ));
-    
-    // 🌟 额外同步：如果以后还要用 localPath，可以顺便同步一下
-    setLocalPath(newPath);
-  }
-  setExplorerOpen(false);
-  setActivePlaceholderId(null); 
-};
-
-    const getInitialDirectory = (fullPath: string) => {
-    if (!fullPath) return '';
-    // 兼容 Windows 和 Linux 的路径分隔符，去掉文件名部分
-    const normalizedPath = fullPath.replace(/\\/g, '/');
-    const lastIndex = normalizedPath.lastIndexOf('/');
-    if (lastIndex > 0) {
-        return fullPath.substring(0, lastIndex); // 返回父文件夹路径
-    }
-    return fullPath;
-    };
   // --- 2. 可视化配置状态 ---
   const [config, setConfig] = useState({
     mode: 'merged', 
@@ -93,17 +181,7 @@ export function LocalVisualization() {
     alpha: 0.3
   });
 
-  // --- 3. 预览图与交互状态 ---
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
 
-  const handleMetaFileConfirm = (selectedPaths: string[]) => {
-    if (selectedPaths.length > 0) {
-        setCurrentProjectPath(selectedPaths[0]); // 取第一个选中的文件
-    }
-    setMetaExplorerOpen(false);
-  };
   
   // 🌟 修正：解析 Meta 的函数
   const handleLoadMeta = async () => {
@@ -155,13 +233,13 @@ export function LocalVisualization() {
     if (sourceType === 'project' && !isMetaLoaded) {
       return alert("请先解析并确认项目配置！");
     }
-    if (sourceType === 'local' && !localPath) {
-      return alert("请选择本地文件夹路径！");
-    }
+    if (sourceType === 'local' && placeholders.filter(p => p.path.trim() !== '').length === 0) {
+    return alert("请至少添加一个有效的本地图像文件夹路径！");
+  }
 
     setIsScanning(true);
     setScannedStems([]);
-    setPreviewUrl(null);
+    setPreviewImages({});
 
     try {
       if (sourceType === 'project') {
@@ -217,32 +295,41 @@ export function LocalVisualization() {
     }
   };
 
-
-  // --- 5. 触发预览 (依赖 scannedStems 和 config) ---
+  // 🌟 修复：移除所有配置相关的依赖，禁止输入时自动狂刷
   useEffect(() => {
+    if (scannedStems.length > 0) {
+      fetchPreview();
+    }
+  }, [currentIndex, scannedStems]);
+
+  const fetchPreview = async () => {
     if (scannedStems.length === 0) return;
-
-    const timer = setTimeout(() => {
-      fetchPreview(scannedStems[0]);
-    }, 600); 
-    
-    return () => clearTimeout(timer);
-  }, [config, scannedStems]);
-
-  const fetchPreview = async (firstStem: string) => {
     setIsLoading(true);
     try {
+      const currentStem = scannedStems[currentIndex];
+
       const payload = {
         source_type: sourceType,
-        project_meta: sourceType === 'project' ? projectMetaPath : null,
-        local_path: sourceType === 'local' ? localPath : null,
-        suffix: suffix,
-        preview_stem: firstStem, // 告诉后端只渲染这张图
-        config: config
+        stem: currentStem,
+        render_settings: config,
+        view_configs: sourceType === 'project' ? viewMetas : null,
+        local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
+        anno_config: enableAnno ? {
+          task_type: annoTaskType, // 🌟 确保发给后端正确的 task_type
+          format: annoFormat,
+          suffix: annoSuffix,
+          folder_path: annoPath,
+          class_file: annoClassFile
+        } : null,
+        pred_configs: enablePred ? predictions.filter(p => p.path) : null
       };
-      const blob = await requestVisPreview(payload);
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-      setPreviewUrl(URL.createObjectURL(blob));
+
+      const res = await requestVisPreview(payload);
+      
+      // 🌟 核心修复 3：直接读取 JSON 中的 images 字典并设置到状态中
+      if (res && res.images) {
+        setPreviewImages(res.images);
+      }
     } catch (error: any) {
       console.error("预览加载失败:", error);
     } finally {
@@ -288,13 +375,21 @@ export function LocalVisualization() {
             </Label>
             
             {/* 🌟 修改：切换模式时，重置解析状态 isMetaLoaded */}
-            <Select value={sourceType} onValueChange={(val: any) => { setSourceType(val); setScannedStems([]); setPreviewUrl(null); setIsMetaLoaded(false); }}>
-              <SelectTrigger className="font-bold">
-                <SelectValue />
+            <Select 
+              value={sourceType} 
+              onValueChange={(val: any) => { 
+                setSourceType(val); 
+                setScannedStems([]); 
+                setPreviewImages({}); // 🌟 修复：重置为空字典
+                setIsMetaLoaded(false); 
+              }}
+            >
+              <SelectTrigger className="w-[140px] h-8 text-xs bg-white dark:bg-neutral-900">
+                <SelectValue placeholder="选择数据来源" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="project">📁 系统项目文件 (Project Meta)</SelectItem>
-                <SelectItem value="local">🚀 快速本地模式 (加载单图文件夹)</SelectItem>
+                <SelectItem value="project">Project Meta</SelectItem>
+                <SelectItem value="local">Local Folders</SelectItem>
               </SelectContent>
             </Select>
 
@@ -451,28 +546,282 @@ export function LocalVisualization() {
 
           {/* 分割线 */}
           <div className="h-px bg-neutral-100 dark:bg-neutral-800" />
+          
+
+          {/* ========================================================= */}
+          {/* 🌟 2. 挂载真实标注 (Ground Truth) */}
+          <section className={`space-y-3 transition-opacity ${scannedStems.length === 0 ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+            <div className="flex items-center justify-between">
+              <Label className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-500 tracking-widest flex items-center gap-1">
+                <Layers className="w-3 h-3" /> 2. 真实标注 (Ground Truth)
+              </Label>
+              <Switch checked={enableAnno} onCheckedChange={setEnableAnno} />
+            </div>
+
+            {enableAnno && (
+              <div className="space-y-3 p-3 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-lg border border-emerald-100 dark:border-emerald-900/30">
+                {/* 统一的提示语块 */}
+                <div className="flex items-start gap-2 text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-100/50 dark:bg-emerald-900/30 p-2 rounded border border-emerald-200/50 dark:border-emerald-800/50">
+                  <Info className="w-3 h-3 mt-0.5 shrink-0" />
+                  <p className="leading-relaxed">
+                    真实标注将作为基准(GT)展示。系统会自动将其与第一步已扫描的 <strong>{scannedStems.length}</strong> 个图像场景进行文件名对齐。
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">任务类型</Label>
+                    <Select value={annoTaskType} onValueChange={setAnnoTaskType}>
+                      <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bbox">目标检测 (BBox)</SelectItem>
+                        <SelectItem value="instance_seg">实例分割 (Polygon)</SelectItem>
+                        <SelectItem value="semantic_seg">语义分割 (Mask)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">标注格式</Label>
+                    <Select value={annoFormat} onValueChange={setAnnoFormat}>
+                      <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {annoTaskType === 'semantic_seg' ? (
+                          <>
+                            <SelectItem value="image">Image Mask (.png/.tif)</SelectItem>
+                            <SelectItem value="multianno">原生 (.json)</SelectItem>
+                          </>
+                        ) : (
+                          <>
+                            <SelectItem value="yolo">YOLO (.txt)</SelectItem>
+                            <SelectItem value="coco">COCO (.json)</SelectItem>
+                            <SelectItem value="multianno">原生 (.json)</SelectItem>
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="space-y-1.5 flex-1">
+                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">标注路径</Label>
+                    <div className="relative">
+                      <Input value={annoPath} onChange={e => setAnnoPath(e.target.value)} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900" placeholder="选择标注路径..." />
+                      <button onClick={() => setExplorerConfig({ open: true, type: annoFormat === 'coco' ? 'file' : 'dir', target: 'anno_dir', initialPath: annoPath })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-emerald-500">
+                        <FolderOpen size={14} />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="space-y-1.5 w-20">
+                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">场景后缀</Label>
+                    <Input value={annoSuffix} onChange={e => setAnnoSuffix(e.target.value)} className="h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="_RGB" />
+                  </div>
+                </div>
+
+                {annoFormat === 'yolo' && (
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-amber-600 dark:text-amber-500">必需的 classes.txt</Label>
+                    <div className="relative">
+                      <Input value={annoClassFile} onChange={e => setAnnoClassFile(e.target.value)} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900 border-amber-200 dark:border-amber-900/50" placeholder="选择 classes.txt..." />
+                      <button onClick={() => setExplorerConfig({ open: true, type: 'file', target: 'anno_class', initialPath: annoClassFile })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-amber-500">
+                        <FileText size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 统一的扫描结果显示与通栏按钮 */}
+                <div className="pt-2 space-y-2">
+                  {annoScannedCount !== null && (
+                    <div className="flex items-center justify-between p-2 bg-white dark:bg-neutral-900 border border-emerald-100 dark:border-emerald-900/50 rounded text-[10px] font-bold">
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-500">
+                        <CheckCircle2 className="w-3 h-3" /> 扫描完成
+                      </span>
+                      <span className={annoScannedCount === scannedStems.length ? 'text-emerald-600' : 'text-amber-600'}>
+                        已对齐: {annoScannedCount} / {scannedStems.length} 场景
+                      </span>
+                    </div>
+                  )}
+                  <Button 
+                    onClick={handleScanAnno} 
+                    disabled={isScanningAnno || !annoPath} 
+                    className="w-full h-9 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md shadow-emerald-500/20"
+                  >
+                    {isScanningAnno ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                    扫描并验证基准标注
+                  </Button>
+                </div>
+              </div>
+            )}
+          </section>
+          {/* ========================================================= */}
+
+          <div className="h-px bg-neutral-100 dark:bg-neutral-800" />
+
+
+          {/* ========================================================= */}
+          {/* 🌟 3. 挂载预测结果 (Predictions - 支持多组) */}
+          <section className={`space-y-3 transition-opacity ${scannedStems.length === 0 ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+            <div className="flex items-center justify-between">
+              <Label className="text-[10px] font-black uppercase text-amber-600 dark:text-amber-500 tracking-widest flex items-center gap-1">
+                <Cpu className="w-3 h-3" /> 3. 预测结果对比 (Predictions)
+              </Label>
+              <Switch checked={enablePred} onCheckedChange={setEnablePred} />
+            </div>
+
+            {enablePred && (
+              <div className="space-y-3">
+                {/* 统一的提示语块 */}
+                <div className="flex items-start gap-2 text-[10px] text-amber-700 dark:text-amber-400 bg-amber-100/50 dark:bg-amber-900/30 p-2 rounded border border-amber-200/50 dark:border-amber-800/50">
+                  <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                  <p className="leading-relaxed">
+                    支持挂载多组模型预测结果。未匹配到原图的预测文件将被自动忽略。
+                  </p>
+                </div>
+
+                {predictions.map((pred, idx) => (
+                  <div key={pred.id} className="p-3 bg-amber-50/50 dark:bg-amber-900/10 rounded-lg border border-amber-200/50 dark:border-amber-900/50 space-y-3 relative">
+                    {/* 删除按钮 */}
+                    {predictions.length > 1 && (
+                      <button onClick={() => setPredictions(prev => prev.filter(p => p.id !== pred.id))} className="absolute right-2 top-2 text-neutral-400 hover:text-red-500 z-10 transition-colors">
+                        <Trash2 size={14} />
+                      </button>
+                    )}
+                    
+                    {/* 🌟 调整 1：模型名称单独成行 (右侧留白防遮挡删除图标) */}
+                    <div className="space-y-1.5 pr-6">
+                      <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">模型名称</Label>
+                      <Input value={pred.name} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, name: e.target.value } : p))} className="h-8 text-xs font-bold bg-white dark:bg-neutral-900" placeholder="如: YOLOv8_Epoch50" />
+                    </div>
+
+                    {/* 🌟 调整 2：任务类型与格式 (与第二部分完全对齐的 1:1 Grid) */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">标注格式</Label>
+                        <Select value={annoFormat} onValueChange={setAnnoFormat}>
+                          <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {annoTaskType === 'semantic_seg' ? (
+                              <>
+                                <SelectItem value="image">Image Mask (.png/.tif)</SelectItem>
+                                <SelectItem value="multianno">原生 (.json)</SelectItem>
+                              </>
+                            ) : (
+                              <>
+                                <SelectItem value="yolo">YOLO (.txt)</SelectItem>
+                                <SelectItem value="coco">COCO (.json)</SelectItem>
+                                <SelectItem value="multianno">原生 (.json)</SelectItem>
+                              </>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">结果格式</Label>
+                        <Select value={pred.format} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val } : p))}>
+                          <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="yolo">YOLO (.txt)</SelectItem>
+                            <SelectItem value="coco">COCO (.json)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* 🌟 调整 3：路径与后缀 (与第二部分完全对齐的 Flex) */}
+                    <div className="flex gap-2">
+                       <div className="space-y-1.5 flex-1">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">结果路径</Label>
+                        <div className="relative">
+                          <Input value={pred.path} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, path: e.target.value } : p))} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900" placeholder="选择路径..." />
+                          <button onClick={() => setExplorerConfig({ open: true, type: pred.format === 'coco' ? 'file' : 'dir', target: 'pred_dir', activeId: pred.id, initialPath: pred.path })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-amber-500">
+                            <FolderOpen size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="space-y-1.5 w-20">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">后缀</Label>
+                        <Input value={pred.suffix} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, suffix: e.target.value } : p))} className="h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="_P" />
+                      </div>
+                    </div>
+
+                    {/* 必需的 classes 文件 */}
+                    {pred.format === 'yolo' && (
+                       <div className="space-y-1.5">
+                        <Label className="text-[10px] font-bold text-amber-600 dark:text-amber-500">必需的 classes.txt</Label>
+                        <div className="relative">
+                          <Input value={pred.classFile} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, classFile: e.target.value } : p))} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900 border-amber-200 dark:border-amber-900/50" placeholder="预测结果的 classes.txt..." />
+                          <button onClick={() => setExplorerConfig({ open: true, type: 'file', target: 'pred_class', activeId: pred.id, initialPath: pred.classFile })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-amber-500">
+                            <FileText size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* 统一的扫描结果显示与通栏按钮 */}
+                    <div className="pt-2 space-y-2">
+                      {pred.scannedCount !== null && (
+                        <div className="flex items-center justify-between p-2 bg-white dark:bg-neutral-900 border border-amber-200/50 dark:border-amber-900/50 rounded text-[10px] font-bold">
+                          <span className="flex items-center gap-1 text-amber-600 dark:text-amber-500">
+                            <CheckCircle2 className="w-3 h-3" /> 验证完成
+                          </span>
+                          <span className={pred.scannedCount === scannedStems.length ? 'text-emerald-600' : 'text-amber-600'}>
+                            已匹配: {pred.scannedCount} / {scannedStems.length} 场景
+                          </span>
+                        </div>
+                      )}
+                      <Button 
+                        onClick={() => handleScanPred(pred.id)} 
+                        disabled={pred.isScanning || !pred.path} 
+                        className="w-full h-9 bg-neutral-800 hover:bg-neutral-900 dark:bg-amber-600 dark:hover:bg-amber-700 text-white font-bold shadow-md"
+                      >
+                        {pred.isScanning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                        扫描验证 {pred.name || `模型 ${idx + 1}`}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* 增加模型按钮 */}
+                <Button variant="outline" onClick={() => setPredictions([...predictions, { id: crypto.randomUUID(), name: `Model ${predictions.length + 1}`, taskType: 'bbox', format: 'yolo', path: '', suffix: '', classFile: '', scoreThreshold: 0.5, scannedCount: null, isScanning: false }])} className="w-full h-9 text-xs border-dashed border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/30">
+                  <Plus className="w-4 h-4 mr-2" /> 添加对比模型
+                </Button>
+              </div>
+            )}
+          </section>
+          {/* ========================================================= */}
 
           {/* 🌟 核心二：可视化渲染配置 (扫描后才可用) */}
           <section className={`space-y-6 transition-opacity ${scannedStems.length === 0 ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
             <Label className="text-[10px] font-black uppercase text-indigo-500 tracking-widest flex items-center gap-1">
-              <Layers className="w-3 h-3" /> 2. 渲染策略配置
+              <LayoutTemplate className="w-3 h-3" /> 4. 排版与渲染策略
             </Label>
 
-            {/* 这里保留之前的配置：Mode, Layout, Resolution, Slider, Switch ... (为了代码简洁省略了前面写过的 UI) */}
             <div className="space-y-3">
-              <Label className="text-[11px] font-bold">排版模式</Label>
+              <Label className="text-[11px] font-bold">导出模式与排版</Label>
               <Select value={config.mode} onValueChange={(val) => setConfig({ ...config, mode: val })}>
                 <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="merged">🖼️ 合并大图 (每组1个文件)</SelectItem>
-                  <SelectItem value="separate">📄 独立文件 (每组N个文件)</SelectItem>
+                  <SelectItem value="separate">📄 分离文件 (当前预览模式：多通道独立保存)</SelectItem>
+                  <SelectItem value="merged">🖼️ 网格拼接 (合并为 1 张超大对比图)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
-            {/* 假设之前的线条粗细、透明度等滑块代码在这里... */}
-
           </section>
+          {/* 🌟 新增：手动触发渲染的全局按钮 */}
+          <div className={`pt-4 mt-6 border-t border-neutral-200 dark:border-neutral-800 transition-opacity ${scannedStems.length === 0 ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
+            <Button 
+              onClick={fetchPreview} 
+              disabled={isLoading || scannedStems.length === 0}
+              className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20"
+            >
+              {isLoading ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 正在渲染预览图...</>
+              ) : (
+                <><RefreshCw className="w-4 h-4 mr-2" /> 应用当前配置并刷新预览</>
+              )}
+            </Button>
+          </div>
         </div>
 
         {/* 底部执行按钮 */}
@@ -493,58 +842,77 @@ export function LocalVisualization() {
       </div>
 
       {/* 主视图：预览区 */}
-      <div className="flex-1 relative bg-neutral-200/50 dark:bg-black/50 p-8 flex flex-col items-center justify-center overflow-auto pattern-checkerboard">
-        {/* 状态提示... */}
+      <div className="flex-1 relative bg-neutral-900 flex flex-col items-center justify-center overflow-hidden pattern-checkerboard">
+        
+        {/* 1. 顶部状态指示 */}
         {scannedStems.length > 0 && (
-          <div className="absolute top-6 left-1/2 -translate-x-1/2 z-10">
-            <div className="px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full text-white text-xs font-mono shadow-lg border border-white/10 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Live Preview: {scannedStems[0]}
+            <div className="absolute top-6 z-30 px-4 py-2 bg-black/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl">
+            <div className="text-[11px] font-mono text-white/90 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-white/40">预览第一组示例:</span> 
+                <span className="text-indigo-400 font-bold">{scannedStems[0]}</span>
             </div>
-          </div>
+            </div>
         )}
 
+        {/* 2. 加载等待层 */}
         {isLoading && (
-          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/50 dark:bg-black/50 backdrop-blur-sm">
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm transition-all">
             <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mb-4" />
-            <p className="text-sm font-bold text-neutral-600 dark:text-neutral-300">正在生成渲染流...</p>
-          </div>
+            <p className="text-[10px] font-black tracking-[0.2em] text-neutral-400 uppercase">
+                {sourceType === 'project' ? 'Backend Rendering (Transforming...)' : 'Loading Raw Image...'}
+            </p>
+            </div>
         )}
 
-        {previewUrl ? (
-          <img 
-            src={previewUrl} 
-            className="max-w-full max-h-full object-contain shadow-2xl rounded-sm ring-1 ring-white/10" 
-            style={{ opacity: isLoading ? 0.3 : 1 }}
-            alt="Vis Preview" 
-          />
-        ) : (
-          <div className="text-neutral-400 dark:text-neutral-600 flex flex-col items-center gap-4">
-            <MonitorPlay className="w-16 h-16 opacity-20" />
-            <p className="text-sm font-medium">请先完成左侧数据源扫描</p>
-          </div>
+        {/* 🌟 3. 核心修复 4：多图像渲染网格 (Grid) */}
+        <div className="w-full h-full p-8 flex items-start justify-center overflow-y-auto custom-scrollbar">
+          {Object.keys(previewImages).length > 0 ? (
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full max-w-6xl mx-auto pb-24 mt-16">
+              {Object.entries(previewImages).map(([layerName, b64Str]) => (
+                <div key={layerName} className="flex flex-col gap-2 bg-black/40 p-3 rounded-xl border border-white/10 shadow-2xl">
+                  <div className="text-white/80 text-[11px] font-mono px-2 uppercase tracking-wider flex justify-between font-bold">
+                    <span>{layerName}</span>
+                  </div>
+                  <div className="relative rounded overflow-hidden bg-black/50 flex items-center justify-center border border-white/5">
+                    <img 
+                      src={b64Str} 
+                      className={`w-full max-h-[400px] object-contain transition-all duration-500 ${isLoading ? 'opacity-30 blur-sm' : 'opacity-100'}`}
+                      alt={layerName} 
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-neutral-700 flex flex-col items-center justify-center h-full gap-4">
+                <MonitorPlay size={48} strokeWidth={1} className="opacity-20" />
+                <p className="text-xs font-bold opacity-30 tracking-widest uppercase">等待数据扫描或渲染</p>
+            </div>
+          )}
+        </div>
+
+        {/* 4. 底部任务反馈 */}
+        {isExporting && (
+            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[300px] bg-black/80 border border-white/10 p-4 rounded-xl backdrop-blur-md">
+            <div className="flex justify-between text-[10px] text-white/60 mb-2 font-mono">
+                <span>批量导出进度...</span>
+                <span>75%</span>
+            </div>
+            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-full bg-indigo-500 w-[75%] transition-all"></div>
+            </div>
+            </div>
         )}
       </div>
       {/* 1. 用于选择 project_meta.json 的文件浏览器 */}
         <FileExplorerDialog 
-        open={metaExplorerOpen}
-        // 🌟 核心修复：这里不再直接传文件路径，而是传父目录路径
-        initialPath={getInitialDirectory(currentProjectPath || projectMetaPath || '')}
-        onClose={() => setMetaExplorerOpen(false)}
-        onConfirm={handleMetaFileConfirm}
-        selectType="file" 
-        />
-
-        {/* 2. 用于快速模式选择图像目录的文件夹浏览器 */}
-        <FileExplorerDialog 
-        open={explorerOpen}
-        // 建议：这里 initialPath 也可以动态获取当前选中行的路径
-        initialPath={activePlaceholderId ? placeholders.find(p => p.id === activePlaceholderId)?.path || '' : localPath}
-        onClose={() => { setExplorerOpen(false); setActivePlaceholderId(null); }}
-        // 🌟 核心修复：这里必须指向 handleExplorerConfirm
-        onConfirm={handleExplorerConfirm} 
-        selectType="dir"
-        />
+        open={explorerConfig.open}
+        initialPath={explorerConfig.initialPath || ''}
+        onClose={() => setExplorerConfig(prev => ({ ...prev, open: false }))}
+        onConfirm={handleUniversalExplorerConfirm}
+        selectType={explorerConfig.type} 
+      />
     </div>
   );
 }
