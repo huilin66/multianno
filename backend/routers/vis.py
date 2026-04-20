@@ -1,8 +1,8 @@
-import base64  # 🌟 新增导入
+import base64
 
 import cv2
-from fastapi import APIRouter, HTTPException, Response
-from fastapi.responses import JSONResponse  # 🌟 新增导入
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 from models import VisPreviewRequest
 from utils.visualizer import LocalVisualizer
 
