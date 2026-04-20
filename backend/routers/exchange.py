@@ -241,6 +241,34 @@ async def export_to_images_only(req: ExportRequest):
 
 
 # ==========================================
+# 🌟 镜像模式清洗器
+# ==========================================
+def apply_mirror_cleanup(target_dir: str, processed_stems: set) -> int:
+    """
+    遍历目标文件夹，如果某个 scene 不在 processed_stems (外部源) 中，
+    则将其标注完全清空，实现绝对镜像同步。
+    """
+    cleaned_count = 0
+    for f_name in os.listdir(target_dir):
+        if not f_name.endswith(".json"):
+            continue
+        base_stem = Path(f_name).stem
+        if base_stem not in processed_stems:
+            target_json = os.path.join(target_dir, f_name)
+            try:
+                with open(target_json, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if len(data.get("shapes", [])) > 0:
+                    data["shapes"] = []
+                    with open(target_json, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    cleaned_count += 1
+            except Exception:
+                pass
+    return cleaned_count
+
+
+# ==========================================
 # 🌟 路由 2：导入接口 (/import)
 # ==========================================
 @router.post("/import")
@@ -270,6 +298,7 @@ async def import_from_yolo(req: ImportRequest):
             classes_map = [line.strip() for line in f if line.strip()]
 
     imported_count = 0
+    processed_stems = set()
     for txt_file in os.listdir(req.source_path):
         if not txt_file.endswith(".txt") or txt_file == "classes.txt":
             continue
@@ -299,8 +328,9 @@ async def import_from_yolo(req: ImportRequest):
 
         if req.merge_strategy == "skip" and existing_data.get("shapes"):
             continue
-        if req.merge_strategy == "overwrite":
+        if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
+        processed_stems.add(base_stem)
 
         with open(os.path.join(req.source_path, txt_file), "r", encoding="utf-8") as f:
             lines = f.readlines()
@@ -314,9 +344,18 @@ async def import_from_yolo(req: ImportRequest):
                 json.dump(existing_data, f, ensure_ascii=False, indent=2)
             imported_count += 1
 
+    cleaned_count = 0
+    if req.merge_strategy == "mirror":
+        cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
+
+    # 🌟 修改：返回信息中带上清理数量
+    msg = f"成功合并导入 {imported_count} 个 YOLO 场景。"
+    if req.merge_strategy == "mirror":
+        msg += f" 镜像清理了 {cleaned_count} 个场景。"
+
     return {
         "status": "success",
-        "message": f"成功导入 {imported_count} 张图像的 YOLO 标注。",
+        "message": msg,
     }
 
 
@@ -341,6 +380,7 @@ async def import_from_coco(req: ImportRequest):
         grouped_anns.setdefault(ann["image_id"], []).append(ann)
 
     imported_count = 0
+    processed_stems = set()
     for img_id, anns in grouped_anns.items():
         if img_id not in img_info:
             continue
@@ -357,8 +397,9 @@ async def import_from_coco(req: ImportRequest):
 
         if req.merge_strategy == "skip" and existing_data.get("shapes"):
             continue
-        if req.merge_strategy == "overwrite":
+        if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
+        processed_stems.add(base_stem)
 
         for ann in anns:
             shape = coco_ann_to_shape(ann, cat_map)
@@ -371,9 +412,18 @@ async def import_from_coco(req: ImportRequest):
             json.dump(existing_data, f, ensure_ascii=False, indent=2)
         imported_count += 1
 
+    cleaned_count = 0
+    if req.merge_strategy == "mirror":
+        cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
+
+    # 🌟 修改：返回信息中带上清理数量
+    msg = f"成功合并导入 {imported_count} 个 COCO 场景。"
+    if req.merge_strategy == "mirror":
+        msg += f" 镜像清理了 {cleaned_count} 个场景。"
+
     return {
         "status": "success",
-        "message": f"成功从 COCO 导入 {imported_count} 张图像的标注。",
+        "message": msg,
     }
 
 
@@ -389,7 +439,7 @@ async def import_from_multianno(req: ImportRequest):
 
     print(f"import_from {req.source_path}")
     imported_count = 0
-
+    processed_stems = set()
     for json_file in os.listdir(req.source_path):
         if not json_file.endswith(".json"):
             continue
@@ -438,8 +488,10 @@ async def import_from_multianno(req: ImportRequest):
         # 3. 冲突策略拦截
         if req.merge_strategy == "skip" and len(existing_data.get("shapes", [])) > 0:
             continue
-        if req.merge_strategy == "overwrite":
+        if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
+
+        processed_stems.add(base_stem)
 
         # 4. 执行合并写入 (核心修复区)
         new_shapes = source_data.get("shapes", [])
@@ -467,9 +519,18 @@ async def import_from_multianno(req: ImportRequest):
                 json.dump(existing_data, f, ensure_ascii=False, indent=2)
             imported_count += 1
 
+    cleaned_count = 0
+    if req.merge_strategy == "mirror":
+        cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
+
+    # 🌟 修改：返回信息中带上清理数量
+    msg = f"成功合并导入 {imported_count} 个 MultiAnno 场景。"
+    if req.merge_strategy == "mirror":
+        msg += f" 镜像清理了 {cleaned_count} 个场景。"
+
     return {
         "status": "success",
-        "message": f"成功合并导入 {imported_count} 个 MultiAnno 场景。",
+        "message": msg,
     }
 
 
@@ -496,7 +557,7 @@ async def import_from_images_only(req: ImportRequest):
 
     valid_exts = (".png", ".tif", ".bmp", ".jpg", ".jpeg")
     imported_count = 0
-
+    processed_stems = set()
     for mask_file in os.listdir(req.source_path):
         if not mask_file.lower().endswith(valid_exts):
             continue
@@ -517,9 +578,9 @@ async def import_from_images_only(req: ImportRequest):
         # 冲突策略拦截
         if req.merge_strategy == "skip" and existing_data.get("shapes"):
             continue
-        if req.merge_strategy == "overwrite":
+        if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
-
+        processed_stems.add(base_stem)
         # 调用逆向提取引擎
         new_shapes, _, img_w, img_h = mask_to_shapes(
             mask_path, classes_map, import_zero_class=req.import_zero_class
@@ -535,7 +596,16 @@ async def import_from_images_only(req: ImportRequest):
                 json.dump(existing_data, f, ensure_ascii=False, indent=2)
             imported_count += 1
 
+    cleaned_count = 0
+    if req.merge_strategy == "mirror":
+        cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
+
+    # 🌟 修改：返回信息中带上清理数量
+    msg = f"成功逆向提取并导入 {imported_count} 个掩码图标注。"
+    if req.merge_strategy == "mirror":
+        msg += f" 镜像清理了 {cleaned_count} 个场景。"
+
     return {
         "status": "success",
-        "message": f"成功从 {imported_count} 张掩码图中逆向提取了多边形标注。",
+        "message": msg,
     }

@@ -29,7 +29,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const safeWorkspaceDir = mainViewFolder?.path || '';
 
   const [format, setFormat] = useState('yolo');
-  const [mergeStrategy, setMergeStrategy] = useState<'append' | 'overwrite' | 'skip'>('append');
+  const [mergeStrategy, setMergeStrategy] = useState<'append' | 'overwrite' | 'skip' | 'mirror'>('append');
   const [sourceDataPath, setSourceDataPath] = useState(''); 
   const [targetWorkspaceDir, setTargetWorkspaceDir] = useState(safeWorkspaceDir);
   const [externalClassFile, setExternalClassFile] = useState('');
@@ -174,8 +174,9 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                     <SelectTrigger className="flex-1 font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="append">🟢 融合追加 (保留原标注，合并新标注)</SelectItem>
-                      <SelectItem value="overwrite">🔴 强制覆盖 (清空原标注，只留新标注)</SelectItem>
+                      <SelectItem value="overwrite">🔴 强制覆盖 (若包含同名，用新标注完全替换原标注)</SelectItem>
                       <SelectItem value="skip">🟡 安全跳过 (若图片已有标注，则跳过导入)</SelectItem>
+                      <SelectItem value="mirror">🟣 镜像同步 (完全以新标注为准，旧内容将被清空)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
