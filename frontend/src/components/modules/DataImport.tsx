@@ -38,6 +38,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [customSuffix, setCustomSuffix] = useState('');
   const [importZeroClass, setImportZeroClass] = useState(false);
+  const [cocoMode, setCocoMode] = useState<'polygon' | 'bbox'>('polygon');
 
   // 🌟 增加一个 Loading 状态
   const [isImporting, setIsImporting] = useState(false);
@@ -59,7 +60,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       merge_strategy: mergeStrategy,
       classes_file: externalClassFile,
       custom_suffix: customSuffix,
-      import_zero_class: importZeroClass
+      import_zero_class: importZeroClass,
+      coco_mode: cocoMode,
     };
 
     try {
@@ -235,6 +237,22 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                         提取像素值为 <code className="text-neutral-700 dark:text-neutral-300 font-bold">0</code> 的区域作为多边形
                       </Label>
                     </div>
+                  </div>
+                )}
+
+                {/* 🌟 新增：只有选择 coco 时才显示该提取模式 */}
+                {format === 'coco' && (
+                  <div className="flex items-center gap-3 pt-2">
+                    <Label className="w-16 text-right text-[11px] font-bold">提取策略：</Label>
+                    <Select value={cocoMode} onValueChange={(val: any) => setCocoMode(val)}>
+                      <SelectTrigger className="flex-1 h-9 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="polygon">🔷 优先多边形 (无多边形则降级为矩形)</SelectItem>
+                        <SelectItem value="bbox">🔲 强制矩形框 (仅提取 Bounding Box)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 )}
             </div>

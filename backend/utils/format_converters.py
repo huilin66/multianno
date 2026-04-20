@@ -1,5 +1,6 @@
 # backend/utils/format_converters.py
 import math
+import uuid
 
 import cv2
 import numpy as np
@@ -381,36 +382,63 @@ def yolo_to_shapes(
     return shapes, stats
 
 
-def coco_ann_to_shape(ann: dict, categories_map: dict) -> dict:
-    """将单个 COCO annotation 还原为 shape"""
+def coco_ann_to_shape(ann: dict, classes_map: dict, coco_mode: str = "polygon") -> dict:
+    """
+    将单个 COCO annotation 字典转换为前端支持的 shape 格式。
+    支持策略分流：优先多边形 (polygon) 或 强制矩形框 (bbox)
+    """
     cat_id = ann.get("category_id")
-    label = categories_map.get(cat_id, f"Class_{cat_id}")
+    label = classes_map.get(cat_id, f"Class_{cat_id}")
 
-    # 优先还原 Segmentation (多边形)
-    seg = ann.get("segmentation", [])
-    if seg and isinstance(seg, list) and len(seg[0]) >= 6:
-        flat_pts = seg[0]
-        points = [[flat_pts[i], flat_pts[i + 1]] for i in range(0, len(flat_pts), 2)]
-        return {
-            "label": label,
-            "type": "polygon",
-            "shape_type": "polygon",
-            "points": points,
-            "attributes": {},
-        }
+    shape_id = str(uuid.uuid4())
+    shape_obj = None
 
-    # 回退还原 BBox
-    bbox = ann.get("bbox", [])
-    if len(bbox) == 4:
-        xmin, ymin, w, h = bbox
-        return {
-            "label": label,
-            "type": "bbox",
-            "shape_type": "rectangle",
-            "points": [[xmin, ymin], [xmin + w, ymin + h]],
-            "attributes": {},
-        }
-    return None
+    # ==========================================
+    # 🌟 策略 1：如果模式是 polygon，且数据里确实有多边形
+    # ==========================================
+    if (
+        coco_mode == "polygon"
+        and "segmentation" in ann
+        and isinstance(ann["segmentation"], list)
+        and len(ann["segmentation"]) > 0
+    ):
+        # COCO 的 segmentation 是 [x1, y1, x2, y2...] 这样的一维数组
+        # 需要转成前端的 [[x1, y1], [x2, y2]...]
+        seg = ann["segmentation"][0]  # 取第一个多边形轮廓
+        if len(seg) >= 6:  # 至少需要3个点
+            points = [[seg[i], seg[i + 1]] for i in range(0, len(seg), 2)]
+            shape_obj = {
+                "id": shape_id,
+                "label": label,
+                "type": "polygon",
+                "shape_type": "polygon",
+                "points": points,
+                "attributes": {},
+            }
+
+    # ==========================================
+    # 🌟 策略 2：如果模式是 bbox，或者策略 1 失败（比如物体太小没有多边形只有框）
+    # ==========================================
+    if shape_obj is None and "bbox" in ann:
+        # COCO bbox 格式是 [x_min, y_min, width, height]
+        bbox = ann["bbox"]
+        if len(bbox) == 4:
+            x_min, y_min, w, h = bbox
+            x_max = x_min + w
+            y_max = y_min + h
+
+            # 转换为前端的 bbox: 两个点 [左上角, 右下角]
+            points = [[x_min, y_min], [x_max, y_max]]
+            shape_obj = {
+                "id": shape_id,
+                "label": label,
+                "type": "bbox",
+                "shape_type": "rectangle",
+                "points": points,
+                "attributes": {},
+            }
+
+    return shape_obj
 
 
 # ==========================================

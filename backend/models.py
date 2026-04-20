@@ -114,6 +114,7 @@ class ImportRequest(BaseModel):
     classes_file: Optional[str] = None
     custom_suffix: str = ""
     import_zero_class: bool = False
+    coco_mode: str = "polygon"
 
 
 class ProjectMetaPayload(BaseModel):

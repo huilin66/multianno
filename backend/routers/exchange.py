@@ -402,7 +402,7 @@ async def import_from_coco(req: ImportRequest):
         processed_stems.add(base_stem)
 
         for ann in anns:
-            shape = coco_ann_to_shape(ann, cat_map)
+            shape = coco_ann_to_shape(ann, cat_map, req.coco_mode)
             if shape:
                 existing_data["shapes"].append(shape)
 
