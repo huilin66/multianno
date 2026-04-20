@@ -27,7 +27,7 @@ import {
   DialogTitle 
 } from '@/components/ui/dialog';
 // 🌟 引入新的图标: FolderPlus 和 Upload
-import { Menu, Settings, Loader2, Edit3, Check, AlertCircle,CloudLightning, Tag, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags, Keyboard } from 'lucide-react';
+import { Menu, Settings, Airplay, Edit3, Check, AlertCircle,CloudLightning, Tag, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags, Keyboard } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -35,6 +35,7 @@ import { useAutoSave } from './hooks/useAutoSave';
 import { ShortcutSettingsModal } from './components/modules/ShortcutSettingsModal';
 import { AISettingsModal } from './components/modules/AISettingsModal';
 import { useMetaAutoSave } from './hooks/useMetaAutoSave';
+import { LocalVisualization } from './components/modules/LocalVisualization';
 
 export default function App() {
   const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings} = useStore();
@@ -93,10 +94,13 @@ export default function App() {
                 <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('exchange_import')}>
-                <Upload className="w-4 h-4 mr-2" /> {t('menu.importData')}
+                <Download className="w-4 h-4 mr-2" /> {t('menu.importData')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('exchange_export')}>
-                <Download className="w-4 h-4 mr-2" /> {t('menu.exportData')}
+                <Upload className="w-4 h-4 mr-2" /> {t('menu.exportData')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveModule('local_visualization')}>
+                <Airplay className="w-4 h-4 mr-2" /> {t('menu.localVisualization')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -416,6 +420,16 @@ export default function App() {
       >
         <DialogContent className="max-w-3xl sm:max-w-3xl h-[85vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
           <DataExport onClose={() => setActiveModule('workspace')} />
+        </DialogContent>
+      </Dialog>
+
+      {/* 🌟 新增：Local Visualization 弹窗 */}
+      <Dialog 
+        open={activeModule === 'local_visualization'} 
+        onOpenChange={(open) => !open && setActiveModule('workspace')}
+      >
+        <DialogContent className="max-w-3xl sm:max-w-3xl h-[85vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
+          <LocalVisualization onClose={() => setActiveModule('workspace')} />
         </DialogContent>
       </Dialog>
       <ShortcutSettingsModal 

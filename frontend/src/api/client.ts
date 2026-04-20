@@ -385,3 +385,30 @@ export const analyzeWorkspaceFolders = async (folders: { path: string; suffix?: 
   }
   return response.json();
 };
+
+
+/**
+ * 🌟 获取本地可视化预览 (返回图片 Blob)
+ */
+export const requestVisPreview = async (payload: any) => {
+  const response = await fetch(`${API_BASE_URL}/vis/preview`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.blob(); // 核心：接收二进制图片流
+};
+
+/**
+ * 🌟 启动全量本地可视化导出
+ */
+export const requestVisExport = async (payload: any) => {
+  const response = await fetch(`${API_BASE_URL}/vis/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+};

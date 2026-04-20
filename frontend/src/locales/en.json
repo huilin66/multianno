@@ -191,7 +191,8 @@
     "projectMeta": "Project Meta",
     "importData": "Import Data",
     "exportData": "Export Data",
-    "taxonomyManager": "Taxonomy Manager"
+    "taxonomyManager": "Taxonomy Manager",
+    "localVisualization": "Local Visualization"
   },
   "header": {
     "themeLight": "Switch to Light Mode",

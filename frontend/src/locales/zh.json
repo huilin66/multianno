@@ -190,7 +190,8 @@
     "viewExtentCheck": "视图对齐校验",
     "projectMeta": "项目元数据",
     "exportData": "导出数据",
-    "taxonomyManager": "标注体系管理器"
+    "taxonomyManager": "标注体系管理器",
+    "localVisualization": "本地可视化"
   },
   "header": {
     "themeLight": "切换为浅色模式",
