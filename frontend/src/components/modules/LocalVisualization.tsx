@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Loader2, MonitorPlay, Download, Layers, Database, Search, Info, Plus, Trash2, FolderOpen, 
     Cpu, LayoutTemplate, FileText, RefreshCw, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight 
 } from 'lucide-react';
-import { requestVisPreview, requestVisExport, getFileContent, analyzeWorkspaceFolders} from '../../api/client';
+import { requestVisPreview, requestVisExportStream, getFileContent, analyzeWorkspaceFolders} from '../../api/client';
 import { FileExplorerDialog } from './FileExplorerDialog'; 
 import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
 
@@ -80,7 +80,7 @@ export function LocalVisualization() {
   const [mergedPreview, setMergedPreview] = useState<string | null>(null);
 
   // output
-  const [exportProgress, setExportProgress] = useState<number | null>(null);
+  const [exportProgress, setExportProgress] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
 
   // ==========================================
@@ -478,8 +478,12 @@ export function LocalVisualization() {
       alert("请先选择保存文件夹");
       return;
     }
-    setIsLoading(true);
-    setExportProgress(0);
+    if (scannedStems.length === 0) {
+      alert("没有可导出的数据");
+      return;
+    }
+    setIsExporting(true);
+    setExportProgress(1);
 
     try {
       const taskApiMap: Record<string, string> = {
@@ -520,15 +524,18 @@ export function LocalVisualization() {
           }
         },
       };
-      const res = await requestVisExport(payload);
+      const res = await requestVisExportStream(payload, (percent) => {
+        setExportProgress(percent);
+      });
       if (res.success) {
-        alert(`批量导出完成！已保存至: ${savePath}`);
+        setExportProgress(100);
+        alert(`批量导出成功！\n保存路径: ${savePath}\n处理总数: ${scannedStems.length}`);
       }
     } catch (err) {
       alert(`导出失败: ${err}`);
     } finally {
       setIsExporting(false);
-      setTimeout(() => setExportProgress(null), 3000);
+      setTimeout(() => setExportProgress(null), 2000);
     }
   };
 
@@ -1068,22 +1075,33 @@ export function LocalVisualization() {
         </div>
         {/* 底部执行按钮 */}
         <div className="p-4 bg-white dark:bg-neutral-900 border-t border-neutral-200 space-y-3">
-        {exportProgress !== null && (
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-[10px] font-bold">
-              <span>批量导出进度</span>
-              <span>{exportProgress}%</span>
+          {/* 🌟 只有导出进行中且有进度值时显示 */}
+          {isExporting && exportProgress !== null && (
+            <div className="space-y-1.5 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex justify-between text-[10px] font-black text-emerald-600 uppercase tracking-tighter">
+                <span>Processing Scenes...</span>
+                <span>{exportProgress}%</span>
+              </div>
+              <div className="w-full h-2 bg-neutral-100 dark:bg-neutral-800 rounded-full overflow-hidden border border-emerald-100 dark:border-emerald-900/30">
+                <div 
+                  className="h-full bg-emerald-500 transition-all duration-500 ease-out shadow-[0_0_8px_rgba(16,185,129,0.4)]" 
+                  style={{ width: `${exportProgress}%` }} 
+                />
+              </div>
             </div>
-            <div className="w-full h-1.5 bg-neutral-100 rounded-full overflow-hidden">
-              <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${exportProgress}%` }} />
-            </div>
-          </div>
-        )}
-        <Button onClick={handleExportAll} disabled={isExporting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 shadow-lg shadow-emerald-500/20">
-          {isExporting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
-          启动批量导出任务
-        </Button>
-      </div>
+          )}
+          <Button 
+            onClick={handleExportAll} 
+            disabled={isExporting} 
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-11 shadow-lg shadow-emerald-500/20 active:scale-[0.98] transition-transform"
+          >
+            {isExporting ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 批量任务执行中...</>
+            ) : (
+              <><Download className="w-4 h-4 mr-2" /> 启动批量导出任务</>
+            )}
+          </Button>
+        </div>
       </div>
 
       {/* 主视图：预览区 */}

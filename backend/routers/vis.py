@@ -1,9 +1,11 @@
 import base64
+import json
+from pathlib import Path
 
 import cv2
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
-from models import ExportRequest, VisPreviewRequest  # 确保导入了 ExportRequest
+from fastapi.responses import JSONResponse, StreamingResponse
+from models import VisExportRequest, VisPreviewRequest
 from utils.visualizer import LocalVisualizer
 
 router = APIRouter(prefix="/api/vis", tags=["Visualization"])
@@ -38,8 +40,6 @@ async def vis_preview(req: VisPreviewRequest):
                 b64_images[layer_name] = f"data:image/jpeg;base64,{b64_str}"
 
         # 🌟 核心修复：处理“合并拼图”预览请求 (对应前端的 handleApplyLayout)
-        # 获取前端传来的 export_config (对应 VisPreviewRequest 中新增的字段)
-        # 注意：你需要确保 models.py 中的 VisPreviewRequest 已经添加了 export_config: Optional[Dict]
         export_cfg = getattr(req, "export_config", None)
 
         if export_cfg and export_cfg.get("modes", {}).get("merged"):
@@ -65,3 +65,70 @@ async def vis_preview(req: VisPreviewRequest):
 
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"渲染引擎错误: {str(e)}")
+
+
+@router.post("/export")
+async def vis_export(req: VisExportRequest):
+    def generate_progress():
+        try:
+            engine = LocalVisualizer(config=req.render_settings)
+            export_config = req.export_config
+            save_path = Path(export_config.get("save_path"))
+
+            modes = export_config.get("modes", {})
+            save_independent = modes.get("independent", True)
+            save_merged = modes.get("merged", False)
+            layout_settings = export_config.get("layout_settings", {})
+
+            configs = (
+                req.view_configs if req.source_type == "project" else req.local_configs
+            )
+
+            # 1. 预创建文件夹
+            save_path.mkdir(parents=True, exist_ok=True)
+            if save_merged:
+                (save_path / "fused").mkdir(parents=True, exist_ok=True)
+
+            # 2. 批量循环处理
+            total = len(req.all_stems)
+            for idx, stem in enumerate(req.all_stems):
+                # 渲染当前场景的所有独立图层
+                layers_dict = engine.render_separated_layers(
+                    stem, configs, req.anno_config, req.pred_configs
+                )
+
+                # --- A. 保存独立图层 ---
+                if save_independent:
+                    for layer_name, img_matrix in layers_dict.items():
+                        # 清理非法路径字符
+                        safe_folder = "".join(
+                            [c if c.isalnum() else "_" for c in layer_name]
+                        )
+                        target_dir = save_path / safe_folder
+                        target_dir.mkdir(parents=True, exist_ok=True)
+
+                        cv2.imwrite(str(target_dir / f"{stem}.png"), img_matrix)
+
+                # --- B. 保存合并拼图 ---
+                if save_merged:
+                    frames = list(layers_dict.values())
+                    fused_img = engine.assemble_custom_layout(frames, layout_settings)
+                    cv2.imwrite(str(save_path / "fused" / f"{stem}.png"), fused_img)
+
+                progress = int(((idx + 1) / total) * 100)
+                yield (
+                    json.dumps(
+                        {
+                            "type": "progress",
+                            "current": idx + 1,
+                            "total": total,
+                            "percent": progress,
+                        }
+                    )
+                    + "\n"
+                )
+
+        except Exception as e:
+            yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+    return StreamingResponse(generate_progress(), media_type="application/x-ndjson")

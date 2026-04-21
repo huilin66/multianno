@@ -414,3 +414,40 @@ export const requestVisExport = async (payload: any) => {
   if (!response.ok) throw new Error(await response.text());
   return response.json();
 };
+
+export const requestVisExportStream = async (
+  payload: any,
+  onProgress: (percent: number) => void
+) => {
+  const response = await fetch(`${API_BASE_URL}/vis/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.body) throw new Error('ReadableStream not supported.');
+  
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop() || '';
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      const msg = JSON.parse(line);
+      if (msg.type === 'progress') {
+        onProgress(msg.percent); // 🌟 更新进度条
+      } else if (msg.type === 'error') {
+        throw new Error(msg.message);
+      }
+    }
+  }
+  return { success: true };
+};
