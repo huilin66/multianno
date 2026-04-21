@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
-import { Slider } from '../ui/slider';
+import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -71,6 +71,14 @@ export function LocalVisualization() {
     isScanning: false,
   }]);
 
+  // 🌟 第四部分：保存与排版状态
+  const [exportIndependent, setExportIndependent] = useState(true);
+  const [exportMerged, setExportMerged] = useState(false);
+  const [savePath, setSavePath] = useState('');
+  const [exportLayout, setExportLayout] = useState('grid');
+  const [exportRows, setExportRows] = useState(2);
+  const [exportCols, setExportCols] = useState(2);
+  const [mergedPreview, setMergedPreview] = useState<string | null>(null);
   // ==========================================
   // 🌟 统一的资源管理器调度核心
   // target: 告诉弹窗把选中的路径填给谁
@@ -159,6 +167,9 @@ export function LocalVisualization() {
     }
     else if (target === 'pred_class' && activeId) {
       setPredictions(prev => prev.map(p => p.id === activeId ? { ...p, classFile: selectedPath } : p));
+    }
+    else if (target === 'save_dir') {
+      setSavePath(selectedPath);
     }
     setExplorerConfig(prev => ({ ...prev, open: false }));
   };
@@ -370,21 +381,133 @@ export function LocalVisualization() {
       setIsLoading(false);
     }
   };
+  // 计算当前预览的总图层数 (用于初始化网格)
+  const totalLayers = (sourceType === 'local' ? placeholders.filter(p => p.path).length : viewMetas.length) 
+                    + (enableAnno ? 1 : 0) 
+                    + (enablePred ? predictions.filter(p => p.path).length : 0);
 
-  const handleExportAll = async () => {
-    if (scannedStems.length === 0) return alert("请先扫描数据源！");
-    const outputDir = prompt("请输入导出目标文件夹的绝对路径:", "");
-    if (!outputDir) return;
+  // 🌟 自动布局联动逻辑
+  useEffect(() => {
+    if (exportLayout === 'horizontal') {
+      setExportRows(1);
+      setExportCols(totalLayers);
+    } else if (exportLayout === 'vertical') {
+      setExportRows(totalLayers);
+      setExportCols(1);
+    } else if (exportLayout === 'grid') {
+      // 初始网格：尽量接近正方形
+      const c = Math.ceil(Math.sqrt(totalLayers));
+      const r = Math.ceil(totalLayers / c);
+      setExportCols(c);
+      setExportRows(r);
+    }
+  }, [exportLayout, totalLayers]);
 
-    setIsExporting(true);
+  const handleApplyLayout = async () => {
+    // 如果没选合并保存，仅仅是普通刷新
+    if (!exportMerged) {
+        fetchPreview();
+        return;
+    }
+
+    setIsLoading(true);
     try {
-      // 导出逻辑 ...
-      await new Promise(r => setTimeout(r, 2000)); // 模拟请求
-      alert(`成功导出 ${scannedStems.length} 组可视化结果！`);
-    } catch (error: any) {
-      alert(`导出失败: ${error.message}`);
+      const taskApiMap: Record<string, string> = {
+        object_detection: 'bbox',
+        instance_segmentation: 'instance_seg',
+        semantic_segmentation: 'semantic_seg'
+      };
+
+      const payload = {
+        source_type: sourceType,
+        stem: scannedStems[currentIndex],
+        render_settings: config,
+        view_configs: sourceType === 'project' ? viewMetas : null,
+        local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
+        // 🌟 关键：告诉后端，我们需要一个预览版的合并图
+        export_config: {
+            preview_only: true, // 标识这只是预览，不写磁盘
+            modes: { independent: exportIndependent, merged: exportMerged },
+            layout_settings: { layout: exportLayout, columns: exportCols }
+        },
+        anno_config: enableAnno ? {
+          task_type: taskApiMap[annoTaskType],
+          format: annoFormat,
+          suffix: (annoFormat === 'image') ? `${annoSuffix}${annoExtension}` : annoSuffix,
+          folder_path: annoPath,
+        } : null,
+        pred_configs: enablePred ? predictions.filter(p => p.path).map(p => ({
+          ...p,
+          taskType: taskApiMap[p.taskType],
+          suffix: (p.format === 'image') ? `${p.suffix}${p.extension}` : p.suffix
+        })) : null
+      };
+
+      const res = await requestVisPreview(payload);
+      if (res.preview_images) {
+        // 分离普通图层和合并图层
+        const { fused_result, ...others } = res.preview_images;
+        setPreviewImages(others);
+        setMergedPreview(fused_result || null);
+      }
+    } catch (err) {
+      console.error(err);
     } finally {
-      setIsExporting(false);
+      setIsLoading(false);
+    }
+  };
+  
+  const handleExportAll = async () => {
+    if (!savePath) {
+      alert("请先选择保存文件夹");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const taskApiMap: Record<string, string> = {
+        object_detection: 'bbox',
+        instance_segmentation: 'instance_seg',
+        semantic_segmentation: 'semantic_seg'
+      };
+
+
+      const payload = {
+        source_type: sourceType,
+        render_settings: config,
+        view_configs: sourceType === 'project' ? viewMetas : null,
+        local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
+        anno_config: enableAnno ? {
+          task_type: taskApiMap[annoTaskType], 
+          format: annoFormat,
+          suffix: annoFormat === 'image' ? `${annoSuffix}${annoExtension}` : annoSuffix,
+          folder_path: annoPath,
+          class_file: annoClassFile
+        } : null,
+        pred_configs: enablePred ? predictions.filter(p => p.path).map(p => ({
+          ...p,
+          taskType: taskApiMap[p.taskType], // 🌟 这里映射
+          suffix: p.format === 'image' ? `${p.suffix}${p.extension}` : p.suffix
+        })) : null,
+        export_config: {
+          save_path: savePath,
+          modes: {
+            independent: exportIndependent,
+            merged: exportMerged
+          },
+          layout_settings: {
+            layout: exportLayout,
+            columns: exportCols
+          }
+        },
+      };
+      const res = await requestVisExport(payload);
+      if (res.success) {
+        alert(`导出成功！已保存至: ${savePath}`);
+      }
+    } catch (err) {
+      alert(`导出失败: ${err}`);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -399,7 +522,7 @@ export function LocalVisualization() {
           {/* 🌟 核心一：数据源扫描区 */}
           <section className="space-y-4">
             <Label className="text-[10px] font-black uppercase text-indigo-500 tracking-widest flex items-center gap-1">
-              <Database className="w-3 h-3" /> 1. 数据来源与扫描
+              <Database className="w-3 h-3" /> 1. 数据源配置
             </Label>
             
             {/* 🌟 修改：切换模式时，重置解析状态 isMetaLoaded */}
@@ -848,39 +971,77 @@ export function LocalVisualization() {
           </section>
           {/* ========================================================= */}
 
-          {/* 🌟 核心二：可视化渲染配置 (扫描后才可用) */}
-          <section className={`space-y-6 transition-opacity ${scannedStems.length === 0 ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-            <Label className="text-[10px] font-black uppercase text-indigo-500 tracking-widest flex items-center gap-1">
-              <LayoutTemplate className="w-3 h-3" /> 4. 排版与渲染策略
-            </Label>
 
-            <div className="space-y-3">
-              <Label className="text-[11px] font-bold">导出模式与排版</Label>
-              <Select value={config.mode} onValueChange={(val) => setConfig({ ...config, mode: val })}>
-                <SelectTrigger className="text-xs h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="separate">📄 分离文件 (当前预览模式：多通道独立保存)</SelectItem>
-                  <SelectItem value="merged">🖼️ 网格拼接 (合并为 1 张超大对比图)</SelectItem>
-                </SelectContent>
-              </Select>
+        {/* 🌟 Section 4: 保存与排版设置 */}
+        <section className="p-4 space-y-4 border-b border-neutral-100 dark:border-neutral-800 bg-indigo-50/30 dark:bg-indigo-900/10">
+          <Label className="text-[10px] font-black uppercase text-indigo-500 tracking-widest flex items-center gap-2">
+            <LayoutTemplate size={12} /> 4. 保存与排版预览
+          </Label>
+
+          <div className="flex items-center gap-4 pt-1">
+            <div className="flex items-center gap-2">
+              <Checkbox id="save-indep" checked={exportIndependent} onCheckedChange={(val) => setExportIndependent(!!val)} />
+              <Label htmlFor="save-indep" className="text-xs cursor-pointer">独立文件</Label>
             </div>
-          </section>
-          {/* 🌟 新增：手动触发渲染的全局按钮 */}
-          <div className={`pt-4 mt-6 border-t border-neutral-200 dark:border-neutral-800 transition-opacity ${scannedStems.length === 0 ? 'opacity-30 pointer-events-none' : 'opacity-100'}`}>
-            <Button 
-              onClick={fetchPreview} 
-              disabled={isLoading || scannedStems.length === 0}
-              className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 text-white font-bold shadow-lg shadow-indigo-500/20"
-            >
-              {isLoading ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 正在渲染预览图...</>
-              ) : (
-                <><RefreshCw className="w-4 h-4 mr-2" /> 应用当前配置并刷新预览</>
-              )}
-            </Button>
+            <div className="flex items-center gap-2">
+              <Checkbox id="save-merge" checked={exportMerged} onCheckedChange={(val) => setExportMerged(!!val)} />
+              <Label htmlFor="save-merge" className="text-xs cursor-pointer">合并拼图</Label>
+            </div>
           </div>
-        </div>
 
+          {exportMerged && (
+            <div className="space-y-4 p-3 rounded-lg bg-white/50 dark:bg-neutral-950/50 border border-indigo-100 dark:border-indigo-900/30">
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold text-neutral-500">布局模式</Label>
+                <Select value={exportLayout} onValueChange={setExportLayout}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="grid">网格布局 (Grid)</SelectItem>
+                    <SelectItem value="horizontal">水平一字排开</SelectItem>
+                    <SelectItem value="vertical">垂直一列纵队</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-neutral-500">行数 (Rows)</Label>
+                  <Input type="number" value={exportRows} onChange={e => setExportRows(Math.max(1, parseInt(e.target.value)))} className="h-8 text-xs" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] font-bold text-neutral-500">列数 (Cols)</Label>
+                  <Input type="number" value={exportCols} onChange={e => setExportCols(Math.max(1, parseInt(e.target.value)))} className="h-8 text-xs" />
+                </div>
+              </div>
+
+              {/* 🌟 实时布局预览：淡蓝色小网格 */}
+              <div className="space-y-1.5">
+                <Label className="text-[10px] font-bold text-neutral-400 uppercase tracking-tighter">布局结构预览 ({totalLayers} 图层)</Label>
+                <div 
+                  className="grid gap-1 p-2 bg-neutral-200/50 dark:bg-black/20 rounded border border-dashed border-neutral-300 dark:border-neutral-700"
+                  style={{ 
+                    gridTemplateColumns: `repeat(${exportCols}, 1fr)`,
+                    gridTemplateRows: `repeat(${exportRows}, 1fr)`
+                  }}
+                >
+                  {Array.from({ length: exportRows * exportCols }).map((_, i) => (
+                    <div 
+                      key={i} 
+                      className={`aspect-video rounded-sm border ${i < totalLayers ? 'bg-indigo-400/40 border-indigo-500' : 'bg-transparent border-neutral-300 dark:border-neutral-800'}`}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <Button variant="outline" size="sm" className="w-full h-8 text-[11px] font-bold" onClick={handleApplyLayout}>
+                <RefreshCw className="w-3 h-3 mr-2" /> 应用并刷新预览
+              </Button>
+            </div>
+          )}
+        </section>
+
+          
+        </div>
         {/* 底部执行按钮 */}
         <div className="p-5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 shrink-0">
           <Button 
@@ -898,7 +1059,6 @@ export function LocalVisualization() {
         </div>
       </div>
 
-      {/* 主视图：预览区 */}
       {/* 主视图：预览区 */}
       <div className="flex-1 relative bg-neutral-900 flex flex-col items-center justify-center overflow-hidden pattern-checkerboard">
         
