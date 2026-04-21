@@ -13,11 +13,23 @@ import { importData, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '
 // 🌟 3. 引入全量加载引擎
 import { loadAllProjectAnnotations } from '../../lib/projectUtils';
 
+const TASK_EN_DISPLAY: Record<string, string> = {
+  object_detection: 'Object Detection',
+  instance_segmentation: 'Instance Segmentation',
+  semantic_segmentation: 'Semantic Segmentation'
+};
+
 const FORMAT_EN_DISPLAY: Record<string, string> = {
-  yolo: 'YOLO 目标检测/实例分割 (.txt)',
-  coco: 'COCO 标注格式 (instances.json)',
-  multianno: 'MultiAnno 原生标注 (.json)',
-  images_only: '语义分割掩码图 (Mask Images)',
+  yolo: 'YOLO 格式',
+  coco: 'COCO 格式',
+  multianno: 'MultiAnno 格式',
+  images_only: 'Mask 图像'
+};
+
+const TASK_TO_FORMATS: Record<string, string[]> = {
+  object_detection: ['yolo', 'coco', 'multianno'],
+  instance_segmentation: ['yolo', 'coco', 'multianno'],
+  semantic_segmentation: ['multianno', 'images_only']
 };
 
 export function DataImport({ onClose }: { onClose?: () => void }) {
@@ -28,7 +40,9 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   
   const safeWorkspaceDir = mainViewFolder?.path || '';
 
+  const [taskType, setTaskType] = useState('object_detection');
   const [format, setFormat] = useState('yolo');
+  const [extension, setExtension] = useState('.txt');
   const [mergeStrategy, setMergeStrategy] = useState<'append' | 'overwrite' | 'skip' | 'mirror'>('append');
   const [sourceDataPath, setSourceDataPath] = useState(''); 
   const [targetWorkspaceDir, setTargetWorkspaceDir] = useState(safeWorkspaceDir);
@@ -39,10 +53,22 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [customSuffix, setCustomSuffix] = useState('');
   const [importZeroClass, setImportZeroClass] = useState(false);
   const [cocoMode, setCocoMode] = useState<'polygon' | 'bbox'>('polygon');
-
-  // 🌟 增加一个 Loading 状态
   const [isImporting, setIsImporting] = useState(false);
+ // 🌟 自动联动：当任务改变时，切换到合法的格式
+ 
+  React.useEffect(() => {
+    const available = TASK_TO_FORMATS[taskType];
+    if (available && !available.includes(format)) setFormat(available[0]);
+  }, [taskType]);
 
+  // 🌟 自动联动：当格式改变时，切换到对应的扩展名
+  React.useEffect(() => {
+    if (format === 'yolo') setExtension('.txt');
+    else if (format === 'coco' || format === 'multianno') setExtension('.json');
+    else if (format === 'images_only' && !['.jpg', '.png', '.tif', '.bmp'].includes(extension)) {
+      setExtension('.png'); 
+    }
+  }, [format]);
   const handleExecute = async () => {
     if (!sourceDataPath) return alert("请选择要导入的外部数据源路径！");
     if (!targetWorkspaceDir) return alert("请选择系统目标工作区！");
@@ -141,25 +167,39 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         <div className="max-w-5xl mx-auto w-full space-y-6">
 
           {/* 1. 格式、策略与后缀 */}
+          {/* 1. 任务与格式配置 (对齐导出面板的完美交互) */}
           <section className="p-5 bg-white dark:bg-neutral-900 rounded-xl border shadow-sm space-y-4">
-            <Label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">1. 数据格式与匹配规则</Label>
+            <Label className="text-[10px] font-black uppercase text-neutral-400 tracking-widest">1. 任务与格式配置 (Task & Format)</Label>
             <div className="grid grid-cols-2 gap-8">
               
               <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <Label className="w-16 text-right text-xs font-bold">外部格式：</Label>
-                  <Select value={format} onValueChange={(val) => { setFormat(val); setSourceDataPath(''); }}>
-                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{FORMAT_EN_DISPLAY[format]}</span></SelectTrigger>
+                  <Label className="w-16 text-right text-xs font-bold">任务：</Label>
+                  <Select value={taskType} onValueChange={setTaskType}>
+                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{TASK_EN_DISPLAY[taskType]}</span></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="yolo">YOLO 格式 (.txt 文件夹)</SelectItem>
-                      <SelectItem value="coco">COCO 格式 (单 .json 文件)</SelectItem>
-                      <SelectItem value="multianno">MultiAnno 原生 (.json 文件夹)</SelectItem>
-                      <SelectItem value="images_only">语义分割掩码图 (图像文件夹)</SelectItem>
+                      <SelectItem value="object_detection">Object Detection</SelectItem>
+                      <SelectItem value="instance_segmentation">Instance Segmentation</SelectItem>
+                      <SelectItem value="semantic_segmentation">Semantic Segmentation</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex items-center gap-3">
-                  <Label className="w-16 text-right text-[11px] font-bold">Scene Suffix：</Label>
+                  <Label className="w-16 text-right text-xs font-bold">格式：</Label>
+                  <Select value={format} onValueChange={(val) => { setFormat(val); setSourceDataPath(''); }}>
+                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{FORMAT_EN_DISPLAY[format]}</span></SelectTrigger>
+                    <SelectContent>
+                      {TASK_TO_FORMATS[taskType].map(f => (
+                        <SelectItem key={f} value={f}>{FORMAT_EN_DISPLAY[f]}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <Label className="w-16 text-right text-[11px] font-bold">场景后缀：</Label>
                   <Input 
                     placeholder="例如: _RGB" 
                     value={customSuffix} 
@@ -167,18 +207,21 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                     className="flex-1 h-9 text-xs font-bold" 
                   />
                 </div>
-              </div>
-
-              <div className="space-y-3">
                 <div className="flex items-center gap-3">
-                  <Label className="w-16 text-right text-xs font-bold">冲突策略：</Label>
-                  <Select value={mergeStrategy} onValueChange={(val: any) => setMergeStrategy(val)}>
+                  <Label className="w-16 text-right text-[11px] font-bold">扩展名：</Label>
+                  <Select value={extension} onValueChange={setExtension}>
                     <SelectTrigger className="flex-1 font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="append">🟢 融合追加 (保留原标注，合并新标注)</SelectItem>
-                      <SelectItem value="overwrite">🔴 强制覆盖 (若包含同名，用新标注完全替换原标注)</SelectItem>
-                      <SelectItem value="skip">🟡 安全跳过 (若图片已有标注，则跳过导入)</SelectItem>
-                      <SelectItem value="mirror">🟣 镜像同步 (完全以新标注为准，旧内容将被清空)</SelectItem>
+                      {format === 'yolo' && <SelectItem value=".txt">.txt</SelectItem>}
+                      {(format === 'coco' || format === 'multianno') && <SelectItem value=".json">.json</SelectItem>}
+                      {format === 'images_only' && (
+                        <>
+                          <SelectItem value=".png">.png</SelectItem>
+                          <SelectItem value=".tif">.tif</SelectItem>
+                          <SelectItem value=".jpg">.jpg</SelectItem>
+                          <SelectItem value=".bmp">.bmp</SelectItem>
+                        </>
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -186,8 +229,22 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
 
             </div>
             
-            <div className="p-2.5 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-md border border-emerald-100 dark:border-emerald-900/30 text-[10px] text-neutral-500 font-mono text-center">
-              匹配预览: 剥离外部 <code className="text-emerald-600 dark:text-emerald-400">scene001{customSuffix || '_RGB'}</code> ➔ 匹配工作区基础组 <code>scene001.json</code>
+            <div className="flex items-center justify-between p-2.5 bg-emerald-50/50 dark:bg-emerald-900/10 rounded-md border border-emerald-100 dark:border-emerald-900/30">
+              <div className="flex items-center gap-3">
+                <Label className="text-xs font-bold text-emerald-800 dark:text-emerald-300">策略设置：</Label>
+                <Select value={mergeStrategy} onValueChange={(val: any) => setMergeStrategy(val)}>
+                  <SelectTrigger className="w-[300px] h-8 text-xs font-bold border-emerald-200 dark:border-emerald-800 bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="append">🟢 融合追加 (保留原标注，合并新标注)</SelectItem>
+                    <SelectItem value="overwrite">🔴 强制覆盖 (用新标注替换原同名标注)</SelectItem>
+                    <SelectItem value="skip">🟡 安全跳过 (图片已有标注则跳过)</SelectItem>
+                    <SelectItem value="mirror">🟣 镜像同步 (清空原标注，完全以新标注为准)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <span className="text-[10px] text-neutral-500 font-mono">
+                预览寻找: <code className="text-emerald-600 dark:text-emerald-400">scene001{customSuffix}{extension}</code>
+              </span>
             </div>
           </section>
 
