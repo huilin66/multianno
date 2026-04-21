@@ -127,8 +127,11 @@ async def vis_export(req: VisExportRequest):
                     )
                     + "\n"
                 )
-
+            yield json.dumps({"type": "complete", "percent": 100}) + "\n"
         except Exception as e:
             yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+        finally:
+            # 🌟 显式清理，防止连接悬空
+            print("Export Stream Finished.")
 
     return StreamingResponse(generate_progress(), media_type="application/x-ndjson")

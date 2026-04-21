@@ -532,7 +532,11 @@ export function LocalVisualization() {
         alert(`批量导出成功！\n保存路径: ${savePath}\n处理总数: ${scannedStems.length}`);
       }
     } catch (err) {
-      alert(`导出失败: ${err}`);
+      if (exportProgress === 100) {
+             alert("批量导出任务已完成（连接已释放）");
+      } else {
+             alert(`导出过程发生错误: ${err.message}`);
+      }
     } finally {
       setIsExporting(false);
       setTimeout(() => setExportProgress(null), 2000);
@@ -1018,15 +1022,6 @@ export function LocalVisualization() {
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-[10px] font-bold text-neutral-600">保存根目录</Label>
-            <div className="relative">
-              <Input value={savePath} onChange={e => setSavePath(e.target.value)} className="h-8 text-xs pr-8" placeholder="选择保存路径..." />
-              <button onClick={() => setExplorerConfig({ open: true, type: 'dir', target: 'save_dir', initialPath: savePath })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400">
-                <FolderOpen size={14} />
-              </button>
-            </div>
-          </div>
 
           {exportMerged && (
             <div className="space-y-4 p-3 rounded-lg bg-white/50 dark:bg-neutral-950/50 border border-indigo-100 dark:border-indigo-900/30">
@@ -1069,6 +1064,16 @@ export function LocalVisualization() {
               </Button>
             </div>
           )}
+
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-bold text-neutral-600">保存根目录</Label>
+            <div className="relative">
+              <Input value={savePath} onChange={e => setSavePath(e.target.value)} className="h-8 text-xs pr-8" placeholder="选择保存路径..." />
+              <button onClick={() => setExplorerConfig({ open: true, type: 'dir', target: 'save_dir', initialPath: savePath })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400">
+                <FolderOpen size={14} />
+              </button>
+            </div>
+          </div>
         </section>
 
           

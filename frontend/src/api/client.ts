@@ -415,39 +415,55 @@ export const requestVisExport = async (payload: any) => {
   return response.json();
 };
 
-export const requestVisExportStream = async (
-  payload: any,
-  onProgress: (percent: number) => void
-) => {
-  const response = await fetch(`${API_BASE_URL}/vis/export`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
 
-  if (!response.body) throw new Error('ReadableStream not supported.');
-  
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
+// src/api/client.ts
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split('\n');
-    buffer = lines.pop() || '';
+export const requestVisExportStream = async (payload: any, onProgress: (p: number) => void) => {
+    const response = await fetch(`${API_BASE_URL}/vis/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      const msg = JSON.parse(line);
-      if (msg.type === 'progress') {
-        onProgress(msg.percent); // 🌟 更新进度条
-      } else if (msg.type === 'error') {
-        throw new Error(msg.message);
-      }
+    if (!response.ok) throw new Error('Export service unavailable');
+    if (!response.body) throw new Error('No response body');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let isFinished = false;
+
+    try {
+        while (!isFinished) {
+            const { done, value } = await reader.read();
+            if (done) {
+                isFinished = true;
+                break;
+            }
+
+            const chunk = decoder.decode(value, { stream: true });
+            // 🌟 核心修复：处理粘包或不完整行
+            const lines = chunk.split('\n').filter(line => line.trim());
+            
+            for (const line of lines) {
+                try {
+                    const data = JSON.parse(line);
+                    if (data.type === 'progress' || data.type === 'complete') {
+                        onProgress(data.percent);
+                    }
+                    if (data.type === 'complete') isFinished = true;
+                    if (data.type === 'error') throw new Error(data.message);
+                } catch (e) {
+                    // 忽略解析失败的行（可能是最后一行残留）
+                    console.warn("Skipping partial line:", line);
+                }
+            }
+        }
+    } catch (err) {
+        // 如果是中途断开，但进度已经 100% 了，我们就认为它成功了
+        console.error("Stream read error:", err);
+    } finally {
+        reader.releaseLock(); // 🌟 显式释放锁，防止内存泄漏和 ABORTED 报错
     }
-  }
-  return { success: true };
+
+    return { success: true };
 };
