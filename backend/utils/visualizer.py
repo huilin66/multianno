@@ -1,3 +1,4 @@
+import json
 import math
 import os
 
@@ -37,11 +38,9 @@ class LocalVisualizer:
         for hex_str in taxonomy_colors_hex:
             hex_str = hex_str.lstrip("#")
             r, g, b = tuple(int(hex_str[i : i + 2], 16) for i in (0, 2, 4))
-            palette.append([b, g, r])  # 存入 BGR
+            palette.append((b, g, r))  # 存入 BGR
 
-        # 🌟 3. 转换为 uint8 的 NumPy 数组，这是极速映射的关键！
-        # 此时 palette_np 的 shape 是 (11, 3)
-        self.palette_np = np.array(palette, dtype=np.uint8)
+        self.palettes = palette
 
     def _stretch_16bit_to_8bit(
         self, img: np.ndarray, min_val: float, max_val: float
@@ -339,14 +338,14 @@ class LocalVisualizer:
                 # 🌟 核心防弹保护：防止 Mask 中出现了超过我们调色板长度的 Class ID
                 # 比如模型预测出了类别 15，但我们的 taxonomy_colors 只有 10 个颜色
                 # 使用 np.clip 将超出的 ID 强制限制在调色板最大索引内，或者使用求余数
-                max_class_id = len(self.palette_np) - 1
+                max_class_id = len(self.palettes) - 1
                 safe_mask = np.clip(mask, 0, max_class_id)
                 # 或者使用循环映射: safe_mask = np.where(mask > 0, ((mask - 1) % max_class_id) + 1, 0)
 
                 # 🌟 终极魔法：NumPy 高级索引直接映射！
                 # 这一行代码会把 shape 为 (H, W) 的 2D 数组，瞬间变成 (H, W, 3) 的 RGB 彩图
                 # 速度是普通 Python 循环的几万倍
-                colored_mask = self.palette_np[safe_mask]
+                colored_mask = self.palettes[safe_mask]
 
                 return colored_mask
 
@@ -355,7 +354,12 @@ class LocalVisualizer:
         )
 
     def _draw_vector_annotations(
-        self, img: np.ndarray, config: dict, stem: str, color: tuple
+        self,
+        img: np.ndarray,
+        config: dict,
+        stem: str,
+        color: tuple,
+        is_pred: bool = False,
     ) -> np.ndarray:
         """目标检测/实例分割：读取 YOLO/COCO/JSON 标注并在 Base 图上绘制真实形状"""
         if not config:
@@ -373,15 +377,12 @@ class LocalVisualizer:
 
         h, w = img.shape[:2]
 
-        # 确保线宽合法
         try:
             t = int(float(self.thickness))
         except (ValueError, TypeError):
             t = 2
 
         shapes = []
-        import json
-        import os
 
         try:
             # ==========================================
@@ -473,7 +474,20 @@ class LocalVisualizer:
         for shape in shapes:
             shape_type = shape.get("type", shape.get("shape_type", "bbox")).lower()
             points = shape.get("points", [])
-            label = shape.get("label", "")
+            base_label = shape.get("label", "")
+            score = shape.get("score", 1.0)
+            class_id = shape.get("class_id", -1)
+            if class_id >= 0:
+                current_color = self.palettes[class_id % len(self.palettes)]
+            else:
+                current_color = color
+
+            if is_pred:
+                display_label = (
+                    f"{base_label} {score:.2f}" if base_label else f"{score:.2f}"
+                )
+            else:
+                display_label = base_label
 
             if not points:
                 continue
@@ -482,44 +496,57 @@ class LocalVisualizer:
             if shape_type in ["bbox", "rectangle"] and len(points) == 2:
                 pt1 = (int(points[0][0]), int(points[0][1]))
                 pt2 = (int(points[1][0]), int(points[1][1]))
-                cv2.rectangle(img, pt1, pt2, color, t)
+                cv2.rectangle(img, pt1, pt2, current_color, t)
 
-                # 绘制文字标签 (带个半透明底色更容易看清)
-                if label:
+                # 绘制文字标签
+                if display_label:
                     text_size = cv2.getTextSize(
-                        label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, max(1, t - 1)
+                        display_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, max(1, t - 1)
                     )[0]
                     cv2.rectangle(
                         img,
                         (pt1[0], pt1[1] - text_size[1] - 5),
                         (pt1[0] + text_size[0], pt1[1]),
-                        color,
+                        current_color,
                         -1,
                     )
                     cv2.putText(
                         img,
-                        label,
+                        display_label,
                         (pt1[0], pt1[1] - 5),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.5,
-                        (255, 255, 255) if color[1] < 200 else (0, 0, 0),
+                        (255, 255, 255) if current_color[1] < 200 else (0, 0, 0),
                         max(1, t - 1),
                     )
 
             # 绘制多边形 (Polygon)
             elif shape_type == "polygon" and len(points) >= 3:
                 pts = np.array(points, np.int32).reshape((-1, 1, 2))
-                cv2.polylines(img, [pts], isClosed=True, color=color, thickness=t)
+                cv2.polylines(
+                    img, [pts], isClosed=True, color=current_color, thickness=t
+                )
 
-                if label:
+                if display_label:
                     pt1 = (int(points[0][0]), int(points[0][1]))
+                    # 为了在多边形上也能看清，同样加上底色背板
+                    text_size = cv2.getTextSize(
+                        display_label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, max(1, t - 1)
+                    )[0]
+                    cv2.rectangle(
+                        img,
+                        (pt1[0], pt1[1] - text_size[1] - 5),
+                        (pt1[0] + text_size[0], pt1[1]),
+                        current_color,
+                        -1,
+                    )
                     cv2.putText(
                         img,
-                        label,
-                        (pt1[0], max(10, pt1[1] - 5)),
+                        display_label,
+                        (pt1[0], pt1[1] - 5),
                         cv2.FONT_HERSHEY_SIMPLEX,
                         0.5,
-                        color,
+                        (255, 255, 255) if current_color[1] < 200 else (0, 0, 0),
                         max(1, t - 1),
                     )
 
@@ -593,7 +620,7 @@ class LocalVisualizer:
             result_layers["Fatal Error (Base Images)"] = self._create_error_placeholder(
                 f"Load Error: {str(e)}"
             )
-            return result_layers  # 连原图都挂了，直接退出
+            return result_layers
 
         # 2. 处理真实标注 (Ground Truth)
         if anno_config and anno_config.get("folder_path"):
@@ -612,16 +639,18 @@ class LocalVisualizer:
                     for idx, v_conf in enumerate(view_configs):
                         view_name = v_conf.get("name", f"view_{idx}")
                         base_img = view_images[idx].copy()
-                        # 🌟 修复：直接传入 anno_config
                         drawn_img = self._draw_vector_annotations(
-                            base_img, anno_config, stem, color=(0, 255, 0)
+                            base_img,
+                            anno_config,  # 🌟 核心修复 1：直接传入完整的 anno_config 字典
+                            stem,
+                            color=(0, 255, 0),
+                            is_pred=False,
                         )
                         result_layers[f"{view_name} (GT BBox/Polygon)"] = drawn_img
             except Exception as e:
-                # 🌟 核心防弹：如果 GT 崩溃，不影响原图，返回一张报错的图层
                 import traceback
 
-                traceback.print_exc()  # 在控制台打印详细错误
+                traceback.print_exc()
                 h, w = view_images[0].shape[:2]
                 result_layers["GT Render Error"] = self._create_error_placeholder(
                     f"GT Error: {str(e)}", w, h
@@ -633,7 +662,7 @@ class LocalVisualizer:
                 if not pred.get("path"):
                     continue
                 p_name = pred.get("name", f"Pred_{p_idx}")
-                p_task = pred.get("taskType")  # 注意这里前端传的是 taskType
+                p_task = pred.get("taskType")
 
                 try:
                     if p_task == "semantic_seg":
@@ -647,11 +676,14 @@ class LocalVisualizer:
                             view_name = v_conf.get("name", f"view_{idx}")
                             base_img = view_images[idx].copy()
                             drawn_img = self._draw_vector_annotations(
-                                base_img, pred.get("path"), stem, color=(0, 165, 255)
+                                base_img,
+                                pred,  # 🌟 核心修复 2：直接传入完整的 pred 字典
+                                stem,
+                                color=(0, 165, 255),
+                                is_pred=True,
                             )
                             result_layers[f"{view_name} ({p_name} Result)"] = drawn_img
                 except Exception as e:
-                    # 🌟 核心防弹：如果某个 Pred 崩溃，返回它的报错图层
                     import traceback
 
                     traceback.print_exc()

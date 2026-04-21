@@ -701,11 +701,25 @@ export function LocalVisualization() {
                     {/* 🌟 调整 2：任务类型与格式 (与第二部分完全对齐的 1:1 Grid) */}
                     <div className="grid grid-cols-2 gap-2">
                       <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">标注格式</Label>
-                        <Select value={annoFormat} onValueChange={setAnnoFormat}>
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">任务类型</Label>
+                        {/* 🌟 修复：绑定到 pred.taskType */}
+                        <Select value={pred.taskType} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, taskType: val } : p))}>
                           <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
                           <SelectContent>
-                            {annoTaskType === 'semantic_seg' ? (
+                            <SelectItem value="bbox">目标检测 (BBox)</SelectItem>
+                            <SelectItem value="instance_seg">实例分割 (Polygon)</SelectItem>
+                            <SelectItem value="semantic_seg">语义分割 (Mask)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">结果格式</Label>
+                        {/* 🌟 修复：绑定到 pred.format，并根据 pred.taskType 动态切换可选格式 */}
+                        <Select value={pred.format} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val } : p))}>
+                          <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {pred.taskType === 'semantic_seg' ? (
                               <>
                                 <SelectItem value="image">Image Mask (.png/.tif)</SelectItem>
                                 <SelectItem value="multianno">原生 (.json)</SelectItem>
@@ -717,16 +731,6 @@ export function LocalVisualization() {
                                 <SelectItem value="multianno">原生 (.json)</SelectItem>
                               </>
                             )}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">结果格式</Label>
-                        <Select value={pred.format} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val } : p))}>
-                          <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="yolo">YOLO (.txt)</SelectItem>
-                            <SelectItem value="coco">COCO (.json)</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>

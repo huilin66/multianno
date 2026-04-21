@@ -341,8 +341,14 @@ def yolo_to_shapes(
             else f"Class_{class_id}"
         )
 
+        is_bbox = len(parts) == 5 or len(parts) == 6
+        is_polygon = len(parts) > 6
+        score = 1.0  # 🌟 如果没有分数，默认设置为 1.0
+
         # 目标检测 (5个值 -> 还原为 bbox)
-        if len(parts) == 5:
+        if is_bbox:
+            if len(parts) >= 6:
+                score = float(parts[5])
             xc, yc, w, h = map(float, parts[1:5])
             abs_xc, abs_yc = xc * img_w, yc * img_h
             abs_w, abs_h = w * img_w, h * img_h
@@ -353,7 +359,9 @@ def yolo_to_shapes(
             shapes.append(
                 {
                     "label": label,
+                    "class_id": class_id,
                     "type": "bbox",
+                    "score": score,
                     "shape_type": "rectangle",
                     "points": [[xmin, ymin], [xmax, ymax]],
                     "attributes": {},
@@ -362,8 +370,13 @@ def yolo_to_shapes(
             stats["imported_bboxes"] += 1
 
         # 实例分割 (多边形点阵 -> 还原为 polygon)
-        elif len(parts) > 5:
-            points_flat = list(map(float, parts[1:]))
+        elif is_polygon:
+            if len(parts) % 2 == 0:  # 长度为偶数说明最后多了一个 score
+                score = float(parts[-1])
+                coords = parts[1:-1]
+            else:
+                coords = parts[1:]
+            points_flat = list(map(float, coords))
             points = []
             for i in range(0, len(points_flat), 2):
                 points.append([points_flat[i] * img_w, points_flat[i + 1] * img_h])
@@ -371,7 +384,9 @@ def yolo_to_shapes(
             shapes.append(
                 {
                     "label": label,
+                    "class_id": class_id,
                     "type": "polygon",
+                    "score": score,
                     "shape_type": "polygon",
                     "points": points,
                     "attributes": {},
@@ -389,6 +404,7 @@ def coco_ann_to_shape(ann: dict, classes_map: dict, coco_mode: str = "polygon") 
     """
     cat_id = ann.get("category_id")
     label = classes_map.get(cat_id, f"Class_{cat_id}")
+    score = ann.get("score", 1.0)
 
     shape_id = str(uuid.uuid4())
     shape_obj = None
@@ -409,8 +425,10 @@ def coco_ann_to_shape(ann: dict, classes_map: dict, coco_mode: str = "polygon") 
             points = [[seg[i], seg[i + 1]] for i in range(0, len(seg), 2)]
             shape_obj = {
                 "id": shape_id,
+                "class_id": cat_id,
                 "label": label,
                 "type": "polygon",
+                "score": score,
                 "shape_type": "polygon",
                 "points": points,
                 "attributes": {},
@@ -431,8 +449,10 @@ def coco_ann_to_shape(ann: dict, classes_map: dict, coco_mode: str = "polygon") 
             points = [[x_min, y_min], [x_max, y_max]]
             shape_obj = {
                 "id": shape_id,
+                "class_id": cat_id,
                 "label": label,
                 "type": "bbox",
+                "score": score,
                 "shape_type": "rectangle",
                 "points": points,
                 "attributes": {},
