@@ -8,28 +8,10 @@ import { Input } from '../ui/input';
 import { Download, Folder, GripVertical, FileText, RotateCcw } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog';
 import { exportData, getFileContent } from '../../api/client';
+import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
+
 
 // --- 🌟 1. 静态字典与映射配置 ---
-
-const TASK_EN_DISPLAY: Record<string, string> = {
-  object_detection: 'Object Detection',
-  instance_segmentation: 'Instance Segmentation',
-  semantic_segmentation: 'Semantic Segmentation'
-};
-
-const FORMAT_EN_DISPLAY: Record<string, string> = {
-  yolo: 'YOLO Format',
-  coco: 'COCO Format',
-  multianno: 'MultiAnno Copy',
-  images_only: 'Images Only'
-};
-
-const TASK_TO_FORMATS: Record<string, string[]> = {
-  object_detection: ['yolo', 'coco', 'multianno'],
-  instance_segmentation: ['yolo', 'coco', 'multianno'],
-  semantic_segmentation: ['multianno', 'images_only']
-};
-
 const ALL_SHAPES: Annotation['type'][] = [
   'bbox', 'polygon', 'ellipse', 'circle', 'oriented_bbox', 
   'cuboid', 'keypoints', 'point', 'line'
@@ -99,7 +81,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   }, [taxonomyClasses]);
 
   useEffect(() => {
-    const available = TASK_TO_FORMATS[taskType];
+    const available = SUPPORTED_TASKS[taskType as TaskType].formats;
     if (!available.includes(format)) setFormat(available[0]);
     
     const mapping = TASK_MAPPINGS[taskType];
@@ -111,10 +93,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   }, [taskType]);
 
   useEffect(() => {
-    if (format === 'yolo') setExtension('.txt');
-    else if (format === 'coco' || format === 'multianno') setExtension('.json');
-    else if (format === 'images_only' && !['.jpg', '.png', '.tif', '.bmp'].includes(extension)) {
-      setExtension('.jpg'); 
+    const detail = FORMAT_DETAILS[format];
+    if (detail && !detail.extensions.includes(extension)) {
+      setExtension(detail.defaultExtension);
     }
   }, [format]);
 
@@ -185,21 +166,21 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                 <div className="flex items-center gap-3">
                   <Label className="w-12 text-right text-xs font-bold">任务：</Label>
                   <Select value={taskType} onValueChange={setTaskType}>
-                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{TASK_EN_DISPLAY[taskType]}</span></SelectTrigger>
+                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{SUPPORTED_TASKS[taskType as TaskType]?.label}</span></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="object_detection">目标检测 (Object Detection)</SelectItem>
-                      <SelectItem value="instance_segmentation">实例分割 (Instance Segmentation)</SelectItem>
-                      <SelectItem value="semantic_segmentation">语义分割 (Semantic Segmentation)</SelectItem>
+                      {Object.entries(SUPPORTED_TASKS).map(([id, t]) => (
+                        <SelectItem key={id} value={id}>{t.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex items-center gap-3">
                   <Label className="w-12 text-right text-xs font-bold">格式：</Label>
                   <Select value={format} onValueChange={setFormat}>
-                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{FORMAT_EN_DISPLAY[format]}</span></SelectTrigger>
+                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{FORMAT_DETAILS[format]?.label}</span></SelectTrigger>
                     <SelectContent>
-                      {TASK_TO_FORMATS[taskType].map(f => (
-                        <SelectItem key={f} value={f}>{FORMAT_EN_DISPLAY[f] || f}</SelectItem>
+                      {SUPPORTED_TASKS[taskType as TaskType]?.formats.map(fId => (
+                        <SelectItem key={fId} value={fId}>{FORMAT_DETAILS[fId].label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -216,16 +197,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                   <Select value={extension} onValueChange={setExtension}>
                     <SelectTrigger className="flex-1 font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {format === 'yolo' && <SelectItem value=".txt">.txt</SelectItem>}
-                      {(format === 'coco' || format === 'multianno') && <SelectItem value=".json">.json</SelectItem>}
-                      {format === 'images_only' && (
-                        <>
-                          <SelectItem value=".jpg">.jpg</SelectItem>
-                          <SelectItem value=".png">.png</SelectItem>
-                          <SelectItem value=".tif">.tif</SelectItem>
-                          <SelectItem value=".bmp">.bmp</SelectItem>
-                        </>
-                      )}
+                      {FORMAT_DETAILS[format]?.extensions.map(ext => (
+                        <SelectItem key={ext} value={ext}>{ext}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>

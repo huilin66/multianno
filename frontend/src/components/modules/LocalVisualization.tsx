@@ -12,6 +12,7 @@ import { Loader2, MonitorPlay, Download, Layers, Database, Search, Info, Plus, T
 } from 'lucide-react';
 import { requestVisPreview, requestVisExport, getFileContent, analyzeWorkspaceFolders} from '../../api/client';
 import { FileExplorerDialog } from './FileExplorerDialog'; 
+import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
 
 interface ViewMeta {
   name: string;
@@ -59,7 +60,7 @@ export function LocalVisualization() {
   const [predictions, setPredictions] = useState([{ 
     id: crypto.randomUUID(), 
     name: 'Model A', 
-    taskType: 'bbox',
+    taskType: 'object_detection' as TaskType,
     format: 'yolo', 
     extension: '.txt',
     path: '', 
@@ -162,6 +163,19 @@ export function LocalVisualization() {
     setExplorerConfig(prev => ({ ...prev, open: false }));
   };
 
+  useEffect(() => {
+    const formats = SUPPORTED_TASKS[annoTaskType]?.formats;
+    if (formats && !formats.includes(annoFormat)) {
+      setAnnoFormat(formats[0]);
+    }
+  }, [annoTaskType]);
+
+  useEffect(() => {
+    const detail = FORMAT_DETAILS[annoFormat];
+    if (detail && !detail.extensions.includes(annoExtension)) {
+      setAnnoExtension(detail.defaultExtension);
+    }
+  }, [annoFormat]);
   // 页面加载时，默认给一个空的输入行
   useEffect(() => {
     if (sourceType === 'local' && placeholders.length === 0) {
@@ -319,7 +333,11 @@ export function LocalVisualization() {
     setIsLoading(true);
     try {
       const currentStem = scannedStems[currentIndex];
-
+      const taskApiMap: Record<string, string> = {
+        object_detection: 'bbox',
+        instance_segmentation: 'instance_seg',
+        semantic_segmentation: 'semantic_seg'
+      };
       const payload = {
         source_type: sourceType,
         stem: currentStem,
@@ -327,7 +345,7 @@ export function LocalVisualization() {
         view_configs: sourceType === 'project' ? viewMetas : null,
         local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
         anno_config: enableAnno ? {
-          task_type: annoTaskType, 
+          task_type: taskApiMap[annoTaskType], 
           format: annoFormat,
           suffix: annoFormat === 'image' ? `${annoSuffix}${annoExtension}` : annoSuffix,
           folder_path: annoPath,
@@ -335,6 +353,7 @@ export function LocalVisualization() {
         } : null,
         pred_configs: enablePred ? predictions.filter(p => p.path).map(p => ({
           ...p,
+          taskType: taskApiMap[p.taskType], // 🌟 这里映射
           suffix: p.format === 'image' ? `${p.suffix}${p.extension}` : p.suffix
         })) : null
       };
@@ -582,12 +601,12 @@ export function LocalVisualization() {
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">任务：</Label>
-                      <Select value={annoTaskType} onValueChange={setAnnoTaskType}>
+                      <Select value={annoTaskType} onValueChange={(val: TaskType) => setAnnoTaskType(val)}>
                         <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="bbox">目标检测 (Object Detection)</SelectItem>
-                          <SelectItem value="instance_seg">实例分割 (Instance Segmentation)</SelectItem>
-                          <SelectItem value="semantic_seg">语义分割 (Semantic Segmentation)</SelectItem>
+                          {Object.entries(SUPPORTED_TASKS).map(([id, t]) => (
+                            <SelectItem key={id} value={id}>{t.label.split(' ')[0]}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -596,18 +615,9 @@ export function LocalVisualization() {
                       <Select value={annoFormat} onValueChange={setAnnoFormat}>
                         <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {annoTaskType === 'semantic_seg' ? (
-                            <>
-                              <SelectItem value="image">Mask 图像</SelectItem>
-                              <SelectItem value="multianno">MultiAnno</SelectItem>
-                            </>
-                          ) : (
-                            <>
-                              <SelectItem value="yolo">YOLO 格式</SelectItem>
-                              <SelectItem value="coco">COCO 格式</SelectItem>
-                              <SelectItem value="multianno">MultiAnno</SelectItem>
-                            </>
-                          )}
+                          {SUPPORTED_TASKS[annoTaskType]?.formats.map(fId => (
+                            <SelectItem key={fId} value={fId}>{FORMAT_DETAILS[fId].label}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -623,14 +633,9 @@ export function LocalVisualization() {
                       <Select value={annoExtension} onValueChange={setAnnoExtension}>
                         <SelectTrigger className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
                         <SelectContent>
-                          {annoFormat === 'yolo' && <SelectItem value=".txt">.txt</SelectItem>}
-                          {(annoFormat === 'coco' || annoFormat === 'multianno') && <SelectItem value=".json">.json</SelectItem>}
-                          {annoFormat === 'image' && (
-                            <>
-                              <SelectItem value=".png">.png</SelectItem>
-                              <SelectItem value=".tif">.tif</SelectItem>
-                            </>
-                          )}
+                          {FORMAT_DETAILS[annoFormat]?.extensions.map(ext => (
+                            <SelectItem key={ext} value={ext}>{ext}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -746,32 +751,27 @@ export function LocalVisualization() {
                       <div className="space-y-3">
                         <div className="flex items-center gap-2">
                           <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">任务：</Label>
-                          <Select value={pred.taskType} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, taskType: val } : p))}>
+                          <Select value={pred.taskType} onValueChange={(val: TaskType) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, taskType: val } : p))}>
                             <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="bbox">目标检测</SelectItem>
-                              <SelectItem value="instance_seg">实例分割</SelectItem>
-                              <SelectItem value="semantic_seg">语义分割</SelectItem>
+                              {Object.entries(SUPPORTED_TASKS).map(([id, t]) => (
+                                <SelectItem key={id} value={id}>{t.label.split(' ')[0]}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
                         <div className="flex items-center gap-2">
                           <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">格式：</Label>
-                          <Select value={pred.format} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val } : p))}>
+                          <Select value={pred.format} onValueChange={(val) => {
+                              // 当改变 format 时，同时顺便重置默认 extension，保证联动体验
+                              const defaultExt = FORMAT_DETAILS[val].defaultExtension;
+                              setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val, extension: defaultExt } : p));
+                            }}>
                             <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {pred.taskType === 'semantic_seg' ? (
-                                <>
-                                  <SelectItem value="image">Mask 图像</SelectItem>
-                                  <SelectItem value="multianno">MultiAnno</SelectItem>
-                                </>
-                              ) : (
-                                <>
-                                  <SelectItem value="yolo">YOLO 格式</SelectItem>
-                                  <SelectItem value="coco">COCO 格式</SelectItem>
-                                  <SelectItem value="multianno">MultiAnno</SelectItem>
-                                </>
-                              )}
+                              {SUPPORTED_TASKS[pred.taskType]?.formats.map(fId => (
+                                <SelectItem key={fId} value={fId}>{FORMAT_DETAILS[fId].label}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
@@ -787,14 +787,9 @@ export function LocalVisualization() {
                           <Select value={pred.extension} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, extension: val } : p))}>
                             <SelectTrigger className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {pred.format === 'yolo' && <SelectItem value=".txt">.txt</SelectItem>}
-                              {(pred.format === 'coco' || pred.format === 'multianno') && <SelectItem value=".json">.json</SelectItem>}
-                              {pred.format === 'image' && (
-                                <>
-                                  <SelectItem value=".png">.png</SelectItem>
-                                  <SelectItem value=".tif">.tif</SelectItem>
-                                </>
-                              )}
+                              {FORMAT_DETAILS[pred.format]?.extensions.map(ext => (
+                                <SelectItem key={ext} value={ext}>{ext}</SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>

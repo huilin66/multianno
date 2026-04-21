@@ -5,32 +5,11 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-// 🌟 1. 补全 Loader2 图标
 import { Upload, Folder, FileText, AlertTriangle, Image as ImageIcon, Loader2 } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog';
-// 🌟 2. 引入读取配置和扫描目录的 API
 import { importData, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
-// 🌟 3. 引入全量加载引擎
 import { loadAllProjectAnnotations } from '../../lib/projectUtils';
-
-const TASK_EN_DISPLAY: Record<string, string> = {
-  object_detection: 'Object Detection',
-  instance_segmentation: 'Instance Segmentation',
-  semantic_segmentation: 'Semantic Segmentation'
-};
-
-const FORMAT_EN_DISPLAY: Record<string, string> = {
-  yolo: 'YOLO 格式',
-  coco: 'COCO 格式',
-  multianno: 'MultiAnno 格式',
-  images_only: 'Mask 图像'
-};
-
-const TASK_TO_FORMATS: Record<string, string[]> = {
-  object_detection: ['yolo', 'coco', 'multianno'],
-  instance_segmentation: ['yolo', 'coco', 'multianno'],
-  semantic_segmentation: ['multianno', 'images_only']
-};
+import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
 
 export function DataImport({ onClose }: { onClose?: () => void }) {
   const { folders, views } = useStore() as any;
@@ -54,21 +33,20 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [importZeroClass, setImportZeroClass] = useState(false);
   const [cocoMode, setCocoMode] = useState<'polygon' | 'bbox'>('polygon');
   const [isImporting, setIsImporting] = useState(false);
- // 🌟 自动联动：当任务改变时，切换到合法的格式
+
  
   React.useEffect(() => {
-    const available = TASK_TO_FORMATS[taskType];
+    const available = SUPPORTED_TASKS[taskType as TaskType].formats;
     if (available && !available.includes(format)) setFormat(available[0]);
   }, [taskType]);
 
-  // 🌟 自动联动：当格式改变时，切换到对应的扩展名
   React.useEffect(() => {
-    if (format === 'yolo') setExtension('.txt');
-    else if (format === 'coco' || format === 'multianno') setExtension('.json');
-    else if (format === 'images_only' && !['.jpg', '.png', '.tif', '.bmp'].includes(extension)) {
-      setExtension('.png'); 
+    const detail = FORMAT_DETAILS[format];
+    if (detail && !detail.extensions.includes(extension)) {
+      setExtension(detail.defaultExtension);
     }
   }, [format]);
+
   const handleExecute = async () => {
     if (!sourceDataPath) return alert("请选择要导入的外部数据源路径！");
     if (!targetWorkspaceDir) return alert("请选择系统目标工作区！");
@@ -176,21 +154,21 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                 <div className="flex items-center gap-3">
                   <Label className="w-16 text-right text-xs font-bold">任务：</Label>
                   <Select value={taskType} onValueChange={setTaskType}>
-                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{TASK_EN_DISPLAY[taskType]}</span></SelectTrigger>
+                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{SUPPORTED_TASKS[taskType as TaskType]?.label}</span></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="object_detection">Object Detection</SelectItem>
-                      <SelectItem value="instance_segmentation">Instance Segmentation</SelectItem>
-                      <SelectItem value="semantic_segmentation">Semantic Segmentation</SelectItem>
+                      {Object.entries(SUPPORTED_TASKS).map(([id, t]) => (
+                        <SelectItem key={id} value={id}>{t.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="flex items-center gap-3">
                   <Label className="w-16 text-right text-xs font-bold">格式：</Label>
                   <Select value={format} onValueChange={(val) => { setFormat(val); setSourceDataPath(''); }}>
-                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{FORMAT_EN_DISPLAY[format]}</span></SelectTrigger>
+                    <SelectTrigger className="flex-1 font-bold"><span className="font-bold">{FORMAT_DETAILS[format]?.label}</span></SelectTrigger>
                     <SelectContent>
-                      {TASK_TO_FORMATS[taskType].map(f => (
-                        <SelectItem key={f} value={f}>{FORMAT_EN_DISPLAY[f]}</SelectItem>
+                      {SUPPORTED_TASKS[taskType as TaskType]?.formats.map(fId => (
+                        <SelectItem key={fId} value={fId}>{FORMAT_DETAILS[fId].label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -212,16 +190,9 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                   <Select value={extension} onValueChange={setExtension}>
                     <SelectTrigger className="flex-1 font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {format === 'yolo' && <SelectItem value=".txt">.txt</SelectItem>}
-                      {(format === 'coco' || format === 'multianno') && <SelectItem value=".json">.json</SelectItem>}
-                      {format === 'images_only' && (
-                        <>
-                          <SelectItem value=".png">.png</SelectItem>
-                          <SelectItem value=".tif">.tif</SelectItem>
-                          <SelectItem value=".jpg">.jpg</SelectItem>
-                          <SelectItem value=".bmp">.bmp</SelectItem>
-                        </>
-                      )}
+                      {FORMAT_DETAILS[format]?.extensions.map(ext => (
+                        <SelectItem key={ext} value={ext}>{ext}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
