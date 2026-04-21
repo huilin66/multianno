@@ -428,8 +428,18 @@ export default function App() {
         open={activeModule === 'local_visualization'} 
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-3xl sm:max-w-3xl h-[85vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
-          <LocalVisualization onClose={() => setActiveModule('workspace')} />
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
+          
+          {/* 🌟 补充标准头部，保持与其他模块高度一致 */}
+          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
+            <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
+              <Airplay className="w-5 h-5 text-indigo-500"/> {t('menu.localVisualization', '本地可视化引擎')}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-grow overflow-hidden relative">
+            <LocalVisualization onClose={() => setActiveModule('workspace')} />
+          </div>
         </DialogContent>
       </Dialog>
       <ShortcutSettingsModal 

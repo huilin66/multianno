@@ -88,6 +88,7 @@ export function LocalVisualization() {
       // 针对 COCO 这种单文件格式，前端可以直接跳过目录扫描验证，或者调用专门的解析接口
       if (annoFormat === 'coco') {
         setAnnoScannedCount(scannedStems.length); // 暂时假设 COCO 全匹配
+        fetchPreview();
         return;
       }
 
@@ -97,6 +98,10 @@ export function LocalVisualization() {
         // 求交集：计算有多少个图像 Stem 在标注文件夹中也找到了对应的文件
         const matched = result.commonStems.filter((stem: string) => scannedStems.includes(stem));
         setAnnoScannedCount(matched.length);
+
+        if (matched.length > 0) {
+          fetchPreview();
+        }
       }
     } catch (error) {
       alert("标注目录扫描失败，请检查路径。");
@@ -115,6 +120,7 @@ export function LocalVisualization() {
     try {
       if (pred.format === 'coco') {
         setPredictions(prev => prev.map(p => p.id === predId ? { ...p, scannedCount: scannedStems.length } : p));
+        fetchPreview();
         return;
       }
 
@@ -122,6 +128,10 @@ export function LocalVisualization() {
       if (result.commonStems) {
         const matched = result.commonStems.filter((stem: string) => scannedStems.includes(stem));
         setPredictions(prev => prev.map(p => p.id === predId ? { ...p, scannedCount: matched.length } : p));
+
+        if (matched.length > 0) {
+          fetchPreview();
+        }
       }
     } catch (error) {
       alert("预测目录扫描失败，请检查路径。");
@@ -358,15 +368,9 @@ export function LocalVisualization() {
     <div className="flex flex-col lg:flex-row h-full bg-neutral-50 dark:bg-neutral-950 w-full overflow-hidden">
       
       {/* 侧边栏：配置区 */}
-      <div className="w-full lg:w-[360px] shrink-0 bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex flex-col h-full">
+      <div className="w-full lg:w-[300px] shrink-0 bg-white dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex flex-col h-full shadow-2xl z-10">
         
-        <div className="p-5 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-          <h2 className="text-xl font-black flex items-center gap-2 text-neutral-800 dark:text-neutral-100">
-            <MonitorPlay className="text-indigo-500 w-5 h-5" /> 本地可视化引擎
-          </h2>
-        </div>
-
-        <div className="flex-1 overflow-y-auto custom-scrollbar p-5 space-y-8">
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-6">
           
           {/* 🌟 核心一：数据源扫描区 */}
           <section className="space-y-4">
@@ -842,42 +846,47 @@ export function LocalVisualization() {
       </div>
 
       {/* 主视图：预览区 */}
+      {/* 主视图：预览区 */}
       <div className="flex-1 relative bg-neutral-900 flex flex-col items-center justify-center overflow-hidden pattern-checkerboard">
         
-        {/* 1. 顶部状态指示 */}
+        {/* 1. 顶部状态指示 (🌟 优化：改到右上角，变得更迷你) */}
         {scannedStems.length > 0 && (
-            <div className="absolute top-6 z-30 px-4 py-2 bg-black/60 backdrop-blur-xl border border-white/10 rounded-full shadow-2xl">
-            <div className="text-[11px] font-mono text-white/90 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-white/40">预览第一组示例:</span> 
-                <span className="text-indigo-400 font-bold">{scannedStems[0]}</span>
-            </div>
+            <div className="absolute top-3 right-4 z-30 px-2.5 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-md shadow-sm">
+              <div className="text-[9px] font-mono text-white/80 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-white/40">当前示例:</span> 
+                  <span className="text-indigo-400 font-bold">{scannedStems[currentIndex]}</span>
+              </div>
             </div>
         )}
 
-        {/* 2. 加载等待层 */}
+        {/* 2. 加载等待层 (🌟 优化：缩小图标和文字) */}
         {isLoading && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm transition-all">
-            <Loader2 className="w-10 h-10 animate-spin text-indigo-500 mb-4" />
-            <p className="text-[10px] font-black tracking-[0.2em] text-neutral-400 uppercase">
-                {sourceType === 'project' ? 'Backend Rendering (Transforming...)' : 'Loading Raw Image...'}
-            </p>
+              <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-3" />
+              <p className="text-[9px] font-black tracking-[0.2em] text-neutral-400 uppercase">
+                  渲染图层数据中...
+              </p>
             </div>
         )}
 
-        {/* 🌟 3. 核心修复 4：多图像渲染网格 (Grid) */}
-        <div className="w-full h-full p-8 flex items-start justify-center overflow-y-auto custom-scrollbar">
+        {/* 🌟 3. 极限空间网格排版 */}
+        <div className="w-full h-full p-2 md:p-4 flex items-start justify-center overflow-y-auto custom-scrollbar">
           {Object.keys(previewImages).length > 0 ? (
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 w-full max-w-6xl mx-auto pb-24 mt-16">
+            // 🌟 优化：去掉了 max-w-6xl，改为 w-full；缩小 gap-6 到 gap-3；缩小顶部 mt-16 到 mt-8
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 w-full pb-16 mt-8">
               {Object.entries(previewImages).map(([layerName, b64Str]) => (
-                <div key={layerName} className="flex flex-col gap-2 bg-black/40 p-3 rounded-xl border border-white/10 shadow-2xl">
-                  <div className="text-white/80 text-[11px] font-mono px-2 uppercase tracking-wider flex justify-between font-bold">
+                // 🌟 优化：卡片内边距 p-3 缩小为 p-1.5
+                <div key={layerName} className="flex flex-col gap-1 bg-black/40 p-1.5 rounded-lg border border-white/10 shadow-xl">
+                  {/* 🌟 优化：标题文字缩小到 text-[9px] */}
+                  <div className="text-white/60 text-[9px] font-mono px-1 uppercase tracking-wider flex justify-between font-bold">
                     <span>{layerName}</span>
                   </div>
                   <div className="relative rounded overflow-hidden bg-black/50 flex items-center justify-center border border-white/5">
                     <img 
                       src={b64Str} 
-                      className={`w-full max-h-[400px] object-contain transition-all duration-500 ${isLoading ? 'opacity-30 blur-sm' : 'opacity-100'}`}
+                      // 🌟 优化：将 max-h-[70vh] 放宽到 max-h-[85vh]，让竖版或高分辨率图像能撑满更多屏幕
+                      className={`w-full max-h-[85vh] object-contain transition-all duration-500 ${isLoading ? 'opacity-30 blur-sm scale-95' : 'opacity-100 scale-100'}`}
                       alt={layerName} 
                     />
                   </div>
@@ -885,25 +894,13 @@ export function LocalVisualization() {
               ))}
             </div>
           ) : (
-            <div className="text-neutral-700 flex flex-col items-center justify-center h-full gap-4">
-                <MonitorPlay size={48} strokeWidth={1} className="opacity-20" />
-                <p className="text-xs font-bold opacity-30 tracking-widest uppercase">等待数据扫描或渲染</p>
+            <div className="text-neutral-700 flex flex-col items-center justify-center h-full gap-3">
+                <MonitorPlay size={40} strokeWidth={1} className="opacity-20" />
+                <p className="text-[10px] font-bold opacity-30 tracking-widest uppercase">等待数据扫描或渲染</p>
             </div>
           )}
         </div>
 
-        {/* 4. 底部任务反馈 */}
-        {isExporting && (
-            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[300px] bg-black/80 border border-white/10 p-4 rounded-xl backdrop-blur-md">
-            <div className="flex justify-between text-[10px] text-white/60 mb-2 font-mono">
-                <span>批量导出进度...</span>
-                <span>75%</span>
-            </div>
-            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 w-[75%] transition-all"></div>
-            </div>
-            </div>
-        )}
       </div>
       {/* 1. 用于选择 project_meta.json 的文件浏览器 */}
         <FileExplorerDialog 

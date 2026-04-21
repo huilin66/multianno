@@ -70,14 +70,182 @@ class LocalVisualizer:
 
         return img_data
 
+    def _read_image_raw(self, stem: str, v_conf: dict) -> np.ndarray:
+        """底层方法：仅读取原始矩阵，支持 16-bit 和多光谱"""
+        folder = v_conf.get("folder_path")
+        suffix = v_conf.get("suffix", "")
+        if not folder:
+            return None
+
+        path = os.path.join(folder, f"{stem}{suffix}")
+        if os.path.exists(path):
+            # 使用 IMREAD_UNCHANGED 确保能读出 16位图或单通道图
+            img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+            return img
+        return None
+
+    def _process_bands_and_render(
+        self, raw_img: np.ndarray, v_conf: dict
+    ) -> np.ndarray:
+        """核心步骤 1：处理波段映射与位深转换 (修复紫红通道与变黑Bug)"""
+        if raw_img is None:
+            return None
+
+        # 1. 安全提取波段 (保持 OpenCV 的 BGR 顺序，拒绝紫红错乱)
+        bands = v_conf.get("bands", [1, 2, 3])
+        extracted = []
+        channels = raw_img.shape[2] if raw_img.ndim == 3 else 1
+
+        for b in bands:
+            idx = int(b) - 1
+            if 0 <= idx < channels:
+                if channels == 1:
+                    extracted.append(raw_img)
+                else:
+                    extracted.append(raw_img[:, :, idx])
+            else:
+                extracted.append(np.zeros(raw_img.shape[:2], dtype=raw_img.dtype))
+
+        # 2. 组合为 3 通道
+        if len(extracted) == 1:
+            img_data = cv2.cvtColor(extracted[0], cv2.COLOR_GRAY2BGR)
+        elif len(extracted) >= 3:
+            img_data = cv2.merge([extracted[0], extracted[1], extracted[2]])
+        else:
+            img_data = cv2.merge(extracted)
+
+        # 3. 动态位深拉伸 (修复 16位图变纯黑/白的问题)
+        if img_data.dtype in [np.uint16, np.int16]:
+            transform = v_conf.get("transform", {})
+            min_m, max_m = transform.get("minMax", [None, None])
+
+            # 如果前端没传精确的 minMax，必须用自身的最小最大值，防止数据溢出成黑图
+            if min_m is None or max_m is None or (min_m == 0 and max_m == 255):
+                min_m, max_m = float(img_data.min()), float(img_data.max())
+
+            img_data = self._stretch_16bit_to_8bit(img_data, min_m, max_m)
+
+        return img_data
+
+    def _apply_transform_and_align(
+        self, img: np.ndarray, transform: dict, target_shape: tuple
+    ) -> np.ndarray:
+        """核心步骤 2：🌟 严格执行用户的【先裁剪，后 Resize】逻辑"""
+        target_h, target_w = target_shape
+        if transform is None:
+            return cv2.resize(img, (target_w, target_h))
+
+        h, w = img.shape[:2]
+
+        # 1. Base Crop (处理基础的 t, b, l, r 边界裁剪)
+        crop = transform.get("crop", {})
+        y1 = max(0, int(float(crop.get("t", 0)) / 100.0 * h))
+        y2 = min(h, int(float(crop.get("b", 100)) / 100.0 * h))
+        x1 = max(0, int(float(crop.get("l", 0)) / 100.0 * w))
+        x2 = min(w, int(float(crop.get("r", 100)) / 100.0 * w))
+
+        if y2 > y1 and x2 > x1:
+            cropped = img[y1:y2, x1:x2]
+        else:
+            cropped = img
+
+        sx = float(transform.get("scaleX", 1.0))
+        sy = float(transform.get("scaleY", 1.0))
+        tx = float(transform.get("offsetX", 0.0))
+        ty = float(transform.get("offsetY", 0.0))
+
+        # 对于 Main View 通常全为默认值，直接 resize 即可
+        if sx == 1.0 and sy == 1.0 and tx == 0.0 and ty == 0.0:
+            return cv2.resize(cropped, (target_w, target_h))
+
+        # ==============================================================
+        # 🌟 核心算法：逆向推导在原图中的 Viewport (视口) 裁剪框
+        # 公式: X_canvas = X_img * sx + tx -> X_img = (X_canvas - tx) / sx
+        # ==============================================================
+        crop_left = int(-tx / sx)
+        crop_right = int((target_w - tx) / sx)
+        crop_top = int(-ty / sy)
+        crop_bottom = int((target_h - ty) / sy)
+
+        ch, cw = cropped.shape[:2]
+        req_w = crop_right - crop_left
+        req_h = crop_bottom - crop_top
+
+        # 限制有效像素边界 (防止裁剪框跑出图片外部)
+        x_start_img = max(0, crop_left)
+        y_start_img = max(0, crop_top)
+        x_end_img = min(cw, crop_right)
+        y_end_img = min(ch, crop_bottom)
+
+        x_pos_box = x_start_img - crop_left
+        y_pos_box = y_start_img - crop_top
+
+        # 2. 构造一块纯黑的 Crop 缓冲垫，用来接住裁剪出来的有效像素
+        box_img = np.zeros((max(1, req_h), max(1, req_w), 3), dtype=cropped.dtype)
+
+        if x_end_img > x_start_img and y_end_img > y_start_img:
+            box_img[
+                y_pos_box : y_pos_box + (y_end_img - y_start_img),
+                x_pos_box : x_pos_box + (x_end_img - x_start_img),
+            ] = cropped[y_start_img:y_end_img, x_start_img:x_end_img]
+
+        # 3. 最后一步：将带有安全黑边的 Crop Box 平滑 Resize 到目标画布尺寸
+        final_aligned = cv2.resize(box_img, (target_w, target_h))
+        return final_aligned
+
     def _load_all_views(self, stem: str, view_configs: list) -> list:
-        """
-        第一步：纯粹的加载，返回 N 个 View 的独立图像列表
-        """
+        """图像获取总管：确保所有 View 都向 Main View 看齐"""
+        if not view_configs:
+            return []
+
         frames = []
-        for v_conf in view_configs:
-            img_array = self._load_and_transform_view(v_conf, stem)
-            frames.append(img_array)
+        target_shape = None
+
+        # Pass 1: 获取 Main View 并确立世界绝对画布基准
+        main_conf = view_configs[0]
+        main_raw = self._read_image_raw(stem, main_conf)
+
+        if main_raw is None:
+            target_shape = (600, 800)
+            main_aligned = self._create_error_placeholder("Main View Missing", 800, 600)
+        else:
+            main_processed = self._process_bands_and_render(main_raw, main_conf)
+
+            # 严格计算 Main View 的原始像素画布大小
+            transform = main_conf.get("transform", {})
+            crop = transform.get("crop", {})
+            mh, mw = main_processed.shape[:2]
+
+            t = max(0, int(float(crop.get("t", 0)) / 100.0 * mh))
+            b = min(mh, int(float(crop.get("b", 100)) / 100.0 * mh))
+            l = max(0, int(float(crop.get("l", 0)) / 100.0 * mw))
+            r = min(mw, int(float(crop.get("r", 100)) / 100.0 * mw))
+
+            target_h = max(10, b - t)
+            target_w = max(10, r - l)
+            target_shape = (target_h, target_w)
+
+            # Main View 同样走一遍安全管线
+            main_aligned = self._apply_transform_and_align(
+                main_processed, transform, target_shape
+            )
+
+        frames.append(main_aligned)
+
+        # Pass 2: 处理其余 Aug Views，全部强制 Crop 然后 Resize 到 target_shape
+        for v_conf in view_configs[1:]:
+            raw_img = self._read_image_raw(stem, v_conf)
+            if raw_img is not None:
+                processed = self._process_bands_and_render(raw_img, v_conf)
+                aligned = self._apply_transform_and_align(
+                    processed, v_conf.get("transform", {}), target_shape
+                )
+                frames.append(aligned)
+            else:
+                frames.append(
+                    np.zeros((target_shape[0], target_shape[1], 3), dtype=np.uint8)
+                )
+
         return frames
 
     def _process_annotations(
@@ -112,14 +280,13 @@ class LocalVisualizer:
     def _draw_semantic_mask(
         self, base_img: np.ndarray, folder_path: str, stem: str, suffix: str
     ) -> np.ndarray:
-        """语义分割渲染：读取掩码图并上色（若为单类别则返回黑白或伪彩）"""
+        """语义分割：读取掩码图并上色（修复了 OpenCV 类型崩溃问题）"""
         if not folder_path:
             return np.zeros_like(base_img)
 
         # 尝试拼接可能的掩码图路径
         mask_path = os.path.join(folder_path, f"{stem}{suffix}")
 
-        # 兼容性寻找：如果没有找到精确后缀，尝试寻找 .png, .tif 等
         if not os.path.exists(mask_path):
             for ext in [".png", ".tif", ".jpg", ".bmp"]:
                 fallback_path = os.path.join(folder_path, f"{stem}{ext}")
@@ -130,24 +297,44 @@ class LocalVisualizer:
         if os.path.exists(mask_path):
             mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
             if mask is not None:
-                # 调整 Mask 尺寸以严格匹配当前的 Base View
                 mask = cv2.resize(
                     mask,
                     (base_img.shape[1], base_img.shape[0]),
                     interpolation=cv2.INTER_NEAREST,
                 )
 
-                # 简单映射：将灰度值放大（避免都是0和1看不见），然后应用伪彩
-                # 如果业务需求是保留黑白，可以直接返回 cv2.cvtColor(mask * 255, cv2.COLOR_GRAY2BGR)
-                colored_mask = cv2.applyColorMap(mask * 50, cv2.COLORMAP_JET)
+                # 🌟 核心修复 1：使用 cv2.convertScaleAbs 安全放大灰度值并严格保持 uint8 类型
+                # 绝对不要直接用 mask * 50，那会导致 int32 溢出并使 applyColorMap 崩溃！
+                mask_scaled = cv2.convertScaleAbs(mask, alpha=50)
+                colored_mask = cv2.applyColorMap(mask_scaled, cv2.COLORMAP_JET)
 
-                # 创建一个纯净的 Mask 展示层（而不是和原图叠加，叠加由前端或导出配置决定）
                 return colored_mask
 
-        # 如果找不到掩码图，返回一张全黑的图或带有错误提示的图
         return self._create_error_placeholder(
             f"Mask Not Found: {stem}", base_img.shape[1], base_img.shape[0]
         )
+
+    def _draw_vector_annotations(
+        self, img: np.ndarray, folder_path: str, stem: str, color: tuple
+    ) -> np.ndarray:
+        """目标检测/实例分割：在 Base 图上画框"""
+        if not folder_path:
+            return img
+
+        h, w = img.shape[:2]
+
+        # 🌟 核心修复 2：确保 thickness 绝对是 int 类型，防止 TypeError 崩溃
+        try:
+            t = int(float(self.thickness))
+        except (ValueError, TypeError):
+            t = 2
+
+        # 画一个占位框证明逻辑生效
+        cv2.rectangle(
+            img, (int(w * 0.4), int(h * 0.4)), (int(w * 0.6), int(h * 0.6)), color, t
+        )
+
+        return img
 
     def _draw_vector_annotations(
         self, img: np.ndarray, folder_path: str, stem: str, color: tuple
@@ -162,72 +349,6 @@ class LocalVisualizer:
         # cv2.rectangle(img, (int(w*0.4), int(h*0.4)), (int(w*0.6), int(h*0.6)), color, self.thickness)
 
         return img
-
-    def render_separated_layers(
-        self,
-        stem: str,
-        view_configs: list,
-        anno_config: dict = None,
-        pred_configs: list = None,
-    ) -> dict:
-        """
-        🚀 终极多通道渲染管线：不再进行物理拼图。
-        返回格式: { "MainView_Base": img_array, "MainView_GT_Mask": mask_array, "MainView_ModelA_Mask": mask_array ... }
-        """
-        # 1. 获取所有纯净的基础视图 (RGB, Thermal 等)
-        view_images = self._load_all_views(stem, view_configs)
-        result_layers = {}
-
-        for idx, v_conf in enumerate(view_configs):
-            view_name = v_conf.get("name", f"view_{idx}")
-            base_img = view_images[idx].copy()  # 复制一份，避免互相污染
-
-            # --- 2. 处理真实标注 (Ground Truth) ---
-            if anno_config and anno_config.get("folder_path"):
-                task_type = anno_config.get("task_type")
-                if task_type == "semantic_seg":
-                    # 语义分割：生成独立的 Mask 层
-                    mask_img = self._draw_semantic_mask(
-                        base_img,
-                        anno_config.get("folder_path"),
-                        stem,
-                        anno_config.get("suffix", ""),
-                    )
-                    result_layers[f"{view_name}_GT_Mask"] = mask_img
-                else:
-                    # Bbox/Instance：在 Base 图上绘制绿色框代表 GT
-                    base_img = self._draw_vector_annotations(
-                        base_img,
-                        anno_config.get("folder_path"),
-                        stem,
-                        color=(0, 255, 0),
-                    )
-
-            # --- 3. 处理多组预测结果 (Predictions) ---
-            if pred_configs:
-                for p_idx, pred in enumerate(pred_configs):
-                    if not pred.get("path"):
-                        continue
-
-                    p_name = pred.get("name", f"Pred_{p_idx}")
-                    p_task = pred.get("taskType")
-
-                    if p_task == "semantic_seg":
-                        # 预测的语义分割：生成独立的 Mask 层
-                        pred_mask = self._draw_semantic_mask(
-                            base_img, pred.get("path"), stem, pred.get("suffix", "")
-                        )
-                        result_layers[f"{view_name}_{p_name}_Mask"] = pred_mask
-                    else:
-                        # 预测的 Bbox/Instance：在 Base 图上绘制红色或橙色框
-                        base_img = self._draw_vector_annotations(
-                            base_img, pred.get("path"), stem, color=(0, 165, 255)
-                        )
-
-            # --- 4. 将叠加了所有 Vector 框 (GT + Preds) 的最终 Base 图加入结果集 ---
-            result_layers[f"{view_name}_Base"] = base_img
-
-        return result_layers
 
     def _draw_vector_annotations(
         self, img: np.ndarray, folder_path: str, stem: str, color: tuple
@@ -297,60 +418,87 @@ class LocalVisualizer:
         pred_configs: list = None,
     ) -> dict:
         """
-        🚀 终极多通道渲染管线：不再进行物理拼图。
-        返回格式: { "MainView_Base": img_array, "MainView_GT_Mask": mask_array, "MainView_ModelA_Mask": mask_array ... }
+        🚀 终极多通道渲染管线 (带防弹容错机制)
         """
-        # 1. 获取所有纯净的基础视图 (RGB, Thermal 等)
-        view_images = self._load_all_views(stem, view_configs)
         result_layers = {}
 
-        for idx, v_conf in enumerate(view_configs):
-            view_name = v_conf.get("name", f"view_{idx}")
-            base_img = view_images[idx].copy()  # 复制一份，避免互相污染
+        # 1. 尝试加载原始图像
+        try:
+            view_images = self._load_all_views(stem, view_configs)
+            for idx, v_conf in enumerate(view_configs):
+                view_name = v_conf.get("name", f"view_{idx}")
+                result_layers[f"{view_name} (Original)"] = view_images[idx].copy()
+        except Exception as e:
+            result_layers["Fatal Error (Base Images)"] = self._create_error_placeholder(
+                f"Load Error: {str(e)}"
+            )
+            return result_layers  # 连原图都挂了，直接退出
 
-            # --- 2. 处理真实标注 (Ground Truth) ---
-            if anno_config and anno_config.get("folder_path"):
+        # 2. 处理真实标注 (Ground Truth)
+        if anno_config and anno_config.get("folder_path"):
+            try:
                 task_type = anno_config.get("task_type")
                 if task_type == "semantic_seg":
-                    # 语义分割：生成独立的 Mask 层
+                    main_base = view_images[0].copy()
                     mask_img = self._draw_semantic_mask(
-                        base_img,
+                        main_base,
                         anno_config.get("folder_path"),
                         stem,
                         anno_config.get("suffix", ""),
                     )
-                    result_layers[f"{view_name}_GT_Mask"] = mask_img
+                    result_layers["Ground Truth (Semantic Mask)"] = mask_img
                 else:
-                    # Bbox/Instance：在 Base 图上绘制绿色框代表 GT
-                    base_img = self._draw_vector_annotations(
-                        base_img,
-                        anno_config.get("folder_path"),
-                        stem,
-                        color=(0, 255, 0),
-                    )
+                    for idx, v_conf in enumerate(view_configs):
+                        view_name = v_conf.get("name", f"view_{idx}")
+                        base_img = view_images[idx].copy()
+                        drawn_img = self._draw_vector_annotations(
+                            base_img,
+                            anno_config.get("folder_path"),
+                            stem,
+                            color=(0, 255, 0),
+                        )
+                        result_layers[f"{view_name} (GT BBox/Polygon)"] = drawn_img
+            except Exception as e:
+                # 🌟 核心防弹：如果 GT 崩溃，不影响原图，返回一张报错的图层
+                import traceback
 
-            # --- 3. 处理多组预测结果 (Predictions) ---
-            if pred_configs:
-                for p_idx, pred in enumerate(pred_configs):
-                    if not pred.get("path"):
-                        continue
+                traceback.print_exc()  # 在控制台打印详细错误
+                h, w = view_images[0].shape[:2]
+                result_layers["GT Render Error"] = self._create_error_placeholder(
+                    f"GT Error: {str(e)}", w, h
+                )
 
-                    p_name = pred.get("name", f"Pred_{p_idx}")
-                    p_task = pred.get("taskType")
+        # 3. 处理预测结果 (Predictions)
+        if pred_configs:
+            for p_idx, pred in enumerate(pred_configs):
+                if not pred.get("path"):
+                    continue
+                p_name = pred.get("name", f"Pred_{p_idx}")
+                p_task = pred.get("taskType")  # 注意这里前端传的是 taskType
 
+                try:
                     if p_task == "semantic_seg":
-                        # 预测的语义分割：生成独立的 Mask 层
+                        main_base = view_images[0].copy()
                         pred_mask = self._draw_semantic_mask(
-                            base_img, pred.get("path"), stem, pred.get("suffix", "")
+                            main_base, pred.get("path"), stem, pred.get("suffix", "")
                         )
-                        result_layers[f"{view_name}_{p_name}_Mask"] = pred_mask
+                        result_layers[f"{p_name} (Semantic Mask)"] = pred_mask
                     else:
-                        # 预测的 Bbox/Instance：在 Base 图上绘制红色或橙色框
-                        base_img = self._draw_vector_annotations(
-                            base_img, pred.get("path"), stem, color=(0, 165, 255)
-                        )
+                        for idx, v_conf in enumerate(view_configs):
+                            view_name = v_conf.get("name", f"view_{idx}")
+                            base_img = view_images[idx].copy()
+                            drawn_img = self._draw_vector_annotations(
+                                base_img, pred.get("path"), stem, color=(0, 165, 255)
+                            )
+                            result_layers[f"{view_name} ({p_name} Result)"] = drawn_img
+                except Exception as e:
+                    # 🌟 核心防弹：如果某个 Pred 崩溃，返回它的报错图层
+                    import traceback
 
-            # --- 4. 将叠加了所有 Vector 框 (GT + Preds) 的最终 Base 图加入结果集 ---
-            result_layers[f"{view_name}_Base"] = base_img
+                    traceback.print_exc()
+                    h, w = view_images[0].shape[:2]
+                    result_layers[f"{p_name} Render Error"] = (
+                        self._create_error_placeholder(f"Pred Error: {str(e)}", w, h)
+                    )
 
         return result_layers

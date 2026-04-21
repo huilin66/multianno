@@ -11,6 +11,11 @@ router = APIRouter(prefix="/api/vis", tags=["Visualization"])
 
 @router.post("/preview")
 async def vis_preview(req: VisPreviewRequest):
+    print("====== 🚀 收到新的渲染请求 ======")
+    print(f"Stem: {req.stem}")
+    print(f"Anno Config (GT): {req.anno_config}")
+    print(f"Pred Configs: {req.pred_configs}")
+    print("===================================")
     try:
         # 1. 提取配置
         configs = (
