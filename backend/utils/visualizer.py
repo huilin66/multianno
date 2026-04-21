@@ -41,6 +41,7 @@ class LocalVisualizer:
             palette.append((b, g, r))  # 存入 BGR
 
         self.palettes = palette
+        self.palettes_np = np.array(palette)
 
     def _stretch_16bit_to_8bit(
         self, img: np.ndarray, min_val: float, max_val: float
@@ -345,7 +346,7 @@ class LocalVisualizer:
                 # 🌟 终极魔法：NumPy 高级索引直接映射！
                 # 这一行代码会把 shape 为 (H, W) 的 2D 数组，瞬间变成 (H, W, 3) 的 RGB 彩图
                 # 速度是普通 Python 循环的几万倍
-                colored_mask = self.palettes[safe_mask]
+                colored_mask = self.palettes_np[safe_mask]
 
                 return colored_mask
 

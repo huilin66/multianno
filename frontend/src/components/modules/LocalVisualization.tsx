@@ -39,14 +39,14 @@ export function LocalVisualization() {
 
   // 🌟 第二部分：真实标注 (Ground Truth) 状态
   const [enableAnno, setEnableAnno] = useState(false);
-  const [annoTaskType, setAnnoTaskType] = useState('bbox'); // bbox, instance_seg, semantic_seg
+  const [annoTaskType, setAnnoTaskType] = useState<TaskType>('object_detection');
   const [annoFormat, setAnnoFormat] = useState('yolo');
+  const [annoExtension, setAnnoExtension] = useState('.txt');
   const [annoSuffix, setAnnoSuffix] = useState('');
   const [annoPath, setAnnoPath] = useState('');
   const [annoClassFile, setAnnoClassFile] = useState('');
   const [annoScannedCount, setAnnoScannedCount] = useState<number | null>(null);
   const [isScanningAnno, setIsScanningAnno] = useState(false);
-  const [annoExtension, setAnnoExtension] = useState('.txt');
 
   // --- 3. 预览图与交互状态 ---
   // 🌟 核心修复 1：废弃单一的 previewUrl，使用对象存储多张 Base64 图
@@ -597,53 +597,59 @@ export function LocalVisualization() {
                 </div>
 
                 {/* 🌟 2栏4元素联动排版 */}
-                <div className="grid grid-cols-2 gap-6 pt-1">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">任务：</Label>
-                      <Select value={annoTaskType} onValueChange={(val: TaskType) => setAnnoTaskType(val)}>
-                        <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(SUPPORTED_TASKS).map(([id, t]) => (
-                            <SelectItem key={id} value={id}>{t.label.split(' ')[0]}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">格式：</Label>
-                      <Select value={annoFormat} onValueChange={setAnnoFormat}>
-                        <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {SUPPORTED_TASKS[annoTaskType]?.formats.map(fId => (
-                            <SelectItem key={fId} value={fId}>{FORMAT_DETAILS[fId].label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                {/* 🌟 优化排版：2栏4元素，改为上下堆叠结构防止拥挤，并接入全局配置 */}
+                <div className="grid grid-cols-[1.5fr_1fr] gap-3 pt-1">
+                  <div className="space-y-1.5 overflow-hidden">
+                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">任务类型</Label>
+                    <Select value={annoTaskType} onValueChange={(val: TaskType) => setAnnoTaskType(val)}>
+                      {/* 🌟 加上 truncate，文字过长时显示省略号，绝不越界 */}
+                      <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900 truncate">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(SUPPORTED_TASKS).map(([id, t]) => (
+                          <SelectItem key={id} value={id}>{t.label.split(' ')[0]}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Label className="w-14 text-right text-[11px] font-bold text-neutral-600 dark:text-neutral-400">后缀：</Label>
-                      <Input value={annoSuffix} onChange={e => setAnnoSuffix(e.target.value)} className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="例如: _RGB" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Label className="w-14 text-right text-[11px] font-bold text-neutral-600 dark:text-neutral-400">扩展名：</Label>
-                      <Select value={annoExtension} onValueChange={setAnnoExtension}>
-                        <SelectTrigger className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {FORMAT_DETAILS[annoFormat]?.extensions.map(ext => (
-                            <SelectItem key={ext} value={ext}>{ext}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
+
+                  <div className="space-y-1.5 overflow-hidden">
+                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">标注格式</Label>
+                    <Select value={annoFormat} onValueChange={setAnnoFormat}>
+                      <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900 truncate">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {SUPPORTED_TASKS[annoTaskType as TaskType]?.formats.map(fId => (
+                          <SelectItem key={fId} value={fId}>{FORMAT_DETAILS[fId].label}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">场景后缀</Label>
+                    <Input value={annoSuffix} onChange={e => setAnnoSuffix(e.target.value)} className="h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="例如: _RGB" />
+                  </div>
+
+                  <div className="space-y-1.5 overflow-hidden">
+                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">扩展名</Label>
+                    <Select value={annoExtension} onValueChange={setAnnoExtension}>
+                      <SelectTrigger className="h-8 text-xs font-mono bg-white dark:bg-neutral-900 truncate">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FORMAT_DETAILS[annoFormat]?.extensions.map(ext => (
+                          <SelectItem key={ext} value={ext}>{ext}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
-                {/* 路径配置 */}
-                <div className="space-y-1.5 flex-1 pt-2">
+                {/* 选择标注路径：只保留这一个！ */}
+                <div className="space-y-1.5 pt-2">
                   <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">选择标注路径</Label>
                   <div className="relative">
                     <Input value={annoPath} onChange={e => setAnnoPath(e.target.value)} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900" placeholder="选择路径..." />
@@ -653,24 +659,8 @@ export function LocalVisualization() {
                   </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <div className="space-y-1.5 flex-1">
-                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">标注路径</Label>
-                    <div className="relative">
-                      <Input value={annoPath} onChange={e => setAnnoPath(e.target.value)} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900" placeholder="选择标注路径..." />
-                      <button onClick={() => setExplorerConfig({ open: true, type: annoFormat === 'coco' ? 'file' : 'dir', target: 'anno_dir', initialPath: annoPath })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-emerald-500">
-                        <FolderOpen size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-1.5 w-20">
-                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">场景后缀</Label>
-                    <Input value={annoSuffix} onChange={e => setAnnoSuffix(e.target.value)} className="h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="_RGB" />
-                  </div>
-                </div>
-
                 {annoFormat === 'yolo' && (
-                  <div className="space-y-1.5">
+                  <div className="space-y-1.5 pt-1">
                     <Label className="text-[10px] font-bold text-amber-600 dark:text-amber-500">必需的 classes.txt</Label>
                     <div className="relative">
                       <Input value={annoClassFile} onChange={e => setAnnoClassFile(e.target.value)} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900 border-amber-200 dark:border-amber-900/50" placeholder="选择 classes.txt..." />
@@ -680,6 +670,7 @@ export function LocalVisualization() {
                     </div>
                   </div>
                 )}
+
 
                 {/* 统一的扫描结果显示与通栏按钮 */}
                 <div className="pt-2 space-y-2">
@@ -745,82 +736,69 @@ export function LocalVisualization() {
                       <Input value={pred.name} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, name: e.target.value } : p))} className="h-8 text-xs font-bold bg-white dark:bg-neutral-900" placeholder="如: YOLOv8_Epoch50" />
                     </div>
 
-                    {/* 🌟 调整 2：任务类型与格式 (与第二部分完全对齐的 1:1 Grid) */}
-                    {/* 🌟 2栏4元素联动排版 */}
-                    <div className="grid grid-cols-2 gap-6 pt-1">
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">任务：</Label>
-                          <Select value={pred.taskType} onValueChange={(val: TaskType) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, taskType: val } : p))}>
-                            <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {Object.entries(SUPPORTED_TASKS).map(([id, t]) => (
-                                <SelectItem key={id} value={id}>{t.label.split(' ')[0]}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">格式：</Label>
-                          <Select value={pred.format} onValueChange={(val) => {
-                              // 当改变 format 时，同时顺便重置默认 extension，保证联动体验
-                              const defaultExt = FORMAT_DETAILS[val].defaultExtension;
-                              setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val, extension: defaultExt } : p));
-                            }}>
-                            <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {SUPPORTED_TASKS[pred.taskType]?.formats.map(fId => (
-                                <SelectItem key={fId} value={fId}>{FORMAT_DETAILS[fId].label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                    {/* 🌟 优化排版：统一的上下堆叠结构与配置联动 */}
+                    {/* 🌟 优化排版：同样改为不对称网格 (1.5 : 1) */}
+                    <div className="grid grid-cols-[1.5fr_1fr] gap-3 pt-1">
+                      <div className="space-y-1.5 overflow-hidden">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">任务类型</Label>
+                        <Select value={pred.taskType} onValueChange={(val: TaskType) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, taskType: val } : p))}>
+                          {/* 加上 truncate */}
+                          <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900 truncate">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(SUPPORTED_TASKS).map(([id, t]) => (
+                              <SelectItem key={id} value={id}>{t.label.split(' ')[0]}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1.5 overflow-hidden">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">结果格式</Label>
+                        <Select value={pred.format} onValueChange={(val) => {
+                          const defaultExt = FORMAT_DETAILS[val].defaultExtension;
+                          setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val, extension: defaultExt } : p));
+                        }}>
+                          <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900 truncate">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {SUPPORTED_TASKS[pred.taskType as TaskType]?.formats.map(fId => (
+                              <SelectItem key={fId} value={fId}>{FORMAT_DETAILS[fId].label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       
-                      <div className="space-y-3">
-                        <div className="flex items-center gap-2">
-                          <Label className="w-14 text-right text-[11px] font-bold text-neutral-600 dark:text-neutral-400">后缀：</Label>
-                          <Input value={pred.suffix} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, suffix: e.target.value } : p))} className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="_P" />
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Label className="w-14 text-right text-[11px] font-bold text-neutral-600 dark:text-neutral-400">扩展名：</Label>
-                          <Select value={pred.extension} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, extension: val } : p))}>
-                            <SelectTrigger className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {FORMAT_DETAILS[pred.format]?.extensions.map(ext => (
-                                <SelectItem key={ext} value={ext}>{ext}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">场景后缀</Label>
+                        <Input value={pred.suffix} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, suffix: e.target.value } : p))} className="h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="_P" />
+                      </div>
+
+                      <div className="space-y-1.5 overflow-hidden">
+                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">扩展名</Label>
+                        <Select value={pred.extension} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, extension: val } : p))}>
+                          <SelectTrigger className="h-8 text-xs font-mono bg-white dark:bg-neutral-900 truncate">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {FORMAT_DETAILS[pred.format]?.extensions.map(ext => (
+                              <SelectItem key={ext} value={ext}>{ext}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
-
-                    {/* 路径配置 */}
-                    <div className="space-y-1.5 flex-1 pt-2">
+                    
+                    {/* 选择标注路径：只保留这一个！ */}
+                    <div className="space-y-1.5 pt-2">
                       <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">选择结果路径</Label>
                       <div className="relative">
                         <Input value={pred.path} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, path: e.target.value } : p))} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900" placeholder="选择路径..." />
                         <button onClick={() => setExplorerConfig({ open: true, type: pred.format === 'coco' ? 'file' : 'dir', target: 'pred_dir', activeId: pred.id, initialPath: pred.path })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-amber-500">
                           <FolderOpen size={14} />
                         </button>
-                      </div>
-                    </div>
-
-                    {/* 🌟 调整 3：路径与后缀 (与第二部分完全对齐的 Flex) */}
-                    <div className="flex gap-2">
-                       <div className="space-y-1.5 flex-1">
-                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">结果路径</Label>
-                        <div className="relative">
-                          <Input value={pred.path} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, path: e.target.value } : p))} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900" placeholder="选择路径..." />
-                          <button onClick={() => setExplorerConfig({ open: true, type: pred.format === 'coco' ? 'file' : 'dir', target: 'pred_dir', activeId: pred.id, initialPath: pred.path })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-amber-500">
-                            <FolderOpen size={14} />
-                          </button>
-                        </div>
-                      </div>
-                      <div className="space-y-1.5 w-20">
-                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">后缀</Label>
-                        <Input value={pred.suffix} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, suffix: e.target.value } : p))} className="h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="_P" />
                       </div>
                     </div>
 
