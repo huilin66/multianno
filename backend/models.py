@@ -130,3 +130,15 @@ class VisPreviewRequest(BaseModel):
     render_settings: Dict[str, Any]
     anno_config: Optional[Dict[str, Any]] = None
     pred_configs: Optional[List[Dict[str, Any]]] = None
+    export_config: Optional[Dict[str, Any]] = None
+
+
+class VisExportRequest(BaseModel):
+    all_stems: List[str]
+    source_type: str
+    view_configs: Optional[List[Dict[str, Any]]] = None
+    local_configs: Optional[List[Dict[str, Any]]] = None
+    render_settings: Dict[str, Any]
+    export_config: Dict[str, Any]  # 必须提供导出配置
+    anno_config: Optional[Dict[str, Any]] = None
+    pred_configs: Optional[List[Dict[str, Any]]] = None

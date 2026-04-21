@@ -52,7 +52,6 @@ export function LocalVisualization() {
   // 🌟 核心修复 1：废弃单一的 previewUrl，使用对象存储多张 Base64 图
   const [previewImages, setPreviewImages] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
 
   // ==========================================
   // 🌟 第三部分：预测结果 (Predictions) 状态 (支持多组)
@@ -79,6 +78,11 @@ export function LocalVisualization() {
   const [exportRows, setExportRows] = useState(2);
   const [exportCols, setExportCols] = useState(2);
   const [mergedPreview, setMergedPreview] = useState<string | null>(null);
+
+  // output
+  const [exportProgress, setExportProgress] = useState<number | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
+
   // ==========================================
   // 🌟 统一的资源管理器调度核心
   // target: 告诉弹窗把选中的路径填给谁
@@ -372,8 +376,8 @@ export function LocalVisualization() {
       const res = await requestVisPreview(payload);
       
       // 🌟 核心修复 3：直接读取 JSON 中的 images 字典并设置到状态中
-      if (res && res.images) {
-        setPreviewImages(res.images);
+      if (res && res.preview_images) {
+        setPreviewImages(res.preview_images);
       }
     } catch (error: any) {
       console.error("预览加载失败:", error);
@@ -382,9 +386,16 @@ export function LocalVisualization() {
     }
   };
   // 计算当前预览的总图层数 (用于初始化网格)
-  const totalLayers = (sourceType === 'local' ? placeholders.filter(p => p.path).length : viewMetas.length) 
-                    + (enableAnno ? 1 : 0) 
-                    + (enablePred ? predictions.filter(p => p.path).length : 0);
+  const activeViewCount = sourceType === 'project' 
+    ? viewMetas.length 
+    : placeholders.filter(p => p.path).length;
+  const totalLayers = activeViewCount + 
+    (enableAnno ? (annoFormat === 'image' ? 1 : activeViewCount) : 0) + 
+    (enablePred ? predictions.filter(p => p.path).reduce((acc, pred) => {
+      // 如果是语义分割，后端通常只在 Base 上叠一张或者出一张 Mask，算 1
+      // 如果是 YOLO/BBox，后端会为每个 View 出一张结果图，算 n
+      return acc + (pred.taskType === 'semantic_segmentation' ? 1 : activeViewCount);
+    }, 0) : 0);
 
   // 🌟 自动布局联动逻辑
   useEffect(() => {
@@ -409,7 +420,7 @@ export function LocalVisualization() {
         fetchPreview();
         return;
     }
-
+    if (scannedStems.length === 0) return;
     setIsLoading(true);
     try {
       const taskApiMap: Record<string, string> = {
@@ -428,13 +439,18 @@ export function LocalVisualization() {
         export_config: {
             preview_only: true, // 标识这只是预览，不写磁盘
             modes: { independent: exportIndependent, merged: exportMerged },
-            layout_settings: { layout: exportLayout, columns: exportCols }
+            layout_settings: { 
+              layout: exportLayout, 
+              rows: exportRows, 
+              cols: exportCols 
+            }
         },
         anno_config: enableAnno ? {
           task_type: taskApiMap[annoTaskType],
           format: annoFormat,
           suffix: (annoFormat === 'image') ? `${annoSuffix}${annoExtension}` : annoSuffix,
           folder_path: annoPath,
+          class_file: annoClassFile
         } : null,
         pred_configs: enablePred ? predictions.filter(p => p.path).map(p => ({
           ...p,
@@ -463,6 +479,8 @@ export function LocalVisualization() {
       return;
     }
     setIsLoading(true);
+    setExportProgress(0);
+
     try {
       const taskApiMap: Record<string, string> = {
         object_detection: 'bbox',
@@ -470,9 +488,9 @@ export function LocalVisualization() {
         semantic_segmentation: 'semantic_seg'
       };
 
-
       const payload = {
         source_type: sourceType,
+        all_stems: scannedStems,
         render_settings: config,
         view_configs: sourceType === 'project' ? viewMetas : null,
         local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
@@ -489,6 +507,7 @@ export function LocalVisualization() {
           suffix: p.format === 'image' ? `${p.suffix}${p.extension}` : p.suffix
         })) : null,
         export_config: {
+          preview_only: false,
           save_path: savePath,
           modes: {
             independent: exportIndependent,
@@ -496,18 +515,20 @@ export function LocalVisualization() {
           },
           layout_settings: {
             layout: exportLayout,
-            columns: exportCols
+            rows: exportRows, 
+            cols: exportCols
           }
         },
       };
       const res = await requestVisExport(payload);
       if (res.success) {
-        alert(`导出成功！已保存至: ${savePath}`);
+        alert(`批量导出完成！已保存至: ${savePath}`);
       }
     } catch (err) {
       alert(`导出失败: ${err}`);
     } finally {
-      setIsLoading(false);
+      setIsExporting(false);
+      setTimeout(() => setExportProgress(null), 3000);
     }
   };
 
@@ -973,6 +994,7 @@ export function LocalVisualization() {
 
 
         {/* 🌟 Section 4: 保存与排版设置 */}
+        {/* Section 4: 保存与排版设置 */}
         <section className="p-4 space-y-4 border-b border-neutral-100 dark:border-neutral-800 bg-indigo-50/30 dark:bg-indigo-900/10">
           <Label className="text-[10px] font-black uppercase text-indigo-500 tracking-widest flex items-center gap-2">
             <LayoutTemplate size={12} /> 4. 保存与排版预览
@@ -981,7 +1003,7 @@ export function LocalVisualization() {
           <div className="flex items-center gap-4 pt-1">
             <div className="flex items-center gap-2">
               <Checkbox id="save-indep" checked={exportIndependent} onCheckedChange={(val) => setExportIndependent(!!val)} />
-              <Label htmlFor="save-indep" className="text-xs cursor-pointer">独立文件</Label>
+              <Label htmlFor="save-indep" className="text-xs cursor-pointer">独立保存</Label>
             </div>
             <div className="flex items-center gap-2">
               <Checkbox id="save-merge" checked={exportMerged} onCheckedChange={(val) => setExportMerged(!!val)} />
@@ -989,20 +1011,18 @@ export function LocalVisualization() {
             </div>
           </div>
 
+          <div className="space-y-1.5">
+            <Label className="text-[10px] font-bold text-neutral-600">保存根目录</Label>
+            <div className="relative">
+              <Input value={savePath} onChange={e => setSavePath(e.target.value)} className="h-8 text-xs pr-8" placeholder="选择保存路径..." />
+              <button onClick={() => setExplorerConfig({ open: true, type: 'dir', target: 'save_dir', initialPath: savePath })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400">
+                <FolderOpen size={14} />
+              </button>
+            </div>
+          </div>
+
           {exportMerged && (
             <div className="space-y-4 p-3 rounded-lg bg-white/50 dark:bg-neutral-950/50 border border-indigo-100 dark:border-indigo-900/30">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold text-neutral-500">布局模式</Label>
-                <Select value={exportLayout} onValueChange={setExportLayout}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="grid">网格布局 (Grid)</SelectItem>
-                    <SelectItem value="horizontal">水平一字排开</SelectItem>
-                    <SelectItem value="vertical">垂直一列纵队</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label className="text-[10px] font-bold text-neutral-500">行数 (Rows)</Label>
@@ -1014,9 +1034,12 @@ export function LocalVisualization() {
                 </div>
               </div>
 
-              {/* 🌟 实时布局预览：淡蓝色小网格 */}
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold text-neutral-400 uppercase tracking-tighter">布局结构预览 ({totalLayers} 图层)</Label>
+              {/* 🌟 实时布局逻辑预览：淡蓝色小网格 */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <Label className="text-[9px] font-bold text-neutral-400 uppercase">布局预览 ({totalLayers} 图层)</Label>
+                  <span className="text-[9px] font-mono text-indigo-500">{exportRows}×{exportCols}</span>
+                </div>
                 <div 
                   className="grid gap-1 p-2 bg-neutral-200/50 dark:bg-black/20 rounded border border-dashed border-neutral-300 dark:border-neutral-700"
                   style={{ 
@@ -1027,14 +1050,15 @@ export function LocalVisualization() {
                   {Array.from({ length: exportRows * exportCols }).map((_, i) => (
                     <div 
                       key={i} 
-                      className={`aspect-video rounded-sm border ${i < totalLayers ? 'bg-indigo-400/40 border-indigo-500' : 'bg-transparent border-neutral-300 dark:border-neutral-800'}`}
+                      className={`aspect-square rounded-sm border transition-all duration-300 ${i < totalLayers ? 'bg-indigo-400/40 border-indigo-500 shadow-[0_0_5px_rgba(99,102,241,0.2)]' : 'bg-transparent border-neutral-300 dark:border-neutral-800'}`}
                     />
                   ))}
                 </div>
               </div>
 
-              <Button variant="outline" size="sm" className="w-full h-8 text-[11px] font-bold" onClick={handleApplyLayout}>
-                <RefreshCw className="w-3 h-3 mr-2" /> 应用并刷新预览
+              <Button variant="outline" size="sm" className="w-full h-8 text-[11px] font-bold border-indigo-200 text-indigo-600 hover:bg-indigo-100" onClick={handleApplyLayout} disabled={isLoading}>
+                {isLoading ? <Loader2 className="w-3 h-3 animate-spin mr-2" /> : <RefreshCw className="w-3 h-3 mr-2" />}
+                更新预览
               </Button>
             </div>
           )}
@@ -1043,77 +1067,109 @@ export function LocalVisualization() {
           
         </div>
         {/* 底部执行按钮 */}
-        <div className="p-5 border-t border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 shrink-0">
-          <Button 
-            size="lg" 
-            disabled={isExporting || scannedStems.length === 0}
-            className="w-full font-black shadow-xl shadow-indigo-500/20 bg-indigo-600 hover:bg-indigo-700 text-white" 
-            onClick={handleExportAll}
-          >
-            {isExporting ? (
-              <><Loader2 className="w-5 h-5 mr-2 animate-spin" /> 正在导出...</>
-            ) : (
-              <><Download className="w-5 h-5 mr-2" /> 启动批量导出任务</>
-            )}
-          </Button>
-        </div>
+        <div className="p-4 bg-white dark:bg-neutral-900 border-t border-neutral-200 space-y-3">
+        {exportProgress !== null && (
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-[10px] font-bold">
+              <span>批量导出进度</span>
+              <span>{exportProgress}%</span>
+            </div>
+            <div className="w-full h-1.5 bg-neutral-100 rounded-full overflow-hidden">
+              <div className="h-full bg-emerald-500 transition-all duration-300" style={{ width: `${exportProgress}%` }} />
+            </div>
+          </div>
+        )}
+        <Button onClick={handleExportAll} disabled={isExporting} className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold h-10 shadow-lg shadow-emerald-500/20">
+          {isExporting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
+          启动批量导出任务
+        </Button>
+      </div>
       </div>
 
       {/* 主视图：预览区 */}
       <div className="flex-1 relative bg-neutral-900 flex flex-col items-center justify-center overflow-hidden pattern-checkerboard">
-        
-        {/* 1. 顶部状态指示 (🌟 优化：改到右上角，变得更迷你) */}
+  
+        {/* 1. 顶部状态指示 (保持不变) */}
         {scannedStems.length > 0 && (
-            <div className="absolute top-3 right-4 z-30 px-2.5 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-md shadow-sm">
-              <div className="text-[9px] font-mono text-white/80 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-white/40">当前示例:</span> 
-                  <span className="text-indigo-400 font-bold">{scannedStems[currentIndex]}</span>
+          <div className="absolute top-3 right-4 z-30 px-2.5 py-1 bg-black/40 backdrop-blur-md border border-white/10 rounded-md shadow-sm">
+            <div className="text-[9px] font-mono text-white/80 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="text-white/40">当前示例:</span> 
+              <span className="text-indigo-400 font-bold">{scannedStems[currentIndex]}</span>
+            </div>
+          </div>
+        )}
+
+        {/* 2. 加载等待层 (保持不变) */}
+        {isLoading && (
+          <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm transition-all">
+            <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-3" />
+            <p className="text-[9px] font-black tracking-[0.2em] text-neutral-400 uppercase">渲染图层数据中...</p>
+          </div>
+        )}
+
+        {/* 🌟 3. 核心画布区域：支持独立图层 + 合并图层 */}
+        <div className="w-full h-full p-4 flex flex-col items-center overflow-y-auto custom-scrollbar">
+          
+          {/* --- A 部分：独立图层网格 (只有勾选了独立保存时显示) --- */}
+          {exportIndependent && Object.keys(previewImages).length > 0 && (
+            <div className="w-full max-w-[1600px] mb-8">
+              <div className="flex items-center gap-2 mb-3 opacity-50">
+                <Layers size={14} className="text-white" />
+                <span className="text-[10px] font-bold text-white uppercase tracking-widest">独立图层监控 (Independent Layers)</span>
+              </div>
+              
+              <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-3 w-full">
+                {Object.entries(previewImages).map(([layerName, b64Str]) => (
+                  <div key={layerName} className="flex flex-col gap-1 bg-black/40 p-1.5 rounded-lg border border-white/10 shadow-xl">
+                    <div className="text-white/60 text-[9px] font-mono px-1 uppercase tracking-wider flex justify-between font-bold">
+                      <span>{layerName}</span>
+                    </div>
+                    <div className="relative rounded overflow-hidden bg-black/50 flex items-center justify-center border border-white/5">
+                      <img 
+                        src={b64Str} 
+                        className={`w-full max-h-[60vh] object-contain transition-all duration-500 ${isLoading ? 'opacity-30 blur-sm' : 'opacity-100'}`}
+                        alt={layerName} 
+                      />
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-        )}
+          )}
 
-        {/* 2. 加载等待层 (🌟 优化：缩小图标和文字) */}
-        {isLoading && (
-            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm transition-all">
-              <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mb-3" />
-              <p className="text-[9px] font-black tracking-[0.2em] text-neutral-400 uppercase">
-                  渲染图层数据中...
-              </p>
-            </div>
-        )}
-
-        {/* 🌟 3. 极限空间网格排版 */}
-        <div className="w-full h-full p-2 md:p-4 flex items-start justify-center overflow-y-auto custom-scrollbar">
-          {Object.keys(previewImages).length > 0 ? (
-            // 🌟 优化：去掉了 max-w-6xl，改为 w-full；缩小 gap-6 到 gap-3；缩小顶部 mt-16 到 mt-8
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 w-full pb-16 mt-8">
-              {Object.entries(previewImages).map(([layerName, b64Str]) => (
-                // 🌟 优化：卡片内边距 p-3 缩小为 p-1.5
-                <div key={layerName} className="flex flex-col gap-1 bg-black/40 p-1.5 rounded-lg border border-white/10 shadow-xl">
-                  {/* 🌟 优化：标题文字缩小到 text-[9px] */}
-                  <div className="text-white/60 text-[9px] font-mono px-1 uppercase tracking-wider flex justify-between font-bold">
-                    <span>{layerName}</span>
-                  </div>
-                  <div className="relative rounded overflow-hidden bg-black/50 flex items-center justify-center border border-white/5">
-                    <img 
-                      src={b64Str} 
-                      // 🌟 优化：将 max-h-[70vh] 放宽到 max-h-[85vh]，让竖版或高分辨率图像能撑满更多屏幕
-                      className={`w-full max-h-[85vh] object-contain transition-all duration-500 ${isLoading ? 'opacity-30 blur-sm scale-95' : 'opacity-100 scale-100'}`}
-                      alt={layerName} 
-                    />
-                  </div>
+          {/* --- B 部分：合并拼图预览 (独占一行，一列显示) --- */}
+          {exportMerged && mergedPreview && (
+            <div className="w-full max-w-[1600px] pb-16">
+              <div className="flex items-center justify-between mb-4 pt-8 border-t border-white/10">
+                <div className="flex items-center gap-2">
+                  <LayoutTemplate size={16} className="text-indigo-400" />
+                  <span className="text-[11px] font-black text-indigo-400 uppercase tracking-widest">最终排版预览 (Fused Layout)</span>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-neutral-700 flex flex-col items-center justify-center h-full gap-3">
-                <MonitorPlay size={40} strokeWidth={1} className="opacity-20" />
-                <p className="text-[10px] font-bold opacity-30 tracking-widest uppercase">等待数据扫描或渲染</p>
+                <div className="px-2 py-0.5 rounded bg-indigo-500/20 text-indigo-400 text-[10px] font-mono border border-indigo-500/30">
+                  {exportRows}R × {exportCols}C
+                </div>
+              </div>
+
+              <div className="bg-white/5 p-4 rounded-2xl border-2 border-indigo-500/20 shadow-2xl shadow-indigo-500/5 transition-all">
+                <img 
+                  src={mergedPreview} 
+                  className={`w-full h-auto rounded shadow-inner transition-all duration-700 ${isLoading ? 'opacity-20 blur-md' : 'opacity-100'}`}
+                  alt="Fused Result" 
+                />
+              </div>
             </div>
           )}
-        </div>
 
+          {/* --- C 部分：空状态提示 --- */}
+          {!mergedPreview && Object.keys(previewImages).length === 0 && !isLoading && (
+            <div className="text-neutral-700 flex flex-col items-center justify-center h-full gap-3 mt-[-10vh]">
+              <MonitorPlay size={40} strokeWidth={1} className="opacity-20" />
+              <p className="text-[10px] font-bold opacity-30 tracking-widest uppercase">等待配置应用或渲染</p>
+            </div>
+          )}
+          
+        </div>
       </div>
       {/* 1. 用于选择 project_meta.json 的文件浏览器 */}
         <FileExplorerDialog 

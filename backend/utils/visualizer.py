@@ -581,6 +581,44 @@ class LocalVisualizer:
 
         return canvas
 
+    def assemble_custom_layout(self, frames: list, layout_settings: dict) -> np.ndarray:
+        """🌟 智能多视图动态拼图引擎 (匹配前端配置)"""
+        if not frames:
+            return self._create_error_placeholder("No frames to assemble")
+
+        layout_mode = layout_settings.get("layout", "grid")
+        rows = int(layout_settings.get("rows", 1))
+        cols = int(layout_settings.get("cols", len(frames)))
+
+        # 为保证排版整齐，强行将所有图 Resize 到第一张图（Main View）的尺寸
+        target_shape = frames[0].shape[:2]
+        h, w = target_shape
+        resized_frames = [cv2.resize(f, (w, h)) for f in frames]
+
+        # 计算并创建黑色大画布
+        canvas_h = h * rows
+        canvas_w = w * cols
+        canvas = np.zeros((canvas_h, canvas_w, 3), dtype=np.uint8)
+
+        # 遍历填入网格
+        for idx, frame in enumerate(resized_frames):
+            # 防止图层数超过网格容量
+            if idx >= rows * cols:
+                break
+
+            if layout_mode == "horizontal":
+                r, c = 0, idx
+            elif layout_mode == "vertical":
+                r, c = idx, 0
+            else:  # grid
+                r = idx // cols
+                c = idx % cols
+
+            # 将图像贴入画布的对应位置
+            canvas[r * h : (r + 1) * h, c * w : (c + 1) * w] = frame
+
+        return canvas
+
     def render_scene_group(
         self, stem: str, view_configs: list, anno_config: dict = None
     ) -> np.ndarray:
