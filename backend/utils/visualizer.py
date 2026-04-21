@@ -14,6 +14,35 @@ class LocalVisualizer:
         self.thickness = config.get("thickness", 2)
         self.alpha = config.get("alpha", 0.5)
 
+        # 🌟 1. 定义前端同步的 Hex 颜色
+        taxonomy_colors_hex = [
+            # "#ef4444",
+            "#22c55e",
+            "#3b82f6",
+            "#a855f7",
+            "#f59e0b",
+            "#06b6d4",
+            "#ec4899",
+            "#84cc16",
+            "#f97316",
+            "#14b8a6",
+        ]
+
+        # 🌟 2. 构建调色板 (Palette)
+        # 类别 0: 设置为灰色 [128, 128, 128] 或者 纯黑 [0, 0, 0]
+        # 注意：OpenCV 的颜色顺序是 [B, G, R]
+        palette = [[128, 128, 128]]  # 这里我用了灰色，如果是纯黑就写 [0, 0, 0]
+
+        # 解析前端的 Hex 为 BGR
+        for hex_str in taxonomy_colors_hex:
+            hex_str = hex_str.lstrip("#")
+            r, g, b = tuple(int(hex_str[i : i + 2], 16) for i in (0, 2, 4))
+            palette.append([b, g, r])  # 存入 BGR
+
+        # 🌟 3. 转换为 uint8 的 NumPy 数组，这是极速映射的关键！
+        # 此时 palette_np 的 shape 是 (11, 3)
+        self.palette_np = np.array(palette, dtype=np.uint8)
+
     def _stretch_16bit_to_8bit(
         self, img: np.ndarray, min_val: float, max_val: float
     ) -> np.ndarray:
@@ -259,8 +288,7 @@ class LocalVisualizer:
         anno_folder = anno_config.get("folder_path")
 
         # 1. 解析标注文件 (伪代码：你需要根据 format_type 写具体的解析器)
-        # annotations = parse_annotation_file(stem, format_type, anno_folder)
-        annotations = []  # 这里假设返回了解析好的标准数据结构
+        annotations = self.parse_annotation_file(stem, format_type, anno_folder)
 
         processed_frames = []
         for img in view_images:
@@ -280,7 +308,7 @@ class LocalVisualizer:
     def _draw_semantic_mask(
         self, base_img: np.ndarray, folder_path: str, stem: str, suffix: str
     ) -> np.ndarray:
-        """语义分割：读取掩码图并上色（修复了 OpenCV 类型崩溃问题）"""
+        """语义分割：使用自定义分类调色板进行精确颜色映射"""
         if not folder_path:
             return np.zeros_like(base_img)
 
@@ -295,6 +323,7 @@ class LocalVisualizer:
                     break
 
         if os.path.exists(mask_path):
+            # 以灰度图模式读取 Mask (像素值代表 Class ID，例如 0, 1, 2...)
             mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
             if mask is not None:
                 mask = cv2.resize(
@@ -303,10 +332,21 @@ class LocalVisualizer:
                     interpolation=cv2.INTER_NEAREST,
                 )
 
-                # 🌟 核心修复 1：使用 cv2.convertScaleAbs 安全放大灰度值并严格保持 uint8 类型
-                # 绝对不要直接用 mask * 50，那会导致 int32 溢出并使 applyColorMap 崩溃！
-                mask_scaled = cv2.convertScaleAbs(mask, alpha=50)
-                colored_mask = cv2.applyColorMap(mask_scaled, cv2.COLORMAP_JET)
+                # 特殊处理：有些二值化 Mask 会把类别 1 保存为 255，这里做个安全修正
+                if mask.max() == 255 and len(np.unique(mask)) == 2:
+                    mask[mask == 255] = 1
+
+                # 🌟 核心防弹保护：防止 Mask 中出现了超过我们调色板长度的 Class ID
+                # 比如模型预测出了类别 15，但我们的 taxonomy_colors 只有 10 个颜色
+                # 使用 np.clip 将超出的 ID 强制限制在调色板最大索引内，或者使用求余数
+                max_class_id = len(self.palette_np) - 1
+                safe_mask = np.clip(mask, 0, max_class_id)
+                # 或者使用循环映射: safe_mask = np.where(mask > 0, ((mask - 1) % max_class_id) + 1, 0)
+
+                # 🌟 终极魔法：NumPy 高级索引直接映射！
+                # 这一行代码会把 shape 为 (H, W) 的 2D 数组，瞬间变成 (H, W, 3) 的 RGB 彩图
+                # 速度是普通 Python 循环的几万倍
+                colored_mask = self.palette_np[safe_mask]
 
                 return colored_mask
 
@@ -315,52 +355,173 @@ class LocalVisualizer:
         )
 
     def _draw_vector_annotations(
-        self, img: np.ndarray, folder_path: str, stem: str, color: tuple
+        self, img: np.ndarray, config: dict, stem: str, color: tuple
     ) -> np.ndarray:
-        """目标检测/实例分割：在 Base 图上画框"""
-        if not folder_path:
+        """目标检测/实例分割：读取 YOLO/COCO/JSON 标注并在 Base 图上绘制真实形状"""
+        if not config:
             return img
+
+        # 兼容 GT 的 'folder_path' 和 Pred 的 'path'
+        base_path = config.get("folder_path") or config.get("path")
+        if not base_path:
+            return img
+
+        format_type = config.get("format", "yolo").lower()
+        suffix = config.get("suffix", "")
+        task_type = config.get("task_type", config.get("taskType", "bbox")).lower()
+        class_file = config.get("class_file", config.get("classFile", ""))
 
         h, w = img.shape[:2]
 
-        # 🌟 核心修复 2：确保 thickness 绝对是 int 类型，防止 TypeError 崩溃
+        # 确保线宽合法
         try:
             t = int(float(self.thickness))
         except (ValueError, TypeError):
             t = 2
 
-        # 画一个占位框证明逻辑生效
-        cv2.rectangle(
-            img, (int(w * 0.4), int(h * 0.4)), (int(w * 0.6), int(h * 0.6)), color, t
-        )
+        shapes = []
+        import json
+        import os
 
-        return img
+        try:
+            # ==========================================
+            # 解析 1: YOLO 格式 (.txt)
+            # ==========================================
+            if format_type == "yolo":
+                txt_path = os.path.join(base_path, f"{stem}{suffix}.txt")
+                if not os.path.exists(txt_path):
+                    txt_path = os.path.join(base_path, f"{stem}.txt")  # 降级兼容
 
-    def _draw_vector_annotations(
-        self, img: np.ndarray, folder_path: str, stem: str, color: tuple
-    ) -> np.ndarray:
-        """目标检测/实例分割渲染：在 Base 图上画框 (这里为占位示意逻辑)"""
-        if not folder_path:
+                if os.path.exists(txt_path):
+                    # 读取类别映射文件
+                    classes_map = []
+                    if class_file and os.path.exists(class_file):
+                        with open(class_file, "r", encoding="utf-8") as f:
+                            classes_map = [
+                                line.strip() for line in f.readlines() if line.strip()
+                            ]
+
+                    with open(txt_path, "r", encoding="utf-8") as f:
+                        lines = f.readlines()
+
+                    # 复用 format_converters 的函数
+                    from utils.format_converters import yolo_to_shapes
+
+                    shapes, _ = yolo_to_shapes(lines, w, h, classes_map)
+
+            # ==========================================
+            # 解析 2: COCO 格式 (.json)
+            # ==========================================
+            elif format_type == "coco":
+                # COCO 的 base_path 是一个单一的 .json 文件
+                if os.path.exists(base_path) and base_path.endswith(".json"):
+                    with open(base_path, "r", encoding="utf-8") as f:
+                        coco_data = json.load(f)
+
+                    # 寻找匹配的 image_id
+                    img_id = None
+                    for image in coco_data.get("images", []):
+                        file_name = image.get("file_name", "")
+                        if file_name.startswith(stem):
+                            img_id = image.get("id")
+                            break
+
+                    if img_id is not None:
+                        classes_map = {
+                            cat["id"]: cat["name"]
+                            for cat in coco_data.get("categories", [])
+                        }
+                        anns = [
+                            ann
+                            for ann in coco_data.get("annotations", [])
+                            if ann.get("image_id") == img_id
+                        ]
+
+                        from utils.format_converters import coco_ann_to_shape
+
+                        coco_mode = "polygon" if task_type == "instance_seg" else "bbox"
+
+                        for ann in anns:
+                            shape = coco_ann_to_shape(
+                                ann, classes_map, coco_mode=coco_mode
+                            )
+                            if shape:
+                                shapes.append(shape)
+
+            # ==========================================
+            # 解析 3: 原生 MultiAnno 格式 (.json)
+            # ==========================================
+            elif format_type == "multianno":
+                json_path = os.path.join(base_path, f"{stem}{suffix}.json")
+                if not os.path.exists(json_path):
+                    json_path = os.path.join(base_path, f"{stem}.json")
+
+                if os.path.exists(json_path):
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        shapes = (
+                            data if isinstance(data, list) else data.get("shapes", [])
+                        )
+
+        except Exception as e:
+            print(f"解析标注文件失败: {str(e)}")
             return img
 
-        # TODO: 这里是你未来对接具体 YOLO/COCO 解析器的地方
-        # 示例：假设我们找到了标注，我们在图像中心画一个框以示对齐成功
-        # h, w = img.shape[:2]
-        # cv2.rectangle(img, (int(w*0.4), int(h*0.4)), (int(w*0.6), int(h*0.6)), color, self.thickness)
+        # ==========================================
+        # 统一绘制提取出的 Shapes
+        # ==========================================
+        for shape in shapes:
+            shape_type = shape.get("type", shape.get("shape_type", "bbox")).lower()
+            points = shape.get("points", [])
+            label = shape.get("label", "")
 
-        return img
+            if not points:
+                continue
 
-    def _draw_vector_annotations(
-        self, img: np.ndarray, folder_path: str, stem: str, color: tuple
-    ) -> np.ndarray:
-        """目标检测/实例分割渲染：在 Base 图上画框 (这里为占位示意逻辑)"""
-        if not folder_path:
-            return img
+            # 绘制边界框 (BBox)
+            if shape_type in ["bbox", "rectangle"] and len(points) == 2:
+                pt1 = (int(points[0][0]), int(points[0][1]))
+                pt2 = (int(points[1][0]), int(points[1][1]))
+                cv2.rectangle(img, pt1, pt2, color, t)
 
-        # TODO: 这里是你未来对接具体 YOLO/COCO 解析器的地方
-        # 示例：假设我们找到了标注，我们在图像中心画一个框以示对齐成功
-        # h, w = img.shape[:2]
-        # cv2.rectangle(img, (int(w*0.4), int(h*0.4)), (int(w*0.6), int(h*0.6)), color, self.thickness)
+                # 绘制文字标签 (带个半透明底色更容易看清)
+                if label:
+                    text_size = cv2.getTextSize(
+                        label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, max(1, t - 1)
+                    )[0]
+                    cv2.rectangle(
+                        img,
+                        (pt1[0], pt1[1] - text_size[1] - 5),
+                        (pt1[0] + text_size[0], pt1[1]),
+                        color,
+                        -1,
+                    )
+                    cv2.putText(
+                        img,
+                        label,
+                        (pt1[0], pt1[1] - 5),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        (255, 255, 255) if color[1] < 200 else (0, 0, 0),
+                        max(1, t - 1),
+                    )
+
+            # 绘制多边形 (Polygon)
+            elif shape_type == "polygon" and len(points) >= 3:
+                pts = np.array(points, np.int32).reshape((-1, 1, 2))
+                cv2.polylines(img, [pts], isClosed=True, color=color, thickness=t)
+
+                if label:
+                    pt1 = (int(points[0][0]), int(points[0][1]))
+                    cv2.putText(
+                        img,
+                        label,
+                        (pt1[0], max(10, pt1[1] - 5)),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.5,
+                        color,
+                        max(1, t - 1),
+                    )
 
         return img
 
@@ -451,11 +612,9 @@ class LocalVisualizer:
                     for idx, v_conf in enumerate(view_configs):
                         view_name = v_conf.get("name", f"view_{idx}")
                         base_img = view_images[idx].copy()
+                        # 🌟 修复：直接传入 anno_config
                         drawn_img = self._draw_vector_annotations(
-                            base_img,
-                            anno_config.get("folder_path"),
-                            stem,
-                            color=(0, 255, 0),
+                            base_img, anno_config, stem, color=(0, 255, 0)
                         )
                         result_layers[f"{view_name} (GT BBox/Polygon)"] = drawn_img
             except Exception as e:
