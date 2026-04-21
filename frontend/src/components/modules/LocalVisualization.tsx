@@ -45,6 +45,7 @@ export function LocalVisualization() {
   const [annoClassFile, setAnnoClassFile] = useState('');
   const [annoScannedCount, setAnnoScannedCount] = useState<number | null>(null);
   const [isScanningAnno, setIsScanningAnno] = useState(false);
+  const [annoExtension, setAnnoExtension] = useState('.txt');
 
   // --- 3. 预览图与交互状态 ---
   // 🌟 核心修复 1：废弃单一的 previewUrl，使用对象存储多张 Base64 图
@@ -60,6 +61,7 @@ export function LocalVisualization() {
     name: 'Model A', 
     taskType: 'bbox',
     format: 'yolo', 
+    extension: '.txt',
     path: '', 
     suffix: '', 
     classFile: '',
@@ -325,13 +327,16 @@ export function LocalVisualization() {
         view_configs: sourceType === 'project' ? viewMetas : null,
         local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
         anno_config: enableAnno ? {
-          task_type: annoTaskType, // 🌟 确保发给后端正确的 task_type
+          task_type: annoTaskType, 
           format: annoFormat,
-          suffix: annoSuffix,
+          suffix: annoFormat === 'image' ? `${annoSuffix}${annoExtension}` : annoSuffix,
           folder_path: annoPath,
           class_file: annoClassFile
         } : null,
-        pred_configs: enablePred ? predictions.filter(p => p.path) : null
+        pred_configs: enablePred ? predictions.filter(p => p.path).map(p => ({
+          ...p,
+          suffix: p.format === 'image' ? `${p.suffix}${p.extension}` : p.suffix
+        })) : null
       };
 
       const res = await requestVisPreview(payload);
@@ -572,37 +577,74 @@ export function LocalVisualization() {
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">任务类型</Label>
-                    <Select value={annoTaskType} onValueChange={setAnnoTaskType}>
-                      <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bbox">目标检测 (BBox)</SelectItem>
-                        <SelectItem value="instance_seg">实例分割 (Polygon)</SelectItem>
-                        <SelectItem value="semantic_seg">语义分割 (Mask)</SelectItem>
-                      </SelectContent>
-                    </Select>
+                {/* 🌟 2栏4元素联动排版 */}
+                <div className="grid grid-cols-2 gap-6 pt-1">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">任务：</Label>
+                      <Select value={annoTaskType} onValueChange={setAnnoTaskType}>
+                        <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="bbox">目标检测 (Object Detection)</SelectItem>
+                          <SelectItem value="instance_seg">实例分割 (Instance Segmentation)</SelectItem>
+                          <SelectItem value="semantic_seg">语义分割 (Semantic Segmentation)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">格式：</Label>
+                      <Select value={annoFormat} onValueChange={setAnnoFormat}>
+                        <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {annoTaskType === 'semantic_seg' ? (
+                            <>
+                              <SelectItem value="image">Mask 图像</SelectItem>
+                              <SelectItem value="multianno">MultiAnno</SelectItem>
+                            </>
+                          ) : (
+                            <>
+                              <SelectItem value="yolo">YOLO 格式</SelectItem>
+                              <SelectItem value="coco">COCO 格式</SelectItem>
+                              <SelectItem value="multianno">MultiAnno</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">标注格式</Label>
-                    <Select value={annoFormat} onValueChange={setAnnoFormat}>
-                      <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {annoTaskType === 'semantic_seg' ? (
-                          <>
-                            <SelectItem value="image">Image Mask (.png/.tif)</SelectItem>
-                            <SelectItem value="multianno">原生 (.json)</SelectItem>
-                          </>
-                        ) : (
-                          <>
-                            <SelectItem value="yolo">YOLO (.txt)</SelectItem>
-                            <SelectItem value="coco">COCO (.json)</SelectItem>
-                            <SelectItem value="multianno">原生 (.json)</SelectItem>
-                          </>
-                        )}
-                      </SelectContent>
-                    </Select>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Label className="w-14 text-right text-[11px] font-bold text-neutral-600 dark:text-neutral-400">后缀：</Label>
+                      <Input value={annoSuffix} onChange={e => setAnnoSuffix(e.target.value)} className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="例如: _RGB" />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Label className="w-14 text-right text-[11px] font-bold text-neutral-600 dark:text-neutral-400">扩展名：</Label>
+                      <Select value={annoExtension} onValueChange={setAnnoExtension}>
+                        <SelectTrigger className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {annoFormat === 'yolo' && <SelectItem value=".txt">.txt</SelectItem>}
+                          {(annoFormat === 'coco' || annoFormat === 'multianno') && <SelectItem value=".json">.json</SelectItem>}
+                          {annoFormat === 'image' && (
+                            <>
+                              <SelectItem value=".png">.png</SelectItem>
+                              <SelectItem value=".tif">.tif</SelectItem>
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 路径配置 */}
+                <div className="space-y-1.5 flex-1 pt-2">
+                  <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">选择标注路径</Label>
+                  <div className="relative">
+                    <Input value={annoPath} onChange={e => setAnnoPath(e.target.value)} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900" placeholder="选择路径..." />
+                    <button onClick={() => setExplorerConfig({ open: true, type: annoFormat === 'coco' ? 'file' : 'dir', target: 'anno_dir', initialPath: annoPath })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-emerald-500">
+                      <FolderOpen size={14} />
+                    </button>
                   </div>
                 </div>
 
@@ -699,40 +741,74 @@ export function LocalVisualization() {
                     </div>
 
                     {/* 🌟 调整 2：任务类型与格式 (与第二部分完全对齐的 1:1 Grid) */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">任务类型</Label>
-                        {/* 🌟 修复：绑定到 pred.taskType */}
-                        <Select value={pred.taskType} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, taskType: val } : p))}>
-                          <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="bbox">目标检测 (BBox)</SelectItem>
-                            <SelectItem value="instance_seg">实例分割 (Polygon)</SelectItem>
-                            <SelectItem value="semantic_seg">语义分割 (Mask)</SelectItem>
-                          </SelectContent>
-                        </Select>
+                    {/* 🌟 2栏4元素联动排版 */}
+                    <div className="grid grid-cols-2 gap-6 pt-1">
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">任务：</Label>
+                          <Select value={pred.taskType} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, taskType: val } : p))}>
+                            <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="bbox">目标检测</SelectItem>
+                              <SelectItem value="instance_seg">实例分割</SelectItem>
+                              <SelectItem value="semantic_seg">语义分割</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Label className="w-14 text-right text-xs font-bold text-neutral-600 dark:text-neutral-400">格式：</Label>
+                          <Select value={pred.format} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val } : p))}>
+                            <SelectTrigger className="flex-1 h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {pred.taskType === 'semantic_seg' ? (
+                                <>
+                                  <SelectItem value="image">Mask 图像</SelectItem>
+                                  <SelectItem value="multianno">MultiAnno</SelectItem>
+                                </>
+                              ) : (
+                                <>
+                                  <SelectItem value="yolo">YOLO 格式</SelectItem>
+                                  <SelectItem value="coco">COCO 格式</SelectItem>
+                                  <SelectItem value="multianno">MultiAnno</SelectItem>
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
                       
-                      <div className="space-y-1.5">
-                        <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">结果格式</Label>
-                        {/* 🌟 修复：绑定到 pred.format，并根据 pred.taskType 动态切换可选格式 */}
-                        <Select value={pred.format} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, format: val } : p))}>
-                          <SelectTrigger className="h-8 text-xs font-medium bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {pred.taskType === 'semantic_seg' ? (
-                              <>
-                                <SelectItem value="image">Image Mask (.png/.tif)</SelectItem>
-                                <SelectItem value="multianno">原生 (.json)</SelectItem>
-                              </>
-                            ) : (
-                              <>
-                                <SelectItem value="yolo">YOLO (.txt)</SelectItem>
-                                <SelectItem value="coco">COCO (.json)</SelectItem>
-                                <SelectItem value="multianno">原生 (.json)</SelectItem>
-                              </>
-                            )}
-                          </SelectContent>
-                        </Select>
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2">
+                          <Label className="w-14 text-right text-[11px] font-bold text-neutral-600 dark:text-neutral-400">后缀：</Label>
+                          <Input value={pred.suffix} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, suffix: e.target.value } : p))} className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900" placeholder="_P" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Label className="w-14 text-right text-[11px] font-bold text-neutral-600 dark:text-neutral-400">扩展名：</Label>
+                          <Select value={pred.extension} onValueChange={(val) => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, extension: val } : p))}>
+                            <SelectTrigger className="flex-1 h-8 text-xs font-mono bg-white dark:bg-neutral-900"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {pred.format === 'yolo' && <SelectItem value=".txt">.txt</SelectItem>}
+                              {(pred.format === 'coco' || pred.format === 'multianno') && <SelectItem value=".json">.json</SelectItem>}
+                              {pred.format === 'image' && (
+                                <>
+                                  <SelectItem value=".png">.png</SelectItem>
+                                  <SelectItem value=".tif">.tif</SelectItem>
+                                </>
+                              )}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 路径配置 */}
+                    <div className="space-y-1.5 flex-1 pt-2">
+                      <Label className="text-[10px] font-bold text-neutral-600 dark:text-neutral-400">选择结果路径</Label>
+                      <div className="relative">
+                        <Input value={pred.path} onChange={e => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, path: e.target.value } : p))} className="h-8 text-xs pr-8 bg-white dark:bg-neutral-900" placeholder="选择路径..." />
+                        <button onClick={() => setExplorerConfig({ open: true, type: pred.format === 'coco' ? 'file' : 'dir', target: 'pred_dir', activeId: pred.id, initialPath: pred.path })} className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-amber-500">
+                          <FolderOpen size={14} />
+                        </button>
                       </div>
                     </div>
 
