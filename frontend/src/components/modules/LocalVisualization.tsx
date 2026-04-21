@@ -343,6 +343,20 @@ export function LocalVisualization() {
     }
   }, [currentIndex, scannedStems]);
 
+  // 🌟 辅助函数：组装本地模式的标准 Payload
+  const getLocalConfigsPayload = () => {
+    if (sourceType !== 'local') return null;
+    return placeholders
+      .filter(p => p.path.trim() !== '')
+      .map((p, idx) => ({
+        folder_path: p.path.trim(),
+        path: p.path.trim(), // 兼容字段
+        suffix: p.suffix.trim(),
+        // 🌟 动态命名：第一个固定为主视图，后续为增强视图
+        name: idx === 0 ? 'Main View' : `Aug View ${idx}`
+      }));
+  };
+
   const fetchPreview = async () => {
     if (scannedStems.length === 0) return;
     setIsLoading(true);
@@ -358,7 +372,7 @@ export function LocalVisualization() {
         stem: currentStem,
         render_settings: config,
         view_configs: sourceType === 'project' ? viewMetas : null,
-        local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
+        local_configs: getLocalConfigsPayload(),
         anno_config: enableAnno ? {
           task_type: taskApiMap[annoTaskType], 
           format: annoFormat,
@@ -434,7 +448,7 @@ export function LocalVisualization() {
         stem: scannedStems[currentIndex],
         render_settings: config,
         view_configs: sourceType === 'project' ? viewMetas : null,
-        local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
+        local_configs: getLocalConfigsPayload(),
         // 🌟 关键：告诉后端，我们需要一个预览版的合并图
         export_config: {
             preview_only: true, // 标识这只是预览，不写磁盘
@@ -497,7 +511,7 @@ export function LocalVisualization() {
         all_stems: scannedStems,
         render_settings: config,
         view_configs: sourceType === 'project' ? viewMetas : null,
-        local_configs: sourceType === 'local' ? placeholders.filter(p => p.path) : null,
+        local_configs: getLocalConfigsPayload(),
         anno_config: enableAnno ? {
           task_type: taskApiMap[annoTaskType], 
           format: annoFormat,
@@ -661,43 +675,63 @@ export function LocalVisualization() {
                         </Button>
                     </div>
 
-                    <div className="max-h-[200px] overflow-y-auto space-y-2 pr-1">
-                        {placeholders.map((p) => (
-                        <div key={p.id} className="flex gap-1.5 items-start">
-                            <div className="flex-1 space-y-1">
-                            <div className="relative">
-                                <Input
-                                value={p.path}
-                                onChange={(e) => updatePlaceholder(p.id, 'path', e.target.value)}
-                                className="h-8 text-[11px] pr-8 bg-white dark:bg-neutral-900"
-                                placeholder="文件夹路径..."
-                                />
-                                <button
-                                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-indigo-500"
-                                onClick={() => { setActivePlaceholderId(p.id); setExplorerOpen(true); }}
-                                >
-                                <FolderOpen size={14} />
+                    <div className="max-h-[250px] overflow-y-auto space-y-2 pr-1">
+                      {/* 🌟 核心修复：自动命名并加上 Suffix 输入框 */}
+                      {placeholders.map((p, idx) => {
+                        const viewName = idx === 0 ? 'Main View' : `Aug View ${idx}`;
+                        return (
+                          <div key={p.id} className="space-y-2 p-2.5 rounded-md bg-white/50 dark:bg-black/20 border border-neutral-100 dark:border-neutral-800 relative group">
+                            
+                            <div className="flex items-center justify-between">
+                              <Label className="text-[10px] font-black text-indigo-500 uppercase bg-indigo-50 dark:bg-indigo-900/30 px-1.5 py-0.5 rounded">
+                                {viewName}
+                              </Label>
+                              {placeholders.length > 1 && (
+                                <button onClick={() => removePlaceholder(p.id)} className="text-neutral-400 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
+                                  <Trash2 size={12} />
                                 </button>
+                              )}
                             </div>
+                            
+                            <div className="flex gap-2">
+                              {/* 文件夹路径 */}
+                              <div className="relative flex-1">
+                                <Input 
+                                  value={p.path} 
+                                  onChange={e => setPlaceholders(prev => prev.map(item => 
+                                    item.id === p.id ? { ...item, path: e.target.value } : item
+                                  ))} 
+                                  className="h-7 text-[10px] pr-8 bg-white dark:bg-neutral-900" 
+                                  placeholder="选择文件夹路径..." 
+                                />
+                                <button 
+                                  onClick={() => setExplorerConfig({ 
+                                    open: true, 
+                                    type: 'dir', 
+                                    target: 'local_dir',
+                                    activeId: p.id,
+                                    initialPath: p.path 
+                                  })} 
+                                  className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-indigo-500"
+                                >
+                                  <FolderOpen size={14} />
+                                </button>
+                              </div>
+                              
+                              {/* 🌟 关键：找回丢失的 Suffix，否则后端根本读不到图片扩展名！ */}
+                              <Input 
+                                value={p.suffix} 
+                                onChange={e => setPlaceholders(prev => prev.map(item => 
+                                  item.id === p.id ? { ...item, suffix: e.target.value } : item
+                                ))} 
+                                className="h-7 text-[10px] w-[68px] bg-white dark:bg-neutral-900 font-mono placeholder:font-sans" 
+                                placeholder="如 .png" 
+                              />
                             </div>
-                            <div className="w-24">
-                            <Input
-                                value={p.suffix}
-                                onChange={(e) => updatePlaceholder(p.id, 'suffix', e.target.value)}
-                                className="h-8 text-[11px] font-mono bg-white dark:bg-neutral-900"
-                                placeholder="后缀(可选)"
-                            />
-                            </div>
-                            <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-neutral-400 hover:text-red-500"
-                            onClick={() => removePlaceholder(p.id)}
-                            >
-                            <Trash2 size={14} />
-                            </Button>
-                        </div>
-                        ))}
+
+                          </div>
+                        );
+                      })}
                     </div>
                     </div>
                 </div>
