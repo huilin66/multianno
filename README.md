@@ -35,29 +35,56 @@ For advanced features and detailed configurations, please refer to the specific 
 
 ---
 
-## Quick Start
+## Installation
 
-### 1. Requirements
-* Node.js (>= 18.x)
-* Python (>= 3.10)
+### 1. Clone the Repository
+```bash
+git clone https://github.com/huilin66/multianno.git
+cd multianno
+```
 
-### 2. Installation
-**Start the Frontend**
+### 2. Install the Frontend
+2.1 Install Node.js from the [Node.js Official Website](https://nodejs.org/en/download).
+
+2.2 Install frontend dependencies.
 ```bash
 cd frontend
 npm install
-npm run dev
+cd ..
 ```
 
-**Start the Backend**
+### 3. Install the Backend
+3.1 Create and activate a Conda environment.
 ```bash
-cd backend
-pip install -r requirements.txt
-python main.py
+conda create -n multianno python=3.10
+conda activate multianno
 ```
 
-### 3. Start Your Annotation
-Basic workflow:
+3.2 Install backend dependencies based on your hardware:
+
+* **Option A: CPU Only (Basic Mode)**
+    ```bash
+    cd backend
+    pip install -r requirements.txt
+    cd ..
+    ```
+* **Option B: GPU Recommended (Full AI Mode with SAM 3)**
+    First, install the specific version of PyTorch that matches your CUDA environment from the [PyTorch Previous Versions Page](https://pytorch.org/get-started/previous-versions/). Then, install the remaining dependencies:
+    ```bash
+    cd backend
+    pip install -r requirements-gpu.txt
+    cd ..
+    ```
+
+---
+
+## Quick Start
+
+MultiAnno provides an all-in-one launcher to simplify the startup process. Once your Conda environment is activated, simply run the following command from the project root:
+
+```bash
+python app.py
+```
 
 1. **Create a new project:**
    * Set up your project meta path.
