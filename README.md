@@ -108,9 +108,9 @@ If you use this software in your research, please cite it as below:
 ```bibtex
 @misc{multianno,
   title={{MultiAnno: An AI-assisted image annotation tool for multi-view tasks}},
-  author={Huilin ZHAO},
+  author={Huilin ZHAO, Xing XU},
   year={2026},
   publisher={GitHub},
-  howpublished={\url{[https://github.com/huilin66/multianno](https://github.com/huilin66/multianno)}}
+  howpublished={\url{https://github.com/huilin66/multianno}}
 }
 ```
