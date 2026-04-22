@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Folder, ChevronRight, CheckSquare, Square, ArrowLeft, File, Info, FolderPlus } from 'lucide-react';
+import { Folder, ChevronRight, CheckSquare, Square, ArrowLeft, File, Info, FolderPlus, Home } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { API_BASE_URL } from '../../api/client';
 
@@ -18,26 +18,27 @@ interface FileExplorerDialogProps {
   initialPath: string;
   onClose: () => void;
   onConfirm: (selectedPaths: string[]) => void;
-  selectType?: 'dir' | 'file' | 'save'; // 🌟 新增 'save'
-  defaultSaveName?: string;             // 🌟 新增默认文件名
+  selectType?: 'dir' | 'file' | 'save'; 
+  defaultSaveName?: string;             
 }
 
 export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, selectType, defaultSaveName }: FileExplorerDialogProps) {
   const { t } = useTranslation();
   const [saveFileName, setSaveFileName] = useState(defaultSaveName || 'project_meta.json');
   const [currentPath, setCurrentPath] = useState(initialPath || '');
+  const [homePath, setHomePath] = useState(initialPath || '');
   const [items, setItems] = useState<ExplorerItem[]>([]);
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
-  // 🌟 新增：新建文件夹状态
+  // 新建文件夹状态
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [creating, setCreating] = useState(false);
 
+  // 🌟 核心 1：只负责向后端请求数据的纯粹函数
   const fetchDirectory = async (targetPath: string) => {
     setLoading(true);
-    // 重置新建状态
     setIsCreatingFolder(false);
     setNewFolderName('');
     
@@ -68,7 +69,7 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
       
       const data = await res.json();
       setItems(data.items);
-      setCurrentPath(data.current_path);
+      setCurrentPath(data.current_path); // 同步后端标准化后的路径
       
     } catch (e) {
       console.error(e);
@@ -78,16 +79,66 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
     }
   };
 
-  useEffect(() => {
-      if (open && defaultSaveName) setSaveFileName(defaultSaveName);
-    }, [open, defaultSaveName]);
+  // 🌟 核心 2：手动触发所有跳转动作的唯一入口
+  const navigateTo = (path: string) => {
+    if (path === undefined || path === null) return;
+    setCurrentPath(path); // 立即更新输入框，提供即时反馈
+    fetchDirectory(path); // 发起请求
+  };
 
+  // 🌟 核心 3：只在弹窗开启时执行一次的初始化管线
+// 🌟 核心修复：双轨制初始化逻辑
   useEffect(() => {
     if (open) {
-      fetchDirectory(initialPath || ''); 
-      setSelectedPaths(new Set()); 
+      // --- 1. 状态重置 ---
+      setSelectedPaths(new Set());
+      if (defaultSaveName) setSaveFileName(defaultSaveName);
+
+      // --- 2. 确定“家 (Home)”的坐标 ---
+      // 我们把父组件传进来的 initialPath 处理成目录，作为永恒的“家”
+      let staticHome = initialPath || '';
+      if (staticHome) {
+        staticHome = staticHome.replace(/\\/g, '/');
+        // 逻辑：如果是文件或带后缀的路径，取上一级作为 Home 目录
+        if (staticHome.includes('.') && !staticHome.endsWith('/')) {
+          const lastIdx = staticHome.lastIndexOf('/');
+          staticHome = lastIdx > 0 ? staticHome.substring(0, lastIdx) : staticHome;
+          if (/^[a-zA-Z]:$/.test(staticHome)) staticHome += '/';
+        }
+      }
+      setHomePath(staticHome); // 🌟 锁死这个快照，点击 Home 按钮永远回这里
+
+      // --- 3. 确定“起点 (Start)”的坐标 ---
+      let startPath = staticHome; // 默认起点是家
+      
+      const savedHistory = localStorage.getItem('multiAnno_recentPaths');
+      if (savedHistory) {
+        try {
+          const historyArray = JSON.parse(savedHistory);
+          if (historyArray.length > 0) {
+            let lastPath = historyArray[0].replace(/\\/g, '/');
+            // 执行你的逻辑：打开时自动退到历史记录的上一级
+            if (lastPath.endsWith('/') && lastPath.length > 1) lastPath = lastPath.slice(0, -1);
+            const lastIndex = lastPath.lastIndexOf('/');
+            if (lastIndex > 0) {
+              startPath = lastPath.substring(0, lastIndex);
+              if (/^[a-zA-Z]:$/.test(startPath)) startPath += '/';
+            } else if (lastIndex === 0) {
+              startPath = '/';
+            } else {
+              startPath = lastPath;
+            }
+          }
+        } catch (e) {
+          console.error("解析历史路径失败", e);
+        }
+      }
+
+      // --- 4. 执行初次跳转 ---
+      // 弹窗打开时，我们去“起点”，但“家”已经在后台备好了
+      navigateTo(startPath);
     }
-  }, [open, initialPath]);
+  }, [open]); // ⚠️ 仅监听 open，确保 homePath 在本次弹窗周期内不被二次修改
 
   const toggleSelect = (path: string) => {
     const next = new Set(selectedPaths);
@@ -98,31 +149,27 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
 
   const handleNavigateUp = () => {
     if (!currentPath || currentPath === '/') {
-      fetchDirectory('');
+      navigateTo('');
       return;
     }
-
+    
     let normalized = currentPath.replace(/\\/g, '/');
     if (normalized.length > 1 && normalized.endsWith('/')) {
       normalized = normalized.slice(0, -1);
     }
-
-    const lastSlashIndex = normalized.lastIndexOf('/');
     
+    const lastSlashIndex = normalized.lastIndexOf('/');
     if (lastSlashIndex > 0) {
       let nextPath = normalized.slice(0, lastSlashIndex);
-      if (/^[a-zA-Z]:$/.test(nextPath)) {
-        nextPath += '/';
-      }
-      fetchDirectory(nextPath);
+      if (/^[a-zA-Z]:$/.test(nextPath)) nextPath += '/';
+      navigateTo(nextPath);
     } else if (lastSlashIndex === 0) {
-      fetchDirectory('/');
+      navigateTo('/');
     } else {
-      fetchDirectory('');
+      navigateTo('');
     }
   };
 
-  // 🌟 新增：处理创建文件夹逻辑
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;
     setCreating(true);
@@ -139,10 +186,9 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
         return;
       }
       
-      // 创建成功后重新拉取当前目录，关闭新建状态
       setIsCreatingFolder(false);
       setNewFolderName('');
-      fetchDirectory(currentPath);
+      navigateTo(currentPath); // 创建成功后原位刷新
     } catch (e) {
       console.error(e);
       alert(t('fileExplorer.errorConnect'));
@@ -162,18 +208,29 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
           <Button variant="outline" size="icon" onClick={handleNavigateUp} disabled={loading} className="h-9 w-9 shrink-0">
             <ArrowLeft className="w-4 h-4" />
           </Button>
+          
+          {/* 🌟 修复后的 Home 按钮：一键回到初始位置 */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-indigo-500 hover:text-indigo-600 hover:bg-indigo-50"
+            onClick={() => navigateTo(homePath)}
+            title={`回到初始目录: ${homePath}`}
+          >
+            <Home size={16} />
+          </Button>
+
           <Input 
             value={currentPath} 
             onChange={(e) => setCurrentPath(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && fetchDirectory(currentPath)}
+            onKeyDown={(e) => e.key === 'Enter' && navigateTo(currentPath)}
             className="flex-1 font-mono text-sm bg-background border-input"
             placeholder={currentPath === "" ? t('fileExplorer.placeholderRoot') : t('fileExplorer.placeholderPath')}
           />
-          <Button onClick={() => fetchDirectory(currentPath)} disabled={loading} variant="secondary">
+          <Button onClick={() => navigateTo(currentPath)} disabled={loading} variant="secondary">
             {t('fileExplorer.go')}
           </Button>
           
-          {/* 🌟 新增：新建文件夹按钮 (不在根目录时显示) */}
           <Button 
             onClick={() => setIsCreatingFolder(true)} 
             disabled={loading || currentPath === "" || currentPath === "/"} 
@@ -202,7 +259,6 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
           ) : (
             <div className="space-y-1">
               
-              {/* 🌟 新增：内联新建文件夹输入框 */}
               {isCreatingFolder && (
                 <div className="flex items-center gap-3 p-1.5 rounded bg-blue-50/50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800">
                   <div className="px-2">
@@ -232,7 +288,6 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
                 </div>
               )}
 
-              {/* 返回上一级 */}
               {currentPath !== "" && currentPath !== "/" && (
                 <div 
                   className="flex items-center gap-3 p-1.5 rounded cursor-pointer hover:bg-muted transition-colors border border-transparent"
@@ -246,7 +301,6 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
                 </div>
               )}
 
-              {/* 文件列表 */}
               {items.length === 0 && !isCreatingFolder ? (
                 <div className="flex items-center justify-center h-40 text-muted-foreground">
                   {t('fileExplorer.empty')}
@@ -258,11 +312,8 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
                   const canSelect = selectType === 'dir' ? isDir : !isDir;
 
                   let displayName = item.name;
-                  if (item.tag === 'drive') {
-                    displayName = `${t('fileExplorer.localDrive')} (${item.name})`;
-                  } else if (item.tag === 'history') {
-                    displayName = `${t('fileExplorer.historyRecord')} (${item.name})`;
-                  }
+                  if (item.tag === 'drive') displayName = `${t('fileExplorer.localDrive')} (${item.name})`;
+                  else if (item.tag === 'history') displayName = `${t('fileExplorer.historyRecord')} (${item.name})`;
 
                   return (
                     <div 
@@ -277,16 +328,17 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
                         )}
                       </div>
                       
+                      {/* 🌟 修复：双击文件夹时，使用 navigateTo 统一接管跳转 */}
                       <div 
                         className={`flex items-center gap-2 flex-1 select-none ${(!isDir && selectType === 'dir') && 'opacity-50'}`}
-                        onDoubleClick={() => { if (isDir) fetchDirectory(item.path); }}
+                        onDoubleClick={() => { if (isDir) navigateTo(item.path); }}
                       >
                         {isDir ? <Folder className="w-4 h-4 text-amber-500" /> : <File className="w-4 h-4 text-muted-foreground" />}
                         <span className="text-sm font-medium">{displayName}</span>
                       </div>
                       
                       {isDir && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => fetchDirectory(item.path)}>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => navigateTo(item.path)}>
                           <ChevronRight className="w-4 h-4" />
                         </Button>
                       )}
@@ -299,8 +351,6 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
         </div>
 
         <DialogFooter className="flex items-center justify-between mt-4">
-          
-          {/* 🌟 核心修改：如果是 Save 模式，显示文件名输入框 */}
           {selectType === 'save' ? (
             <div className="flex-1 flex items-center gap-2 mr-4">
               <span className="text-sm font-bold text-muted-foreground whitespace-nowrap">文件名:</span>
@@ -322,15 +372,38 @@ export function FileExplorerDialog({ open, initialPath, onClose, onConfirm, sele
             <Button 
               variant="default"
               onClick={() => {
+                let finalPaths: string[] = [];
+                let pathToRecord = currentPath; 
+
                 if (selectType === 'save') {
                   const separator = currentPath.includes('\\') ? '\\' : '/';
                   const cleanPath = currentPath.endsWith(separator) ? currentPath : currentPath + separator;
-                  onConfirm([cleanPath + saveFileName]);
+                  finalPaths = [cleanPath + saveFileName];
                 } else {
-                  onConfirm(Array.from(selectedPaths));
+                  finalPaths = Array.from(selectedPaths);
+                  if (selectType === 'dir' && finalPaths.length > 0) {
+                    pathToRecord = finalPaths[0]; 
+                  }
                 }
+
+                if (pathToRecord && pathToRecord !== '/' && pathToRecord !== '') {
+                  try {
+                    const historyKey = 'multiAnno_recentPaths';
+                    const savedHistory = localStorage.getItem(historyKey);
+                    let historyArray: string[] = savedHistory ? JSON.parse(savedHistory) : [];
+                    
+                    historyArray = historyArray.filter(p => p !== pathToRecord);
+                    historyArray.unshift(pathToRecord);
+                    
+                    if (historyArray.length > 5) historyArray = historyArray.slice(0, 5);
+                    localStorage.setItem(historyKey, JSON.stringify(historyArray));
+                  } catch (e) {
+                    console.error("保存历史记录失败", e);
+                  }
+                }
+
+                onConfirm(finalPaths);
               }}
-              // 控制 Save 模式下必须有路径和文件名才能确认
               disabled={
                 (selectType !== 'save' && selectedPaths.size === 0) || 
                 (selectType === 'save' && (!currentPath || !saveFileName.trim()))
