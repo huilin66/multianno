@@ -9,6 +9,7 @@
 > **A Special Note:** The core architecture and codebase of this project were developed with the pair-programming assistance of **Google Gemini 3.1 Pro**. 
 
 ---
+![功能演示](./doc/pic/feature2.gif)
 
 ## Key Features
 
