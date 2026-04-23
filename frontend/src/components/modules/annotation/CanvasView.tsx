@@ -429,9 +429,9 @@ return (
         onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} onContextMenu={(e) => e.preventDefault()}
       />
 
-{/* ==========================================
-          🌟 重建的底层图像引擎：Base Image + Overlays (严格服从图层顺序)
-          ========================================== */}
+      {/* ==========================================
+      🌟 重建的底层图像引擎：Base Image + Overlays (严格服从图层顺序)
+      ========================================== */}
       {isSingleViewMode && layerOrder.map((layerId: string) => {
          const zIndex = layerOrder.length - layerOrder.indexOf(layerId);
          const config = layerConfigs?.[layerId] || { mode: 'opacity', value: 1 };
@@ -468,22 +468,33 @@ return (
 
            return (
              <div key={`base-img-${layerId}`} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex }}>
+               {/* 主视图缩放平移层 */}
                <div style={{ transformOrigin: '0 0', transform: `translate3d(${viewport.panX}px, ${viewport.panY}px, 0) scale(${viewport.zoom})` }}>
-                  <div style={{ transformOrigin: '0 0', transform: `translate3d(${view.transform?.offsetX || 0}px, ${view.transform?.offsetY || 0}px, 0) scale(${view.transform?.scaleX || 1}, ${view.transform?.scaleY || view.transform?.scaleX || 1})` }}>
-                     <img
-                       src={imageObj?.src}
-                       alt="Base Layer"
-                       className="block max-w-none"
-                       style={{
-                         width: `${logicalW}px`,
-                         height: `${logicalH}px`,
-                         opacity,
-                         clipPath: imgClipPath, // 🌟 修复：把算好的裁剪路径挂载上去！
-                         filter: baseFilterStyle, // 🌟 直接复用顶层的计算结果
-                         transition: 'clip-path 0.1s ease-out, filter 0.1s ease-out'
-                       }}
-                     />
+                  
+                  {/* 🌟 核心修复 1：插入物理裁剪容器，完美等价于 Canvas 的 ctx.clip() */}
+                  <div style={{
+                      width: `${mainWidth}px`,
+                      height: `${mainHeight}px`,
+                      overflow: (!isBaseFullExtent && !view.isMain) ? 'hidden' : 'visible'
+                  }}>
+                      {/* 图像局部偏移层 */}
+                      <div style={{ transformOrigin: '0 0', transform: `translate3d(${view.transform?.offsetX || 0}px, ${view.transform?.offsetY || 0}px, 0) scale(${view.transform?.scaleX || 1}, ${view.transform?.scaleY || view.transform?.scaleX || 1})` }}>
+                         <img
+                           src={imageObj?.src}
+                           alt="Base Layer"
+                           className="block max-w-none"
+                           style={{
+                             width: `${logicalW}px`,
+                             height: `${logicalH}px`,
+                             opacity,
+                             clipPath: imgClipPath, // 原有的卷帘特效依然保留生效
+                             filter: baseFilterStyle,
+                             transition: 'clip-path 0.1s ease-out, filter 0.1s ease-out'
+                           }}
+                         />
+                      </div>
                   </div>
+
                </div>
              </div>
            );
@@ -530,22 +541,33 @@ return (
             
             return (
               <div key={`overlay-${layerId}`} className="absolute inset-0 pointer-events-none overflow-hidden" style={{ zIndex }}>
+                 {/* 主视图缩放平移层 */}
                  <div style={{ transformOrigin: '0 0', transform: `translate3d(${viewport.panX}px, ${viewport.panY}px, 0) scale(${viewport.zoom})` }}>
-                    <div style={{ transformOrigin: '0 0', transform: `translate3d(${oView.transform?.offsetX || 0}px, ${oView.transform?.offsetY || 0}px, 0) scale(${oView.transform?.scaleX || 1}, ${oView.transform?.scaleY || oView.transform?.scaleX || 1})` }}>
-                       <img
-                         src={getOverlayUrl(oView)}
-                         alt={`Overlay ${layerId}`}
-                         className="block max-w-none mix-blend-screen" 
-                         style={{
-                           width: `${oLogicalW}px`,    // 👈 强行锁定物理宽度
-                           height: `${oLogicalH}px`,   // 👈 强行锁定物理高度
-                           opacity, 
-                           clipPath: overlayClipPath, // 🌟 修复：把叠加层的裁剪路径也挂载上去！
-                           filter: filterStyle, // 🌟 应用效果
-                           transition: 'clip-path 0.1s ease-out, filter 0.1s ease-out'
-                         }}
-                       />
+                    
+                    {/* 🌟 核心修复 2：为叠加图层也插入物理裁剪容器 */}
+                    <div style={{
+                        width: `${mainWidth}px`,
+                        height: `${mainHeight}px`,
+                        overflow: (!isLayerFullExtent && !oView.isMain) ? 'hidden' : 'visible'
+                    }}>
+                        {/* 图像局部偏移层 */}
+                        <div style={{ transformOrigin: '0 0', transform: `translate3d(${oView.transform?.offsetX || 0}px, ${oView.transform?.offsetY || 0}px, 0) scale(${oView.transform?.scaleX || 1}, ${oView.transform?.scaleY || oView.transform?.scaleX || 1})` }}>
+                           <img
+                             src={getOverlayUrl(oView)}
+                             alt={`Overlay ${layerId}`}
+                             className="block max-w-none mix-blend-screen" 
+                             style={{
+                               width: `${oLogicalW}px`,
+                               height: `${oLogicalH}px`,
+                               opacity, 
+                               clipPath: overlayClipPath, 
+                               filter: filterStyle,
+                               transition: 'clip-path 0.1s ease-out, filter 0.1s ease-out'
+                             }}
+                           />
+                        </div>
                     </div>
+
                  </div>
               </div>
             );
