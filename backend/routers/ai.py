@@ -10,66 +10,11 @@ from models import (
     SAMInitRequest,
     SAMInteractiveRequest,
 )
-from utils.engine import UnifiedSAM3Predcitor
+from utils.ai_engine import InteractiveVisionEngine
 
 router = APIRouter(prefix="/api/ai/vision", tags=["Vision AI"])
 
 
-class InteractiveVisionEngine:
-    def __init__(self):
-        self.engine = None
-        self.model_path = ""
-        self.current_image_key = ""
-        self.model_type = ""
-
-    @property
-    def is_loaded(self):
-        return self.engine is not None
-
-    def load_model(self, path: str, model_type: str, conf: float = 0.25):
-        if self.model_path == path and self.is_loaded:
-            return
-
-        overrides = dict(
-            conf=conf,
-            task="segment",
-            mode="predict",
-            model=path,
-            half=True,
-            compile=False,
-        )
-        # 实例化统一引擎
-        self.predictor = UnifiedSAM3Predcitor(overrides=overrides)
-        self.model_path = path
-        self.engine = True
-
-    @staticmethod
-    def mask_to_bbox(mask_array: np.ndarray):
-        coords = np.argwhere(mask_array > 0)
-        if len(coords) == 0:
-            return None
-        y_min, x_min = coords.min(axis=0)
-        y_max, x_max = coords.max(axis=0)
-        return [float(x_min), float(y_min), float(x_max), float(y_max)]
-
-    @staticmethod
-    def mask_to_polygons(mask_array: np.ndarray, epsilon_factor: float = 0.002):
-        contours, _ = cv2.findContours(
-            mask_array.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-        )
-        polygons = []
-        for cnt in contours:
-            if cv2.contourArea(cnt) < 50:
-                continue
-            epsilon = epsilon_factor * cv2.arcLength(cnt, True)
-            approx = cv2.approxPolyDP(cnt, epsilon, True)
-            poly = [{"x": float(p[0][0]), "y": float(p[0][1])} for p in approx]
-            if len(poly) >= 3:
-                polygons.append(poly)
-        return polygons
-
-
-# 全局唯一引擎实例
 vision_engine = InteractiveVisionEngine()
 
 
