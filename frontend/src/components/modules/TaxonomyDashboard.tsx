@@ -48,21 +48,21 @@ const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
            <div className="flex-1 overflow-x-auto overflow-y-hidden custom-scrollbar pb-1">
              <div className="h-full flex flex-col min-w-max px-2">
                
-               {/* 柱子区域 */}
-               <div className="flex-1 flex items-end gap-1 border-b-2 border-neutral-200 dark:border-neutral-700">
+               {/* 柱子区域：靠左对齐并加入间距 */}
+               <div className="flex-1 flex items-end justify-start gap-4 border-b-2 border-neutral-200 dark:border-neutral-700 px-2">
                  {entries.map(([k, v]: any) => (
-                    // 🌟 核心修复：增加 min-w-[28px] 保证每根柱子和下方的字不被压扁
-                    <div key={k} className="flex-1 flex flex-col items-center justify-end group h-full relative min-w-[28px]">
+                    // 🌟 修复：增加 max-w-[60px] 限制最大宽度，防止类别少时柱子变得过于粗大
+                    <div key={k} className="flex-1 max-w-[60px] flex flex-col items-center justify-end group h-full relative min-w-[28px]">
                        <span className="text-[9px] font-mono text-neutral-600 dark:text-neutral-300 mb-1 opacity-0 group-hover:opacity-100 transition-opacity absolute -top-4">{v}</span>
                        <div className={`w-full ${colorClass} rounded-t-sm transition-all hover:brightness-110`} style={{ height: `${(v / maxVal) * 100}%` }} />
                     </div>
                  ))}
                </div>
                
-               {/* X 轴刻度标签 */}
-               <div className="flex pt-2">
+               {/* X 轴刻度标签：与上方对齐 */}
+               <div className="flex justify-start gap-4 pt-2 px-2">
                  {entries.map(([k]: any) => (
-                    <div key={k} className="flex-1 text-center text-[8px] text-neutral-500 truncate min-w-[28px]" title={k}>{k}</div>
+                    <div key={k} className="flex-1 max-w-[60px] text-center text-[8px] text-neutral-500 truncate min-w-[28px]" title={k}>{k}</div>
                  ))}
                </div>
 
@@ -827,41 +827,46 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   {/* --- 上半部分：全局紧凑视图 (干掉 h-36，让它自适应撑开) --- */}
                   <div className="flex flex-col gap-6">
                     
-                    {/* --- 第一行：全局紧凑视图 --- */}
-                  <div className="flex flex-col xl:flex-row gap-6 shrink-0">
-                    <div className="w-full xl:w-1/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center">
+                  {/* --- 第一行：全局大盘与图表并排显示 --- */}
+                  <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 shrink-0">
+                    
+                    {/* 1. 总量统计 (占 3 格) */}
+                    <div className="xl:col-span-3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center">
                       <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-4">Dataset Footprint</h4>
                       <div className="text-5xl font-black text-blue-600 dark:text-blue-500 mb-2">{statsData.global.total_objects} <span className="text-base text-neutral-400 font-bold">Objects</span></div>
                       <p className="text-sm text-neutral-500 flex items-center"><Layers className="w-4 h-4 mr-1.5"/> Across {statsData.global.total_images} Scanned Images</p>
                     </div>
-                    <div className="w-full xl:w-2/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center overflow-hidden">
+
+                    {/* 2. Shape 比例 (占 4 格) */}
+                    <div className="xl:col-span-4 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center overflow-hidden">
                       <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-2">Shape Type Distribution</h4>
                       <ShapeDistribution data={statsData.global.shape_types} />
                     </div>
-                  </div>
 
-                  {/* 🌟 1. 新增：全局类别数量分布大盘 */}
-                  {statsData?.global?.class_counts && Object.keys(statsData.global.class_counts).length > 0 && (
-                    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm shrink-0 flex flex-col">
-                      <div className="flex items-center gap-2 mb-4">
+                    {/* 3. Class 数量分布 (占 5 格) */}
+                    <div className="xl:col-span-5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm flex flex-col overflow-hidden">
+                      <div className="flex items-center gap-2 mb-2 shrink-0">
                         <div className="w-1.5 h-4 bg-indigo-500 rounded-full" />
-                        <h3 className="text-sm font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">
-                          Class Distribution
-                        </h3>
+                        <h4 className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Class Distribution</h4>
                       </div>
-                      <div className="h-[280px]">
+                      <div className="flex-1 min-h-[120px]">
                          <AxisBarChart 
-                           title="Annotations per Class"
                            xLabel="Class Name"
-                           yLabel="Objects Count"
+                           yLabel="Count"
                            colorClass="bg-indigo-500"
                            data={Object.fromEntries(
-                             Object.entries(statsData.global.class_counts).sort((a:any, b:any) => b[1] - a[1]) // 按数量降序排列
+                             // 🌟 核心逻辑变更：不依赖后端传来的离散数据，而是遍历前端 Taxonomy 系统里的所有类！
+                             // 只要是系统存在的类（包括 background），哪怕没数据也能查出 0 并显示出来。
+                             taxonomyClasses
+                               .map((c: any) => [c.name, statsData?.classes?.[c.name]?.total_objects || 0])
+                               .sort((a:any, b:any) => b[1] - a[1]) // 按数量降序排列
                            )}
                          />
                       </div>
                     </div>
-                  )}
+                    
+                  </div>
+
                   {/* --- 第二行：属性分布大盘 (另起一行！) --- */}
                   {statsData.global.attribute_details && Object.keys(statsData.global.attribute_details).length > 0 && (
                     <div className="flex flex-col gap-4 shrink-0">
