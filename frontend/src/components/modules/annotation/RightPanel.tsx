@@ -43,8 +43,39 @@ export function RightPanel({
     folders, views, annotations, updateAnnotation, removeAnnotation, 
     stems, currentStem, setCurrentStem, taxonomyClasses, taxonomyAttributes, 
     activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta,
-    updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll
+    updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll, addTaxonomyClass
   } = useStore() as any;
+  // 🌟 核心修复：智能类别发现引擎 (Auto-Discover Missing Classes)
+  // 当导入外部数据后，如果标注中出现了全新未注册的 label，自动将其补全到全局 Taxonomy 中
+  React.useEffect(() => {
+    // 确保数据和函数已就绪
+    if (!annotations || annotations.length === 0 || !taxonomyClasses || !addTaxonomyClass) return;
+
+    const existingNames = new Set(taxonomyClasses.map((c: any) => c.name));
+    const missingLabels = new Set<string>();
+
+    // 1. 扫描内存中所有的标注，提取未知的 label
+    annotations.forEach((anno: any) => {
+      if (anno.label && !existingNames.has(anno.label)) {
+        missingLabels.add(anno.label);
+      }
+    });
+
+    // 2. 如果存在未知类别，自动注册并分配颜色
+    if (missingLabels.size > 0) {
+      // 预设一套好看的备选颜色库
+      const DEFAULT_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ef4444', '#14b8a6', '#6366f1'];
+      
+      missingLabels.forEach((label) => {
+        const newId = `class-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+        // 根据当前已有类别的数量取余，分配一个确定性的颜色
+        const color = DEFAULT_COLORS[existingNames.size % DEFAULT_COLORS.length];
+        
+        addTaxonomyClass({ id: newId, name: label, color: color });
+        existingNames.add(label); // 立即更新 Set，防止同一次循环内分配相同颜色
+      });
+    }
+  }, [annotations, taxonomyClasses, addTaxonomyClass]);
   const [openLayerId, setOpenLayerId] = React.useState<string | null>(null);
 
   // 控制各个板块的展开状态
