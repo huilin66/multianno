@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
-  Tags, Settings, Trash2, ArrowRight, GitMerge,
+  Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
   Plus, Check, X, Loader2, AlertCircle, Upload, Database, Activity,
   List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, Layers, ShieldCheck
 } from 'lucide-react';
@@ -623,8 +623,41 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       }
     };
 
-    // 🌟 新增：执行属性的批量应用与同步
-// 🌟 修复后的完整版：执行属性的批量应用与同步
+  // 🌟 新增：专门用于清除 background 标注的函数
+  const executeCleanBackground = async () => {
+    if (deleteStage < 1) {
+      setDeleteStage(1);
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      
+      // 1. 调用后端的删除接口，使用 hard_delete 物理抹除所有的 background 框
+      await batchDeleteClass({ 
+        save_dirs: safeSaveDirs, 
+        class_name: 'background', 
+        hard_delete: true 
+      });
+      
+      // 2. 🌟 极速响应：清理本地 Store 中的标注，让画布上的框瞬间消失
+      const state = useStore.getState() as any;
+      const updatedAnnotations = state.annotations.filter((a: any) => a.label !== 'background');
+      useStore.setState({ annotations: updatedAnnotations });
+      
+      // 3. 刷新统计大盘
+      loadStatistics(true);
+      setDeleteStage(0);
+      alert('All background annotations have been cleaned successfully!');
+    } catch (err: any) { 
+      alert(`Clean failed: ${err.message}`); 
+    } finally { 
+      setIsProcessing(false); 
+    }
+  };
+
+  // 🌟 新增：执行属性的批量应用与同步
+  // 🌟 修复后的完整版：执行属性的批量应用与同步
   const executeApplyAttribute = async () => {
     if (!activeAttribute || !attrDraft) return;
     setIsProcessing(true);
@@ -1028,10 +1061,39 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
 
                     {/* 🌟 Delete 模块：仅对 background 锁定 */}
+                    {/* 🌟 Delete / Clean 模块：对 background 开启 Clean 模式 */}
                     {activeClass.name.toLowerCase() === 'background' ? (
-                      <Button disabled variant="outline" size="sm" className="h-9 px-4 text-neutral-400 bg-neutral-50 dark:bg-neutral-900 border-dashed">
-                        <ShieldCheck className="w-4 h-4 mr-2" /> Protected
-                      </Button>
+                      <div className="flex items-center">
+                        {deleteStage === 0 ? (
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="h-9 px-4 font-bold border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-900/50 dark:hover:bg-orange-900/20" 
+                            onClick={() => setDeleteStage(1)}
+                          >
+                            <Eraser className="w-4 h-4 mr-2" /> Clean
+                          </Button>
+                        ) : (
+                          <div className="flex items-center gap-1.5 bg-orange-50 dark:bg-orange-950/30 p-1.5 rounded-lg border border-orange-200 animate-in slide-in-from-right-2">
+                            <Button
+                              size="sm"
+                              className="h-7 px-3 text-[10px] font-black transition-all bg-orange-500 hover:bg-orange-600 text-white shadow-lg ring-2 ring-orange-400 animate-pulse"
+                              onClick={executeCleanBackground}
+                              disabled={isProcessing}
+                            >
+                              {isProcessing ? 'CLEANING...' : 'CONFIRM CLEAN?'}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200"
+                              onClick={() => setDeleteStage(0)}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
                     ) : (
                     <div className="flex items-center">
                       {deleteStage === 0 ? (
