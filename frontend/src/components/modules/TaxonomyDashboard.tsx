@@ -840,6 +840,28 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     </div>
                   </div>
 
+                  {/* 🌟 1. 新增：全局类别数量分布大盘 */}
+                  {statsData?.global?.class_counts && Object.keys(statsData.global.class_counts).length > 0 && (
+                    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm shrink-0 flex flex-col">
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-1.5 h-4 bg-indigo-500 rounded-full" />
+                        <h3 className="text-sm font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">
+                          Class Distribution
+                        </h3>
+                      </div>
+                      <div className="h-[280px]">
+                         <AxisBarChart 
+                           title="Annotations per Class"
+                           xLabel="Class Name"
+                           yLabel="Objects Count"
+                           colorClass="bg-indigo-500"
+                           data={Object.fromEntries(
+                             Object.entries(statsData.global.class_counts).sort((a:any, b:any) => b[1] - a[1]) // 按数量降序排列
+                           )}
+                         />
+                      </div>
+                    </div>
+                  )}
                   {/* --- 第二行：属性分布大盘 (另起一行！) --- */}
                   {statsData.global.attribute_details && Object.keys(statsData.global.attribute_details).length > 0 && (
                     <div className="flex flex-col gap-4 shrink-0">
@@ -1009,11 +1031,16 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     }`} 
                     placeholder="Class Name" 
                   />
-                  {activeClass.name.toLowerCase() === 'background' && (
-                    <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest px-2">
-                      System Class (Recycle Bin)
+                  <div className="flex items-center gap-2 mt-1 px-2">
+                    {activeClass.name.toLowerCase() === 'background' && (
+                      <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">
+                        System Class (Recycle Bin)
+                      </span>
+                    )}
+                    <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 font-black px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 shadow-sm">
+                      Total Objects: {statsData?.classes?.[activeClass.name]?.total_objects || 0}
                     </span>
-                  )}
+                  </div>
                 </div>
               </div>
 
@@ -1209,7 +1236,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       <div className="flex items-center gap-2 mb-6 bg-neutral-100 dark:bg-neutral-800/50 p-1.5 rounded-xl w-fit shrink-0">
                         {['bbox', 'polygon'].map((shapeId) => {
                           const isActive = activeClassShapeTab === shapeId;
-                          const hasData = !!statsData?.classes?.[activeClass.name]?.shapes?.[shapeId];
+                          // 🌟 3. 修复：不再用 hasData 决定是否显示，而是直接拿真实数量！
+                          const shapeCount = statsData?.classes?.[activeClass.name]?.shapes?.[shapeId]?.total_objects || 0;
                           
                           return (
                             <button
@@ -1223,7 +1251,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             >
                               <Layers className="w-3.5 h-3.5" />
                               {shapeId === 'bbox' ? 'Bounding Box' : 'Polygon'}
-                              {!hasData && <span className="text-[9px] font-mono text-neutral-400 bg-neutral-200 dark:bg-neutral-800 px-1.5 py-0.5 rounded">0</span>}
+                              <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
+                                isActive 
+                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' 
+                                  : 'bg-neutral-200 text-neutral-500 dark:bg-neutral-800'
+                              }`}>
+                                {shapeCount}
+                              </span>
                             </button>
                           )
                         })}
