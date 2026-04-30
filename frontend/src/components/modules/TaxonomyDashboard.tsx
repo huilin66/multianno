@@ -421,7 +421,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
   // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
   useEffect(() => { 
-    if (folders.length > 0) {
+    if (folders?.length > 0) {
       loadStatistics(editorSettings.autoRefreshStats === true);
     } 
   }, []);
@@ -447,10 +447,36 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setStatsStatus('loading');
     try {
       const saveDirs = folders.map((f: any) => f.path);
-      const data = await fetchProjectStatistics(saveDirs, forceRefresh);
+      const rawData = await fetchProjectStatistics(saveDirs, forceRefresh);
+      
+      // 🌟 核心修复 1：拦截后端数据，把不兼容的 'rectangle' 或 'Rectangle' 强制转为引擎识别的 'bbox'
+      const dataStr = JSON.stringify(rawData).replace(/"rectangle"/gi, '"bbox"').replace(/"Rectangle"/g, '"bbox"');
+      const data = JSON.parse(dataStr);
+      
       setStatsData(data);
+
+      // 🌟 核心优化：智能感知默认 Tab
+      if (data?.global?.shape_types) {
+        const polyCount = data.global.shape_types['polygon'] || 0;
+        const bboxCount = data.global.shape_types['bbox'] || 0;
+        
+        // 如果有多边形，优先多边形；如果没有多边形且有 bbox，则全线自动切到 bbox
+        if (polyCount === 0 && bboxCount > 0) {
+          setActiveShapeTab('bbox');
+          setActiveClassShapeTab('bbox');
+          setActiveAttrShapeTab('bbox');
+        } else {
+          setActiveShapeTab('polygon');
+          setActiveClassShapeTab('polygon');
+          setActiveAttrShapeTab('polygon');
+        }
+      }
+
       setStatsStatus('done');
-    } catch (e: any) { console.error(e); setStatsStatus('idle'); }
+    } catch (e: any) { 
+      console.error(e); 
+      setStatsStatus('idle'); 
+    }
   };
 
   const handleAdd = (type: 'classes' | 'attributes') => {
@@ -1117,6 +1143,29 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
                     {/* 右侧：内容展示区 */}
                     <div className="flex-1 p-8 overflow-y-auto custom-scrollbar bg-white dark:bg-neutral-900">
+                      {/* 🌟 这里才是正确的单类页面：补充 Geometry Filter (水平切换卡) */}
+                      <div className="flex items-center gap-2 mb-6 bg-neutral-100 dark:bg-neutral-800/50 p-1.5 rounded-xl w-fit shrink-0">
+                        {['bbox', 'polygon'].map((shapeId) => {
+                          const isActive = activeClassShapeTab === shapeId;
+                          const hasData = !!statsData?.classes?.[activeClass.name]?.shapes?.[shapeId];
+                          
+                          return (
+                            <button
+                              key={shapeId}
+                              onClick={() => setActiveClassShapeTab(shapeId)}
+                              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                                isActive
+                                  ? 'bg-white dark:bg-neutral-900 text-blue-600 shadow-sm'
+                                  : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-200/50'
+                              }`}
+                            >
+                              <Layers className="w-3.5 h-3.5" />
+                              {shapeId === 'bbox' ? 'Bounding Box' : 'Polygon'}
+                              {!hasData && <span className="text-[9px] font-mono text-neutral-400 bg-neutral-200 dark:bg-neutral-800 px-1.5 py-0.5 rounded">0</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
                       {['bbox', 'polygon'].includes(activeClassShapeTab) ? (
                         statsData.classes[activeClass.name].shapes && statsData.classes[activeClass.name].shapes[activeClassShapeTab] ? (
                           

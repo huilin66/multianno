@@ -349,6 +349,10 @@ async def get_project_statistics(req: StatRequest):
     # 🌟 2. 转换为 DataFrame 享受降维打击
     df = pd.DataFrame(records)
 
+    df["shape_type"] = df["shape_type"].replace(
+        {"rectangle": "bbox", "Rectangle": "bbox"}
+    )
+
     # 矢量化计算长宽比与相对面积
     df["shape_rate"] = (df["width"] / df["height"].replace(0, 1e-6)).round(2)
     df["rel_area"] = df["area"] / df["img_area"]
