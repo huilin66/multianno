@@ -49,12 +49,12 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
 
   const handleExecute = async () => {
     if (!sourceDataPath) return alert("请选择要导入的外部数据源路径！");
-    if (!targetWorkspaceDir) return alert("请选择系统目标工作区！");
-    
+
     if ((format === 'yolo' || format === 'images_only') && !externalClassFile) {
       return alert("导入当前格式必须提供 classes.txt 以还原类别名称！");
     }
-
+    if (!targetWorkspaceDir) return alert("错误：无法获取当前项目的默认工作区路径。");
+        
     setIsImporting(true);
 
     const payload = {
@@ -220,8 +220,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
           </section>
 
           {/* 2. 路径配置 */}
-          <section className="grid grid-cols-2 gap-6">
-            <div className="p-5 bg-white dark:bg-neutral-900 rounded-xl border shadow-sm space-y-4 border-emerald-100 dark:border-emerald-900/30">
+          <section className="p-5 bg-white dark:bg-neutral-900 rounded-xl border shadow-sm space-y-4">
+
               <Label className="text-[10px] font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest flex items-center gap-1">
                 <Upload className="w-3 h-3" /> 2. 外部数据源 (Source)
               </Label>
@@ -283,28 +283,11 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                     </Select>
                   </div>
                 )}
-            </div>
 
-            <div className="p-5 bg-white dark:bg-neutral-900 rounded-xl border shadow-sm space-y-4">
-              <Label className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 tracking-widest flex items-center gap-1">
-                <Folder className="w-3 h-3" /> 3. 系统目标工作区 (Target)
-              </Label>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold text-neutral-500">选择包含图像素材的系统工作区</Label>
-                <Button variant="outline" className="w-full justify-start text-xs font-bold truncate border-blue-200 dark:border-blue-900/50 hover:bg-blue-50 dark:hover:bg-blue-900/20" 
-                  onClick={() => { setExplorerTarget('target'); setExplorerMode('dir'); setExplorerOpen(true); }}>
-                  <Folder className="w-4 h-4 mr-2 text-blue-500 shrink-0" /> 
-                  {targetWorkspaceDir || "选择写入目标文件夹..."}
-                </Button>
-              </div>
-              <div className="p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-md border border-blue-100 dark:border-blue-900/30">
-                <p className="text-[10px] text-blue-700/80 dark:text-blue-300/80 leading-relaxed">
-                  系统会自动在此文件夹中寻找同名图像以获取绝对物理尺寸，并将逆向计算后的原生 <code>.json</code> 文件保存在此。
-                </p>
-              </div>
-            </div>
           </section>
-
+          <p className="text-[10px] text-neutral-400 mt-2 px-1">
+            数据将自动同步至当前工作区：<span className="font-mono text-neutral-500">{safeWorkspaceDir}</span>
+          </p>
           {/* 🌟 体验升级：带 Loading 状态的按钮 */}
           <Button 
             size="lg" 
