@@ -1023,14 +1023,16 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 
                 {/* 🌟 保护 1：禁止修改 background 的名字 */}
                 <div className="flex flex-col">
+
+                  {/* --- 第一行：输入框 (左) + 确认重命名胶囊组 (右) --- */}
+                  <div className="flex items-center gap-3">
                   <Input 
                     value={renameValue} 
                     onChange={e => setRenameValue(e.target.value)} 
                     onKeyDown={e => { 
                         if (e.key === 'Enter') {
                           e.currentTarget.blur();
-                          // 提示用户必须点击确认按钮才能生效
-                          alert("Please click the Green Check mark to apply and sync changes to disk.");
+                          alert("Please click the Check mark to apply and sync changes to disk.");
                         } 
                       }}
                     disabled={activeClass.name.toLowerCase() === 'background'} 
@@ -1041,62 +1043,62 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     }`} 
                     placeholder="Class Name" 
                   />
-                  {/* 当名字发生变化时，显示确认和取消按钮 */}
+                  {/* 当名字发生变化时，在右侧滑出胶囊样式的确认框 */}
                     {renameValue.trim() !== activeClass.name && (
-                      <div className="flex items-center gap-1 animate-in fade-in zoom-in duration-200">
+                      <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/30 p-1.5 rounded-lg border border-blue-200 shadow-sm animate-in slide-in-from-left-2 shrink-0">
                         <Button
                           size="sm"
-                          variant="ghost"
                           disabled={isProcessing}
-                          className="h-7 w-7 p-0 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-50"
+                          className="h-7 px-3 text-[10px] font-black transition-all bg-blue-600 hover:bg-blue-700 text-white shadow-md ring-2 ring-blue-400/50"
                           onClick={async () => {
                             const newName = renameValue.trim();
                             if (!newName) return;
                             
                             const oldName = activeClass.name;
-                            setIsProcessing(true); // 借用你文件顶部的全局 Loading 状态
+                            setIsProcessing(true);
                             
                             try {
                               const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
-                              
-                              // 1. 调用后端的物理同步接口，修改所有 JSON 里的 label
                               const result = await batchMergeClass({
                                 save_dirs: safeSaveDirs,
-                                old_names: [oldName], // 传入数组格式
+                                old_names: [oldName],
                                 new_name: newName
                               });
                               
-                              // 2. 更新前端 Taxonomy 字典
                               updateTaxonomyClass(activeClass.id, { name: newName });
-                              
-                              // 3. 强行刷新全局数据大盘
                               await loadStatistics(true);
                               
-                              // 4. 成功反馈
                               alert(`Successfully renamed!\nModified ${result.modified_files} annotation files on disk.`);
                             } catch (err: any) {
                               alert(`Rename failed: ${err.message}`);
-                              setRenameValue(oldName); // 失败则回滚输入框
+                              setRenameValue(oldName);
                             } finally {
                               setIsProcessing(false);
                             }
                           }}
                         >
-                          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                          {isProcessing ? (
+                            <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> SYNCING...</>
+                          ) : (
+                            'CONFIRM RENAME'
+                          )}
                         </Button>
                         
                         <Button
                           size="sm"
                           variant="ghost"
                           disabled={isProcessing}
-                          className="h-7 w-7 p-0 text-neutral-400 hover:bg-neutral-100"
-                          onClick={() => setRenameValue(activeClass.name)} // 取消重命名
+                          className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                          onClick={() => setRenameValue(activeClass.name)} // 取消并恢复原名
                         >
                           <X className="w-4 h-4" />
                         </Button>
                       </div>
                     )}
-                  <div className="flex items-center gap-2 mt-1 px-2">
+                  </div>
+
+                  {/* 第二行：附加信息 (标签说明和总数) */}
+                  <div className="flex items-center gap-2 mt-2 px-2">
                     {activeClass.name.toLowerCase() === 'background' && (
                       <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">
                         System Class (Recycle Bin)
@@ -1105,10 +1107,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 font-black px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 shadow-sm">
                       Total Objects: {statsData?.classes?.[activeClass.name]?.total_objects || 0}
                     </span>
-                  </div>
                 </div>
               </div>
-
+            </div>
               {/* 右侧：Merge合并 与 删除操作 */}
               {/* 🌟 进化版：多级内联确认菜单 */}
                 <div className="flex items-center gap-3">
