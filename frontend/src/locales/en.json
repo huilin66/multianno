@@ -1,23 +1,56 @@
 {
-    "createProject": {
-        "defaultName": "multianno project1",
-        "nameLabel": "Project Name",
-        "namePlaceholder": "Enter project name...",
-        "importLabel": "Optional: Import Parameters",
-        "importDesc": "You can reuse folder paths, view settings, and alignments from an existing project.",
-        "paramsLoaded": "Parameters Loaded",
-        "loadJson": "Load existing JSON...",
-        "cancel": "Cancel",
-        "submit": "Create Project",
-        "invalidJson": "Invalid JSON file"
-    },
-    "loadProject": {
-        "descPre": "Select a ",
-        "descPost": " file to restore your workspace, folders, and view configurations.",
-        "failLoad": "Failed to load project",
-        "browse": "Browse JSON File"
-    },
-    "dataPreload": {
+  "menu": {
+    "createProject": "Create Project",
+    "loadProject": "Load Project",
+    "dataPreload": "View Setting",
+    "viewExtentCheck": "View Align",
+    "projectMeta": "Project Meta",
+    "importData": "Import Data",
+    "exportData": "Export Data",
+    "taxonomyManager": "Taxonomy Manager",
+    "localVisualization": "Local Visualization"
+  },
+  "header": {
+    "appName": "Welcome to use Multianno!",
+    "projectName": "Project Name: ",
+    "sceneGroupName": "Current Scene Group: ",
+    "projectMetaNotSaved": "Project Metadata Save Failed",
+    "projectMetaSaved": "Project Metadata Saved ",
+    "annotationNotSaved": "Annotation Save Failed",
+    "annotationSaved": "Annotation Saved ",
+    "settings": "Settings",
+    "themeLight": "Switch to Light Mode",
+    "themeDark": "Switch to Dark Mode",
+    "switchLang": "切换为中文"
+  },
+  "headerSetting":{
+    "showCrosshair": "Show Crosshair",
+    "showPixelValue": "Show Pixel Value",
+    "continuousDrawing": "Continuous Drawing",
+    "showAnnotationToolLabel": "Show Annotation Tool Label",
+    "autoRefreshStats": "Auto Refresh Statistics",
+    "shortcutSetting": "Shortcut Settings",
+    "aiSetting": "AI Settings"
+  },
+  "createProject": {
+    "defaultName": "multianno project1",
+    "nameLabel": "Project Name",
+    "namePlaceholder": "Enter project name...",
+    "importLabel": "Optional: Import Parameters",
+    "importDesc": "You can reuse folder paths, view settings, and alignments from an existing project.",
+    "paramsLoaded": "Parameters Loaded",
+    "loadJson": "Load existing JSON...",
+    "cancel": "Cancel",
+    "submit": "Create Project",
+    "invalidJson": "Invalid JSON file"
+  },
+  "loadProject": {
+    "descPre": "Select a ",
+    "descPost": " file to restore your workspace, folders, and view configurations.",
+    "failLoad": "Failed to load project",
+    "browse": "Browse JSON File"
+  },
+  "dataPreload": {
     "folders": {
       "title": "Data Folders",
       "add": "Add Folder",
@@ -102,7 +135,7 @@
       "showAug": "Show Aug View"
     },
     "canvas": {
-    "mainBorder": "MAIN VIEW BORDER",
+      "mainBorder": "MAIN VIEW BORDER",
       "mainViewBase": "MAIN VIEW BASE",
       "augRange": "AUG RANGE (Drag edges to crop)",
       "augContent": "AUG CONTENT (Drag any edge to stretch/snap)"
@@ -181,33 +214,8 @@
     "errorRead": "Read failed: ",
     "errorConnect": "Cannot connect to Python backend. Please check if FastAPI is running.",
     "localDrive": "Local Disk",
-    "historyRecord": "History"  
-},
-  "menu": {
-    "createProject": "Create New Project",
-    "loadProject": "Load Project",
-    "dataPreload": "Data Preload",
-    "viewExtentCheck": "View Extent Check",
-    "projectMeta": "Project Meta",
-    "importData": "Import Data",
-    "exportData": "Export Data",
-    "taxonomyManager": "Taxonomy Manager",
-    "localVisualization": "Local Visualization"
+    "historyRecord": "History"
   },
-  "header": {
-    "themeLight": "Switch to Light Mode",
-    "themeDark": "Switch to Dark Mode",
-    "switchLang": "切换为中文"
-  },
-  "dialog": {
-    "createProject": "Create New Project",
-    "loadProject": "Load Project",
-    "dataPreload": "Data Preload",
-    "viewExtentCheck": "View Extent Check",
-    "exportData": "Export Data",
-    "projectMeta": "Project Metadata Dashboard",
-    "taxonomyManager": "Taxonomy Manager"
-   },
   "taxonomy": {
     "title": "Taxonomy Manager",
     "classes": "Classes",
@@ -255,6 +263,9 @@
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",
-    "edit": "Edit"
+    "edit": "Edit",
+    "error": "Error",
+    "success": "Success",
+    "saved": "Saved"
   }
 }

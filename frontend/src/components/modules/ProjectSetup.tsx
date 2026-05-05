@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next'; // 🌟 引入国际化钩子
 import { loadAllProjectAnnotations } from '../../lib/projectUtils';
 
 // ==========================================
-// Create New Project Modal (创建新项目)
+// Create New Project Modal
 // ==========================================
 export function CreateProject({onClose }: {onClose: () => void }) {
   const { t } = useTranslation();
@@ -40,9 +40,8 @@ export function CreateProject({onClose }: {onClose: () => void }) {
     
     resetProject();
     setProjectName(name);
-    setProjectMetaPath(metaPath); // 🌟 记录路径到全局状态
+    setProjectMetaPath(metaPath);
 
-    // 🌟 首次静默建档 (初始化空项目)
     try {
       await saveProjectMeta({
         file_path: metaPath,

@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { ClassFormPopover } from './annotation/ClassFormPopover';
 import { LeftToolbar } from './annotation/LeftToolbar';
 import { RightPanel } from './annotation/RightPanel';
-import { useAutoSave } from '../../hooks/useAutoSave';
+import { useAnnotationAutoSave } from '../../hooks/useAnnotationAutoSave';
 import { useActionHistory } from '../../hooks/useActionHistory';
 import { CanvasView } from './annotation/CanvasView';
 import { X, Minimize, Frame } from 'lucide-react';

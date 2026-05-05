@@ -1,86 +1,72 @@
-import './i18n'; 
+import './i18n';
 import { useTranslation } from 'react-i18next';
-import React, { useState, useEffect } from 'react'; 
+import React, { useState, useEffect } from 'react';
 import { useStore } from './store/useStore';
-import { 
-  LoadProject, 
-  CreateProject, 
-  DataPreload, 
-  ViewExtentCheck, 
-  SyncAnnotation, 
+import {
+  LoadProject,
+  CreateProject,
+  DataPreload,
+  ViewExtentCheck,
+  SyncAnnotation,
   ProjectMetaDashboard,
   TaxonomyDashboard,
   DataExport,
   DataImport
 } from './components/Modules';
 import { Button } from '@/components/ui/button';
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle 
-} from '@/components/ui/dialog';
-// 🌟 引入新的图标: FolderPlus 和 Upload
-import { Menu, Settings, Airplay, Edit3, Check, AlertCircle,CloudLightning, Tag, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Globe, Tags, Keyboard } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
-import { useAutoSave } from './hooks/useAutoSave';
+import { useAnnotationAutoSave } from './hooks/useAnnotationAutoSave';
 import { ShortcutSettingsModal } from './components/modules/ShortcutSettingsModal';
 import { AISettingsModal } from './components/modules/AISettingsModal';
 import { useMetaAutoSave } from './hooks/useMetaAutoSave';
 import { LocalVisualization } from './components/modules/LocalVisualization';
 
 export default function App() {
-  const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings} = useStore();
-  // 🌟 拿到翻译函数 t，和 i18n 实例
+  const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings } = useStore();
+
   const { t, i18n } = useTranslation();
-  const { saveStatus, lastSavedTime } = useAutoSave();
+  const { annotationSaveStatus, annotationLastSavedTime } = useAnnotationAutoSave();
   const { metaSaveStatus, metaLastSavedTime } = useMetaAutoSave();
 
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
-  // 🌟 监听 Store 里的语言变化，同步给 i18next 引擎
+
   useEffect(() => {
     i18n.changeLanguage(language);
   }, [language, i18n]);
 
-  // 🌟 4. 核心逻辑：监听 theme 变化，动态切换 HTML 根节点的 class
   useEffect(() => {
     const root = window.document.documentElement;
     root.classList.remove('light', 'dark');
     root.classList.add(theme);
   }, [theme]);
-  
+
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
-      {/* Top Navigation Bar */}
       <header className="flex items-center justify-between px-4 py-2 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0 h-14">
+        {/* Start Menu */}
         <div className="flex items-center gap-4 w-1/3">
           <DropdownMenu>
-          {/* 找到 App.tsx 第 44 行左右 */}
-            {/* 🌟 完美避开 button 嵌套报错 */}
             <DropdownMenuTrigger className="flex items-center justify-center w-9 h-9 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors outline-none cursor-pointer shrink-0 text-neutral-700 dark:text-neutral-200">
               <Menu className="w-5 h-5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
-              
-              {/* 🌟 1. 修复菜单栏：创建新项目 */}
               <DropdownMenuItem onClick={() => setActiveModule('createproject')}>
                 <FolderPlus className="w-4 h-4 mr-2" /> {t('menu.createProject')}
               </DropdownMenuItem>
-              
-              {/* 🌟 2. 修复菜单栏：加载现有项目 */}
               <DropdownMenuItem onClick={() => setActiveModule('loadproject')}>
                 <Upload className="w-4 h-4 mr-2" /> {t('menu.loadProject')}
               </DropdownMenuItem>
-              
               <DropdownMenuItem onClick={() => setActiveModule('preload')}>
                 <FolderOpen className="w-4 h-4 mr-2" /> {t('menu.dataPreload')}
               </DropdownMenuItem>
@@ -105,185 +91,180 @@ export default function App() {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        
-        {/* 中间区域：Logo + 软件名 + 项目名 + 当前切片 */}
+
+        {/* Top Navigation Bar：Logo + app name + project name + scene group + 2 save status */}
         <div className="flex items-center justify-center gap-3 w-1/2 shrink-0">
-          <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold shadow-sm">
+          <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold shadow-sm cursor-default" title={t('header.appName')}>
             MA
           </div>
-          {/* 🌟 1. 主标题：日间深灰，夜间纯白 */}
-          <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white transition-colors">
+          <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white transition-colors cursor-default" title={t('header.appName')}>
             MultiAnno
           </h1>
-          
-          {/* 🌟 2. 分隔线：日间浅灰，夜间深灰 */}
-          <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors" />
-          
-          {/* 🌟 3. 项目名：日间深蓝，夜间浅蓝 */}
-          <span className="text-sm font-semibold text-primary tracking-wide truncate max-w-[200px] transition-colors" title={projectName}>
-            {projectName}
-          </span>
+          <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-2" />
 
-          {/* 🌟 4. 当前切片 (Stem) 药丸标签：日间浅灰底深色字，夜间深灰底浅色字 */}
+          <span
+            className="inline-flex items-center text-sm font-semibold text-primary tracking-wide max-w-[200px] transition-colors cursor-default"
+            title={t('header.projectName') + projectName}
+          >
+            <span className="truncate">
+              {projectName.slice(0, Math.ceil(projectName.length / 2)) + ' '}
+            </span>
+            <span className="whitespace-nowrap flex-shrink-0">
+              {' ' + projectName.slice(Math.ceil(projectName.length / 2))}
+            </span>
+          </span>
+          <div className="h-4 w-[1px] bg-neutral-100 dark:bg-neutral-900 transition-colors mx-1" />
           {currentStem && (
             <>
-              <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors" />
-              <span className="px-3 py-1 bg-neutral-200 dark:bg-neutral-800 rounded-full text-xs font-mono text-neutral-700 dark:text-neutral-300 truncate max-w-[150px] transition-colors">
-                {currentStem}
+              <span
+                className="inline-flex items-center max-w-[200px] px-3 py-1 bg-neutral-200 dark:bg-neutral-800 rounded-full text-xs font-mono text-neutral-700 dark:text-neutral-300 transition-colors cursor-default"
+                title={t('header.sceneGroupName') + currentStem}
+              >
+                <span className="truncate min-w-0">
+                  {currentStem.slice(0, Math.ceil(currentStem.length / 2))}
+                </span>
+                <span className="whitespace-nowrap flex-shrink-0">
+                  {currentStem.slice(Math.ceil(currentStem.length / 2))}
+                </span>
               </span>
             </>
           )}
-          
-          {/* 🌟 5. 自动保存状态区 */}
+          <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-2" />
+
           <div className="flex items-center gap-0">
-            
-            {/* A. Project Meta 状态 (数据库图标) */}
-            {folders && folders.length > 0 && (metaSaveStatus === 'error' || metaLastSavedTime) && (
-              <>
-                <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-3" />
-                <div 
-                  // 🌟 悬停显示完整时间
-                  title={metaSaveStatus === 'error' ? 'Project meta sync failed' : `project meta saved at ${metaLastSavedTime}`}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all cursor-help ${
-                    metaSaveStatus === 'error' 
-                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400' 
+            {folders && folders.length > 0 && (metaSaveStatus !== 'idle' || metaLastSavedTime) && (
+              <div
+                title={metaSaveStatus === 'error' ? t('header.projectMetaNotSaved') : t('header.projectMetaSaved') + ' ' + metaLastSavedTime}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${metaSaveStatus === 'error'
+                    ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400'
+                    : metaSaveStatus === 'saving'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 text-blue-600 dark:text-blue-400'
                       : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300'
                   }`}
-                >
+              >
+                {metaSaveStatus === 'saving' ? (
+                  <CloudLightning className="w-3 h-3 animate-pulse" />
+                ) : (
                   <Database className="w-3 h-3 opacity-70" />
-                  {metaSaveStatus === 'error' ? (
-                    'Error'
-                  ) : (
-                    // 🌟 界面只显示 时:分 (截取前5位)
-                    `Saved ${metaLastSavedTime?.substring(0, 5)}`
-                  )}
-                </div>
-              </>
+                )}
+                {metaSaveStatus === 'error'
+                  ? t('common.error', 'Error')
+                  : metaSaveStatus === 'saving'
+                    ? t('common.saving', 'Saving...')
+                    : t('common.saved', 'Saved ') + metaLastSavedTime}
+              </div>
             )}
-
-            {/* B. Annotation 状态 (标签图标) */}
-            {currentStem && (saveStatus === 'error' || lastSavedTime) && (
-              <>
-                <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-3" />
-                <div 
-                  // 🌟 悬停显示完整时间
-                  title={saveStatus === 'error' ? 'Annotation sync failed' : `annotation saved at ${lastSavedTime}`}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all cursor-help ${
-                    saveStatus === 'error'
-                      ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400'
+            <div className="h-4 w-[1px] bg-neutral-100 dark:bg-neutral-900 transition-colors mx-1" />
+            {currentStem && (annotationSaveStatus !== 'idle' || annotationLastSavedTime) && (
+              <div
+                title={annotationSaveStatus === 'error' ? t('header.annotationNotSaved') : t('header.annotationSaved') + ' ' + annotationLastSavedTime}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${annotationSaveStatus === 'error'
+                    ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400'
+                    : annotationSaveStatus === 'saving'
+                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 text-blue-600 dark:text-blue-400'
                       : 'bg-neutral-50 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-300'
                   }`}
-                >
+              >
+                {annotationSaveStatus === 'saving' ? (
+                  <CloudLightning className="w-3 h-3 animate-pulse" />
+                ) : (
                   <Tag className="w-3 h-3 opacity-70" />
-                  {saveStatus === 'error' ? (
-                    'Error'
-                  ) : (
-                    // 🌟 界面只显示 时:分
-                    `Saved ${lastSavedTime?.substring(0, 5)}`
-                  )}
-                </div>
-              </>
+                )}
+                {annotationSaveStatus === 'error'
+                  ? t('common.error', 'Error')
+                  : annotationSaveStatus === 'saving'
+                    ? t('common.saving', 'Saving...')
+                    : t('common.saved', 'Saved ') + annotationLastSavedTime}
+              </div>
             )}
-
           </div>
         </div>
 
-        {/* 右侧区域：放置主题切换按钮 */}
+        {/* Right Menu: Settings + Theme Switch + Language Switch */}
         <div className="w-1/3 flex justify-end items-center gap-2">
           <Popover>
-            {/* 🌟 修复：移除 asChild 和内部的 Button，直接对 Trigger 进行原生样式装扮 */}
-            <PopoverTrigger className="inline-flex items-center justify-center w-9 h-9 rounded-full bg-white/90 dark:bg-black/90 shadow-sm border border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors focus:outline-none cursor-pointer">
-              <Settings className="w-4 h-4 text-neutral-700 dark:text-neutral-200" />
+            <PopoverTrigger asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white rounded-full"
+                title={t('header.settings')}
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-4 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
-              <h4 className="font-bold text-sm mb-4 border-b pb-2">Editor Settings</h4>
-
-              <PopoverContent className="w-64 p-4 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
-              <h4 className="font-bold text-sm mb-4 border-b pb-2">Editor Settings</h4>
               <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Show Sync Crosshair</Label>
-                    <Switch 
-                      checked={editorSettings.showCrosshair} 
-                      onCheckedChange={(v) => updateEditorSettings({ showCrosshair: v })}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Show Pixel Value</Label>
-                    <Switch 
-                      checked={editorSettings.showPixelValue} 
-                      onCheckedChange={(v) => updateEditorSettings({ showPixelValue: v })} 
-                    />
-                  </div>
-                  
-                  {/* 🌟 新增：连续绘制开关 */}
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Continuous Drawing</Label>
-                    <Switch 
-                      checked={editorSettings.continuousDrawing} 
-                      onCheckedChange={(v) => updateEditorSettings({ continuousDrawing: v })} 
-                    />
-                  </div>
-                  
-                 {/* 🌟 新增：左侧工具栏文字显示开关 */}
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">Show Tool Labels</Label>
-                    <Switch 
-                      checked={editorSettings.showToolLabels} 
-                      onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })} 
-                    />
-                  </div>
-                  {/* 🌟🌟🌟 新增：打开标签管理时是否自动强制重新统计 🌟🌟🌟 */}
-                  <div className="flex items-center justify-between" title="Force recalculate statistics when opening Taxonomy Manager">
-                    <Label className="text-xs">Auto-refresh Stats</Label>
-                    <Switch 
-                      checked={editorSettings.autoRefreshStats} 
-                      onCheckedChange={(v) => updateEditorSettings({ autoRefreshStats: v })} 
-                    />
-                  </div>
-                  {/* 🌟 新增：快捷键设置按钮 */}
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start text-xs h-8 mt-2" 
-                    onClick={() => setShortcutModalOpen(true)}
-                  >
-                    <Keyboard className="w-4 h-4 mr-2" />
-                    Shortcut Settings
-                  </Button>
-
-                  {/* 🌟 新增：AI 设置按钮 */}
-                  <Button 
-                    variant="outline" 
-                    className="w-full justify-start text-xs h-8 mt-2" 
-                    onClick={() => setAiSettingsModalOpen(true)}
-                  >
-                    <CloudLightning className="w-4 h-4 mr-2 text-blue-500" />
-                    AI Engine Settings
-                  </Button>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t('headerSetting.showCrosshair')}</Label>
+                  <Switch
+                    checked={editorSettings.showCrosshair}
+                    onCheckedChange={(v) => updateEditorSettings({ showCrosshair: v })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t('headerSetting.showPixelValue')}</Label>
+                  <Switch
+                    checked={editorSettings.showPixelValue}
+                    onCheckedChange={(v) => updateEditorSettings({ showPixelValue: v })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t('headerSetting.continuousDrawing')}</Label>
+                  <Switch
+                    checked={editorSettings.continuousDrawing}
+                    onCheckedChange={(v) => updateEditorSettings({ continuousDrawing: v })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t('headerSetting.showAnnotationToolLabel')}</Label>
+                  <Switch
+                    checked={editorSettings.showToolLabels}
+                    onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t('headerSetting.autoRefreshStats')}</Label>
+                  <Switch
+                    checked={editorSettings.autoRefreshStats}
+                    onCheckedChange={(v) => updateEditorSettings({ autoRefreshStats: v })}
+                  />
+                </div>
+                <div className="border-t border-neutral-300 dark:border-neutral-700 pt-1" />
+                <button
+                  onClick={() => setShortcutModalOpen(true)}
+                  className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-0.5 transition-colors"
+                >
+                  <Label className="text-xs cursor-pointer">{t('headerSetting.shortcutSetting')}</Label>
+                  <Keyboard className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" />
+                </button>
+                <button
+                  onClick={() => setAiSettingsModalOpen(true)}
+                  className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-0.5 transition-colors"
+                >
+                  <Label className="text-xs cursor-pointer">{t('headerSetting.aiSetting')}</Label>
+                  <CloudLightning className="w-3.5 h-3.5 text-blue-400 dark:text-blue-300" />
+                </button>
               </div>
             </PopoverContent>
-
-
-            </PopoverContent>
           </Popover>
-          {/* 语言切换按钮 */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
+
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setLanguage(language === 'en' ? 'zh' : 'en')}
             className="text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white rounded-full font-bold text-xs"
-            title={t('header.switchLang')} // 🌟 替换这里
+            title={t('header.switchLang')}
           >
             {language === 'en' ? '中' : 'EN'}
           </Button>
 
-          {/* 主题切换按钮 */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
+          <Button
+            variant="ghost"
+            size="icon"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
             className="text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white rounded-full"
-            title={theme === 'dark' ? t('header.themeLight') : t('header.themeDark')} // 🌟 替换这里
+            title={theme === 'dark' ? t('header.themeLight') : t('header.themeDark')}
           >
             {theme === 'dark' ? <Sun className="w-5 h-5 transition-all" /> : <Moon className="w-5 h-5 transition-all" />}
           </Button>
@@ -298,52 +279,52 @@ export default function App() {
       {/* ============== 以下是各种 Dialog 容器 ============== */}
 
       {/* 🌟 新增：Create Project 弹窗 */}
-      <Dialog 
-        open={activeModule === 'createproject'} 
+      <Dialog
+        open={activeModule === 'createproject'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-      {/* 🌟 修复后：去掉了 bg-neutral-900 text-white 等，使用标准样式 */}
+        {/* 🌟 修复后：去掉了 bg-neutral-900 text-white 等，使用标准样式 */}
         <DialogContent className="max-w-md w-[95vw] h-auto flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <FolderPlus className="w-5 h-5 text-primary"/> {t('dialog.createProject')}
+              <FolderPlus className="w-5 h-5 text-primary" /> {t('menu.createProject')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-             {/* 传入 onClose 回调，以便组件内部点 Cancel 时可以关闭弹窗 */}
+            {/* 传入 onClose 回调，以便组件内部点 Cancel 时可以关闭弹窗 */}
             <CreateProject onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>
 
       {/* 🌟 新增：Load Project 弹窗 */}
-      <Dialog 
-        open={activeModule === 'loadproject'} 
+      <Dialog
+        open={activeModule === 'loadproject'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         {/* 🌟 修复后：去掉硬编码颜色 */}
         <DialogContent className="max-w-md w-[95vw] h-auto flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
             <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-primary"/> {t('dialog.loadProject')}
+              <Upload className="w-5 h-5 text-primary" /> {t('menu.loadProject')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-            <LoadProject 
-               onClose={() => setActiveModule('workspace')} 
+            <LoadProject
+              onClose={() => setActiveModule('workspace')}
             />
           </div>
         </DialogContent>
       </Dialog>
 
       {/* 原有的 Preload 弹窗 */}
-      <Dialog 
-        open={activeModule === 'preload'} 
+      <Dialog
+        open={activeModule === 'preload'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-            <DialogTitle>{t('dialog.dataPreload')}</DialogTitle>
+            <DialogTitle>{t('menu.dataPreload')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <DataPreload />
@@ -352,13 +333,13 @@ export default function App() {
       </Dialog>
 
       {/* 原有的 Extent Check 弹窗 */}
-      <Dialog 
-        open={activeModule === 'extent'} 
+      <Dialog
+        open={activeModule === 'extent'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-6xl sm:max-w-6xl h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-            <DialogTitle>{t('dialog.viewExtentCheck')}</DialogTitle>
+            <DialogTitle>{t('menu.viewExtentCheck')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <ViewExtentCheck />
@@ -368,14 +349,14 @@ export default function App() {
 
 
       {/* 统一格式的 Project Meta 弹窗 */}
-      <Dialog 
-        open={activeModule === 'meta'} 
+      <Dialog
+        open={activeModule === 'meta'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-6xl sm:max-w-6xl w-[95vw] h-[85vh] flex flex-col p-0 bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-800 overflow-hidden">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
             <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-              <Database className="w-5 h-5 text-blue-400"/> {t('dialog.projectMeta')}
+              <Database className="w-5 h-5 text-blue-400" /> {t('menu.projectMeta')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
@@ -384,18 +365,18 @@ export default function App() {
         </DialogContent>
       </Dialog>
       {/* 🌟 新增：Taxonomy Manager 弹窗 */}
-      <Dialog 
-        open={activeModule === 'taxonomy'} 
+      <Dialog
+        open={activeModule === 'taxonomy'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-800 overflow-hidden">
           {/* 🌟 1. 补齐缺失的标准头部 (DialogHeader) */}
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
             <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-              <Tags className="w-5 h-5 text-primary"/> {t('dialog.taxonomyManager')}
+              <Tags className="w-5 h-5 text-primary" /> {t('menu.taxonomyManager')}
             </DialogTitle>
           </DialogHeader>
-          
+
           <div className="flex-grow overflow-hidden relative">
             {/* 🌟 2. 传入标准的 onClose 回调 */}
             <TaxonomyDashboard onClose={() => setActiveModule('workspace')} />
@@ -404,8 +385,8 @@ export default function App() {
       </Dialog>
       {/* 🌟 数据导入/导出 统一弹窗 */}
       {/* 🌟 导入弹窗 */}
-      <Dialog 
-        open={activeModule === 'exchange_import'} 
+      <Dialog
+        open={activeModule === 'exchange_import'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-2xl sm:max-w-2xl h-[70vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
@@ -414,8 +395,8 @@ export default function App() {
       </Dialog>
 
       {/* 🌟 导出弹窗 */}
-      <Dialog 
-        open={activeModule === 'exchange_export'} 
+      <Dialog
+        open={activeModule === 'exchange_export'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-3xl sm:max-w-3xl h-[85vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
@@ -424,16 +405,16 @@ export default function App() {
       </Dialog>
 
       {/* 🌟 新增：Local Visualization 弹窗 */}
-      <Dialog 
-        open={activeModule === 'local_visualization'} 
+      <Dialog
+        open={activeModule === 'local_visualization'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
-          
+
           {/* 🌟 补充标准头部，保持与其他模块高度一致 */}
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
             <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-              <Airplay className="w-5 h-5 text-indigo-500"/> {t('menu.localVisualization', '本地可视化引擎')}
+              <Airplay className="w-5 h-5 text-indigo-500" /> {t('menu.localVisualization', '本地可视化引擎')}
             </DialogTitle>
           </DialogHeader>
 
@@ -442,14 +423,14 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
-      <ShortcutSettingsModal 
-        open={shortcutModalOpen} 
-        onClose={() => setShortcutModalOpen(false)} 
+      <ShortcutSettingsModal
+        open={shortcutModalOpen}
+        onClose={() => setShortcutModalOpen(false)}
       />
 
-      <AISettingsModal 
-        open={aiSettingsModalOpen} 
-        onClose={() => setAiSettingsModalOpen(false)} 
+      <AISettingsModal
+        open={aiSettingsModalOpen}
+        onClose={() => setAiSettingsModalOpen(false)}
       />
     </div>
   );

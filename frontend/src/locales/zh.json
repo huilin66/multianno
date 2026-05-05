@@ -1,4 +1,37 @@
 {
+    "menu": {
+    "createProject": "创建项目",
+    "loadProject": "加载项目",
+    "dataPreload": "视图设置",
+    "viewExtentCheck": "视图对齐",
+    "projectMeta": "项目元数据",
+    "importData": "导入数据",
+    "exportData": "导出数据",
+    "taxonomyManager": "标注管理器",
+    "localVisualization": "本地可视化"
+  },
+  "header": {
+    "appName": "欢迎使用 Multianno!",
+    "projectName": "项目名称: ",
+    "sceneGroupName": "当前场景组: ",
+    "projectMetaNotSaved": "项目元数据保存失败",
+    "projectMetaSaved": "项目元数据已保存 ",
+    "annotationNotSaved": "标注保存失败",
+    "annotationSaved": "标注已保存 ",
+    "settings": "设置",
+    "themeLight": "切换为浅色模式",
+    "themeDark": "切换为深色模式",
+    "switchLang": "Switch to English"
+  },
+  "headerSetting":{
+    "showCrosshair": "显示十字准星",
+    "showPixelValue": "显示像素值",
+    "continuousDrawing": "连续绘制",
+    "showAnnotationToolLabel": "显示标注工具标签",
+    "autoRefreshStats": "自动刷新统计信息",
+    "shortcutSetting": "快捷键设置",
+    "aiSetting": "AI 设置"
+  },
   "createProject": {
     "defaultName": "multianno 项目1",
     "nameLabel": "项目名称",
@@ -183,31 +216,6 @@
       "downloadJson": "下载 JSON 配置"
     }
   },
-  "menu": {
-    "createProject": "创建新项目",
-    "loadProject": "加载项目",
-    "dataPreload": "数据预处理",
-    "viewExtentCheck": "视图对齐校验",
-    "projectMeta": "项目元数据",
-    "exportData": "导出数据",
-    "taxonomyManager": "标注体系管理器",
-    "localVisualization": "本地可视化"
-  },
-  "header": {
-    "themeLight": "切换为浅色模式",
-    "themeDark": "切换为深色模式",
-    "switchLang": "Switch to English"
-  },
-  "dialog": {
-    "createProject": "创建新项目",
-    "loadProject": "加载项目",
-    "dataPreload": "数据预加载",
-    "viewExtentCheck": "视图对齐校验",
-    "importData": "导入数据",
-    "exportData": "导出数据",
-    "projectMeta": "项目元数据看板",
-    "taxonomyManager": "标注体系管理器"
-  },
   "taxonomy": {
     "title": "标注体系管理器 (Taxonomy)",
     "classes": "类别管理",
@@ -255,6 +263,9 @@
   "common": {
     "confirm": "确认",
     "cancel": "取消",
-    "edit": "编辑"
+    "edit": "编辑",
+    "error": "错误",
+    "success": "成功",
+    "saved": "已保存"
   }
 }

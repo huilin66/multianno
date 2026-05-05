@@ -274,7 +274,7 @@ export const useStore = create<AppState>()(
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
 
-      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false, autoRefreshStats: false },
+      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false, autoRefreshStats: true },
       updateEditorSettings: (newSettings) => set((state) => ({ 
         editorSettings: { ...state.editorSettings, ...newSettings } 
       })),
