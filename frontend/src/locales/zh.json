@@ -32,6 +32,38 @@
     "shortcutSetting": "快捷键设置",
     "aiSetting": "AI 设置"
   },
+    "shortcuts":{
+    "title": "快捷键设置",
+    "pressKey": "请按键...",
+    "pressCombineKey": "请按下键/组合键(Ctrl/Shift+键)以设置快捷键",
+    
+    "pan": "平移",
+    "home": "重置位置",
+    "prev": "上一场景",
+    "next": "下一场景",
+
+    "bbox": "矩形",
+    "polygon": "多边形",
+    "ai_anno": "AI 自动标注",
+
+    "rbbox": "旋转矩形",
+    "cuboid": "立方体", 
+    "ellipse": "椭圆",
+    "circle": "圆",
+    "freemask": "自由掩码",
+    "point": "点",
+    "line": "线",
+    "lasso": "自由线",
+
+    "select": "选择并编辑",
+    "save": "保存",
+    "cut": "裁剪",
+    "cutout": "裁切",
+    "undo": "撤销",
+    "redo": "重做",
+    "del": "删除",
+    "clear": "清空"
+  },
   "createProject": {
     "defaultName": "multianno 项目1",
     "nameLabel": "项目名称",
@@ -266,6 +298,7 @@
     "edit": "编辑",
     "error": "错误",
     "success": "成功",
-    "saved": "已保存"
+    "saved": "已保存",
+    "done": "完成"
   }
 }

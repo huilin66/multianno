@@ -138,7 +138,7 @@ export interface AppState {
   theme: 'dark' | 'light';
   language: 'en' | 'zh';
   editorSettings: EditorSettings;
-  shortcutsSettings: Record<string, string>;
+  shortcutsSettings: Record<string, { key: string; shift?: boolean; ctrl?: boolean }>;
   aiSettings: {
       model: string;
       modelPath: string;
@@ -201,7 +201,7 @@ export interface AppState {
   setTheme: (theme: 'dark' | 'light') => void;
   setLanguage: (lang: 'en' | 'zh') => void;
   updateEditorSettings: (settings: Partial<EditorSettings>) => void;
-  updateShortcutSettings: (tool: string, key: string) => void;
+  updateShortcutSettings: (tool: string, settings: { key: string; shift?: boolean; ctrl?: boolean }) => void;
   setAISettings: (settings: Partial<AppState['aiSettings']>) => void;
 
   // display function
@@ -238,32 +238,31 @@ export const useStore = create<AppState>()(
       language: 'en',
       editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false, autoRefreshStats: true },
       shortcutsSettings: {
-        pan: 'w',
-        home: 's',
-        prev: 'a',
-        next: 'd',
+        pan: {key:'w'},
+        home: {key:'space'},
+        prev: {key:'a'},
+        next: {key:'d'},
 
-        bbox: 'r',
-        polygon: 'p',
-        ai_anno: 'i',
+        bbox: {key:'r'},
+        polygon: {key:'p'},
+        ai_anno: {key:'i'},
 
-        rbbox: 'r',
-        cuboid: 'd',
-        ellipse: 'e',
-        circle: 'c',
-        freemask: 'm',
-        point: 'p',
-        line: 'l',
-        lasso: 's',
+        rbbox: {key:'r', shift: true},
+        cuboid: {key:'d', shift: true},
+        ellipse: {key:'e', shift: true},
+        circle: {key:'c', shift: true},
+        freemask: {key:'m', shift: true},
+        point: {key:'p', shift: true},
+        line: {key:'l', shift: true},
+        lasso: {key:'s', shift: true},
 
-
-        select: 'v',
-        save: 's',
-        cut: 'x',
-        cutout: 'e', 
-        undo: 'z',
-        redo: 'y',
-        delete: 'delete',
+        select: {key:'e', ctrl: true},
+        cut: {key:'q', ctrl: true},
+        cutout: {key:'e', ctrl: true}, 
+        undo: {key:'z', ctrl: true},
+        delete: {key:'delete'},
+        clear: {key:'delete',ctrl: true},
+        save: {key:'s', ctrl: true},
       },
       aiSettings: {
         model: 'SAM-3',
@@ -500,8 +499,8 @@ export const useStore = create<AppState>()(
       updateEditorSettings: (newSettings) => set((state) => ({ 
         editorSettings: { ...state.editorSettings, ...newSettings } 
       })),
-      updateShortcutSettings: (tool: string, key: string) => set((state) => ({ 
-        shortcutsSettings: { ...state.shortcutsSettings, [tool]: key.toLowerCase() } 
+      updateShortcutSettings: (tool, settings) => set((state) => ({ 
+        shortcutsSettings: { ...state.shortcutsSettings, [tool]: settings } 
       })),
       setAISettings: (newSettings) => set((state) => ({
         aiSettings: { ...state.aiSettings, ...newSettings }
