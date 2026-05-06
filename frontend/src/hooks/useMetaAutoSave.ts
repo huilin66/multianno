@@ -9,13 +9,13 @@ export function useMetaAutoSave() {
   const [metaSaveStatus, setMetaSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   const [metaLastSavedTime, setMetaLastSavedTime] = useState<string | null>(null);
   const { i18n } = useTranslation();
-  const projectMetaPath = useStore((state) => state.projectMetaPath);
-  const projectName = useStore((state) => state.projectName);
-  const taxonomyClasses = useStore((state) => state.taxonomyClasses);
-  const taxonomyAttributes = useStore((state) => state.taxonomyAttributes);
-  const sceneGroups = useStore((state) => state.sceneGroups);
-  const folders = useStore((state) => state.folders);
-  const views = useStore((state) => state.views);
+  const projectMetaPath = useStore((s) => s.projectMetaPath);
+  const projectName = useStore((s) => s.projectName);
+  const taxonomyClasses = useStore((s) => s.taxonomyClasses);
+  const taxonomyAttributes = useStore((s) => s.taxonomyAttributes);
+  const sceneGroups = useStore((s) => s.sceneGroups);
+  const folders = useStore((s) => s.folders);
+  const views = useStore((s) => s.views);
 
 
   useEffect(() => {
