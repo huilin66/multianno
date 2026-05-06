@@ -35,7 +35,7 @@ export default function App() {
   const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings } = useStore();
 
   const { t, i18n } = useTranslation();
-  const { annotationSaveStatus, annotationLastSavedTime } = useAnnotationAutoSave();
+  const { annotationSaveStatus, annotationLastSavedTime, autoSave } = useAnnotationAutoSave();
   const { metaSaveStatus, metaLastSavedTime } = useMetaAutoSave();
 
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
@@ -273,7 +273,7 @@ export default function App() {
 
       {/* Main Content Area - Always Workspace */}
       <main className="flex-grow overflow-hidden relative">
-        <SyncAnnotation />
+        <SyncAnnotation autoSave={autoSave} />
       </main>
 
       {/* ============== 以下是各种 Dialog 容器 ============== */}

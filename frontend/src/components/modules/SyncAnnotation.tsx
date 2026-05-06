@@ -32,8 +32,10 @@ const getControlPoints = (anno: any) => {
   }
   return anno.points.map((p: any, i: number) => ({ ...p, id: i, type: 'point' }));
 };
-
-export function SyncAnnotation() {
+interface SyncAnnotationProps {
+  autoSave: () => void;
+}
+export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const { t } = useTranslation();
   const [formAttributes, setFormAttributes] = useState<Record<string, any>>({});
   const { pushAction, performGlobalUndo, performGlobalRedo, undoCount, redoCount } = useActionHistory();
@@ -1367,9 +1369,6 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     const currentAnnos = annotations.filter(a => a.stem === currentStem);
     currentAnnos.forEach(a => removeAnnotation(a.id));
   };
-  const manualSave = () => {
-    // TODO
-  };
   return (
     <div 
     className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"
@@ -1390,7 +1389,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       hasNext={stemIndex < stems.length - 1}
       handleDelete={handleDelete}
       handleClear={handleClear}
-      handleSave={manualSave}
+      handleSave={autoSave}
     />
 
     {/* 🤖 🌟 新增：左侧 AI 二级悬浮面板 */}

@@ -12,35 +12,38 @@ export function useAnnotationAutoSave() {
   const currentStem = useStore((s) => s.currentStem);
   const annotations = useStore((s) => s.annotations);
   
+  const autoSave = async () => {
+    if (!currentStem) return;
+    setAnnotationSaveStatus('saving');
+    try {
+      const state = useStore.getState();
+      const mainViewFolder = state.folders.find((f: any) => f.id === state.views.find((v: any) => v.isMain)?.folderId) || state.folders[0];
+      const saveDir = mainViewFolder?.path || '';
+      if (!state.folders || state.folders.length === 0 || !saveDir) {
+        setAnnotationSaveStatus('idle');
+        return;
+      }
+
+      const fileName = `${currentStem}.json`;
+      const payload = generateAnnotationPayload(state, currentStem);
+
+      await saveAnnotation({ save_dir: saveDir, file_name: fileName, content: payload });
+      setAnnotationLastSavedTime(new Date().toLocaleTimeString(localeMap[i18n.language||'en'] || undefined, { hour12: false }));
+      setAnnotationSaveStatus('idle');
+    } catch (error) {
+      setAnnotationSaveStatus('error');
+    }
+  };
 
   useEffect(() => {
     if (!currentStem) return;
 
-    const timer = setTimeout(async () => {
-      setAnnotationSaveStatus('saving');
-      try {
-        const state = useStore.getState();
-        const mainViewFolder = state.folders.find((f: any) => f.id === state.views.find((v: any) => v.isMain)?.folderId) || state.folders[0];
-        const saveDir = mainViewFolder?.path || '';
-        if (!state.folders || state.folders.length === 0 || !saveDir) {
-          setAnnotationSaveStatus('idle');
-          return;
-        }
-
-        const currentAnnotations = state.annotations.filter((a: any) => a.stem === currentStem);
-        const fileName = `${currentStem}.json`;
-        const payload = generateAnnotationPayload(state, currentStem);
-
-        await saveAnnotation({ save_dir: saveDir, file_name: fileName, content: payload });
-        setAnnotationLastSavedTime(new Date().toLocaleTimeString(localeMap[i18n.language||'en'] || undefined, { hour12: false }));
-        setAnnotationSaveStatus('idle');
-      } catch (error) {
-        setAnnotationSaveStatus('error');
-      }
+    const timer = setTimeout(() => {
+      autoSave();
     }, 1000); 
 
     return () => clearTimeout(timer);
   }, [annotations, currentStem]); 
 
-  return {annotationSaveStatus, annotationLastSavedTime};
+  return { annotationSaveStatus, annotationLastSavedTime, autoSave };
 }
