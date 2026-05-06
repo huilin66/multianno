@@ -1357,6 +1357,19 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
   }, [tempActiveAnno, formLabel, aiSettings.semiClass, currentStem, addAnnotation, pushAction, state.editorSettings, taxonomyAttributes]); 
   // 🎯 极度关键：必须把 taxonomyAttributes 放在依赖数组里！否则 React 会永远记住你刚刷新页面时空的属性列表。
 
+  const handleDelete = () => {
+    if (activeAnnotationId) {
+      removeAnnotation(activeAnnotationId);
+    }
+  };
+  const handleClear = () => {
+    if (!currentStem) return;
+    const currentAnnos = annotations.filter(a => a.stem === currentStem);
+    currentAnnos.forEach(a => removeAnnotation(a.id));
+  };
+  const manualSave = () => {
+    // TODO
+  };
   return (
     <div 
     className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"
@@ -1375,6 +1388,9 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       handleNextStem={handleNextStem}
       hasPrev={stemIndex > 0}
       hasNext={stemIndex < stems.length - 1}
+      handleDelete={handleDelete}
+      handleClear={handleClear}
+      handleSave={manualSave}
     />
 
     {/* 🤖 🌟 新增：左侧 AI 二级悬浮面板 */}
