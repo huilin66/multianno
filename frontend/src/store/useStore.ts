@@ -101,187 +101,170 @@ export interface TaxonomyAttribute {
   applyToAll: boolean; 
 }
 
+// settings
 export interface EditorSettings {
-  showCrosshair: boolean;
-  continuousDrawing: boolean; // 🌟 新增：连续绘制开关
+  showCrosshair: boolean; 
+  showPixelValue: boolean; 
+  continuousDrawing: boolean; 
+  showToolLabels: boolean; 
+  autoRefreshStats: boolean; 
 }
 
 type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy' | 'exchange_import' | 'exchange_export' | 'local_visualization';
 
 export interface AppState {
+  // project
   projectName: string;
-  setProjectName: (name: string) => void;
   projectMetaPath: string | null;
-  setProjectMetaPath: (path: string | null) => void;
-  theme: 'dark' | 'light';
-  setTheme: (theme: 'dark' | 'light') => void;
-  language: 'en' | 'zh';
-  setLanguage: (lang: 'en' | 'zh') => void;
   projectMetadata: FolderMetadata[]; 
   folders: FolderData[];
   views: ViewConfig[];
-  annotations: Annotation[];
-  
-  // 🌟 3. 新增：状态中维护全局图像属性映射
-  stemMetadata: Record<string, StemMetadata>; 
-  updateStemMetadata: (stem: string, data: Partial<StemMetadata>) => void;
-  sceneGroups: Record<string, Record<string, string>>;
-  setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
-  viewport: {zoom: number;panX: number;panY: number;};
-
-  editorSettings: { showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean; showToolLabels: boolean; autoRefreshStats: boolean; };
-  updateEditorSettings: (settings: Partial<{ showCrosshair: boolean; showPixelValue: boolean; continuousDrawing: boolean; showToolLabels: boolean; autoRefreshStats: boolean }>) => void;
-
-  shortcuts: Record<string, string>;
-  updateShortcut: (tool: string, key: string) => void;
-
-  activeModule: ActiveModule;
-  currentStem: string | null;
   stems: string[];
-  activeAnnotationId: string | null;
+  stemMetadata: Record<string, StemMetadata>; 
+  sceneGroups: Record<string, Record<string, string>>;
 
+
+  // annotations
+  currentStem: string | null;
   taxonomyClasses: TaxonomyClass[];
   taxonomyAttributes: TaxonomyAttribute[];
-
-  savedAlignments: SavedAlignment[];
-  addSavedAlignment: (preset: SavedAlignment) => void;
-  removeSavedAlignment: (id: string) => void;
-  completedViews: string[];
-  setCompletedViews: (views: string[]) => void;
-  setProjectMetadata: (data: FolderMetadata[]) => void;
-  loadProjectMeta: (meta: ProjectMetaContract) => void; 
-  resetProject: () => void;
-
-  addFolder: (folder: FolderData) => void;
-  updateFolder: (id: string, data: Partial<FolderData>) => void;
-  removeFolder: (id: string) => void;
-  clearFolders: () => void;
-
-  addView: (view: ViewConfig) => void;
-  updateView: (id: string, data: Partial<ViewConfig>) => void;
-  removeView: (id: string) => void;
-  clearViews: () => void;
-
-  setViewport: (zoom: number, panX: number, panY: number) => void;
-  addAnnotation: (annotation: Annotation) => void;
-  updateAnnotation: (id: string, data: Partial<Annotation>) => void;
-  removeAnnotation: (id: string) => void;
-  
-  setActiveModule: (module: ActiveModule) => void;
-  setCurrentStem: (stem: string | null) => void;
-  setStems: (stems: string[]) => void;
-  setActiveAnnotationId: (id: string | null) => void;
-
-  addTaxonomyClass: (cls: TaxonomyClass) => void;
-  updateTaxonomyClass: (id: string, updates: Partial<TaxonomyClass>) => void;
-  deleteTaxonomyClass: (id: string, deleteAnnotations: boolean) => void;
-  mergeTaxonomyClasses: (sourceIds: string[], targetId: string) => void;
-
-  addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
-  updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
-  deleteTaxonomyAttribute: (id: string) => void;
-
-  // 🌟 新增：色彩调节暂态存储 (Stem 级)
-  tempViewSettings: Record<string, any>;
-  setTempViewSettings: (stem: string, viewId: string, settings: any) => void;
-  applyViewSettingsToAll: (stem: string, viewId: string) => void;
-
-  // 🌟 新增：AI 面板开关与状态
+  annotations: Annotation[];
+  activeAnnotationId: string | null;
   isAIPanelOpen: boolean;
-  setAIPanelOpen: (open: boolean) => void;
-  aiPrompts: { x: number, y: number, label: number }[]; // 存鼠标点的正负样本
+  aiPrompts: { x: number, y: number, label: number }[]; 
+
+
+  // setting
+  theme: 'dark' | 'light';
+  language: 'en' | 'zh';
+  editorSettings: EditorSettings;
+  shortcutsSettings: Record<string, string>;
   aiSettings: {
       model: string;
       modelPath: string;
       confidence: number;
-      isConfigured: boolean; // 关键：是否已设置
+      isConfigured: boolean;
       inferenceSize: number;
       outputType: 'polygon' | 'bbox',
       filterThreshold: number,
     };
+  
+  // view align
+  completedViews: string[];
+  savedAlignments: SavedAlignment[];
+
+  // display
+  viewport: {zoom: number;panX: number;panY: number;};
+  activeModule: ActiveModule;
+  tempViewSettings: Record<string, any>;
+
+  // project function
+  setProjectName: (name: string) => void;
+  setProjectMetaPath: (path: string | null) => void;
+  setProjectMetadata: (data: FolderMetadata[]) => void;
+  loadProjectMeta: (meta: ProjectMetaContract) => void; 
+  resetProject: () => void;
+  addFolder: (folder: FolderData) => void;
+  updateFolder: (id: string, data: Partial<FolderData>) => void;
+  removeFolder: (id: string) => void;
+  clearFolders: () => void;
+  addView: (view: ViewConfig) => void;
+  updateView: (id: string, data: Partial<ViewConfig>) => void;
+  removeView: (id: string) => void;
+  clearViews: () => void;
+  setStems: (stems: string[]) => void;
+  updateStemMetadata: (stem: string, data: Partial<StemMetadata>) => void;
+  setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
+  
+  // annotation function
+  setCurrentStem: (stem: string | null) => void;
+  addTaxonomyClass: (cls: TaxonomyClass) => void;
+  updateTaxonomyClass: (id: string, updates: Partial<TaxonomyClass>) => void;
+  deleteTaxonomyClass: (id: string, deleteAnnotations: boolean) => void;
+  mergeTaxonomyClasses: (sourceIds: string[], targetId: string) => void;
+  addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
+  updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
+  deleteTaxonomyAttribute: (id: string) => void;
+  addAnnotation: (annotation: Annotation) => void;
+  updateAnnotation: (id: string, data: Partial<Annotation>) => void;
+  removeAnnotation: (id: string) => void;
+  setActiveAnnotationId: (id: string | null) => void;
+  setAIPanelOpen: (open: boolean) => void;
+  setAiPrompts: (ptspts: { x: number, y: number, label: number }[]) => void;
+
+  // view align function
+  setCompletedViews: (views: string[]) => void;
+  addSavedAlignment: (preset: SavedAlignment) => void;
+  removeSavedAlignment: (id: string) => void;
+
+  // setting function
+  setTheme: (theme: 'dark' | 'light') => void;
+  setLanguage: (lang: 'en' | 'zh') => void;
+  updateEditorSettings: (settings: Partial<EditorSettings>) => void;
+  updateShortcutSettings: (tool: string, key: string) => void;
   setAISettings: (settings: Partial<AppState['aiSettings']>) => void;
+
+  // display function
+  setViewport: (zoom: number, panX: number, panY: number) => void;
+  setActiveModule: (module: ActiveModule) => void;
+  setTempViewSettings: (stem: string, viewId: string, settings: any) => void;
+  applyViewSettingsToAll: (stem: string, viewId: string) => void;
 }
 
 export const useStore = create<AppState>()(
   persist(
     (set) => ({
-      projectName: 'multianno project1',
+      // project
+      projectName: 'multianno project',
       projectMetaPath: null,
-
-      theme: 'dark', 
-      language: 'en',
       projectMetadata: [],
       folders: [],
       views: [],
-      annotations: [],
-      
-      // 🌟 4. 初始化空字典
-      stemMetadata: {}, 
-
-      viewport: { zoom: 1, panX: 0, panY: 0 },
-      activeModule: 'workspace', 
-      currentStem: null,
       stems: [],
-      completedViews: [],
-      savedAlignments: [],
-      activeAnnotationId: null,
-
+      stemMetadata: {}, 
+      sceneGroups: {},
+      
+      // annotations
+      currentStem: null,
       taxonomyClasses: [],
       taxonomyAttributes: [],
-      sceneGroups: {},
-
-
-      setProjectMetaPath: (path) => set({ projectMetaPath: path }),
-      // 🌟 新增：暂态初始化与方法
-      tempViewSettings: {},
-      setTempViewSettings: (stem, viewId, settings) => set((state) => ({
-        tempViewSettings: { ...state.tempViewSettings, [`${stem}_${viewId}`]: settings }
-      })),
-      applyViewSettingsToAll: (stem, viewId) => set((state) => {
-        const temp = state.tempViewSettings[`${stem}_${viewId}`];
-        if (!temp) return state;
-        return {
-          views: state.views.map(v => v.id === viewId ? { ...v, settings: { ...(v.settings || {}), ...temp } } : v),
-          // 应用后可以选择清理暂态，也可以保留，这里保留让 UI 不会闪烁
-        };
-      }),
-      // 🌟 修复后的重置逻辑 (清空所有当前项目残留)
-      resetProject: () => set({
-        projectMetaPath: null, // 🌟 重置时清空路径
-        projectName: 'Untitled Project',
-        folders: [],
-        views: [],              // 必须清空视图
-        stems: [],
-        currentStem: null,      // 类型必须是 null 而不是 ''
-        annotations: [],
-        taxonomyClasses: [],    
-        taxonomyAttributes: [],
-        stemMetadata: {},
-        projectMetadata: [],    // 类型必须是 []
-        sceneGroups: {},        // 类型必须是 {}
-        completedViews: [],
-        activeAnnotationId: null
-      }),
-      setSceneGroups: (groups) => set({ sceneGroups: groups }),
-      setProjectName: (name) => set({ projectName: name }),
-      setTheme: (theme) => set({ theme }),
-      setLanguage: (lang) => set({ language: lang }),
-      setProjectMetadata: (data) => set({ projectMetadata: data }),
-      setCompletedViews: (views) => set({ completedViews: views }),
-      setActiveModule: (module) => set({ activeModule: module }),
-      setCurrentStem: (stem) => set({ currentStem: stem }),
-      setStems: (stems) => set({ stems }),
-      setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
-      setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
-
-      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false, autoRefreshStats: true },
-      updateEditorSettings: (newSettings) => set((state) => ({ 
-        editorSettings: { ...state.editorSettings, ...newSettings } 
-      })),
-      
+      annotations: [],
+      activeAnnotationId: null,
       isAIPanelOpen: false,
-      setAIPanelOpen: (open) => set({ isAIPanelOpen: open }),
       aiPrompts: [],
+
+      // setting
+      theme: 'dark', 
+      language: 'en',
+      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false, autoRefreshStats: true },
+      shortcutsSettings: {
+        pan: 'w',
+        home: 's',
+        prev: 'a',
+        next: 'd',
+
+        bbox: 'r',
+        polygon: 'p',
+        ai_anno: 'i',
+
+        rbbox: 'r',
+        cuboid: 'd',
+        ellipse: 'e',
+        circle: 'c',
+        freemask: 'm',
+        point: 'p',
+        line: 'l',
+        lasso: 's',
+
+
+        select: 'v',
+        save: 's',
+        cut: 'x',
+        cutout: 'e', 
+        undo: 'z',
+        redo: 'y',
+        delete: 'delete',
+      },
       aiSettings: {
         model: 'SAM-3',
         modelPath: '',
@@ -291,53 +274,21 @@ export const useStore = create<AppState>()(
         outputType: 'polygon',
         filterThreshold: 1
       },
-      setAISettings: (newSettings) => set((state) => ({
-        aiSettings: { ...state.aiSettings, ...newSettings }
-      })),
+      
+      // view align
+      completedViews: [],
+      savedAlignments: [],
 
-      shortcuts: {
-        pan: 'h',
-        select: 'v',
-        bbox: 'r',
-        polygon: 'p',
-        ai_anno: 'a',
-        rbbox: 'd',
-        cuboid: 'b',
-        ellipse: 'o',
-        circle: 'c',
-        freemask: 'm',
-        point: 't',
-        line: 'l',
-        lasso: 'f',
-        cut: 'x',   // 避免和 Circle(c) 冲突，使用 x 作为切割
-        cutout: 'e', 
+      // display
+      viewport: { zoom: 1, panX: 0, panY: 0 },
+      activeModule: 'workspace', 
+      tempViewSettings: {},
 
-        undo: 'z',     // 配合 Ctrl 使用，显示为 Z
-        redo: 'y',     // 配合 Ctrl 使用，显示为 Y
-        prev: 'arrowleft',  // 上一组
-        next: 'arrowright', // 下一组
-      },
-      updateShortcut: (tool: string, key: string) => set((state) => ({ 
-        shortcuts: { ...state.shortcuts, [tool]: key.toLowerCase() } 
-      })),
-    setEditorSettings: (settings: Partial<EditorSettings>) => set((state) => ({ 
-      editorSettings: { ...state.editorSettings, ...settings } 
-    })),
-
-      // 🌟 5. 新增方法：更新特定 stem 的全局属性
-      updateStemMetadata: (stem, data) => set((state) => ({
-        stemMetadata: {
-          ...state.stemMetadata,
-          [stem]: {
-            ...({ tags: [], text: '', flags: {} }), // 默认值兜底
-            ...(state.stemMetadata[stem] || {}),
-            ...data
-          }
-        }
-      })),
-
+      // project function
+      setProjectName: (name) => set({ projectName: name }),
+      setProjectMetaPath: (path) => set({ projectMetaPath: path }),
+      setProjectMetadata: (data) => set({ projectMetadata: data }),
       loadProjectMeta: (meta) => {
-        // 🌟 1. 动态计算 stems：提取字典的 keys 并按字母排序
         const loadedStems = meta.sceneGroups ? Object.keys(meta.sceneGroups).sort() : [];
 
         set({
@@ -387,31 +338,26 @@ export const useStore = create<AppState>()(
           completedViews: [],
         });
       },
-
-      addSavedAlignment: (newAlignment) => set((state) => {
-        const filteredAlignments = state.savedAlignments.filter(a => {
-          const isSameCrop = 
-            a.crop.t === newAlignment.crop.t && 
-            a.crop.r === newAlignment.crop.r && 
-            a.crop.b === newAlignment.crop.b && 
-            a.crop.l === newAlignment.crop.l;
-          const isSameTransform = 
-            a.transform.scaleX === newAlignment.transform.scaleX && 
-            a.transform.scaleY === newAlignment.transform.scaleY && 
-            a.transform.offsetX === newAlignment.transform.offsetX && 
-            a.transform.offsetY === newAlignment.transform.offsetY;
-          return !(isSameCrop && isSameTransform);
-        });
-        return { savedAlignments: [newAlignment, ...filteredAlignments] };
+      resetProject: () => set({
+        projectMetaPath: null, // 🌟 重置时清空路径
+        projectName: 'Untitled Project',
+        folders: [],
+        views: [],              // 必须清空视图
+        stems: [],
+        currentStem: null,      // 类型必须是 null 而不是 ''
+        annotations: [],
+        taxonomyClasses: [],    
+        taxonomyAttributes: [],
+        stemMetadata: {},
+        projectMetadata: [],    // 类型必须是 []
+        sceneGroups: {},        // 类型必须是 {}
+        completedViews: [],
+        activeAnnotationId: null
       }),
-      removeSavedAlignment: (id) => set((state) => ({savedAlignments: state.savedAlignments.filter(a => a.id !== id)})),
-
       addFolder: (folder) => set((state) => ({ folders: [...state.folders, folder] })),
       updateFolder: (id, data) => set((state) => ({folders: state.folders.map(f => f.id === id ? { ...f, ...data } : f)})),
       removeFolder: (id) => set((state) => ({ folders: state.folders.filter(f => f.id !== id) })),
       clearFolders: () => set({ folders: [] }),
-
-
       addView: (newView) => set((state) => {
         // 🌟 终极防线：在数据层彻底锁死
         if (state.views.length >= 9) {
@@ -440,12 +386,21 @@ export const useStore = create<AppState>()(
       updateView: (id, data) => set((state) => ({views: state.views.map(v => v.id === id ? { ...v, ...data } : v)})),
       removeView: (id) => set((state) => ({ views: state.views.filter(v => v.id !== id) })),
       clearViews: () => set({ views: [] }),
+      setStems: (stems) => set({ stems }),
+      updateStemMetadata: (stem, data) => set((state) => ({
+        stemMetadata: {
+          ...state.stemMetadata,
+          [stem]: {
+            ...({ tags: [], text: '', flags: {} }), // 默认值兜底
+            ...(state.stemMetadata[stem] || {}),
+            ...data
+          }
+        }
+      })),
+      setSceneGroups: (groups) => set({ sceneGroups: groups }),
 
-      addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
-      updateAnnotation: (id, data) => set((state) => ({annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)})),
-      removeAnnotation: (id) => set((state) => ({ annotations: state.annotations.filter(a => a.id !== id) })),
-
-      // 🌟 终极防御：在 Store 数据写入层彻底拦截重复类别
+      // annotation function
+      setCurrentStem: (stem) => set({ currentStem: stem }),
       addTaxonomyClass: (cls) => set((state) => {
         // 检查是否已经存在相同 ID 或者相同名字（忽略大小写）的类别
         const isExist = state.taxonomyClasses.some(
@@ -472,7 +427,6 @@ export const useStore = create<AppState>()(
         }
         return { taxonomyClasses: newClasses, annotations: newAnnotations };
       }),
-
       deleteTaxonomyClass: (id, deleteAnnotations) => set((state) => {
         const classToDelete = state.taxonomyClasses.find(c => c.id === id);
         if (!classToDelete) return state;
@@ -489,7 +443,6 @@ export const useStore = create<AppState>()(
         }
         return { taxonomyClasses: newClasses, annotations: newAnnotations };
       }),
-
       mergeTaxonomyClasses: (sourceNames, targetName) => set((state) => {
         const newClasses = state.taxonomyClasses.filter(c => !sourceNames.includes(c.name));
         const newAnnotations = state.annotations.map(a => 
@@ -497,7 +450,6 @@ export const useStore = create<AppState>()(
         );
         return { taxonomyClasses: newClasses, annotations: newAnnotations };
       }),
-
       addTaxonomyAttribute: (attr) => set((state) => ({ taxonomyAttributes: [...state.taxonomyAttributes, attr] })),
       updateTaxonomyAttribute: (id, updates) => set((state) => ({ 
         taxonomyAttributes: state.taxonomyAttributes.map(a => a.id === id ? { ...a, ...updates } : a) 
@@ -514,32 +466,94 @@ export const useStore = create<AppState>()(
         });
         return { taxonomyAttributes: newAttrs, annotations: newAnnotations };
       }),
+      addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
+      updateAnnotation: (id, data) => set((state) => ({annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)})),
+      removeAnnotation: (id) => set((state) => ({ annotations: state.annotations.filter(a => a.id !== id) })),
+      setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
+      setAIPanelOpen: (open) => set({ isAIPanelOpen: open }),
+      setAiPrompts: (ptspts) => set({ aiPrompts: ptspts }),
+
+      // view align function
+      setCompletedViews: (views) => set({ completedViews: views }),
+      addSavedAlignment: (newAlignment) => set((state) => {
+        const filteredAlignments = state.savedAlignments.filter(a => {
+          const isSameCrop = 
+            a.crop.t === newAlignment.crop.t && 
+            a.crop.r === newAlignment.crop.r && 
+            a.crop.b === newAlignment.crop.b && 
+            a.crop.l === newAlignment.crop.l;
+          const isSameTransform = 
+            a.transform.scaleX === newAlignment.transform.scaleX && 
+            a.transform.scaleY === newAlignment.transform.scaleY && 
+            a.transform.offsetX === newAlignment.transform.offsetX && 
+            a.transform.offsetY === newAlignment.transform.offsetY;
+          return !(isSameCrop && isSameTransform);
+        });
+        return { savedAlignments: [newAlignment, ...filteredAlignments] };
+      }),
+      removeSavedAlignment: (id) => set((state) => ({savedAlignments: state.savedAlignments.filter(a => a.id !== id)})),
+
+
+      // setting function
+      setTheme: (theme) => set({ theme }),
+      setLanguage: (lang) => set({ language: lang }),
+      updateEditorSettings: (newSettings) => set((state) => ({ 
+        editorSettings: { ...state.editorSettings, ...newSettings } 
+      })),
+      updateShortcutSettings: (tool: string, key: string) => set((state) => ({ 
+        shortcutsSettings: { ...state.shortcutsSettings, [tool]: key.toLowerCase() } 
+      })),
+      setAISettings: (newSettings) => set((state) => ({
+        aiSettings: { ...state.aiSettings, ...newSettings }
+      })),
+
+      // display function
+      setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
+      setActiveModule: (module) => set({ activeModule: module }),
+      setTempViewSettings: (stem, viewId, settings) => set((state) => ({
+        tempViewSettings: { ...state.tempViewSettings, [`${stem}_${viewId}`]: settings }
+      })),
+      applyViewSettingsToAll: (stem, viewId) => set((state) => {
+        const temp = state.tempViewSettings[`${stem}_${viewId}`];
+        if (!temp) return state;
+        return {
+          views: state.views.map(v => v.id === viewId ? { ...v, settings: { ...(v.settings || {}), ...temp } } : v),
+          // 应用后可以选择清理暂态，也可以保留，这里保留让 UI 不会闪烁
+        };
+      }),
     }),
     {
       name: 'multiAnno_workspace_state', 
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        projectMetaPath: state.projectMetaPath,
         projectName: state.projectName,
-        theme: state.theme,
-        sceneGroups: state.sceneGroups,
-        language: state.language,
+        projectMetaPath: state.projectMetaPath,
         projectMetadata: state.projectMetadata,
         folders: state.folders,
         views: state.views,         
         stems: state.stems,
-        currentStem: state.currentStem,
+        sceneGroups: state.sceneGroups,
         
-        // 🌟 6. 确保将新的全局属性字典持久化存储
-        stemMetadata: state.stemMetadata, 
-
-        annotations: state.annotations, 
-        savedAlignments: state.savedAlignments, 
-        completedViews: state.completedViews,
+        currentStem: state.currentStem,
         taxonomyClasses: state.taxonomyClasses,
         taxonomyAttributes: state.taxonomyAttributes,
+        annotations: state.annotations,
+        activeAnnotationId: state.activeAnnotationId,
+        isAIPanelOpen: state.isAIPanelOpen,
+        aiPrompts: state.aiPrompts,
+
+        theme: state.theme,
+        language: state.language,
         editorSettings: state.editorSettings,
+        shortcutsSettings: state.shortcutsSettings,
         aiSettings: state.aiSettings,
+
+        completedViews: state.completedViews,
+        savedAlignments: state.savedAlignments, 
+
+        viewport: state.viewport,
+        activeModule: state.activeModule,       
+        tempViewSettings: state.tempViewSettings,
       }),
     }
   )
