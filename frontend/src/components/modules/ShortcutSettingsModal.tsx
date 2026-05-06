@@ -1,8 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react'; // 1. 引入 useRef 和 useEffect
+import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
-import { Keyboard, Command, ChevronUp } from 'lucide-react';
+import { Keyboard, Command, ChevronUp, RotateCcw } from 'lucide-react'; // 🌟 引入 RotateCcw 图标
 import { useTranslation } from 'react-i18next';
 import { useToolNames } from '../../hooks/useToolNames';
 
@@ -35,6 +35,8 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
   const { t } = useTranslation();
   const shortcutsSettings = useStore((s) => s.shortcutsSettings);
   const updateShortcutSettings = useStore((s) => s.updateShortcutSettings);
+  const resetShortcutSettings = useStore((s) => s.resetShortcutSettings); 
+  
   const [recordingTool, setRecordingTool] = useState<string | null>(null);
   const toolNames = useToolNames();
 
@@ -66,13 +68,20 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
     setRecordingTool(null);
   };
 
+  const handleReset = () => {
+    if (resetShortcutSettings) {
+      resetShortcutSettings();
+      setRecordingTool(null);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-[460px] bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
             <Keyboard className="w-5 h-5 text-blue-500" />
-            {t('shortcuts.title')}
+            {t('shortcuts.title', 'Shortcut Settings')}
           </DialogTitle>
         </DialogHeader>
 
@@ -94,7 +103,7 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
                   onKeyDown={(e) => handleKeyDown(e, tool)}
                   onBlur={() => setRecordingTool(null)}
                 >
-                  {t('shortcuts.pressKey')}
+                  {t('shortcuts.pressKey', 'Press Key...')}
                 </div>
               ) : (
                 <button
@@ -111,8 +120,14 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
         </div>
 
         <div className="pt-4 mt-2 border-t border-neutral-100 dark:border-neutral-800 text-xs text-neutral-500 flex justify-between items-center">
-          <span>{t('shortcuts.pressCombineKey')}</span>
-          <Button onClick={onClose} size="sm">{t('common.done')}</Button>
+          <span>{t('shortcuts.pressCombineKey', 'Click a button to rebind')}</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleReset} className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white">
+              <RotateCcw className="w-3 h-3 mr-1.5" />
+              {t('common.reset', 'Reset')}
+            </Button>
+            <Button onClick={onClose} size="sm">{t('common.done', 'Done')}</Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

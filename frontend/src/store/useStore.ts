@@ -110,6 +110,34 @@ export interface EditorSettings {
   autoRefreshStats: boolean; 
 }
 
+export const DEFAULT_SHORTCUTS_SETTINGS = {
+  pan: {key:'w'},
+  home: {key:'space'},
+  prev: {key:'a'},
+  next: {key:'d'},
+
+  bbox: {key:'r'},
+  polygon: {key:'p'},
+  ai_anno: {key:'i'},
+
+  rbbox: {key:'r', shift: true},
+  cuboid: {key:'d', shift: true},
+  ellipse: {key:'e', shift: true},
+  circle: {key:'c', shift: true},
+  freemask: {key:'m', shift: true},
+  point: {key:'p', shift: true},
+  line: {key:'l', shift: true},
+  lasso: {key:'s', shift: true},
+
+  select: {key:'e', ctrl: true},
+  cut: {key:'q', ctrl: true},
+  cutout: {key:'e', ctrl: true}, 
+  undo: {key:'z', ctrl: true},
+  delete: {key:'delete'},
+  clear: {key:'delete',ctrl: true},
+  save: {key:'s', ctrl: true},
+}
+
 type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy' | 'exchange_import' | 'exchange_export' | 'local_visualization';
 
 export interface AppState {
@@ -202,6 +230,7 @@ export interface AppState {
   setLanguage: (lang: 'en' | 'zh') => void;
   updateEditorSettings: (settings: Partial<EditorSettings>) => void;
   updateShortcutSettings: (tool: string, settings: { key: string; shift?: boolean; ctrl?: boolean }) => void;
+  resetShortcutSettings: () => void;
   setAISettings: (settings: Partial<AppState['aiSettings']>) => void;
 
   // display function
@@ -237,33 +266,7 @@ export const useStore = create<AppState>()(
       theme: 'dark', 
       language: 'en',
       editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false, autoRefreshStats: true },
-      shortcutsSettings: {
-        pan: {key:'w'},
-        home: {key:'space'},
-        prev: {key:'a'},
-        next: {key:'d'},
-
-        bbox: {key:'r'},
-        polygon: {key:'p'},
-        ai_anno: {key:'i'},
-
-        rbbox: {key:'r', shift: true},
-        cuboid: {key:'d', shift: true},
-        ellipse: {key:'e', shift: true},
-        circle: {key:'c', shift: true},
-        freemask: {key:'m', shift: true},
-        point: {key:'p', shift: true},
-        line: {key:'l', shift: true},
-        lasso: {key:'s', shift: true},
-
-        select: {key:'e', ctrl: true},
-        cut: {key:'q', ctrl: true},
-        cutout: {key:'e', ctrl: true}, 
-        undo: {key:'z', ctrl: true},
-        delete: {key:'delete'},
-        clear: {key:'delete',ctrl: true},
-        save: {key:'s', ctrl: true},
-      },
+      shortcutsSettings:DEFAULT_SHORTCUTS_SETTINGS,
       aiSettings: {
         model: 'SAM-3',
         modelPath: '',
@@ -502,6 +505,7 @@ export const useStore = create<AppState>()(
       updateShortcutSettings: (tool, settings) => set((state) => ({ 
         shortcutsSettings: { ...state.shortcutsSettings, [tool]: settings } 
       })),
+      resetShortcutSettings: () => set({ shortcutsSettings: DEFAULT_SHORTCUTS_SETTINGS }),
       setAISettings: (newSettings) => set((state) => ({
         aiSettings: { ...state.aiSettings, ...newSettings }
       })),
