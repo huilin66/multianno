@@ -9,8 +9,8 @@ export function useAnnotationAutoSave() {
   const [annotationSaveStatus, setAnnotationSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   const [annotationLastSavedTime, setAnnotationLastSavedTime] = useState<string | null>(null); 
   const { i18n } = useTranslation();
-  const currentStem = useStore((state: any) => state.currentStem);
-  const annotations = useStore((state: any) => state.annotations);
+  const currentStem = useStore((state) => state.currentStem);
+  const annotations = useStore((state) => state.annotations);
   
 
   useEffect(() => {
