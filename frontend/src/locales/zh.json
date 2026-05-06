@@ -75,7 +75,7 @@
     "alsertSetAIFail": "加载 AI 模型失败！",
     "infoModelPath": "请选择或输入模型路径",
     "infoHistoricalModelPath": "历史模型路径",
-    "infoLoadingModelPath": "加载模型路径中..."
+    "infoLoadingModelPath": "加载模型中..."
   },
   "createProject": {
     "defaultName": "multianno 项目1",

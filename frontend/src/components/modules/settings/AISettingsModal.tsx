@@ -10,6 +10,7 @@ import { CloudLightning, Loader2, Save, FolderSearch, History } from 'lucide-rea
 import { updateAIConfig } from '../../../api/client';
 import { FileExplorerDialog } from '../FileExplorerDialog'; 
 import { useTranslation } from 'react-i18next';
+import { showDialog } from '../../../store/useDialogStore';
 
 interface AISettingsModalProps {
   open: boolean; 
@@ -66,10 +67,19 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       
       savePathsToHistory(localSettings.modelPath);
       setAISettings({ ...localSettings, isConfigured: true });
-      alert(t("aiSettings.alsertSetAIDone")); 
+
+      await showDialog({
+        type: 'success',
+        title: t("common.success", "Success"),
+        description: t("aiSettings.alsertSetAIDone"),
+      });
       onClose();
     } catch (error: any) {
-      alert(t("aiSettings.alsertSetAIFail", error.message));
+      await showDialog({
+        type: 'danger',
+        title: t("common.error", "Error"),
+        description: t("aiSettings.alsertSetAIFail") + error.message,
+      });
     } finally {
       setIsVerifying(false);
     }

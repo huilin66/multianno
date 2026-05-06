@@ -75,7 +75,7 @@
     "alsertSetAIFail": "Load AI model failed!",
     "infoModelPath": "Please select or input model path",
     "infoHistoricalModelPath": "historical model path",
-    "infoLoadingModelPath": "Loading model path"
+    "infoLoadingModelPath": "Loading model..."
   },
   "createProject": {
     "defaultName": "multianno project1",

@@ -30,6 +30,7 @@ import { ShortcutSettingsModal } from './components/modules/settings/ShortcutSet
 import { AISettingsModal } from './components/modules/settings/AISettingsModal';
 import { useMetaAutoSave } from './hooks/useMetaAutoSave';
 import { LocalVisualization } from './components/modules/LocalVisualization';
+import { GlobalConfirmDialog } from './components/modules/GlobalConfirmDialog';
 
 export default function App() {
   const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings } = useStore();
@@ -432,6 +433,7 @@ export default function App() {
         open={aiSettingsModalOpen}
         onClose={() => setAiSettingsModalOpen(false)}
       />
+      <GlobalConfirmDialog />
     </div>
   );
 }
