@@ -1,15 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useStore } from '../../store/useStore';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Button } from '../ui/button';
-import { Keyboard, Command, ChevronUp, RotateCcw } from 'lucide-react'; // 🌟 引入 RotateCcw 图标
+import { useStore } from '../../../store/useStore';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
+import { Button } from '../../ui/button';
+import { Keyboard, Command, ChevronUp, RotateCcw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { useToolNames } from '../../hooks/useToolNames';
-
-interface ShortcutSettingsModalProps {
-  open: boolean;
-  onClose: () => void;
-}
+import { useToolNames } from '../../../hooks/useToolNames';
 
 export const KEY_LABELS: Record<string, string> = {
   'arrowleft': '←',
@@ -30,6 +25,11 @@ const formatShortcut = (setting: { key: string; ctrl?: boolean; shift?: boolean 
   parts.push(key);
   return parts.join(' + ');
 };
+
+interface ShortcutSettingsModalProps {
+  open: boolean;
+  onClose: () => void;
+}
 
 export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalProps) {
   const { t } = useTranslation();

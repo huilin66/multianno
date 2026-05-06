@@ -64,6 +64,19 @@
     "del": "Delete",
     "clear": "Clear"
   },
+  "aiSettings": {
+    "title": "AI Settings",
+    "modelType": "Model Type",
+    "modelPath": "Model Path",
+    "confidence": "Confidence",
+    "loadModel": "Load Model",
+    "alsertSetAI": "Please set AI model path!",
+    "alsertSetAIDone": "Successfully load AI model!",
+    "alsertSetAIFail": "Load AI model failed!",
+    "infoModelPath": "Please select or input model path",
+    "infoHistoricalModelPath": "historical model path",
+    "infoLoadingModelPath": "Loading model path"
+  },
   "createProject": {
     "defaultName": "multianno project1",
     "nameLabel": "Project Name",

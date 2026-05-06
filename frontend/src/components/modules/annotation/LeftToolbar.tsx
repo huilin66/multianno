@@ -7,7 +7,7 @@ import {
   Pencil, Cloud, MousePointer2, Undo2, Redo2, Columns2, Diamond, Home
 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
-import { KEY_LABELS } from '../ShortcutSettingsModal';
+import { KEY_LABELS } from '../settings/ShortcutSettingsModal';
 import { useTranslation } from 'react-i18next';
 
 interface LeftToolbarProps {

@@ -64,6 +64,19 @@
     "del": "删除",
     "clear": "清空"
   },
+  "aiSettings": {
+    "title": "AI 设置",
+    "modelType": "模型类型",
+    "modelPath": "模型路径",
+    "confidence": "置信度",
+    "loadModel": "加载模型",
+    "alsertSetAI": "请设置 AI 模型路径！",
+    "alsertSetAIDone": "成功加载 AI 模型！",
+    "alsertSetAIFail": "加载 AI 模型失败！",
+    "infoModelPath": "请选择或输入模型路径",
+    "infoHistoricalModelPath": "历史模型路径",
+    "infoLoadingModelPath": "加载模型路径中..."
+  },
   "createProject": {
     "defaultName": "multianno 项目1",
     "nameLabel": "项目名称",
