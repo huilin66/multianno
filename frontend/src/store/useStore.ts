@@ -114,6 +114,7 @@ export const DEFAULT_SHORTCUTS_SETTINGS = {
   bbox: {key:'r'},
   polygon: {key:'p'},
   ai_anno: {key:'i'},
+  _sep1: {key: '__separator__'} as any,
 
   rbbox: {key:'r', shift: true},
   cuboid: {key:'d', shift: true},
@@ -123,11 +124,13 @@ export const DEFAULT_SHORTCUTS_SETTINGS = {
   point: {key:'p', shift: true},
   line: {key:'l', shift: true},
   lasso: {key:'s', shift: true},
+  _sep2: {key: '__separator__'} as any,
 
   pan: {key:'w'},
   select: {key:'e', ctrl: true},
   cut: {key:'q', ctrl: true},
   cutout: {key:'e', ctrl: true}, 
+  _sep3: {key: '__separator__'} as any,
 
   home: {key:'space'},
   prev: {key:'a'},

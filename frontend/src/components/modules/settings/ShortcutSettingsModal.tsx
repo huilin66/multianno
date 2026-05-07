@@ -86,7 +86,16 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
         </DialogHeader>
 
         <div className="space-y-2 mt-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
-          {Object.entries(shortcutsSettings).map(([tool, setting]) => (
+          {Object.entries(shortcutsSettings).map(([tool, setting]) => {
+            if ((setting as any)?.key === '__separator__') {
+              return (
+                <div key={tool} className="flex items-center gap-3 my-3">
+                  <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
+                </div>
+              );
+            }
+  
+            return (
             <div 
               key={tool} 
               className="flex items-center justify-between p-3 rounded-lg bg-neutral-50 dark:bg-black/40 border border-neutral-100 dark:border-neutral-800/50"
@@ -116,7 +125,8 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
 
         <div className="pt-4 mt-2 border-t border-neutral-100 dark:border-neutral-800 text-xs text-neutral-500 flex justify-between items-center">
