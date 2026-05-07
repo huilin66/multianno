@@ -1213,7 +1213,7 @@ const handleResetNms = (e: React.MouseEvent) => {
         <SectionHeader 
           title={t('workspace.scenegroup')} icon={ImageIcon} 
           isExpanded={expanded.scenes} onToggle={() => toggleSection('scenes')} 
-          badge={stems.length}
+          badge={currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}
         />
         {expanded.scenes && (
           <div className="max-h-[25vh] overflow-y-auto p-2 space-y-1 bg-neutral-100 dark:bg-black/20 custom-scrollbar shrink-0">
