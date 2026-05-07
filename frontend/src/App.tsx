@@ -184,15 +184,10 @@ export default function App() {
         {/* Right Menu: Settings + Theme Switch + Language Switch */}
         <div className="w-1/3 flex justify-end items-center gap-2">
           <Popover>
-            <PopoverTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white rounded-full"
-                title={t('header.settings')}
-              >
-                <Settings className="w-4 h-4" />
-              </Button>
+            <PopoverTrigger className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors focus:outline-none cursor-pointer text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
+              title={t('header.settings')}
+            >
+              <Settings className="w-4 h-4" />
             </PopoverTrigger>
             <PopoverContent className="w-64 p-4 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
               <div className="space-y-4">
