@@ -395,7 +395,7 @@ return (
           ========================================== */}
       {isSingleViewMode && (
         <div 
-          className="absolute border-2 border-dashed border-red-500 pointer-events-none z-20 bg-red-500/5 shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+          className="absolute border-2 border-dashed border-red-500 pointer-events-none z-20 bg-transparent shadow-[0_0_15px_rgba(239,68,68,0.2)]"
           style={{
             left: `${viewport.panX}px`,
             top: `${viewport.panY}px`,
