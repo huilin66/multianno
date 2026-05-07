@@ -109,38 +109,42 @@ export function RightPanel({
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  // 通用手风琴头部组件
-// 🌟 升级通用手风琴头部组件，支持传入 actionNode (如删除按钮)
   const SectionHeader = ({ title, icon: Icon, isExpanded, onToggle, badge, colorClass, actionNode }: any) => (
     <div 
       onClick={onToggle}
       className={`p-2.5 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 cursor-pointer hover:bg-neutral-200/50 dark:hover:bg-neutral-800 transition-colors shrink-0 ${
-        isExpanded ? 'bg-neutral-100/50 dark:bg-neutral-900/50' : 'bg-white dark:bg-neutral-950'
+        isExpanded ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-neutral-950'  // ← 背景改为蓝色调
       }`}
     >
       <div className="flex items-center gap-2">
-        <Icon className={`w-3.5 h-3.5 ${isExpanded ? (colorClass || 'text-primary') : 'text-neutral-400'}`} />
-        <h3 className={`font-bold text-[10px] uppercase tracking-wider ${isExpanded ? 'text-neutral-700 dark:text-neutral-300' : 'text-neutral-500'}`}>
+        <Icon className={`w-3.5 h-3.5 ${isExpanded ? 'text-blue-500' : 'text-neutral-400'}`} />
+        <h3 className={`font-bold text-[10px] uppercase tracking-wider ${
+          isExpanded ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-500'  // ← 改这里
+        }`}>
           {title}
         </h3>
         {badge !== undefined && (
-          <span className="ml-2 px-1.5 py-0.5 rounded-full bg-neutral-200 dark:bg-neutral-800 text-[9px] text-neutral-500 font-mono">
+          <span className={`ml-2 px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
+            isExpanded 
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'  // ← badge 也变蓝
+              : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-500'
+          }`}>
             {badge}
           </span>
         )}
       </div>
       <div className="flex items-center gap-2">
-        {/* 🌟 渲染额外操作按钮，并阻止点击事件冒泡到折叠面板 */}
         {actionNode && (
           <div onClick={(e) => e.stopPropagation()}>
             {actionNode}
           </div>
         )}
-        <ChevronRight className={`w-3.5 h-3.5 text-neutral-400 transition-transform duration-200 ${isExpanded ? 'rotate-90' : ''}`} />
+        <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${
+          isExpanded ? 'rotate-90 text-blue-500' : 'text-neutral-400'  // ← 箭头也变蓝
+        }`} />
       </div>
     </div>
   );
-
   const currentAnnotations = annotations.filter((a: any) => a.stem === currentStem);
 // 🌟 新增：重置函数
 const handleResetNms = (e: React.MouseEvent) => {
@@ -294,7 +298,7 @@ const handleResetNms = (e: React.MouseEvent) => {
         <SectionHeader title={t('workspace.viewLayers', 'View Layers')} icon={Layers} isExpanded={expanded.layers} onToggle={() => toggleSection('layers')} />
         
         {expanded.layers && (
-          <div className="p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30">
+          <div className="p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30 max-h-[228px]">
             {/* 🌟 需求 2：按照 layerOrder 排序渲染 */}
             {[...views].sort((a, b) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id)).map((v: any) => {
               const originalIndex = views.findIndex((orig: any) => orig.id === v.id);
@@ -307,7 +311,7 @@ const handleResetNms = (e: React.MouseEvent) => {
                 <div key={v.id} className="flex flex-col bg-white dark:bg-neutral-900/50 rounded border border-neutral-200 dark:border-neutral-800/50 mb-1">
                   
                   {/* === 图层头部（拖拽、基础操作） === */}
-                  <div className="flex items-center justify-between p-1.5 gap-2 hover:border-blue-400 transition-colors">
+                  <div className="flex items-center justify-between p-1.5 gap-2 hover:border-blue-400 transition-colors h-[36px]">
                     
                   {/* 🌟 体验升级：将 draggable 提升到左半边整个容器，包含图标、复选框和名称 */}
                     <div 
@@ -742,12 +746,12 @@ const handleResetNms = (e: React.MouseEvent) => {
 
             {/* === Classes Tab === */}
             {taxonomyTab === 'classes' && (
-              <div className="max-h-[40vh] overflow-y-auto custom-scrollbar p-2 space-y-1">
+              <div className="max-h-[40vh] overflow-y-auto custom-scrollbar p-2 space-y-1 max-h-[228px]">
                 {/* Quick Actions */}
                 <div className="flex gap-1 mb-2">
                   <button
                     onClick={() => setHiddenClasses([])}
-                    className="flex-1 text-[9px] font-bold px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                    className="flex-1 text-[9px] font-bold px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors h-[40px]"
                   >
                     Show All
                   </button>
@@ -836,7 +840,7 @@ const handleResetNms = (e: React.MouseEvent) => {
 
             {/* === Attributes Tab === */}
             {taxonomyTab === 'attributes' && (
-              <div className="max-h-[40vh] overflow-y-auto custom-scrollbar p-2 space-y-2">
+              <div className="max-h-[40vh] overflow-y-auto custom-scrollbar p-2 space-y-2 max-h-[228px]">
                 {taxonomyAttributes?.map((attr: any) => {
                   // Calculate value distribution for current scene
                   const valueCounts: Record<string, number> = {};
@@ -942,7 +946,6 @@ const handleResetNms = (e: React.MouseEvent) => {
         )}
 
         {/* 4. Active Object Editor (仅选中时显示 Header 和 内容) */}
-        {activeAnnotationId && (
           <>
             <SectionHeader 
               title={t('workspace.editorTitle')} icon={Edit3} 
@@ -953,7 +956,16 @@ const handleResetNms = (e: React.MouseEvent) => {
               <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30 transition-all animate-in fade-in relative">
                 {(() => {
                   const activeAnno = annotations.find((a: any) => a.id === activeAnnotationId);
-                  if (!activeAnno) return null;
+                  
+                  // 🌟 没有选中时显示空状态
+                  if (!activeAnno) {
+                    return (
+                      <div className="text-center py-4 text-[11px] text-neutral-400">
+                        <Edit3 className="w-5 h-5 mx-auto mb-2 opacity-50" />
+                        {t('workspace.selectObjectHint', 'Select an object to edit')}
+                      </div>
+                    );
+                  }
                   
                   const activeClassDef = taxonomyClasses.find((c: any) => c.name === activeAnno.label);
                   const activeColor = activeClassDef?.color || '#3B82F6';
@@ -962,7 +974,6 @@ const handleResetNms = (e: React.MouseEvent) => {
                     <div className="pl-2">
                       <div className="absolute left-0 top-0 bottom-0 w-0.5 transition-colors duration-300" style={{ backgroundColor: activeColor }} />
                       
-                      {/* 🌟 完美复用相同的表单，只改变回调函数直接触发 Store 更新 */}
                       <ObjectEditorForm 
                         label={activeAnno.label} onLabelChange={(val) => updateAnnotation(activeAnno.id, { label: val })}
                         text={activeAnno.text || ''} onTextChange={(val) => updateAnnotation(activeAnno.id, { text: val })}
@@ -980,7 +991,6 @@ const handleResetNms = (e: React.MouseEvent) => {
               </div>
             )}
           </>
-        )}
 
         {/* 5. Objects List (设置为 Flex-1 充满剩余空间) */}
         <SectionHeader 
@@ -1104,7 +1114,7 @@ const handleResetNms = (e: React.MouseEvent) => {
             </div>
           )}
 
-          <div className="max-h-[40vh] overflow-y-auto p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/30 custom-scrollbar">
+          <div className="max-h-[40vh] overflow-y-auto p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/30 custom-scrollbar max-h-[228px]">
             {currentAnnotations
             // .filter((ann: any) => !hiddenClasses.includes(ann.label))
             .map((ann: any) => {
@@ -1142,13 +1152,9 @@ const handleResetNms = (e: React.MouseEvent) => {
                 <div 
                   key={ann.id} 
                   onClick={() => setActiveAnnotationId(ann.id)}
-                  // className={`group p-2 rounded border text-[11px] flex items-center justify-between transition-all ${
-                  //   isRedundant ? 'bg-red-50/50 dark:bg-red-900/10 border-red-300' : 
-                  //   (groupInfo?.isMaster ? 'bg-blue-50/30 dark:bg-blue-900/10 border-blue-300' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800')
-                  // }`}
-                  className={`group p-2 rounded border text-[11px] flex items-center justify-between transition-all ${
+                  className={`group p-2 rounded border text-[11px] flex items-center justify-between transition-all h-[40px] ${
                     isHidden
-                      ? 'opacity-40 bg-neutral-100/50 dark:bg-neutral-900/20'  // 🌟 隐藏时半透明
+                      ? 'opacity-40 bg-neutral-100/50 dark:bg-neutral-900/20'
                       : isRedundant 
                         ? 'bg-red-50/50 dark:bg-red-900/10 border-red-300' 
                         : (groupInfo?.isMaster 
@@ -1231,7 +1237,7 @@ const handleResetNms = (e: React.MouseEvent) => {
           badge={currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}
         />
         {expanded.scenes && (
-          <div className="max-h-[25vh] overflow-y-auto p-2 space-y-1 bg-neutral-100 dark:bg-black/20 custom-scrollbar shrink-0">
+          <div className="max-h-[25vh] overflow-y-auto p-2 space-y-1 bg-neutral-100 dark:bg-black/20 custom-scrollbar shrink-0 max-h-[228px]">
             {stems.map((stem: string) => {
               // 🌟 核心：计算该场景下包含多少个标注对象
               const annoCount = annotations.filter((a: any) => a.stem === stem).length;
@@ -1240,7 +1246,7 @@ const handleResetNms = (e: React.MouseEvent) => {
                 <button
                   key={stem}
                   onClick={() => { setCurrentStem(stem); setActiveAnnotationId(null); }}
-                  className={`w-full text-left px-3 py-1.5 text-[11px] rounded transition-all flex items-center justify-between group ${
+                  className={`w-full text-left px-3 py-1.5 text-[11px] rounded transition-all flex items-center justify-between group h-[40px] ${
                     currentStem === stem ? 'bg-blue-600 text-white shadow-md font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
                   }`}
                 >
