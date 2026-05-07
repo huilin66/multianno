@@ -803,14 +803,25 @@ const handleResetNms = (e: React.MouseEvent) => {
                         {count}
                       </span>
 
-                      {/* Eye Toggle */}
-                      <div className={`w-8 h-4 rounded-full relative shrink-0 transition-colors ${
-                        isHidden ? 'bg-neutral-300 dark:bg-neutral-700' : 'bg-violet-500'
-                      }`}>
-                        <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${
-                          isHidden ? 'left-0.5' : 'left-[18px]'
-                        }`} />
-                      </div>
+                      {/* 🌟 统一的眼睛开关 */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleClassVisibility(cls.name);
+                        }}
+                        className={`w-6 h-6 flex items-center justify-center rounded transition-all shrink-0 ${
+                          isHidden
+                            ? 'text-neutral-300 dark:text-neutral-600 hover:text-neutral-500'
+                            : 'text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                        }`}
+                        title={isHidden ? 'Show class' : 'Hide class'}
+                      >
+                        {isHidden ? (
+                          <EyeOff className="w-3.5 h-3.5" />
+                        ) : (
+                          <Eye className="w-3.5 h-3.5" />
+                        )}
+                      </button>
                     </div>
                   );
                 })}
