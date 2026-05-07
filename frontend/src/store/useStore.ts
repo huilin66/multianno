@@ -161,6 +161,8 @@ export interface AppState {
   currentStem: string | null;
   taxonomyClasses: TaxonomyClass[];
   taxonomyAttributes: TaxonomyAttribute[];
+  classOrder: string[];
+  attributeOrder: string[];
   hiddenClasses: string[];
   annotations: Annotation[];
   hiddenAnnotations: string[];
@@ -220,6 +222,8 @@ export interface AppState {
   addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
   updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
   deleteTaxonomyAttribute: (id: string) => void;
+  setClassOrder: (order: string[]) => void;
+  setAttributeOrder: (order: string[]) => void;
   setHiddenClasses: (classes: string[]) => void;
   toggleClassVisibility: (className: string) => void;
   // setHiddenAnnotations: (id: string[]) => void;
@@ -269,6 +273,8 @@ export const useStore = create<AppState>()(
       taxonomyClasses: [],
       taxonomyAttributes: [],
       hiddenClasses: [],
+      classOrder: [],
+      attributeOrder: [],
       annotations: [],
       hiddenAnnotations: [],
       activeAnnotationId: null,
@@ -317,7 +323,9 @@ export const useStore = create<AppState>()(
           projectName: meta.projectName || 'Untitled Project',
           sceneGroups: meta.sceneGroups || {},
           taxonomyClasses: meta.taxonomyClasses || [],
+          classOrder: (meta.taxonomyClasses || []).map((c: any) => c.id),
           taxonomyAttributes: meta.taxonomyAttributes || [],
+          attributeOrder: (meta.taxonomyAttributes || []).map((a: any) => a.id),
           
           folders: meta.folders.map(f => ({
             id: String(f.Id),
@@ -439,7 +447,9 @@ export const useStore = create<AppState>()(
         }
 
         // 只有不存在时，才允许写入
-        return { taxonomyClasses: [...state.taxonomyClasses, cls] };
+        return { 
+          taxonomyClasses: [...state.taxonomyClasses, cls], 
+          classOrder: [...state.classOrder, cls.id], attrSortDir: 'manual' };
       }),
       updateTaxonomyClass: (id, updates) => set((state) => {
         const oldClass = state.taxonomyClasses.find(c => c.id === id);
@@ -467,16 +477,30 @@ export const useStore = create<AppState>()(
             a.label === classToDelete.name ? { ...a, label: 'background' } : a
           );
         }
-        return { taxonomyClasses: newClasses, annotations: newAnnotations };
+        return { 
+          taxonomyClasses: newClasses, 
+          annotations: newAnnotations,
+          classOrder: state.classOrder.filter(cid => cid !== id),
+        };
       }),
       mergeTaxonomyClasses: (sourceNames, targetName) => set((state) => {
         const newClasses = state.taxonomyClasses.filter(c => !sourceNames.includes(c.name));
         const newAnnotations = state.annotations.map(a => 
           sourceNames.includes(a.label) ? { ...a, label: targetName } : a
         );
-        return { taxonomyClasses: newClasses, annotations: newAnnotations };
+        const deletedIds = state.taxonomyClasses
+        .filter(c => sourceNames.includes(c.name))
+        .map(c => c.id);
+        return { 
+          taxonomyClasses: newClasses, 
+          annotations: newAnnotations,
+          classOrder: state.classOrder.filter(cid => !deletedIds.includes(cid)),
+        };
       }),
-      addTaxonomyAttribute: (attr) => set((state) => ({ taxonomyAttributes: [...state.taxonomyAttributes, attr] })),
+      addTaxonomyAttribute: (attr) => set((state) => ({ 
+        taxonomyAttributes: [...state.taxonomyAttributes, attr], 
+        attributeOrder: [...state.attributeOrder, attr.id] 
+      })),
       updateTaxonomyAttribute: (id, updates) => set((state) => ({ 
         taxonomyAttributes: state.taxonomyAttributes.map(a => a.id === id ? { ...a, ...updates } : a) 
       })),
@@ -490,8 +514,14 @@ export const useStore = create<AppState>()(
           delete newAttributes[attrToDelete.name];
           return { ...a, attributes: newAttributes };
         });
-        return { taxonomyAttributes: newAttrs, annotations: newAnnotations };
+        return { 
+          taxonomyAttributes: newAttrs, 
+          annotations: newAnnotations,
+          attributeOrder: state.attributeOrder.filter(aid => aid !== id),
+        };
       }),
+      setClassOrder: (order) => set({ classOrder: order }),
+      setAttributeOrder: (order) => set({ attributeOrder: order }),
       setHiddenClasses: (classes) => set({ hiddenClasses: classes }),
       toggleClassVisibility: (className) => set((state) => ({
         hiddenClasses: state.hiddenClasses.includes(className)

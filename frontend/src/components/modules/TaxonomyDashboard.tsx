@@ -359,7 +359,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
-    folders, editorSettings, setCurrentStem, setActiveModule
+    folders, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder
   } = useStore() as any;
 
   const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'attributes'>('overview');
@@ -390,6 +390,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [newClassName, setNewClassName] = useState('');
   const [isAddingClass, setIsAddingClass] = useState(false);
 
+  const [classSortDir, setClassSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
+  const [attrSortDir, setAttrSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
 
   // 监听切换属性时，清空草稿
   useEffect(() => {
@@ -744,7 +746,23 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setIsProcessing(false);
     }
   };
+  // 排序后的 Classes
+  const sortedClasses = [...taxonomyClasses].sort((a, b) => {
+    if (classSortDir === 'manual') {
+      return classOrder.indexOf(a.id) - classOrder.indexOf(b.id);
+    }
+    const cmp = a.name.localeCompare(b.name);
+    return classSortDir === 'asc' ? cmp : -cmp;
+  });
 
+  // 排序后的 Attributes
+  const sortedAttributes = [...taxonomyAttributes].sort((a, b) => {
+    if (attrSortDir === 'manual') {
+      return attributeOrder.indexOf(a.id) - attributeOrder.indexOf(b.id);
+    }
+    const cmp = a.name.localeCompare(b.name);
+    return attrSortDir === 'asc' ? cmp : -cmp;
+  });
   return (
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
       <input type="file" accept=".txt,.yaml,.yml" ref={fileInputRef} className="hidden" onChange={handleImportFile} />
@@ -765,15 +783,38 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             {/* --- Classes --- */}
             <div>
               <div className="flex items-center justify-between cursor-pointer p-1.5 group rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors" onClick={() => setExpanded(p => ({...p, classes: !p.classes}))}>
-                <span className="text-xs font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-wider flex items-center"><Tags className="w-3.5 h-3.5 mr-2"/> Classes <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyClasses.length}</span></span>
-                {expanded.classes ? <ChevronDown className="w-4 h-4 text-neutral-400"/> : <ChevronRight className="w-4 h-4 text-neutral-400"/>}
+                <span className="text-xs font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-wider flex items-center">
+                  <Tags className="w-3.5 h-3.5 mr-2"/> Classes 
+                  <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyClasses.length}</span>
+                </span>
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => { setClassSortDir(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? 'manual' : 'asc'); }}
+                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400"
+                    title={classSortDir === 'asc' ? 'A→Z' : classSortDir === 'desc' ? '手动' : 'Z→A'}
+                  >
+                    {classSortDir === 'asc' ? '↑' : classSortDir === 'desc' ? '↓' : '↕'}
+                  </button>
+                  {expanded.classes ? <ChevronDown className="w-4 h-4 text-neutral-400"/> : <ChevronRight className="w-4 h-4 text-neutral-400"/>}
+                </div>
               </div>
               {expanded.classes && (
                 <div className="mt-1 ml-3 border-l-2 border-neutral-100 dark:border-neutral-800 pl-2 space-y-0.5">
-                  {Array.from(new Map(taxonomyClasses.map((c: any) => [c.id, c])).values())
+                  {Array.from(new Map(sortedClasses.map((c: any) => [c.id, c])).values())
                     .map((cls: any, index: number) => (
                       <div 
-                        key={`${cls.id}-${index}`} // 🌟 就算 ID 重复，加上 index 后 key 也绝对唯一，彻底干掉警告
+                        key={`${cls.id}-${index}`}
+                        draggable  // 🌟 加拖拽
+                        onDragStart={(e) => { e.dataTransfer.setData('text/plain', cls.id); }}
+                        onDragOver={(e) => { e.preventDefault(); }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          const sourceId = e.dataTransfer.getData('text/plain');
+                          const newOrder = classOrder.filter(id => id !== sourceId);
+                          const targetIdx = classOrder.indexOf(cls.id);
+                          newOrder.splice(targetIdx, 0, sourceId);
+                          setClassOrder(newOrder);
+                          setClassSortDir('manual');
+                        }}
                         onClick={() => { setActiveTab('classes'); setSelectedClassId(cls.id); }} 
                         className={`flex items-center p-2 rounded-md text-xs cursor-pointer transition-colors ${selectedClassId === cls.id && activeTab === 'classes' ? 'bg-neutral-100 dark:bg-neutral-800 font-bold shadow-sm' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50 text-neutral-600 dark:text-neutral-400'}`}
                       >
@@ -839,14 +880,38 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             {/* --- Attributes --- */}
             <div>
               <div className="flex items-center justify-between cursor-pointer p-1.5 group rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors" onClick={() => setExpanded(p => ({...p, attributes: !p.attributes}))}>
-                <span className="text-xs font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-wider flex items-center"><Settings className="w-3.5 h-3.5 mr-2"/> Attributes <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyAttributes.length}</span></span>
-                {expanded.attributes ? <ChevronDown className="w-4 h-4 text-neutral-400"/> : <ChevronRight className="w-4 h-4 text-neutral-400"/>}
+                <span className="text-xs font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-wider flex items-center">
+                  <Settings className="w-3.5 h-3.5 mr-2"/> Attributes 
+                  <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyAttributes.length}</span>
+                </span>
+                <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                  <button onClick={() => { setAttrSortDir(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? 'manual' : 'asc'); }}
+                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400"
+                    title={attrSortDir === 'asc' ? 'A→Z' : attrSortDir === 'desc' ? 'Z→A' : 'Manual'}
+                  >
+                    {attrSortDir === 'asc' ? '↑' : attrSortDir === 'desc' ? '↓' : '↕'}
+                  </button>
+                  {expanded.attributes ? <ChevronDown className="w-4 h-4 text-neutral-400"/> : <ChevronRight className="w-4 h-4 text-neutral-400"/>}
+                </div>
               </div>
               {expanded.attributes && (
                 <div className="mt-1 ml-3 border-l-2 border-neutral-100 dark:border-neutral-800 pl-2 space-y-0.5">
-                  {taxonomyAttributes.map((attr: any) => (
-                    <div key={attr.id} onClick={() => { setActiveTab('attributes'); setSelectedAttributeId(attr.id); }} 
-                         className={`flex items-center p-2 rounded-md text-xs cursor-pointer transition-colors ${selectedAttributeId === attr.id && activeTab === 'attributes' ? 'bg-neutral-100 dark:bg-neutral-800 font-bold shadow-sm' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50 text-neutral-600 dark:text-neutral-400'}`}>
+                  {sortedAttributes.map((attr: any) => (
+                    <div key={attr.id} 
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', attr.id); }}
+                      onDragOver={(e) => { e.preventDefault(); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        const sourceId = e.dataTransfer.getData('text/plain');
+                        const newOrder = attributeOrder.filter(id => id !== sourceId);
+                        const targetIdx = attributeOrder.indexOf(attr.id);
+                        newOrder.splice(targetIdx, 0, sourceId);
+                        setAttributeOrder(newOrder);
+                        setAttrSortDir('manual'); 
+                      }}
+                      onClick={() => { setActiveTab('attributes'); setSelectedAttributeId(attr.id); }} 
+                      className={`flex items-center p-2 rounded-md text-xs cursor-pointer transition-colors ${selectedAttributeId === attr.id && activeTab === 'attributes' ? 'bg-neutral-100 dark:bg-neutral-800 font-bold shadow-sm' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50 text-neutral-600 dark:text-neutral-400'}`}>
                       <List className="w-3 h-3 mr-2.5 shrink-0 text-neutral-400" />
                       <span className="truncate flex-1">{attr.name}</span>
                     </div>
