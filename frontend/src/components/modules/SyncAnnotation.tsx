@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { ClassFormPopover } from './annotation/ClassFormPopover';
 import { LeftToolbar } from './annotation/LeftToolbar';
 import { RightPanel } from './annotation/RightPanel';
-import { useAnnotationAutoSave } from '../../hooks/useAnnotationAutoSave';
 import { useActionHistory } from '../../hooks/useActionHistory';
 import { CanvasView } from './annotation/CanvasView';
 import { X, Minimize, Frame } from 'lucide-react';
@@ -14,8 +13,9 @@ import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
 import { AIToolPanel } from './annotation/AIToolPanel';
 import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM, SAMPoint } from '../../api/client'
+import { ChevronLeft, ChevronRight } from 'lucide-react'
 
-// 🌟 定义自定义光标样式
+
 const CURSOR_FOCUS = `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='5' stroke='white' stroke-width='3' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Ccircle cx='12' cy='12' r='5' stroke='%23262626' stroke-width='1.5' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") 12 12, auto`;
 const CURSOR_DRAG = `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='5' stroke='white' stroke-width='3' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Ccircle cx='12' cy='12' r='5' stroke='%23262626' stroke-width='1.5' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 12 12, auto`;
 
@@ -53,7 +53,8 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     tempViewSettings, updateAnnotation,
     setSettingsOpen, aiSettings, setAISettings
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
-
+  const [leftPanelOpen, setLeftPanelOpen] = useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const hiddenClasses = useStore((s) => (s).hiddenClasses);
   const hiddenAnnotations = useStore((s) => (s).hiddenAnnotations);
   const toggleAnnotationVisibility = useStore((s) => s.toggleAnnotationVisibility);
@@ -1436,21 +1437,44 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     >
       
       {/* 👈 Left Toolbar */}
-      <LeftToolbar 
-      tool={tool} 
-      setTool={handleToolChange}
-      onHomeClick={handleHomeViewport}
-      handleUndo={handleUndo} handleRedo={handleRedo} 
-      canUndo={undoCount > 0 || currentPoints.length > 0}
-      canRedo={redoCount > 0 || undonePoints.length > 0}
-      handlePrevStem={handlePrevStem}
-      handleNextStem={handleNextStem}
-      hasPrev={stemIndex > 0}
-      hasNext={stemIndex < stems.length - 1}
-      handleDelete={handleDelete}
-      handleClear={handleClear}
-      handleSave={autoSave}
-    />
+      <div className="relative">
+        {leftPanelOpen ? (
+          <LeftToolbar 
+            tool={tool} 
+            setTool={handleToolChange}
+            onHomeClick={handleHomeViewport}
+            handleUndo={handleUndo} handleRedo={handleRedo} 
+            canUndo={undoCount > 0 || currentPoints.length > 0}
+            canRedo={redoCount > 0 || undonePoints.length > 0}
+            handlePrevStem={handlePrevStem}
+            handleNextStem={handleNextStem}
+            hasPrev={stemIndex > 0}
+            hasNext={stemIndex < stems.length - 1}
+            handleDelete={handleDelete}
+            handleClear={handleClear}
+            handleSave={autoSave}
+          />
+        ) : (
+          <button
+            onClick={() => setLeftPanelOpen(true)}
+            className="h-full w-6 bg-neutral-100 dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex items-center justify-center hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+            title="Expand Left Panel"
+          >
+            <ChevronRight className="w-4 h-4 text-neutral-500" />
+          </button>
+        )}
+        
+        {/* 🌟 折叠按钮（面板展开时显示） */}
+        {leftPanelOpen && (
+          <button
+            onClick={() => setLeftPanelOpen(false)}
+            className="absolute top-2 -right-3 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors z-20 shadow-sm"
+            title="Collapse Left Panel"
+          >
+            <ChevronLeft className="w-3.5 h-3.5 text-neutral-500" />
+          </button>
+        )}
+      </div>
 
     {/* 🤖 🌟 新增：左侧 AI 二级悬浮面板 */}
      {/* 🤖 窄版 AI 面板 */}
@@ -1661,17 +1685,39 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       </div>
       
       {/* 👉 Right Panel */}
-      <RightPanel 
-      tool={tool} 
-      showFullExtent={showFullExtent} toggleFullExtent={toggleFullExtent} 
-      pushAction={pushAction}
-      /* 🌟 新增状态透传 */
-      focusedViewId={focusedViewId} setFocusedViewId={setFocusedViewId}
-      layerOrder={layerOrder} setLayerOrder={setLayerOrder}
-      visibleLayers={visibleLayers} setVisibleLayers={setVisibleLayers}
-      hiddenAnnotations={hiddenAnnotations}
-      toggleAnnotationVisibility={toggleAnnotationVisibility}
-    />
+      <div className="relative">
+        {rightPanelOpen ? (
+          <RightPanel 
+            tool={tool} 
+            showFullExtent={showFullExtent} toggleFullExtent={toggleFullExtent} 
+            pushAction={pushAction}
+            focusedViewId={focusedViewId} setFocusedViewId={setFocusedViewId}
+            layerOrder={layerOrder} setLayerOrder={setLayerOrder}
+            visibleLayers={visibleLayers} setVisibleLayers={setVisibleLayers}
+            hiddenAnnotations={hiddenAnnotations}
+            toggleAnnotationVisibility={toggleAnnotationVisibility}
+          />
+        ) : (
+          <button
+            onClick={() => setRightPanelOpen(true)}
+            className="h-full w-6 bg-neutral-100 dark:bg-neutral-900 border-l border-neutral-200 dark:border-neutral-800 flex items-center justify-center hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
+            title="Expand Right Panel"
+          >
+            <ChevronLeft className="w-4 h-4 text-neutral-500" />
+          </button>
+        )}
+        
+        {/* 🌟 折叠按钮（面板展开时显示） */}
+        {rightPanelOpen && (
+          <button
+            onClick={() => setRightPanelOpen(false)}
+            className="absolute top-2 -left-3 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors z-20 shadow-sm"
+            title="Collapse Right Panel"
+          >
+            <ChevronRight className="w-3.5 h-3.5 text-neutral-500" />
+          </button>
+        )}
+      </div>
     </div>
   );
 }
