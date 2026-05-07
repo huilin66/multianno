@@ -140,7 +140,7 @@ export const DEFAULT_SHORTCUTS_SETTINGS = {
   redo: {key:'y', ctrl: true},
   delete: {key:'delete'},
   clear: {key:'delete',ctrl: true},
-  save: {key:'s'},
+  save: {key:'s',ctrl: true},
 }
 
 type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy' | 'exchange_import' | 'exchange_export' | 'local_visualization';

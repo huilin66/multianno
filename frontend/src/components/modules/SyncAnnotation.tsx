@@ -65,7 +65,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const [isAIPanelOpen, setAIPanelOpen] = useState(false);
   const [isAIReady, setIsAIReady] = useState(false);
   const [formTruncated, setFormTruncated] = useState(false);
-  
+
   // 🌟 修复 2.1：新增装载 Loading 状态与 Reset 函数
   const [isInitializing, setIsInitializing] = useState(false);
   const handleAIReset = () => {
@@ -226,10 +226,13 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   }, [focusedViewId]);
 
 
-// 🌟 全局快捷键监听引擎
+  // 🌟 全局快捷键监听引擎
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      // 安全锁 1：如果用户正在输入框里打字（例如填 Label Text），绝对不触发快捷键！
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+      }
+      // 安全锁 1：输入框中不触发
       const target = e.target as HTMLElement;
       if (
         target.isContentEditable ||
@@ -237,61 +240,45 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
         (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'range')
       ) return;
       
-      // 安全锁 2：如果用户正在画图过程中，禁用快捷键切换工具，防止状态错乱
+      // 安全锁 2：绘制中不切换
       if (isDrawing) return;
-      if (e.ctrlKey || e.metaKey) return;
-      const state = useStore.getState();
-    const { shortcutsSettings } = state as any;
-    if (!shortcutsSettings) return;
-    console.log('当前 shortcutsSettings:', JSON.stringify(shortcutsSettings));
-
-    // 🌟 遍历新的快捷键结构
-    const matchedTool = Object.keys(shortcutsSettings).find((tool) => {
-      const setting = shortcutsSettings[tool];
-      if (!setting) return false;
       
-      const keyMatch = e.key.toLowerCase() === setting.key.toLowerCase();
-      const shiftMatch = setting.shift ? e.shiftKey : !e.shiftKey;
-      const ctrlMatch = setting.ctrl ? (e.ctrlKey || e.metaKey) : !e.ctrlKey && !e.metaKey;
-      if (keyMatch && shiftMatch && ctrlMatch) {
-        console.log('匹配到:', tool, '按键:', e.key, setting); // ← 加这行
-      }
-      return keyMatch && shiftMatch && ctrlMatch;
-    });
+      const state = useStore.getState();
+      const { shortcutsSettings } = state as any;
+      if (!shortcutsSettings) return;
 
-    if (matchedTool) {
+      // 匹配快捷键
+      let matchedTool: string | undefined;
+      matchedTool = Object.keys(shortcutsSettings).find((tool) => {
+        const setting = shortcutsSettings[tool];
+        if (!setting) return false;
+        
+        const keyMatch = e.key.toLowerCase() === setting.key.toLowerCase();
+        const shiftMatch = setting.shift ? e.shiftKey : !e.shiftKey;
+        const ctrlMatch = setting.ctrl ? (e.ctrlKey || e.metaKey) : !e.ctrlKey && !e.metaKey;
+        
+        return keyMatch && shiftMatch && ctrlMatch;
+      });
+
+      if (!matchedTool) return;
+
       e.preventDefault();
-      if (matchedTool === 'home') {
-        handleHomeViewport();
-        return;
-      }
-      if (matchedTool === 'prev') {
-        handlePrevStem();
-        return;
-      }
-      if (matchedTool === 'next') {
-        handleNextStem();
-        return;
-      }
-      if (matchedTool === 'delete') {
-        handleDelete();
-        return;
-      }
-      if (matchedTool === 'clear') {
-        handleClear();
-        return;
-      }
-      if (matchedTool === 'save') {
-        autoSave();
-        return;
-      }
-      handleToolChange(matchedTool);
-    }
-  };
 
-  window.addEventListener('keydown', handleGlobalKeyDown);
-  return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-}, [isDrawing]);
+      // 导航操作
+      if (matchedTool === 'home') { handleHomeViewport(); return; }
+      if (matchedTool === 'prev') { handlePrevStem(); return; }
+      if (matchedTool === 'next') { handleNextStem(); return; }
+      
+      // 手动保存
+      if (matchedTool === 'save') { autoSave(); return; }
+
+      // 工具切换
+      handleToolChange(matchedTool);
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [isDrawing]);
 
   // 计算当前可被控制的图层列表 (当前图层 + 被勾选显示的图层)
   const operableLayers = layerOrder.filter(id => id === focusedViewId || visibleLayers[id]);
