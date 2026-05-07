@@ -167,6 +167,7 @@ export interface AppState {
   annotations: Annotation[];
   hiddenAnnotations: string[];
   activeAnnotationId: string | null;
+  isAnnotationDirty: boolean;
   isAIPanelOpen: boolean;
   aiPrompts: { x: number, y: number, label: number }[]; 
 
@@ -226,12 +227,13 @@ export interface AppState {
   setAttributeOrder: (order: string[]) => void;
   setHiddenClasses: (classes: string[]) => void;
   toggleClassVisibility: (className: string) => void;
-  // setHiddenAnnotations: (id: string[]) => void;
   toggleAnnotationVisibility: (id: string) => void;
   addAnnotation: (annotation: Annotation) => void;
   updateAnnotation: (id: string, data: Partial<Annotation>) => void;
   removeAnnotation: (id: string) => void;
   setActiveAnnotationId: (id: string | null) => void;
+  markAnnotationDirty: () => void;
+  clearAnnotationDirty: () => void;
   setAIPanelOpen: (open: boolean) => void;
   setAiPrompts: (ptspts: { x: number, y: number, label: number }[]) => void;
 
@@ -278,6 +280,7 @@ export const useStore = create<AppState>()(
       annotations: [],
       hiddenAnnotations: [],
       activeAnnotationId: null,
+      isAnnotationDirty: false,
       isAIPanelOpen: false,
       aiPrompts: [],
 
@@ -533,10 +536,21 @@ export const useStore = create<AppState>()(
           ? state.hiddenAnnotations.filter((aId) => aId !== id)
           : [...state.hiddenAnnotations, id]
       })),
-      addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
-      updateAnnotation: (id, data) => set((state) => ({annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)})),
-      removeAnnotation: (id) => set((state) => ({ annotations: state.annotations.filter(a => a.id !== id) })),
+      addAnnotation: (annotation) => set((state) => ({ 
+        annotations: [...state.annotations, annotation], 
+        isAnnotationDirty: true
+      })),
+      updateAnnotation: (id, data) => set((state) => ({ 
+        annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a), 
+        isAnnotationDirty: true
+      })),
+      removeAnnotation: (id) => set((state) => ({ 
+        annotations: state.annotations.filter(a => a.id !== id), 
+        isAnnotationDirty: true
+      })),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
+      markAnnotationDirty: () => set({ isAnnotationDirty: true }),
+      clearAnnotationDirty: () => set({ isAnnotationDirty: false }),
       setAIPanelOpen: (open) => set({ isAIPanelOpen: open }),
       setAiPrompts: (ptspts) => set({ aiPrompts: ptspts }),
 
