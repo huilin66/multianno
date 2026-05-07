@@ -387,6 +387,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [mergeStage, setMergeStage] = useState<0 | 1>(0); // Merge 比较安全，两段即可
   const [attrDraft, setAttrDraft] = useState<{options: string[], defaultValue: string} | null>(null);
   const [showAttrDeleteConfirm, setShowAttrDeleteConfirm] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [isAddingClass, setIsAddingClass] = useState(false);
+
 
   // 监听切换属性时，清空草稿
   useEffect(() => {
@@ -496,14 +499,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   };
 
   const handleAdd = (type: 'classes' | 'attributes') => {
-    if (type === 'classes') {
-      const newId = `class-${Date.now()}`;
-      addTaxonomyClass({ id: newId, name: `new_class_${taxonomyClasses.length + 1}`, color: TAXONOMY_COLORS[taxonomyClasses.length % TAXONOMY_COLORS.length] });
-      setActiveTab('classes'); setSelectedClassId(newId);
-    } else {
+    if (type === 'attributes') {
       const newId = `attr-${Date.now()}`;
       addTaxonomyAttribute({ id: newId, name: `new_attribute_${taxonomyAttributes.length + 1}`, type: 'select', options: ['default_val_1'], defaultValue: 'default_val_1', applyToAll: true });
       setActiveTab('attributes'); setSelectedAttributeId(newId);
+    } else {
+      // 🌟 打开输入模式
+      setNewClassName('');
+      setIsAddingClass(true);
     }
   };
 
@@ -780,8 +783,54 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   ))}
                   {/* 干净排版的行动按钮 */}
                   <div className="flex gap-2 mt-3 mb-1 pr-1">
-                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('classes')}><Plus className="w-3 h-3 mr-1"/> Add</Button>
-                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('classes'); fileInputRef.current?.click(); }}><Upload className="w-3 h-3 mr-1"/> Import</Button>
+                    {isAddingClass ? (
+                      <>
+                        <Input
+                          autoFocus
+                          value={newClassName}
+                          onChange={(e) => setNewClassName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              const name = newClassName.trim();
+                              if (name) {
+                                const newId = `class-${Date.now()}`;
+                                addTaxonomyClass({ id: newId, name, color: TAXONOMY_COLORS[taxonomyClasses.length % TAXONOMY_COLORS.length] });
+                                setActiveTab('classes');
+                                setSelectedClassId(newId);
+                              }
+                              setIsAddingClass(false);
+                            }
+                            if (e.key === 'Escape') setIsAddingClass(false);
+                          }}
+                          placeholder="Class name..."
+                          className="h-7 text-xs flex-1"
+                        />
+                        <Button size="sm" className="h-7 px-2 text-[10px] shrink-0" onClick={() => {
+                          const name = newClassName.trim();
+                          if (name) {
+                            const newId = `class-${Date.now()}`;
+                            addTaxonomyClass({ id: newId, name, color: TAXONOMY_COLORS[taxonomyClasses.length % TAXONOMY_COLORS.length] });
+                            setActiveTab('classes');
+                            setSelectedClassId(newId);
+                          }
+                          setIsAddingClass(false);
+                        }}>
+                          <Check className="w-3 h-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => setIsAddingClass(false)}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('classes')}>
+                          <Plus className="w-3 h-3 mr-1"/> Add
+                        </Button>
+                        <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('classes'); fileInputRef.current?.click(); }}>
+                          <Upload className="w-3 h-3 mr-1"/> Import
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
