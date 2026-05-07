@@ -142,3 +142,8 @@ class VisExportRequest(BaseModel):
     export_config: Dict[str, Any]  # 必须提供导出配置
     anno_config: Optional[Dict[str, Any]] = None
     pred_configs: Optional[List[Dict[str, Any]]] = None
+
+
+class RepairRequest(BaseModel):
+    save_dirs: List[str]
+    repair_types: List[str] = ["stem"]

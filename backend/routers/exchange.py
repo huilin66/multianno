@@ -338,7 +338,7 @@ async def import_from_yolo(req: ImportRequest):
 
         if new_shapes:
             existing_data["shapes"].extend(new_shapes)
-            existing_data["stem"] = stem
+            existing_data["stem"] = base_stem
             existing_data["imageWidth"], existing_data["imageHeight"] = img_w, img_h
             with open(target_json, "w", encoding="utf-8") as f:
                 json.dump(existing_data, f, ensure_ascii=False, indent=2)
@@ -406,7 +406,7 @@ async def import_from_coco(req: ImportRequest):
             if shape:
                 existing_data["shapes"].append(shape)
 
-        existing_data["stem"] = info["stem"]
+        existing_data["stem"] = base_stem
         existing_data["imageWidth"], existing_data["imageHeight"] = info["w"], info["h"]
         with open(target_json, "w", encoding="utf-8") as f:
             json.dump(existing_data, f, ensure_ascii=False, indent=2)
@@ -588,7 +588,7 @@ async def import_from_images_only(req: ImportRequest):
 
         if new_shapes:
             existing_data["shapes"].extend(new_shapes)
-            existing_data["stem"] = stem
+            existing_data["stem"] = base_stem
             existing_data["imageWidth"] = img_w
             existing_data["imageHeight"] = img_h
 

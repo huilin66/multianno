@@ -467,3 +467,18 @@ export const requestVisExportStream = async (payload: any, onProgress: (p: numbe
 
     return { success: true };
 };
+
+
+// 🌟 数据修复接口
+export const repairData = async (saveDirs: string[], repairTypes: string[] = ['stem']) => {
+  const response = await fetch(`${API_BASE_URL}/taxonomy/repair`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ save_dirs: saveDirs, repair_types: repairTypes }),
+  });
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Data repair failed');
+  }
+  return response.json();
+};

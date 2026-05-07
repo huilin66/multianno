@@ -2,14 +2,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
-  Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
+  Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser, Wrench,
   Plus, Check, X, Loader2, AlertCircle, Upload, Database, Activity,
   List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, Layers, ShieldCheck
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { batchMergeClass, batchDeleteClass, fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute } from '../../api/client';
+import { batchMergeClass, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 
@@ -18,9 +18,6 @@ interface TaxonomyDashboardProps {
   onClose?: () => void;
 }
 
-// ============================================================================
-// 🌟 高级图表组件库 (纯 CSS 无依赖实现)
-// ============================================================================
 
 // 1. 带 XY 坐标轴的直方图 (修复超宽数据遮挡，支持横向滚动)
 const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
@@ -369,6 +366,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState({ classes: true, attributes: true });
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [repairResult, setRepairResult] = useState<{fixed?: number, scanned?: number} | null>(null);
 
   const [statsStatus, setStatsStatus] = useState<'idle' | 'loading' | 'done'>('idle');
   const [statsData, setStatsData] = useState<any>(null); 
@@ -418,7 +417,24 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       description: 'System reserved class for soft-deleted items.',
     });
   }, [taxonomyClasses, addTaxonomyClass]);
-
+  const handleRepair = async () => {
+    setIsRepairing(true);
+    setRepairResult(null);
+    try {
+      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      const result = await repairData(safeSaveDirs, ['stem']);
+      setRepairResult({ fixed: result.total_fixed, scanned: result.total_scanned });
+      
+      // 修复后自动刷新统计
+      if (result.total_fixed > 0) {
+        await loadStatistics(true);
+      }
+    } catch (err: any) {
+      alert(`数据修复失败: ${err.message}`);
+    } finally {
+      setIsRepairing(false);
+    }
+  };
   // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
   useEffect(() => { 
     if (folders?.length > 0) {
@@ -807,10 +823,27 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 <h2 className="text-xl font-black">Data Statistics Overview</h2>
                 <p className="text-xs text-neutral-500 mt-1">Global and shape-specific analytics across the entire dataset.</p>
               </div>
-              <Button onClick={() => loadStatistics(true)} disabled={statsStatus === 'loading'} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md font-bold">
-                {statsStatus === 'loading' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                Refresh Statistics
-              </Button>
+              <div className="flex items-center gap-2">
+                {/* 🌟 数据修复按钮 */}
+                <Button 
+                  onClick={handleRepair} 
+                  disabled={isRepairing}
+                  variant="outline"
+                  className="border-amber-200 text-amber-600 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/20 font-bold"
+                >
+                  {isRepairing ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Wrench className="w-4 h-4 mr-2" />
+                  )}
+                  {repairResult ? `已修复 ${repairResult.fixed} 个文件` : '数据修复'}
+                </Button>
+
+                <Button onClick={() => loadStatistics(true)} disabled={statsStatus === 'loading'} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md font-bold">
+                  {statsStatus === 'loading' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                  Refresh Statistics
+                </Button>
+              </div>
             </div>
 
            {/* 🌟 核心修复：外层使用 flex flex-col gap-6，子元素使用 shrink-0，彻底避免重叠 */}

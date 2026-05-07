@@ -8,21 +8,18 @@ import numpy as np
 import pandas as pd
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-
-# 从咱们新建的模型文件里引入需要的 Model
 from models import (
     ApplyAttributeRequest,
     BatchDeleteAttributeRequest,
     BatchDeleteClassRequest,
     BatchMergeClassRequest,
+    RepairRequest,
     StatRequest,
 )
 
-# 统一加上前缀和标签，方便管理
 router = APIRouter(prefix="/api/taxonomy", tags=["Taxonomy"])
 
 
-# 🌟 Bins 设定 (最后加上 inf 以防极端比例报错)
 SHP_RATE_BINS = [
     0,
     0.1,
@@ -278,7 +275,18 @@ async def get_project_statistics(req: StatRequest):
                     data = json.load(f)
 
                 total_images += 1
-                stem = data.get("stem", fname.replace(".json", ""))
+                file_stem = fname.replace(".json", "")
+                raw_stem = data.get("stem", "")
+                if (
+                    raw_stem
+                    and raw_stem != file_stem
+                    and raw_stem.startswith(file_stem)
+                ):
+                    stem = file_stem
+                elif raw_stem:
+                    stem = raw_stem
+                else:
+                    stem = file_stem
                 img_w = data.get("imageWidth", 1) or 1
                 img_h = data.get("imageHeight", 1) or 1
                 shapes = data.get("shapes", [])
@@ -515,3 +523,90 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
         print(f"💥 [FATAL ERROR] Backend crashed inside apply_attribute: {e}")
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"detail": str(e)})
+
+
+@router.post("/repair")
+async def repair_project_data(req: RepairRequest):
+    """
+    统一数据修复入口，支持多种修复类型
+    目前支持：
+    - stem: 修复 JSON 文件中带后缀的 stem 字段
+    后续可扩展：
+    - attribute: 修复缺失的属性默认值
+    - duplicate: 清理重复标注
+    """
+    result = {"total_scanned": 0, "total_fixed": 0, "details": {}}
+
+    for repair_type in req.repair_types:
+        if repair_type == "stem":
+            stem_result = _repair_stems(req.save_dirs)
+            result["details"]["stem"] = stem_result
+            result["total_scanned"] += stem_result["scanned"]
+            result["total_fixed"] += stem_result["fixed"]
+
+    return result
+
+
+def _repair_stems(save_dirs: list) -> dict:
+    """
+    修复规则：
+    如果文件名是 DJI_20260211160843_1138.json，
+    JSON 内的 stem 却是 DJI_20260211160843_1138_T，
+    说明带了下游文件的后缀，需要修正为文件名。
+    """
+    scanned = 0
+    fixed = 0
+    fixed_files = []
+
+    for directory in save_dirs:
+        if not os.path.exists(directory):
+            continue
+
+        for fname in os.listdir(directory):
+            if not fname.endswith(".json"):
+                continue
+            if fname.endswith("_meta.json"):
+                continue
+
+            fpath = os.path.join(directory, fname)
+            file_stem = fname.replace(".json", "")
+            scanned += 1
+
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+
+                changed = False
+
+                # 修复顶层 stem
+                current_stem = data.get("stem", "")
+                if (
+                    current_stem
+                    and current_stem != file_stem
+                    and current_stem.startswith(file_stem)
+                ):
+                    data["stem"] = file_stem
+                    changed = True
+
+                # 修复每个 shape 的 stem
+                if "shapes" in data:
+                    for shape in data["shapes"]:
+                        shape_stem = shape.get("stem", "")
+                        if (
+                            shape_stem
+                            and shape_stem != file_stem
+                            and shape_stem.startswith(file_stem)
+                        ):
+                            shape["stem"] = file_stem
+                            changed = True
+
+                if changed:
+                    with open(fpath, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    fixed += 1
+                    fixed_files.append(fname)
+
+            except Exception as e:
+                print(f"❌ [Repair] Failed on {fpath}: {e}")
+
+    return {"scanned": scanned, "fixed": fixed, "fixed_files": fixed_files}
