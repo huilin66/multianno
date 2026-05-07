@@ -155,6 +155,8 @@ export interface AppState {
   stems: string[];
   stemMetadata: Record<string, StemMetadata>; 
   sceneGroups: Record<string, Record<string, string>>;
+  annotationLastSavedTime: string | null;
+  metaLastSavedTime: string | null;
 
 
   // annotations
@@ -213,6 +215,8 @@ export interface AppState {
   setStems: (stems: string[]) => void;
   updateStemMetadata: (stem: string, data: Partial<StemMetadata>) => void;
   setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
+  setAnnotationLastSavedTime: (time: string | null) => void;
+  setMetaLastSavedTime: (time: string | null) => void;
   
   // annotation function
   setCurrentStem: (stem: string | null) => void;
@@ -269,6 +273,8 @@ export const useStore = create<AppState>()(
       stems: [],
       stemMetadata: {}, 
       sceneGroups: {},
+      annotationLastSavedTime: null,
+      metaLastSavedTime: null,
       
       // annotations
       currentStem: null,
@@ -431,6 +437,8 @@ export const useStore = create<AppState>()(
         }
       })),
       setSceneGroups: (groups) => set({ sceneGroups: groups }),
+      setAnnotationLastSavedTime: (time) => set({ annotationLastSavedTime: time }),
+      setMetaLastSavedTime: (time) => set({ metaLastSavedTime: time }),
 
       // annotation function
       // setCurrentStem: (stem) => set({ currentStem: stem }),
@@ -615,6 +623,8 @@ export const useStore = create<AppState>()(
         views: state.views,         
         stems: state.stems,
         sceneGroups: state.sceneGroups,
+        annotationLastSavedTime: state.annotationLastSavedTime,
+        metaLastSavedTime: state.metaLastSavedTime,
         
         currentStem: state.currentStem,
         taxonomyClasses: state.taxonomyClasses,

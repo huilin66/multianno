@@ -6,14 +6,13 @@ import { localeMap } from '../i18n';
 import { generateAnnotationPayload } from '../lib/annotationUtils';
 
 export function useAnnotationAutoSave() {
-  const [annotationSaveStatus, setAnnotationSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
-  const [annotationLastSavedTime, setAnnotationLastSavedTime] = useState<string | null>(null); 
   const { i18n } = useTranslation();
+  const [annotationSaveStatus, setAnnotationSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   const currentStem = useStore((s) => s.currentStem);
   const annotations = useStore((s) => s.annotations);
   const isAnnotationDirty = useStore((s) => s.isAnnotationDirty);
   const clearAnnotationDirty = useStore((s) => s.clearAnnotationDirty);
-  
+  const setAnnotationLastSavedTime = useStore((s) => s.setAnnotationLastSavedTime);
   const autoSave = async () => {
     if (!currentStem) return;
     setAnnotationSaveStatus('saving');
@@ -32,9 +31,8 @@ export function useAnnotationAutoSave() {
       const payload = generateAnnotationPayload(state, currentStem);
 
       await saveAnnotation({ save_dir: saveDir, file_name: fileName, content: payload });
-      setAnnotationLastSavedTime(new Date().toLocaleTimeString(
-        localeMap[i18n.language || 'en'] || undefined, { hour12: false }
-      ));
+      const timeStr = new Date().toLocaleTimeString(localeMap[i18n.language || 'en'] || undefined, { hour12: false });
+      setAnnotationLastSavedTime(timeStr);
       setAnnotationSaveStatus('idle');
       clearAnnotationDirty();
     } catch (error) {
@@ -52,5 +50,5 @@ export function useAnnotationAutoSave() {
 
     return () => clearTimeout(timer);
   }, [annotations, currentStem, isAnnotationDirty]); 
-  return { annotationSaveStatus, annotationLastSavedTime, autoSave};
+  return { annotationSaveStatus, autoSave};
 }

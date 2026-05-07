@@ -33,11 +33,12 @@ import { LocalVisualization } from './components/modules/LocalVisualization';
 import { GlobalConfirmDialog } from './components/modules/GlobalConfirmDialog';
 
 export default function App() {
-  const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings } = useStore();
-
   const { t, i18n } = useTranslation();
-  const { annotationSaveStatus, annotationLastSavedTime, autoSave } = useAnnotationAutoSave();
-  const { metaSaveStatus, metaLastSavedTime } = useMetaAutoSave();
+  const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings } = useStore();
+  const annotationLastSavedTime = useStore((s) => s.annotationLastSavedTime);
+  const metaLastSavedTime = useStore((s) => s.metaLastSavedTime);
+  const { annotationSaveStatus, autoSave } = useAnnotationAutoSave();
+  const { metaSaveStatus } = useMetaAutoSave();
 
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
