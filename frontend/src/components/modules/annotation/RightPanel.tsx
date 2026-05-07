@@ -29,13 +29,16 @@ interface RightPanelProps {
   setLayerOrder: (order: string[]) => void;
   visibleLayers: Record<string, boolean>;
   setVisibleLayers: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  hiddenAnnotations: string[];
+  toggleAnnotationVisibility: (id: string) => void;
 }
 
 export function RightPanel({ 
   tool, showFullExtent, toggleFullExtent, pushAction, 
   focusedViewId, setFocusedViewId,
   layerOrder, setLayerOrder,
-  visibleLayers, setVisibleLayers
+  visibleLayers, setVisibleLayers,
+  hiddenAnnotations, toggleAnnotationVisibility,
 }: RightPanelProps) {
   const { t } = useTranslation();
   
@@ -1147,10 +1150,34 @@ const handleResetNms = (e: React.MouseEvent) => {
                       {ann.label}
                     </span>
                   </div>
-                  
+
+                  {/* 🌟 紧凑操作按钮组：眼睛 + 删除 — 始终可见 */}
+                <div className="flex items-center gap-0.5 shrink-0">
+                  {/* 眼睛开关 */}
                   <Button 
                     variant="ghost" size="icon" 
-                    className="w-6 h-6 shrink-0 opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
+                    className={`w-6 h-6 transition-all ${
+                      hiddenAnnotations.includes(ann.id)
+                        ? 'text-neutral-300 dark:text-neutral-600'
+                        : 'text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                    }`}
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      toggleAnnotationVisibility(ann.id); 
+                    }}
+                    title={hiddenAnnotations.includes(ann.id) ? "Show object" : "Hide object"}
+                  >
+                    {hiddenAnnotations.includes(ann.id) ? (
+                      <EyeOff className="w-3.5 h-3.5" />
+                    ) : (
+                      <Eye className="w-3.5 h-3.5" />
+                    )}
+                  </Button>
+
+                  {/* 删除按钮 */}
+                  <Button 
+                    variant="ghost" size="icon" 
+                    className="w-6 h-6 text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
                     onClick={(e) => { 
                       e.stopPropagation(); 
                       const targetAnno = currentAnnotations.find((a: any) => a.id === ann.id);
@@ -1161,6 +1188,7 @@ const handleResetNms = (e: React.MouseEvent) => {
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
+                </div>
                 </div>
               );
             })}

@@ -54,7 +54,9 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     setSettingsOpen, aiSettings, setAISettings
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
 
-  const hiddenClasses = useStore((s) => (s).hiddenClasses) || [];
+  const hiddenClasses = useStore((s) => (s).hiddenClasses);
+  const hiddenAnnotations = useStore((s) => (s).hiddenAnnotations);
+  const toggleAnnotationVisibility = useStore((s) => s.toggleAnnotationVisibility);
   const [promptMode, setPromptMode] = useState<'positive' | 'negative' | 'box'>('positive');
   const [activeAITab, setActiveAITab] = useState<'auto' | 'semi' | 'vqa'>('auto');
   const [isAIPanelOpen, setAIPanelOpen] = useState(false);
@@ -1541,7 +1543,10 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   view={view} 
                   annotations={(tempActiveAnno && tempActiveAnno.id !== 'ai_preview' 
                     ? currentAnnotations.map((a: any) => a.id === tempActiveAnno.id ? tempActiveAnno : a) 
-                    : currentAnnotations).filter((a: any) => !hiddenClasses.includes(a.label))}
+                    : currentAnnotations)
+                    .filter((a: any) => !hiddenClasses.includes(a.label))
+                    .filter((a: any) => !hiddenAnnotations.includes(a.id))
+                  }
                   activeAnnotationId={activeAnnotationId}
                   taxonomyClasses={taxonomyClasses}
                   currentPoints={currentPoints}
@@ -1606,6 +1611,8 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       focusedViewId={focusedViewId} setFocusedViewId={setFocusedViewId}
       layerOrder={layerOrder} setLayerOrder={setLayerOrder}
       visibleLayers={visibleLayers} setVisibleLayers={setVisibleLayers}
+      hiddenAnnotations={hiddenAnnotations}
+      toggleAnnotationVisibility={toggleAnnotationVisibility}
     />
     </div>
   );

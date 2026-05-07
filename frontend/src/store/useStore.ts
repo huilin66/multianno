@@ -158,6 +158,7 @@ export interface AppState {
   taxonomyAttributes: TaxonomyAttribute[];
   hiddenClasses: string[];
   annotations: Annotation[];
+  hiddenAnnotations: string[];
   activeAnnotationId: string | null;
   isAIPanelOpen: boolean;
   aiPrompts: { x: number, y: number, label: number }[]; 
@@ -216,6 +217,8 @@ export interface AppState {
   deleteTaxonomyAttribute: (id: string) => void;
   setHiddenClasses: (classes: string[]) => void;
   toggleClassVisibility: (className: string) => void;
+  // setHiddenAnnotations: (id: string[]) => void;
+  toggleAnnotationVisibility: (id: string) => void;
   addAnnotation: (annotation: Annotation) => void;
   updateAnnotation: (id: string, data: Partial<Annotation>) => void;
   removeAnnotation: (id: string) => void;
@@ -262,6 +265,7 @@ export const useStore = create<AppState>()(
       taxonomyAttributes: [],
       hiddenClasses: [],
       annotations: [],
+      hiddenAnnotations: [],
       activeAnnotationId: null,
       isAIPanelOpen: false,
       aiPrompts: [],
@@ -478,6 +482,11 @@ export const useStore = create<AppState>()(
           ? state.hiddenClasses.filter(c => c !== className)
           : [...state.hiddenClasses, className]
       })),
+      toggleAnnotationVisibility: (id) => set((state) => ({
+        hiddenAnnotations: state.hiddenAnnotations.includes(id)
+          ? state.hiddenAnnotations.filter((aId) => aId !== id)
+          : [...state.hiddenAnnotations, id]
+      })),
       addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
       updateAnnotation: (id, data) => set((state) => ({annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)})),
       removeAnnotation: (id) => set((state) => ({ annotations: state.annotations.filter(a => a.id !== id) })),
@@ -561,6 +570,7 @@ export const useStore = create<AppState>()(
         shortcutsSettings: state.shortcutsSettings,
         aiSettings: state.aiSettings,
         hiddenClasses: state.hiddenClasses,
+        hiddenAnnotations: state.hiddenAnnotations,
         
         completedViews: state.completedViews,
         savedAlignments: state.savedAlignments, 
