@@ -92,7 +92,7 @@ export function LeftToolbar({
     { id: 'separator', type: 'separator' },
     { id: 'undo', icon: Undo2, ...getToolInfo(t('shortcuts.undo'), 'undo'), action: handleUndo, disabled: !canUndo },
     { id: 'redo', icon: Redo2, ...getToolInfo(t('shortcuts.redo'), 'redo'), action: handleRedo, disabled: !canRedo },
-    { id: 'delete', icon: Trash2, ...getToolInfo(t('shortcuts.del'), 'delete'), action: handleDelete },
+    { id: 'delete', icon: Trash2, ...getToolInfo(t('shortcuts.delete'), 'delete'), action: handleDelete },
     { id: 'clear', icon: Ban, ...getToolInfo(t('shortcuts.clear'), 'clear'), action: handleClear },
     { id: 'save', icon: Save, ...getToolInfo(t('shortcuts.save'), 'save'), action: handleSave },
   ];

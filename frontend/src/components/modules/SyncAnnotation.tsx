@@ -245,6 +245,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
       const state = useStore.getState();
     const { shortcutsSettings } = state as any;
     if (!shortcutsSettings) return;
+    console.log('当前 shortcutsSettings:', JSON.stringify(shortcutsSettings));
 
     // 🌟 遍历新的快捷键结构
     const matchedTool = Object.keys(shortcutsSettings).find((tool) => {
