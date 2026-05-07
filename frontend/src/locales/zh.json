@@ -36,15 +36,10 @@
     "title": "快捷键设置",
     "pressKey": "请按键...",
     "pressCombineKey": "请按下键/组合键(Ctrl/Shift+键)以设置快捷键",
-    
-    "pan": "平移",
-    "home": "重置位置",
-    "prev": "上一场景",
-    "next": "下一场景",
 
     "bbox": "矩形",
     "polygon": "多边形",
-    "ai_anno": "AI 自动标注",
+    "aiAnno": "AI 自动标注",
 
     "rbbox": "旋转矩形",
     "cuboid": "立方体", 
@@ -54,15 +49,20 @@
     "point": "点",
     "line": "线",
     "lasso": "自由线",
-
+    
+    "pan": "平移",
     "select": "选择并编辑",
-    "save": "保存",
     "cut": "裁剪",
     "cutout": "裁切",
+
+    "home": "重置位置",
+    "prev": "上一场景",
+    "next": "下一场景",
     "undo": "撤销",
     "redo": "重做",
-    "del": "删除",
-    "clear": "清空"
+    "delete": "删除",
+    "clear": "清空",
+    "save": "保存"
   },
   "aiSettings": {
     "title": "AI 设置",

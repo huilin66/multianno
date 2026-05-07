@@ -6,11 +6,6 @@ export function useToolNames() {
   const { t } = useTranslation();
   
   return useMemo(() => ({
-    pan: t('shortcuts.pan', 'Pan'),
-    home: t('shortcuts.home', 'Home'),
-    prev: t('shortcuts.prev', 'Prev'),
-    next: t('shortcuts.next', 'Next'),
-
     bbox: t('shortcuts.bbox', 'BBox'),
     polygon: t('shortcuts.polygon', 'Polygon'),
     ai_anno: t('shortcuts.aiAnno', 'AI Auto'),
@@ -24,9 +19,14 @@ export function useToolNames() {
     line: t('shortcuts.line', 'Line'),
     lasso: t('shortcuts.lasso', 'Lasso'),
 
+    pan: t('shortcuts.pan', 'Pan'),
     select: t('shortcuts.select', 'Select'),
     cut: t('shortcuts.cut', 'Cut'),
     cutout: t('shortcuts.cutout', 'Cutout'),
+
+    home: t('shortcuts.home', 'Home'),
+    prev: t('shortcuts.prev', 'Prev'),
+    next: t('shortcuts.next', 'Next'),
     undo: t('shortcuts.undo', 'Undo'),
     redo: t('shortcuts.redo', 'Redo'),
     delete: t('shortcuts.delete', 'Delete'),

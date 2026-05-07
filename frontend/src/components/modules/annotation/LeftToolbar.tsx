@@ -60,13 +60,6 @@ export function LeftToolbar({
     };
   };
 
-  const navTools = [
-    { id: 'pan', icon: Hand, ...getToolInfo(t('shortcuts.pan'), 'pan') },
-    { id: 'home', icon: Home, ...getToolInfo(t('shortcuts.home'), 'home'), action: onHomeClick },
-    { id: 'prev', icon: ChevronLeft, ...getToolInfo(t('shortcuts.prev'), 'prev'), action: handlePrevStem, disabled: !hasPrev },
-    { id: 'next', icon: ChevronRight, ...getToolInfo(t('shortcuts.next'), 'next'), action: handleNextStem, disabled: !hasNext },
-  ];
-
   const mainDrawTools = [
     { id: 'bbox', icon: Square, ...getToolInfo(t('shortcuts.bbox'), 'bbox') },
     { id: 'polygon', icon: Hexagon, ...getToolInfo(t('shortcuts.polygon'), 'polygon') },
@@ -86,14 +79,21 @@ export function LeftToolbar({
   ];
 
   const editTools = [
+    { id: 'pan', icon: Hand, ...getToolInfo(t('shortcuts.pan'), 'pan') },
     { id: 'select', icon: MousePointer2, ...getToolInfo(t('shortcuts.select'), 'select') },
     { id: 'cut', icon: Columns2, ...getToolInfo(t('shortcuts.cut'), 'cut') },
     { id: 'cutout', icon: Eraser, ...getToolInfo(t('shortcuts.cutout'), 'cutout') },
+  ];
+
+  const navTools = [
+    { id: 'home', icon: Home, ...getToolInfo(t('shortcuts.home'), 'home'), action: onHomeClick },
+    { id: 'prev', icon: ChevronLeft, ...getToolInfo(t('shortcuts.prev'), 'prev'), action: handlePrevStem, disabled: !hasPrev },
+    { id: 'next', icon: ChevronRight, ...getToolInfo(t('shortcuts.next'), 'next'), action: handleNextStem, disabled: !hasNext },
     { id: 'separator', type: 'separator' },
-    { id: 'delete', icon: Trash2, ...getToolInfo(t('shortcuts.del'), 'delete'), action: handleDelete },
-    { id: 'clear', icon: Ban, ...getToolInfo(t('shortcuts.clear'), 'clear'), action: handleClear },
     { id: 'undo', icon: Undo2, ...getToolInfo(t('shortcuts.undo'), 'undo'), action: handleUndo, disabled: !canUndo },
     { id: 'redo', icon: Redo2, ...getToolInfo(t('shortcuts.redo'), 'redo'), action: handleRedo, disabled: !canRedo },
+    { id: 'delete', icon: Trash2, ...getToolInfo(t('shortcuts.del'), 'delete'), action: handleDelete },
+    { id: 'clear', icon: Ban, ...getToolInfo(t('shortcuts.clear'), 'clear'), action: handleClear },
     { id: 'save', icon: Save, ...getToolInfo(t('shortcuts.save'), 'save'), action: handleSave },
   ];
 
@@ -141,8 +141,7 @@ export function LeftToolbar({
 
   return (
     <div className="w-16 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-900 flex flex-col items-center py-4 space-y-2 z-10 shrink-0 shadow-sm relative h-full overflow-y-auto custom-scrollbar">
-      {navTools.map(renderToolButton)}
-      <div className="w-8 h-px bg-neutral-200 dark:bg-neutral-800 my-1" />
+
       {mainDrawTools.map(renderToolButton)}
       <div className="flex flex-col items-center w-full">
         <Button 
@@ -160,6 +159,8 @@ export function LeftToolbar({
       </div>
       <div className="w-8 h-px bg-neutral-200 dark:bg-neutral-800 my-1" />
       {editTools.map(renderToolButton)}
+      <div className="w-8 h-px bg-neutral-200 dark:bg-neutral-800 my-1" />
+      {navTools.map(renderToolButton)}
     </div>
   );
 }

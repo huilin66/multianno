@@ -111,11 +111,6 @@ export interface EditorSettings {
 }
 
 export const DEFAULT_SHORTCUTS_SETTINGS = {
-  pan: {key:'w'},
-  home: {key:'space'},
-  prev: {key:'a'},
-  next: {key:'d'},
-
   bbox: {key:'r'},
   polygon: {key:'p'},
   ai_anno: {key:'i'},
@@ -129,10 +124,16 @@ export const DEFAULT_SHORTCUTS_SETTINGS = {
   line: {key:'l', shift: true},
   lasso: {key:'s', shift: true},
 
+  pan: {key:'w'},
   select: {key:'e', ctrl: true},
   cut: {key:'q', ctrl: true},
   cutout: {key:'e', ctrl: true}, 
+
+  home: {key:'space'},
+  prev: {key:'a'},
+  next: {key:'d'},
   undo: {key:'z', ctrl: true},
+  redo: {key:'y', ctrl: true},
   delete: {key:'delete'},
   clear: {key:'delete',ctrl: true},
   save: {key:'s', ctrl: true},

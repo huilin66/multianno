@@ -37,14 +37,9 @@
     "pressKey": "Please Press Key...",
     "pressCombineKey": "Please press Key/Combine Key(Ctrl/Shift+Key) to set shortcuts",
 
-    "pan": "Pan",
-    "home": "Home",
-    "prev": "Prev",
-    "next": "Next",
-
     "bbox": "BBox",
     "polygon": "Polygon",
-    "ai_anno": "AI Auto",
+    "aiAnno": "AI Auto",
 
     "rbbox": "Rotated Box",
     "cuboid": "Cuboid", 
@@ -55,14 +50,19 @@
     "line": "Line",
     "lasso": "Lasso",
 
+    "pan": "Pan",
     "select": "Select & Edit",
-    "save": "Save",
     "cut": "Cut",
     "cutout": "Cutout",
+
+    "home": "Home",
+    "prev": "Prev",
+    "next": "Next",
     "undo": "Undo",
     "redo": "Redo",
-    "del": "Delete",
-    "clear": "Clear"
+    "delete": "Delete",
+    "clear": "Clear",
+    "save": "Save"
   },
   "aiSettings": {
     "title": "AI Settings",
