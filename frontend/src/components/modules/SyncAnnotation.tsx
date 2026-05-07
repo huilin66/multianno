@@ -232,21 +232,58 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
       
       // 安全锁 2：如果用户正在画图过程中，禁用快捷键切换工具，防止状态错乱
       if (isDrawing) return;
+      if (e.ctrlKey || e.metaKey) return;
+      const state = useStore.getState();
+    const { shortcutsSettings } = state as any;
+    if (!shortcutsSettings) return;
 
-      const key = e.key.toLowerCase();
-      const { shortcuts } = useStore.getState() as any;
-
-      // 遍历匹配快捷键
-      const matchedTool = Object.keys(shortcuts).find(tool => shortcuts[tool] === key);
-      if (matchedTool) {
-        e.preventDefault(); // 阻止浏览器默认行为
-        handleToolChange(matchedTool); // 调用之前写的带弹窗拦截的 Tool Change 函数
+    // 🌟 遍历新的快捷键结构
+    const matchedTool = Object.keys(shortcutsSettings).find((tool) => {
+      const setting = shortcutsSettings[tool];
+      if (!setting) return false;
+      
+      const keyMatch = e.key.toLowerCase() === setting.key.toLowerCase();
+      const shiftMatch = setting.shift ? e.shiftKey : !e.shiftKey;
+      const ctrlMatch = setting.ctrl ? (e.ctrlKey || e.metaKey) : !e.ctrlKey && !e.metaKey;
+      if (keyMatch && shiftMatch && ctrlMatch) {
+        console.log('匹配到:', tool, '按键:', e.key, setting); // ← 加这行
       }
-    };
+      return keyMatch && shiftMatch && ctrlMatch;
+    });
 
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isDrawing]); // 依赖 isDrawing，防止画一半切工具
+    if (matchedTool) {
+      e.preventDefault();
+      if (matchedTool === 'home') {
+        handleHomeViewport();
+        return;
+      }
+      if (matchedTool === 'prev') {
+        handlePrevStem();
+        return;
+      }
+      if (matchedTool === 'next') {
+        handleNextStem();
+        return;
+      }
+      if (matchedTool === 'delete') {
+        handleDelete();
+        return;
+      }
+      if (matchedTool === 'clear') {
+        handleClear();
+        return;
+      }
+      if (matchedTool === 'save') {
+        autoSave();
+        return;
+      }
+      handleToolChange(matchedTool);
+    }
+  };
+
+  window.addEventListener('keydown', handleGlobalKeyDown);
+  return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+}, [isDrawing]);
 
   // 计算当前可被控制的图层列表 (当前图层 + 被勾选显示的图层)
   const operableLayers = layerOrder.filter(id => id === focusedViewId || visibleLayers[id]);
@@ -1054,15 +1091,36 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 
   const stemIndex = stems.indexOf(currentStem);
   const handlePrevStem = () => {
-    if (stemIndex > 0) {
-      setCurrentStem(stems[stemIndex - 1]);
+    const state = useStore.getState();
+    const { stems, currentStem, setCurrentStem } = state;
+    const idx = stems.indexOf(currentStem);
+    
+    console.log('BEFORE — currentStem:', currentStem, 'stemIndex:', idx);
+    
+    if (idx > 0) {
+      const newStem = stems[idx - 1];
+      console.log('SETTING currentStem to:', newStem);
+      setCurrentStem(newStem);
       setActiveAnnotationId(null);
+    } else {
+      console.log('Already at first stem');
     }
-  }; 
+  };
+
   const handleNextStem = () => {
-    if (stemIndex < stems.length - 1) {
-      setCurrentStem(stems[stemIndex + 1]);
+    const state = useStore.getState();
+    const { stems, currentStem, setCurrentStem } = state;
+    const idx = stems.indexOf(currentStem);
+    
+    console.log('BEFORE — currentStem:', currentStem, 'stemIndex:', idx);
+    
+    if (idx < stems.length - 1) {
+      const newStem = stems[idx + 1];
+      console.log('SETTING currentStem to:', newStem);
+      setCurrentStem(newStem);
       setActiveAnnotationId(null);
+    } else {
+      console.log('Already at last stem');
     }
   };
 

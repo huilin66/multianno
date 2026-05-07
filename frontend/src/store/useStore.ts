@@ -410,7 +410,11 @@ export const useStore = create<AppState>()(
       setSceneGroups: (groups) => set({ sceneGroups: groups }),
 
       // annotation function
-      setCurrentStem: (stem) => set({ currentStem: stem }),
+      // setCurrentStem: (stem) => set({ currentStem: stem }),
+      setCurrentStem: (stem) => {
+        console.trace('🔴 setCurrentStem called with:', stem);
+        set({ currentStem: stem });
+      },
       addTaxonomyClass: (cls) => set((state) => {
         // 检查是否已经存在相同 ID 或者相同名字（忽略大小写）的类别
         const isExist = state.taxonomyClasses.some(
