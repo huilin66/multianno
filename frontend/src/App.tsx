@@ -218,6 +218,13 @@ export default function App() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t('headerSetting.fillShapes', 'Fill Shapes')}</Label>
+                  <Switch
+                    checked={editorSettings.fillAnnotationShapes}
+                    onCheckedChange={(v) => updateEditorSettings({ fillAnnotationShapes: v })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
                   <Label className="text-xs">{t('headerSetting.showAnnotationToolLabel')}</Label>
                   <Switch
                     checked={editorSettings.showToolLabels}

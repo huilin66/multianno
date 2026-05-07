@@ -108,6 +108,7 @@ export interface EditorSettings {
   continuousDrawing: boolean; 
   showToolLabels: boolean; 
   autoRefreshStats: boolean; 
+  fillAnnotationShapes: boolean;
 }
 
 export const DEFAULT_SHORTCUTS_SETTINGS = {
@@ -277,7 +278,14 @@ export const useStore = create<AppState>()(
       // setting
       theme: 'dark', 
       language: 'en',
-      editorSettings: { showCrosshair: true, showPixelValue: true, continuousDrawing: false, showToolLabels: false, autoRefreshStats: true },
+      editorSettings: { 
+        showCrosshair: true, 
+        showPixelValue: true, 
+        continuousDrawing: false, 
+        showToolLabels: false, 
+        autoRefreshStats: true,
+        fillAnnotationShapes: true,
+      },
       shortcutsSettings:DEFAULT_SHORTCUTS_SETTINGS,
       aiSettings: {
         model: 'SAM-3',

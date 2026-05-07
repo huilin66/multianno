@@ -139,7 +139,8 @@ function drawCuboidEngine(ctx: CanvasRenderingContext2D, p1: any, p2: any, p3: a
 
 // 2. 绘制已保存的标注对象
 function drawSavedObjects(params: RenderParams, colors: any) {
-  const { ctx, annotations, activeAnnotationId, taxonomyClasses, tool, viewport } = params;
+  const { ctx, annotations, activeAnnotationId, taxonomyClasses, tool, viewport, editorSettings } = params;
+  const fillShapes = editorSettings?.fillAnnotationShapes !== false;
 
   annotations.forEach((ann: any) => {
     const clsDef = taxonomyClasses?.find((c: any) => c.name === ann.label);
@@ -154,7 +155,8 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       const [p1, p2] = ann.points;
       const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
       const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-      ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h); 
+      if (fillShapes) ctx.fillRect(x, y, w, h);
       ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
       ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
     } else if (ann.type === 'polygon' && ann.points.length > 0) {
@@ -186,7 +188,7 @@ function drawSavedObjects(params: RenderParams, colors: any) {
 
       // 🌟 由于第一重裁剪的保护，此时的 evenodd 填充，就是完美的 A 减 B (a')
       ctx.fillStyle = isActive ? `${baseColor}60` : `${baseColor}30`;
-      ctx.fill('evenodd'); 
+      if (fillShapes) ctx.fill('evenodd');
 
       // 🌟 第二重裁剪：将接下来的描边也死死限制在 a' 的面积上！
       // 这意味着相交的那根线 (c) 直接被物理屏蔽了，画不出来。
@@ -238,7 +240,8 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       } else {
         ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2);
       }
-      ctx.fill(); ctx.stroke();
+      if (fillShapes) ctx.fill();
+      ctx.stroke();
       ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; 
       ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
     } else if (ann.type === 'point' && ann.points.length > 0) {
@@ -250,11 +253,12 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       const pts = getRbboxPoints(ann.points[0], ann.points[1], ann.points[2]);
       ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.closePath(); 
+      if (fillShapes) ctx.fill();
+      ctx.stroke();
       ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
       ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, pts[0].x, pts[0].y - 6 / viewport.zoom);
-    
-    // 🌟 新增：渲染已保存的 3D立方体
+
     } else if (ann.type === 'cuboid' && ann.points.length >= 2) {
       drawCuboidEngine(ctx, ann.points[0], ann.points[1], ann.points[2]);
       const f1x = Math.min(ann.points[0].x, ann.points[1].x);
@@ -300,8 +304,9 @@ function drawSavedObjects(params: RenderParams, colors: any) {
 
 // 3. 绘制正在进行的草图
 function drawDrawingDraft(params: RenderParams) {
-  const { ctx, currentPoints, tool, formLabel, taxonomyClasses, viewport, hoverPos } = params;
+  const { ctx, currentPoints, tool, formLabel, taxonomyClasses, viewport, hoverPos, editorSettings } = params;
   if (currentPoints.length === 0) return;
+  const fillShapes = editorSettings?.fillShapes !== false;
 
   const activeClassDef = taxonomyClasses?.find((c: any) => c.name === formLabel);
   const activeColor = activeClassDef?.color || '#3B82F6';
@@ -328,13 +333,18 @@ function drawDrawingDraft(params: RenderParams) {
   if (tool === 'bbox' && currentPoints.length === 2) {
     const [p1, p2] = currentPoints;
     const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-    ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h); 
+    if (fillShapes) ctx.fillRect(x, y, w, h);
   } else if (tool === 'ellipse' && currentPoints.length === 2) {
     const [p1, p2] = currentPoints, x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-    ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); 
+    if (fillShapes) ctx.fill(); 
+    ctx.stroke();
   } else if (tool === 'circle' && currentPoints.length === 2) {
     const [p1, p2] = currentPoints, x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
-    ctx.beginPath(); ctx.arc(x + w/2, y + h/2, Math.max(w, h) / 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + w/2, y + h/2, Math.max(w, h) / 2, 0, Math.PI * 2); 
+    if (fillShapes) ctx.fill(); 
+    ctx.stroke();
   } else if (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask' || tool === 'cut' || tool === 'cutout') {
       ctx.beginPath(); ctx.moveTo(currentPoints[0].x, currentPoints[0].y);
       for (let i = 1; i < currentPoints.length; i++) ctx.lineTo(currentPoints[i].x, currentPoints[i].y);
@@ -347,11 +357,11 @@ function drawDrawingDraft(params: RenderParams) {
       if (tool === 'cutout') {
         ctx.strokeStyle = '#EF4444'; // Red
         ctx.fillStyle = 'rgba(239, 68, 68, 0.3)';
-        ctx.fill();
+        if (fillShapes) ctx.fill();
       } else if (tool === 'cut') {
         ctx.strokeStyle = '#F59E0B'; // Amber/Yellow
       } else if (tool === 'polygon' || tool === 'freemask') {
-        ctx.fill();
+        if (fillShapes) ctx.fill();
       }
       
       ctx.stroke();
@@ -369,13 +379,11 @@ function drawDrawingDraft(params: RenderParams) {
       const pts = getRbboxPoints(currentPoints[0], currentPoints[1], currentPoints[2]);
       ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      
-      // 用亮色高亮显示基准线
+      ctx.closePath(); 
+      if (fillShapes) ctx.fill();
+      ctx.stroke();
       ctx.save(); ctx.strokeStyle = '#fff'; ctx.setLineDash([]); ctx.beginPath(); 
       ctx.moveTo(pts[0].x, pts[0].y); ctx.lineTo(pts[1].x, pts[1].y); ctx.stroke(); ctx.restore();
-
-  // 🌟 新增：绘制3D立方体草图
   } else if (tool === 'cuboid' && currentPoints.length >= 2) {
       drawCuboidEngine(ctx, currentPoints[0], currentPoints[1], currentPoints[2]);
   }
@@ -397,8 +405,9 @@ function drawDrawingDraft(params: RenderParams) {
 // 4. 绘制待确认弹窗状态
 // 位于 src/lib/canvasRenderer.ts
 function drawPendingConfirm(params: RenderParams) {
-  const { ctx, pendingAnnotation, formLabel, taxonomyClasses, viewport } = params;
+  const { ctx, pendingAnnotation, formLabel, taxonomyClasses, viewport, editorSettings } = params;
   if (!pendingAnnotation) return;
+  const fillShapes = editorSettings?.fillShapes !== false;
 
   // 🌟 核心增强：识别 AI 预览状态
   // 当 pendingAnnotation.id 为 'ai_preview' 时，使用专用高对比度蓝色
@@ -421,14 +430,16 @@ function drawPendingConfirm(params: RenderParams) {
     const [p1, p2] = pendingAnnotation.points;
     const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y), w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
     if (pendingAnnotation.type === 'bbox') {
-      ctx.strokeRect(x, y, w, h); ctx.fillRect(x, y, w, h);
+      ctx.strokeRect(x, y, w, h); 
+      if (fillShapes) ctx.fillRect(x, y, w, h);
     } else if (pendingAnnotation.type === 'ellipse') {
-      ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.ellipse(x + w/2, y + h/2, w/2, h/2, 0, 0, Math.PI * 2); 
+      if (fillShapes) ctx.fill(); ctx.stroke();
     } else if (pendingAnnotation.type === 'circle') {
-      ctx.beginPath(); ctx.arc(x + w/2, y + h/2, Math.max(w, h) / 2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(x + w/2, y + h/2, Math.max(w, h) / 2, 0, Math.PI * 2); 
+      if (fillShapes) ctx.fill(); ctx.stroke();
     }
   } 
-  // 2. 渲染多边形 (AI 分割结果通常为此类型)
   else if (pendingAnnotation.type === 'polygon' && pendingAnnotation.points.length > 0) {
     ctx.beginPath(); 
     ctx.moveTo(pendingAnnotation.points[0].x, pendingAnnotation.points[0].y);
@@ -436,7 +447,7 @@ function drawPendingConfirm(params: RenderParams) {
       ctx.lineTo(pendingAnnotation.points[i].x, pendingAnnotation.points[i].y);
     }
     ctx.closePath(); 
-    ctx.fill(); 
+    if (fillShapes) ctx.fill(); 
     ctx.stroke();
   } 
   // 3. 渲染线段
@@ -457,7 +468,9 @@ function drawPendingConfirm(params: RenderParams) {
     const pts = getRbboxPoints(pendingAnnotation.points[0], pendingAnnotation.points[1], pendingAnnotation.points[2]);
     ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < 4; i++) ctx.lineTo(pts[i].x, pts[i].y);
-    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.closePath(); 
+    if (fillShapes) ctx.fill(); 
+    ctx.stroke();
   } 
   // 6. 渲染 3D 立方体
   else if (pendingAnnotation.type === 'cuboid' && pendingAnnotation.points.length >= 2) {

@@ -229,7 +229,11 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       // 安全锁 1：如果用户正在输入框里打字（例如填 Label Text），绝对不触发快捷键！
       const target = e.target as HTMLElement;
-      if (['INPUT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable) return;
+      if (
+        target.isContentEditable ||
+        (target.tagName === 'TEXTAREA') ||
+        (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'range')
+      ) return;
       
       // 安全锁 2：如果用户正在画图过程中，禁用快捷键切换工具，防止状态错乱
       if (isDrawing) return;
