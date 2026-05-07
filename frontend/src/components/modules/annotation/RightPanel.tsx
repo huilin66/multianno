@@ -1106,11 +1106,15 @@ const handleResetNms = (e: React.MouseEvent) => {
 
           <div className="max-h-[40vh] overflow-y-auto p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/30 custom-scrollbar">
             {currentAnnotations
-            .filter((ann: any) => !hiddenClasses.includes(ann.label))
+            // .filter((ann: any) => !hiddenClasses.includes(ann.label))
             .map((ann: any) => {
               const clsDef = taxonomyClasses.find((c: any) => c.name === ann.label);
               const color = clsDef?.color || '#3B82F6';
               const isActive = ann.id === activeAnnotationId;
+
+              const classHidden = hiddenClasses.includes(ann.label);
+              const individuallyHidden = hiddenAnnotations.includes(ann.id);
+              const isHidden = classHidden || individuallyHidden;
 
               const groupInfo = nmsGroups[ann.id];
               const isRedundant = groupInfo && !groupInfo.isMaster;
@@ -1136,10 +1140,20 @@ const handleResetNms = (e: React.MouseEvent) => {
 
               return (
                 <div 
-                  key={ann.id} onClick={() => setActiveAnnotationId(ann.id)}
+                  key={ann.id} 
+                  onClick={() => setActiveAnnotationId(ann.id)}
+                  // className={`group p-2 rounded border text-[11px] flex items-center justify-between transition-all ${
+                  //   isRedundant ? 'bg-red-50/50 dark:bg-red-900/10 border-red-300' : 
+                  //   (groupInfo?.isMaster ? 'bg-blue-50/30 dark:bg-blue-900/10 border-blue-300' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800')
+                  // }`}
                   className={`group p-2 rounded border text-[11px] flex items-center justify-between transition-all ${
-                    isRedundant ? 'bg-red-50/50 dark:bg-red-900/10 border-red-300' : 
-                    (groupInfo?.isMaster ? 'bg-blue-50/30 dark:bg-blue-900/10 border-blue-300' : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800')
+                    isHidden
+                      ? 'opacity-40 bg-neutral-100/50 dark:bg-neutral-900/20'  // 🌟 隐藏时半透明
+                      : isRedundant 
+                        ? 'bg-red-50/50 dark:bg-red-900/10 border-red-300' 
+                        : (groupInfo?.isMaster 
+                            ? 'bg-blue-50/30 dark:bg-blue-900/10 border-blue-300' 
+                            : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800')
                   }`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
@@ -1175,7 +1189,8 @@ const handleResetNms = (e: React.MouseEvent) => {
                       e.stopPropagation(); 
                       toggleAnnotationVisibility(ann.id); 
                     }}
-                    title={hiddenAnnotations.includes(ann.id) ? "Show object" : "Hide object"}
+                    title={isHidden ? "Show object" : "Hide object"}
+                    // title={hiddenAnnotations.includes(ann.id) ? "Show object" : "Hide object"}
                   >
                     {hiddenAnnotations.includes(ann.id) ? (
                       <EyeOff className="w-3.5 h-3.5" />
