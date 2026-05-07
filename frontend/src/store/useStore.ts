@@ -128,9 +128,9 @@ export const DEFAULT_SHORTCUTS_SETTINGS = {
   _sep2: {key: '__separator__'} as any,
 
   pan: {key:'w'},
-  select: {key:'e', ctrl: true},
-  cut: {key:'q', ctrl: true},
-  cutout: {key:'e', ctrl: true}, 
+  select: {key:'e'},
+  cut: {key:'c'},
+  cutout: {key:'t'}, 
   _sep3: {key: '__separator__'} as any,
 
   home: {key:'space'},
