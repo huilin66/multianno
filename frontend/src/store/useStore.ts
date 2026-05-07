@@ -156,6 +156,7 @@ export interface AppState {
   currentStem: string | null;
   taxonomyClasses: TaxonomyClass[];
   taxonomyAttributes: TaxonomyAttribute[];
+  hiddenClasses: string[];
   annotations: Annotation[];
   activeAnnotationId: string | null;
   isAIPanelOpen: boolean;
@@ -213,6 +214,8 @@ export interface AppState {
   addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
   updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
   deleteTaxonomyAttribute: (id: string) => void;
+  setHiddenClasses: (classes: string[]) => void;
+  toggleClassVisibility: (className: string) => void;
   addAnnotation: (annotation: Annotation) => void;
   updateAnnotation: (id: string, data: Partial<Annotation>) => void;
   removeAnnotation: (id: string) => void;
@@ -257,6 +260,7 @@ export const useStore = create<AppState>()(
       currentStem: null,
       taxonomyClasses: [],
       taxonomyAttributes: [],
+      hiddenClasses: [],
       annotations: [],
       activeAnnotationId: null,
       isAIPanelOpen: false,
@@ -468,6 +472,12 @@ export const useStore = create<AppState>()(
         });
         return { taxonomyAttributes: newAttrs, annotations: newAnnotations };
       }),
+      setHiddenClasses: (classes) => set({ hiddenClasses: classes }),
+      toggleClassVisibility: (className) => set((state) => ({
+        hiddenClasses: state.hiddenClasses.includes(className)
+          ? state.hiddenClasses.filter(c => c !== className)
+          : [...state.hiddenClasses, className]
+      })),
       addAnnotation: (annotation) => set((state) => ({ annotations: [...state.annotations, annotation] })),
       updateAnnotation: (id, data) => set((state) => ({annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a)})),
       removeAnnotation: (id) => set((state) => ({ annotations: state.annotations.filter(a => a.id !== id) })),
@@ -550,7 +560,8 @@ export const useStore = create<AppState>()(
         editorSettings: state.editorSettings,
         shortcutsSettings: state.shortcutsSettings,
         aiSettings: state.aiSettings,
-
+        hiddenClasses: state.hiddenClasses,
+        
         completedViews: state.completedViews,
         savedAlignments: state.savedAlignments, 
 

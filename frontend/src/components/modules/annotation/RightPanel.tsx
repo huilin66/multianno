@@ -43,8 +43,13 @@ export function RightPanel({
     folders, views, annotations, updateAnnotation, removeAnnotation, 
     stems, currentStem, setCurrentStem, taxonomyClasses, taxonomyAttributes, 
     activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta,
-    updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll, addTaxonomyClass
+    updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll, addTaxonomyClass,
+    hiddenClasses, setHiddenClasses, toggleClassVisibility,
   } = useStore() as any;
+
+  const [taxonomyPanelOpen, setTaxonomyPanelOpen] = React.useState(false);
+  const [taxonomyTab, setTaxonomyTab] = React.useState<'classes' | 'attributes'>('classes');
+
   // 🌟 核心修复：智能类别发现引擎 (Auto-Discover Missing Classes)
   // 当导入外部数据后，如果标注中出现了全新未注册的 label，自动将其补全到全局 Taxonomy 中
   React.useEffect(() => {
@@ -82,6 +87,7 @@ export function RightPanel({
   const [expanded, setExpanded] = React.useState({
     layers: true,
     vlm: false,      // VLM 默认收起
+    classes: true,
     editor: true,    // 编辑器默认展开
     objects: true,
     scenes: false    // 场景列表较长，默认收起
@@ -696,6 +702,204 @@ const handleResetNms = (e: React.MouseEvent) => {
           </div>
         )}
 
+        {/* === 🌟 Taxonomy Manager === */}
+        <SectionHeader 
+          title={t('workspace.taxonomy', 'Taxonomy')} 
+          icon={Tag} 
+          isExpanded={expanded.taxonomy} 
+          onToggle={() => toggleSection('taxonomy')} 
+          badge={`${taxonomyClasses?.length || 0}C / ${taxonomyAttributes?.length || 0}A`}
+          colorClass="text-violet-500"
+        />
+
+        {expanded.taxonomy && (
+          <div className="border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30">
+            {/* Tab Switcher */}
+            <div className="flex bg-neutral-100 dark:bg-black/20 p-1 mx-2 mt-2 rounded-lg">
+              <button
+                onClick={() => setTaxonomyTab('classes')}
+                className={`flex-1 text-[10px] font-bold py-1.5 rounded-md transition-all ${
+                  taxonomyTab === 'classes'
+                    ? 'bg-white dark:bg-neutral-800 text-violet-600 dark:text-violet-400 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-700'
+                }`}
+              >
+                Classes ({taxonomyClasses?.length || 0})
+              </button>
+              <button
+                onClick={() => setTaxonomyTab('attributes')}
+                className={`flex-1 text-[10px] font-bold py-1.5 rounded-md transition-all ${
+                  taxonomyTab === 'attributes'
+                    ? 'bg-white dark:bg-neutral-800 text-violet-600 dark:text-violet-400 shadow-sm'
+                    : 'text-neutral-500 hover:text-neutral-700'
+                }`}
+              >
+                Attributes ({taxonomyAttributes?.length || 0})
+              </button>
+            </div>
+
+            {/* === Classes Tab === */}
+            {taxonomyTab === 'classes' && (
+              <div className="max-h-[40vh] overflow-y-auto custom-scrollbar p-2 space-y-1">
+                {/* Quick Actions */}
+                <div className="flex gap-1 mb-2">
+                  <button
+                    onClick={() => setHiddenClasses([])}
+                    className="flex-1 text-[9px] font-bold px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                  >
+                    Show All
+                  </button>
+                  <button
+                    onClick={() => setHiddenClasses(taxonomyClasses?.map((c: any) => c.name) || [])}
+                    className="flex-1 text-[9px] font-bold px-2 py-1 rounded bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
+                  >
+                    Hide All
+                  </button>
+                </div>
+
+                {taxonomyClasses?.map((cls: any) => {
+                  const isHidden = hiddenClasses.includes(cls.name);
+                  const count = currentAnnotations.filter((a: any) => a.label === cls.name).length;
+
+                  return (
+                    <div
+                      key={cls.id}
+                      onClick={() => toggleClassVisibility(cls.name)}
+                      className={`flex items-center gap-3 p-2 rounded-lg border transition-all cursor-pointer ${
+                        isHidden
+                          ? 'bg-neutral-100/50 dark:bg-neutral-900/20 border-neutral-100 dark:border-neutral-800/30 opacity-50'
+                          : 'bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 hover:border-violet-300 dark:hover:border-violet-700'
+                      }`}
+                    >
+                      {/* Color Swatch */}
+                      <div
+                        className="w-4 h-4 rounded-md shrink-0 ring-1 ring-black/10"
+                        style={{ backgroundColor: cls.color || '#3B82F6' }}
+                      />
+                      
+                      {/* Class Name */}
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-[11px] font-medium truncate ${
+                          isHidden 
+                            ? 'text-neutral-400 dark:text-neutral-500' 
+                            : 'text-neutral-700 dark:text-neutral-300'
+                        }`}>
+                          {cls.name}
+                        </div>
+                        {cls.description && (
+                          <div className="text-[9px] text-neutral-400 truncate">{cls.description}</div>
+                        )}
+                      </div>
+
+                      {/* Instance Count */}
+                      <span className={`text-[10px] font-mono shrink-0 px-1.5 py-0.5 rounded-full ${
+                        isHidden
+                          ? 'bg-neutral-100 dark:bg-neutral-800 text-neutral-400'
+                          : 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400'
+                      }`}>
+                        {count}
+                      </span>
+
+                      {/* Eye Toggle */}
+                      <div className={`w-8 h-4 rounded-full relative shrink-0 transition-colors ${
+                        isHidden ? 'bg-neutral-300 dark:bg-neutral-700' : 'bg-violet-500'
+                      }`}>
+                        <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-all ${
+                          isHidden ? 'left-0.5' : 'left-[18px]'
+                        }`} />
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {(!taxonomyClasses || taxonomyClasses.length === 0) && (
+                  <div className="text-center py-6 text-[11px] text-neutral-400">
+                    <Tag className="w-5 h-5 mx-auto mb-2 opacity-50" />
+                    No classes defined yet
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === Attributes Tab === */}
+            {taxonomyTab === 'attributes' && (
+              <div className="max-h-[40vh] overflow-y-auto custom-scrollbar p-2 space-y-2">
+                {taxonomyAttributes?.map((attr: any) => {
+                  // Calculate value distribution for current scene
+                  const valueCounts: Record<string, number> = {};
+                  currentAnnotations.forEach((a: any) => {
+                    const val = a.attributes?.[attr.name] || '(unset)';
+                    valueCounts[val] = (valueCounts[val] || 0) + 1;
+                  });
+
+                  return (
+                    <div
+                      key={attr.id}
+                      className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden"
+                    >
+                      {/* Attribute Header */}
+                      <div className="flex items-center gap-2 p-2.5 bg-neutral-50 dark:bg-black/20 border-b border-neutral-100 dark:border-neutral-800/50">
+                        <Type className="w-3.5 h-3.5 text-amber-500" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-[11px] font-bold text-neutral-700 dark:text-neutral-300 truncate">
+                            {attr.name}
+                          </div>
+                          <div className="text-[9px] text-neutral-400 uppercase">
+                            {attr.type}
+                            {attr.applyToAll && ' · Apply to All'}
+                          </div>
+                        </div>
+                        <span className="text-[9px] font-mono text-neutral-400">
+                          {Object.keys(valueCounts).length} values
+                        </span>
+                      </div>
+
+                      {/* Value Tree */}
+                      <div className="p-1">
+                        {Object.entries(valueCounts)
+                          .sort(([, a], [, b]) => b - a)
+                          .map(([value, count]) => (
+                            <div
+                              key={value}
+                              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors"
+                            >
+                              {/* Tree line */}
+                              <div className="w-3 flex justify-center">
+                                <div className="w-px h-3 bg-neutral-300 dark:bg-neutral-700" />
+                              </div>
+                              
+                              {/* Value name */}
+                              <span className="text-[10px] text-neutral-600 dark:text-neutral-400 truncate flex-1">
+                                {value}
+                              </span>
+                              
+                              {/* Count badge */}
+                              <span className="text-[9px] font-mono text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
+                                {count}
+                              </span>
+                            </div>
+                          ))}
+                      </div>
+
+                      {Object.keys(valueCounts).length === 0 && (
+                        <div className="text-center py-3 text-[10px] text-neutral-400">
+                          No instances in current scene
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {(!taxonomyAttributes || taxonomyAttributes.length === 0) && (
+                  <div className="text-center py-6 text-[11px] text-neutral-400">
+                    <Hash className="w-5 h-5 mx-auto mb-2 opacity-50" />
+                    No attributes defined yet
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
         {/* 3. Global VLM Description */}
         {currentStem && (
           <>
@@ -769,7 +973,7 @@ const handleResetNms = (e: React.MouseEvent) => {
         <SectionHeader 
           title={t('workspace.objects')} icon={Square} 
           isExpanded={expanded.objects} onToggle={() => toggleSection('objects')} 
-          badge={currentAnnotations.length}
+          badge={currentAnnotations.filter((a: any) => !hiddenClasses.includes(a.label)).length}
           actionNode={
             currentAnnotations.length > 0 && (
               <div className="flex items-center gap-1">
@@ -888,7 +1092,9 @@ const handleResetNms = (e: React.MouseEvent) => {
           )}
 
           <div className="max-h-[40vh] overflow-y-auto p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/30 custom-scrollbar">
-            {currentAnnotations.map((ann: any) => {
+            {currentAnnotations
+            .filter((ann: any) => !hiddenClasses.includes(ann.label))
+            .map((ann: any) => {
               const clsDef = taxonomyClasses.find((c: any) => c.name === ann.label);
               const color = clsDef?.color || '#3B82F6';
               const isActive = ann.id === activeAnnotationId;

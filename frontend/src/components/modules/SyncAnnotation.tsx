@@ -54,7 +54,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     setSettingsOpen, aiSettings, setAISettings
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
 
-
+  const hiddenClasses = useStore((s) => (s).hiddenClasses) || [];
   const [promptMode, setPromptMode] = useState<'positive' | 'negative' | 'box'>('positive');
   const [activeAITab, setActiveAITab] = useState<'auto' | 'semi' | 'vqa'>('auto');
   const [isAIPanelOpen, setAIPanelOpen] = useState(false);
@@ -1539,11 +1539,9 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                 
                 <CanvasView 
                   view={view} 
-                  // 🌟 核心修改：如果正在拖拽，就用 tempActiveAnno 临时替换掉原来的对象，实现丝滑渲染
-                  // 🌟 修复：普通的图形拖拽用 annotations 替换，AI 预览则跳过这一步
-                  annotations={tempActiveAnno && tempActiveAnno.id !== 'ai_preview' 
+                  annotations={(tempActiveAnno && tempActiveAnno.id !== 'ai_preview' 
                     ? currentAnnotations.map((a: any) => a.id === tempActiveAnno.id ? tempActiveAnno : a) 
-                    : currentAnnotations}
+                    : currentAnnotations).filter((a: any) => !hiddenClasses.includes(a.label))}
                   activeAnnotationId={activeAnnotationId}
                   taxonomyClasses={taxonomyClasses}
                   currentPoints={currentPoints}
