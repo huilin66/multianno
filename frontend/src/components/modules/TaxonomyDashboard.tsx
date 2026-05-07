@@ -788,7 +788,21 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyClasses.length}</span>
                 </span>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => { setClassSortDir(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? 'manual' : 'asc'); }}
+                  <button onClick={() => { 
+                      const next = classSortDir === 'asc' ? 'desc' : classSortDir === 'desc' ? 'manual' : 'asc';
+                      setClassSortDir(next);
+                      if (next === 'asc') {
+                        const newOrder = [...taxonomyClasses]
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(c => c.id);
+                        setClassOrder(newOrder);
+                      } else if (next === 'desc') {
+                        const newOrder = [...taxonomyClasses]
+                          .sort((a, b) => b.name.localeCompare(a.name))
+                          .map(c => c.id);
+                        setClassOrder(newOrder);
+                      }
+                    }}
                     className="w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400"
                     title={classSortDir === 'asc' ? 'A→Z' : classSortDir === 'desc' ? '手动' : 'Z→A'}
                   >
@@ -885,7 +899,21 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyAttributes.length}</span>
                 </span>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                  <button onClick={() => { setAttrSortDir(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? 'manual' : 'asc'); }}
+                  <button onClick={() => { 
+                      const next = attrSortDir === 'asc' ? 'desc' : attrSortDir === 'desc' ? 'manual' : 'asc';
+                      setAttrSortDir(next);
+                      if (next === 'asc') {
+                        const newOrder = [...taxonomyAttributes]
+                          .sort((a, b) => a.name.localeCompare(b.name))
+                          .map(a => a.id);
+                        setAttributeOrder(newOrder);
+                      } else if (next === 'desc') {
+                        const newOrder = [...taxonomyAttributes]
+                          .sort((a, b) => b.name.localeCompare(a.name))
+                          .map(a => a.id);
+                        setAttributeOrder(newOrder);
+                      }
+                    }}
                     className="w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400"
                     title={attrSortDir === 'asc' ? 'A→Z' : attrSortDir === 'desc' ? 'Z→A' : 'Manual'}
                   >
@@ -1004,9 +1032,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                            data={Object.fromEntries(
                              // 🌟 核心逻辑变更：不依赖后端传来的离散数据，而是遍历前端 Taxonomy 系统里的所有类！
                              // 只要是系统存在的类（包括 background），哪怕没数据也能查出 0 并显示出来。
-                             taxonomyClasses
-                               .map((c: any) => [c.name, statsData?.classes?.[c.name]?.total_objects || 0])
-                               .sort((a:any, b:any) => b[1] - a[1]) // 按数量降序排列
+                             sortedClasses
+                              .map((c: any) => [c.name, statsData?.classes?.[c.name]?.total_objects || 0])
                            )}
                          />
                       </div>
@@ -1271,7 +1298,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         </SelectValue>
                       </SelectTrigger>
                       <SelectContent>
-                        {taxonomyClasses
+                        {sortedClasses
                           .filter((c: any) => c.id !== activeClass.id)
                           .map((c: any) => (
                             <SelectItem key={c.id} value={c.id} className="text-xs">
@@ -1788,7 +1815,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       )}
 
                       {/* 分割线 */}
-                      {taxonomyClasses.some((cls: any) => statsData?.classes?.[cls.name]?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name]) && (
+                      {sortedClasses.some((cls: any) => statsData?.classes?.[cls.name]?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name]) && (
                         <div className="flex items-center gap-3 opacity-50 py-2">
                            <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
                            <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Breakdown by Class</span>
@@ -1797,7 +1824,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       )}
 
                       {/* 2. 遍历各 Class 的分布 */}
-                      {taxonomyClasses.map((cls: any) => {
+                      {sortedClasses.map((cls: any) => {
                         const clsData = statsData?.classes?.[cls.name]?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name];
                         if (!clsData || Object.keys(clsData).length === 0) return null;
 

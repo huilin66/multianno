@@ -53,6 +53,10 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     tempViewSettings, updateAnnotation,
     setSettingsOpen, aiSettings, setAISettings
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
+  const classOrder = useStore((s) => (s as any).classOrder || []);
+  const sortedClasses = [...taxonomyClasses].sort((a: any, b: any) => 
+    classOrder.indexOf(a.id) - classOrder.indexOf(b.id)
+  );
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const hiddenClasses = useStore((s) => (s).hiddenClasses);
@@ -1488,7 +1492,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
         views={views}
         selectedViewId={selectedAIViewId}
         onViewChange={setSelectedAIViewId}
-        taxonomyClasses={taxonomyClasses}
+        taxonomyClasses={sortedClasses}
         aiPrompts={aiPrompts}
         setAiPrompts={setAiPrompts}
         isPredicting={isPredicting}
@@ -1634,7 +1638,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                     .filter((a: any) => !hiddenAnnotations.includes(a.id))
                   }
                   activeAnnotationId={activeAnnotationId}
-                  taxonomyClasses={taxonomyClasses}
+                  taxonomyClasses={sortedClasses}
                   currentPoints={currentPoints}
                   tool={(tool === 'ai_anno' && activeAITab !== 'semi') ? 'pan' : tool}
                   theme={theme}
@@ -1683,7 +1687,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           formAttributes={formAttributes} 
           setFormAttributes={setFormAttributes}
           handleCancelDrawing={handleCancelDrawing} savePendingAnnotationToStore={savePendingAnnotationToStore}
-          taxonomyClasses={taxonomyClasses}
+          taxonomyClasses={sortedClasses}
         />
       )}
       </div>

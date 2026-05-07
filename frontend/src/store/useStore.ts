@@ -449,7 +449,7 @@ export const useStore = create<AppState>()(
         // 只有不存在时，才允许写入
         return { 
           taxonomyClasses: [...state.taxonomyClasses, cls], 
-          classOrder: [...state.classOrder, cls.id], attrSortDir: 'manual' };
+          classOrder: [...state.classOrder, cls.id]};
       }),
       updateTaxonomyClass: (id, updates) => set((state) => {
         const oldClass = state.taxonomyClasses.find(c => c.id === id);
@@ -605,6 +605,8 @@ export const useStore = create<AppState>()(
         currentStem: state.currentStem,
         taxonomyClasses: state.taxonomyClasses,
         taxonomyAttributes: state.taxonomyAttributes,
+        classOrder: state.classOrder,
+        attributeOrder: state.attributeOrder,
         annotations: state.annotations,
         activeAnnotationId: state.activeAnnotationId,
         isAIPanelOpen: state.isAIPanelOpen,

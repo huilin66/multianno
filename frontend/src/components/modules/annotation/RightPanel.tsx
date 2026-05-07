@@ -47,8 +47,15 @@ export function RightPanel({
     stems, currentStem, setCurrentStem, taxonomyClasses, taxonomyAttributes, 
     activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta,
     updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll, addTaxonomyClass,
-    hiddenClasses, setHiddenClasses, toggleClassVisibility,
+    hiddenClasses, setHiddenClasses, toggleClassVisibility, classOrder,
   } = useStore() as any;
+
+  const sortedClasses = React.useMemo(() => 
+    [...(taxonomyClasses || [])].sort((a: any, b: any) => 
+      (classOrder || []).indexOf(a.id) - (classOrder || []).indexOf(b.id)
+    ),
+    [taxonomyClasses, classOrder]
+  );
 
   const [taxonomyPanelOpen, setTaxonomyPanelOpen] = React.useState(false);
   const [taxonomyTab, setTaxonomyTab] = React.useState<'classes' | 'attributes'>('classes');
@@ -146,13 +153,13 @@ export function RightPanel({
     </div>
   );
   const currentAnnotations = annotations.filter((a: any) => a.stem === currentStem);
-// 🌟 新增：重置函数
-const handleResetNms = (e: React.MouseEvent) => {
-  e.stopPropagation();
-  setNmsGroups({});
-  setHasScanned(false);
-  // 这里如果需要通知 Canvas 取消高亮，也可以在此处理
-};
+
+  const handleResetNms = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setNmsGroups({});
+    setHasScanned(false);
+    // 这里如果需要通知 Canvas 取消高亮，也可以在此处理
+  };
 
 // 工具 1：提取对象的 BBox (兼容各类图形)
   const getBBoxFromPoints = (points: {x: number, y: number}[]) => {
@@ -763,7 +770,7 @@ const handleResetNms = (e: React.MouseEvent) => {
                   </button>
                 </div>
 
-                {taxonomyClasses?.map((cls: any) => {
+                {sortedClasses.map((cls: any) => {
                   const isHidden = hiddenClasses.includes(cls.name);
                   const count = currentAnnotations.filter((a: any) => a.label === cls.name).length;
 
@@ -983,7 +990,7 @@ const handleResetNms = (e: React.MouseEvent) => {
                         occluded={!!activeAnno.occluded} onOccludedChange={(val) => updateAnnotation(activeAnno.id, { occluded: val })}
                         truncated={!!activeAnno.truncated} onTruncatedChange={(val) => updateAnnotation(activeAnno.id, { truncated: val })}
                         attributes={activeAnno.attributes || {}} onAttributesChange={(val) => updateAnnotation(activeAnno.id, { attributes: val })}
-                        taxonomyClasses={taxonomyClasses} taxonomyAttributes={taxonomyAttributes} activeColor={activeColor}
+                        taxonomyClasses={sortedClasses} taxonomyAttributes={taxonomyAttributes} activeColor={activeColor}
                       />
                     </div>
                   );
