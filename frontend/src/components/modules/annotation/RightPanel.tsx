@@ -711,7 +711,6 @@ const handleResetNms = (e: React.MouseEvent) => {
           icon={Tag} 
           isExpanded={expanded.taxonomy} 
           onToggle={() => toggleSection('taxonomy')} 
-          badge={`${taxonomyClasses?.length || 0}C / ${taxonomyAttributes?.length || 0}A`}
           colorClass="text-violet-500"
         />
 
