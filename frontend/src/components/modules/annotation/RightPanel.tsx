@@ -1159,6 +1159,10 @@ export function RightPanel({
                 <div 
                   key={ann.id} 
                   onClick={() => setActiveAnnotationId(ann.id)}
+                  onDoubleClick={() => {
+                    setActiveAnnotationId(ann.id);
+                    setExpanded(prev => ({ ...prev, editor: true }));
+                  }}
                   className={`group p-2 rounded border text-[11px] flex items-center justify-between transition-all h-[40px] ${
                     isHidden
                       ? 'opacity-40 bg-neutral-100/50 dark:bg-neutral-900/20'
