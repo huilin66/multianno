@@ -75,7 +75,12 @@ export function ClassFormPopover({
       <div className="p-3">
         {/* 🌟 复用封装好的表单组件 */}
         <ObjectEditorForm 
-          label={formLabel} onLabelChange={setFormLabel}
+          label={formLabel} 
+          onLabelChange={(val) => {
+            if (val !== formLabel) {
+              setFormLabel(val);
+            }
+          }}
           text={formText} onTextChange={setFormText}
           groupId={formGroupId} onGroupIdChange={setFormGroupId}
           trackId={formTrackId} onTrackIdChange={setFormTrackId}
