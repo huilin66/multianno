@@ -97,28 +97,35 @@ export function ObjectEditorForm({
       </div>
 
       {/* Attributes */}
-      {taxonomyAttributes && taxonomyAttributes.length > 0 && (
-        <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
-          <Label className="text-[10px] text-neutral-400 mb-2 block uppercase tracking-wider">Attributes</Label>
-          <div className="space-y-1.5 max-h-[100px] overflow-y-auto custom-scrollbar pr-1">
-            {taxonomyAttributes.map((attr: any) => (
-              <div key={attr.id} className="flex items-center gap-2 bg-neutral-50 dark:bg-black/40 px-2 py-1 rounded border border-neutral-100 dark:border-neutral-800/50">
-                <span className="text-[11px] text-neutral-500 truncate w-16 shrink-0">{attr.name}</span>
-                {attr.options ? (
-                  <Select value={attributes[attr.name] || ''} onValueChange={(val) => onAttributesChange({ ...attributes, [attr.name]: val })}>
-                    <SelectTrigger className="h-6 text-[10px] flex-1 bg-white dark:bg-neutral-900"><SelectValue placeholder="Select..." /></SelectTrigger>
-                    <SelectContent>
-                      {attr.options.map((opt: string) => <SelectItem key={opt} value={opt} className="text-[10px]">{opt}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input value={attributes[attr.name] || ''} onChange={(e) => onAttributesChange({ ...attributes, [attr.name]: e.target.value })} className="h-6 text-[10px] flex-1 bg-white dark:bg-neutral-900" />
-                )}
-              </div>
+      
+      <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
+        <Label className="text-[10px] text-neutral-400 mb-2 block uppercase tracking-wider">Attributes</Label>
+          {taxonomyAttributes && taxonomyAttributes.length > 0 ? (
+            <div className="space-y-1.5 max-h-[100px] overflow-y-auto custom-scrollbar pr-1">
+              {taxonomyAttributes.map((attr: any) => (
+                <div key={attr.id} className="flex items-center gap-2 bg-neutral-50 dark:bg-black/40 px-2 py-1 rounded border border-neutral-100 dark:border-neutral-800/50">
+                  <span className="text-[11px] text-neutral-500 truncate w-16 shrink-0">{attr.name}</span>
+                  {attr.options ? (
+                    <Select value={attributes[attr.name] || ''} onValueChange={(val) => onAttributesChange({ ...attributes, [attr.name]: val })}>
+                      <SelectTrigger className="h-6 text-[10px] flex-1 bg-white dark:bg-neutral-900"><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectContent>
+                        {attr.options.map((opt: string) => <SelectItem key={opt} value={opt} className="text-[10px]">{opt}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input value={attributes[attr.name] || ''} onChange={(e) => onAttributesChange({ ...attributes, [attr.name]: e.target.value })} className="h-6 text-[10px] flex-1 bg-white dark:bg-neutral-900" />
+                  )}
+                </div>
             ))}
           </div>
-        </div>
-      )}
+          ) : (
+          <div className="text-center py-2 text-[10px] text-neutral-400 border border-dashed border-neutral-200 dark:border-neutral-700 rounded">
+            No attributes defined
+          </div>
+        )}
+      </div>
+      
+
     </div>
   );
 }
