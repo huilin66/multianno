@@ -111,7 +111,7 @@ export function RightPanel({
   // 核心数据结构：{ annoId: { groupName: 'OP_1', isMaster: boolean } }
   const [nmsGroups, setNmsGroups] = React.useState<Record<string, { groupName: string, isMaster: boolean }>>({});
   const [hasScanned, setHasScanned] = React.useState(false);
-
+  const [showHiddenObjects, setShowHiddenObjects] = React.useState(false);
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
@@ -1006,7 +1006,21 @@ export function RightPanel({
           badge={currentAnnotations.filter((a: any) => !hiddenClasses.includes(a.label)).length}
           actionNode={
             currentAnnotations.length > 0 && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1">{/* 🌟 显示/隐藏已隐藏的对象 */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowHiddenObjects(prev => !prev);
+                }}
+                className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                  showHiddenObjects 
+                    ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40' 
+                    : 'text-neutral-400 hover:text-amber-500'
+                }`}
+                title={showHiddenObjects ? "Hide hidden objects" : "Show hidden objects"}
+              >
+                {showHiddenObjects ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              </button>
               <button
                   onClick={(e) => { e.stopPropagation(); setNmsPanelOpen(!nmsPanelOpen); }}
                   className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${nmsPanelOpen || hasScanned ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40' : 'text-neutral-400 hover:text-blue-500'}`}
@@ -1123,7 +1137,7 @@ export function RightPanel({
 
           <div className="max-h-[40vh] overflow-y-auto p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/30 custom-scrollbar max-h-[228px]">
             {currentAnnotations
-            // .filter((ann: any) => !hiddenClasses.includes(ann.label))
+            .filter((ann: any) => showHiddenObjects || !hiddenClasses.includes(ann.label))
             .map((ann: any) => {
               const clsDef = taxonomyClasses.find((c: any) => c.name === ann.label);
               const color = clsDef?.color || '#3B82F6';
