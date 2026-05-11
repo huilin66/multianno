@@ -482,3 +482,25 @@ export const repairData = async (saveDirs: string[], repairTypes: string[] = ['s
   }
   return response.json();
 };
+
+// 🌟 合并类并设置属性
+export async function batchMergeClassWithAttribute(params: {
+  save_dirs: string[];
+  merges: {
+    old_name: string;
+    new_name: string;
+    attribute_name: string;
+    attribute_value: string;
+  }[];
+}): Promise<{ modified_files: number; total_objects: number }> {
+  const res = await fetch(`${API_BASE_URL}/taxonomy/merge_with_attribute`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err.detail || 'Merge with attribute failed');
+  }
+  return res.json();
+}

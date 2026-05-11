@@ -225,6 +225,7 @@ export interface AppState {
   updateTaxonomyClass: (id: string, updates: Partial<TaxonomyClass>) => void;
   deleteTaxonomyClass: (id: string, deleteAnnotations: boolean) => void;
   mergeTaxonomyClasses: (sourceIds: string[], targetId: string) => void;
+  mergeTaxonomyClassesWithAttributes: (merges: { old_name: string; new_name: string; attribute_name: string; attribute_value: string }[]) => void;
   addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
   updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
   deleteTaxonomyAttribute: (id: string) => void;
@@ -510,6 +511,43 @@ export const useStore = create<AppState>()(
           taxonomyClasses: newClasses, 
           annotations: newAnnotations,
           classOrder: state.classOrder.filter(cid => !deletedIds.includes(cid)),
+        };
+      }),
+      mergeTaxonomyClassesWithAttributes: (
+        merges: { old_name: string; new_name: string; attribute_name: string; attribute_value: string }[]
+      ) => set((state) => {
+        const oldNames = merges.map(m => m.old_name);
+        
+        const newAnnotations = state.annotations.map(a => {
+          const match = merges.find(m => m.old_name === a.label);
+          if (match) {
+            return {
+              ...a,
+              label: match.new_name,
+              attributes: {
+                ...a.attributes,
+                [match.attribute_name]: match.attribute_value,
+              },
+            };
+          }
+          return a;
+        });
+        
+        const newClassNames = merges.map(m => m.new_name);
+
+        const classesToRemove = state.taxonomyClasses.filter(
+          c => oldNames.includes(c.name) && !newClassNames.includes(c.name)
+        );
+        const newClasses = state.taxonomyClasses.filter(
+          c => !classesToRemove.find(rc => rc.id === c.id)
+        );
+        
+        return {
+          annotations: newAnnotations,
+          taxonomyClasses: newClasses,
+          classOrder: state.classOrder.filter(
+            id => !classesToRemove.find(c => c.id === id)
+          ),
         };
       }),
       addTaxonomyAttribute: (attr) => set((state) => ({ 

@@ -13,6 +13,7 @@ from models import (
     BatchDeleteAttributeRequest,
     BatchDeleteClassRequest,
     BatchMergeClassRequest,
+    MergeWithAttributeRequest,
     RepairRequest,
     StatRequest,
 )
@@ -610,3 +611,90 @@ def _repair_stems(save_dirs: list) -> dict:
                 print(f"❌ [Repair] Failed on {fpath}: {e}")
 
     return {"scanned": scanned, "fixed": fixed, "fixed_files": fixed_files}
+
+
+@router.post("/merge_with_attribute")
+async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
+    modified_count = 0
+    total_objects = 0
+
+    import traceback  # 🌟 确保导入
+
+    # 🌟 构建快速查找字典
+    merge_map = {}
+    for m in request.merges:
+        # 兼容 Pydantic 对象和 dict
+        old_name = m.old_name if hasattr(m, "old_name") else m["old_name"]
+        merge_map[old_name] = m
+
+    print(f"\n{'=' * 50}")
+    print(f"🔀 [Merge with Attribute] Processing {len(request.merges)} merge rules")
+    print(f"{'=' * 50}")
+
+    for folder in request.save_dirs:
+        if not os.path.exists(folder):
+            print(f"⚠️  Folder not found: {folder}")
+            continue
+
+        for file_name in os.listdir(folder):
+            if not file_name.endswith(".json") or file_name.endswith("_meta.json"):
+                continue
+
+            file_path = os.path.join(folder, file_name)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    anno_data = json.load(f)
+
+                changed = False
+                file_objects_updated = 0
+
+                for shape in anno_data.get("shapes", []):
+                    label = shape.get("label", "")
+
+                    if label in merge_map:
+                        merge = merge_map[label]
+
+                        # 🌟 兼容 Pydantic 和 dict
+                        if hasattr(merge, "new_name"):
+                            new_name = merge.new_name
+                            attr_name = merge.attribute_name
+                            attr_value = merge.attribute_value
+                        else:
+                            new_name = merge["new_name"]
+                            attr_name = merge["attribute_name"]
+                            attr_value = merge["attribute_value"]
+
+                        old_attr = shape.get("attributes", {}).get(
+                            attr_name, "<not set>"
+                        )
+
+                        shape["label"] = new_name
+                        if "attributes" not in shape:
+                            shape["attributes"] = {}
+                        shape["attributes"][attr_name] = attr_value
+
+                        print(
+                            f"   ✅ {file_name}: '{label}' → '{new_name}' | "
+                            f"{attr_name}: '{old_attr}' → '{attr_value}'"
+                        )
+
+                        changed = True
+                        file_objects_updated += 1
+
+                if changed:
+                    with open(file_path, "w", encoding="utf-8") as f:
+                        json.dump(anno_data, f, indent=2, ensure_ascii=False)
+                    modified_count += 1
+                    total_objects += file_objects_updated
+
+            except Exception as e:
+                print(f"❌ Error processing {file_path}: {e}")
+                traceback.print_exc()
+
+    print(f"\n✅ Done! Modified {modified_count} files, {total_objects} objects.")
+
+    return {
+        "status": "success",
+        "modified_files": modified_count,
+        "total_objects": total_objects,
+    }

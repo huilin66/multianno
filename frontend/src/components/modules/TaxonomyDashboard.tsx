@@ -1,15 +1,17 @@
 // src/components/modules/TaxonomyDashboard.tsx
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
   Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser, Wrench,
   Plus, Check, X, Loader2, AlertCircle, Upload, Database, Activity,
-  List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, Layers, ShieldCheck
+  List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, 
+  Layers, ShieldCheck, CheckSquare, Square
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { batchMergeClass, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute } from '../../api/client';
+import { Label } from '../ui/label';
+import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 import { useDialogStore } from '../../store/useDialogStore';
@@ -359,7 +361,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
-    folders, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder
+    folders, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
+    mergeTaxonomyClassesWithAttributes
   } = useStore() as any;
 
   const openDialog = useDialogStore((s) => s.openDialog);
@@ -391,8 +394,180 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [newClassName, setNewClassName] = useState('');
   const [isAddingClass, setIsAddingClass] = useState(false);
 
+  const [showMergeWithAttr, setShowMergeWithAttr] = useState(false);
+  const [mergeSourceClassIds, setMergeSourceClassIds] = useState<Set<string>>(new Set());
+  const [mergeAttrName, setMergeAttrName] = useState('');
+  const [mergeAttrValues, setMergeAttrValues] = useState<Record<string, string>>({}); // classId → value
+
   const [classSortDir, setClassSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
   const [attrSortDir, setAttrSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
+
+  const [targetMode, setTargetMode] = useState<'new' | 'existing'>('new');
+  const [newTargetClassName, setNewTargetClassName] = useState('');
+  const [existingTargetId, setExistingTargetId] = useState('');
+
+  const allMergedClasses = useMemo(() => {
+    if (!showMergeWithAttr) return [];
+    
+    const classes = new Map<string, any>();
+    
+    // 添加 activeClass（当前选中的类）
+    if (activeClass) {
+      classes.set(activeClass.id, activeClass);
+    }
+    
+    // 添加已勾选的源类
+    for (const sourceId of mergeSourceClassIds) {
+      const cls = taxonomyClasses.find((c: any) => c.id === sourceId);
+      if (cls) classes.set(cls.id, cls);
+    }
+    
+    // 如果选择了已有 target，也加入映射列表
+    if (targetMode === 'existing' && existingTargetId) {
+      const targetCls = taxonomyClasses.find((c: any) => c.id === existingTargetId);
+      if (targetCls && !classes.has(targetCls.id)) {
+        classes.set(targetCls.id, targetCls);
+      }
+    }
+    
+    // 如果是新建 target，加入临时对象
+    if (targetMode === 'new' && newTargetClassName.trim()) {
+      classes.set('__new_target__', {
+        id: '__new_target__',
+        name: newTargetClassName.trim(),
+        color: activeClass?.color || '#6366f1',
+      });
+    }
+    
+    return Array.from(classes.values());
+  }, [showMergeWithAttr, activeClass, mergeSourceClassIds, existingTargetId, targetMode, newTargetClassName, taxonomyClasses]);
+
+  // 🌟 只包含源类，不包括 target
+  const allSourceClasses = useMemo(() => {
+    if (!showMergeWithAttr || !activeClass) return [];
+    
+    const classes = new Map<string, any>();
+    
+    // 添加当前 active class
+    classes.set(activeClass.id, activeClass);
+    
+    // 添加已勾选的额外源类
+    for (const sourceId of mergeSourceClassIds) {
+      const cls = taxonomyClasses.find((c: any) => c.id === sourceId);
+      if (cls) classes.set(cls.id, cls);
+    }
+    
+    return Array.from(classes.values());
+  }, [showMergeWithAttr, activeClass, mergeSourceClassIds, taxonomyClasses]);
+
+  const executeMergeWithAttribute = async () => {
+    if (!activeClass) return;
+    
+    const sourceClasses = allSourceClasses;
+    
+    if (sourceClasses.length === 0 || !mergeAttrName.trim() || !newTargetClassName.trim()) return;
+
+    const targetClassName = newTargetClassName.trim();
+
+    // 验证每个源类都必须选择了 attribute value
+    for (const cls of sourceClasses) {
+      const value = mergeAttrValues[cls.id]?.trim();
+      if (!value) {
+        openDialog({
+          type: 'warning',
+          title: 'Missing Value',
+          description: `Please select the "${mergeAttrName}" value for "${cls.name}".`,
+          confirmText: 'Got it',
+          hideCancel: true,
+        });
+        return;
+      }
+    }
+
+    const merges = sourceClasses.map(cls => ({
+      old_name: cls.name,
+      new_name: targetClassName,
+      attribute_name: mergeAttrName.trim(),
+      attribute_value: mergeAttrValues[cls.id].trim(),
+    }));
+    
+    setIsProcessing(true);
+    try {
+      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      
+      await batchMergeClassWithAttribute({
+        save_dirs: safeSaveDirs,
+        merges,
+      });
+      
+      // 🌟 关键修复：手动更新 annotations 中的 attributes
+      const state = useStore.getState();
+      const mergeMap = new Map(merges.map(m => [m.old_name, m]));
+      
+      const updatedAnnotations = state.annotations.map((ann: any) => {
+        const merge = mergeMap.get(ann.label) as {
+          old_name: string;
+          new_name: string;
+          attribute_name: string;
+          attribute_value: string;
+        } | undefined;
+        if (!merge) return ann;
+        return {
+          ...ann,
+          label: merge.new_name,
+          attributes: {
+            ...(ann.attributes || {}),
+            [merge.attribute_name]: merge.attribute_value,
+          },
+        };
+      });
+      
+      // 直接更新 Store 的 annotations
+      useStore.setState({ annotations: updatedAnnotations });
+      
+      // 在本地 Store 中创建新的 target class
+      const newClassId = `class-${Date.now()}`;
+      const targetColor = activeClass?.color || TAXONOMY_COLORS[taxonomyClasses.length % TAXONOMY_COLORS.length];
+      
+      addTaxonomyClass({
+        id: newClassId,
+        name: targetClassName,
+        color: targetColor,
+      });
+      
+      // 合并所有源类到新类（这个调用会再次更新 annotations，但我们已经在上面手动更新过了）
+      const sourceNames = sourceClasses.map(c => c.name);
+      mergeTaxonomyClasses(sourceNames, targetClassName);
+      
+      useStore.getState().setStatsCacheValid?.(false);
+      
+      // 重置弹窗状态
+      setShowMergeWithAttr(false);
+      setMergeSourceClassIds(new Set());
+      setMergeAttrValues({});
+      setMergeAttrName('');
+      setNewTargetClassName('');
+      setSelectedClassId(newClassId);
+      
+      openDialog({
+        type: 'success',
+        title: 'Merge Complete',
+        description: `Merged ${merges.length} classes into "${targetClassName}" with attribute "${mergeAttrName}".`,
+        confirmText: 'Done',
+        hideCancel: true,
+      });
+    } catch (err: any) {
+      openDialog({
+        type: 'danger',
+        title: 'Merge Failed',
+        description: err.message,
+        confirmText: 'OK',
+        hideCancel: true,
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   // 监听切换属性时，清空草稿
   useEffect(() => {
@@ -1339,8 +1514,18 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                           <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge
                         </Button>
                       )}
-                    </div>
-
+                  </div>
+                  {/* 🌟 新增：带属性的合并入口 */}
+                  {activeClass && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 px-3 text-[10px] border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-400"
+                      onClick={() => setShowMergeWithAttr(true)}
+                    >
+                      <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge with Attr
+                    </Button>
+                  )}
                   <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
 
                     {/* 🌟 Delete 模块：仅对 background 锁定 */}
@@ -1906,6 +2091,221 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
           {t('common.confirm', 'Confirm & Close')}
         </Button>
       </div>
+    
+    {/* 🌟 合并弹窗 - 只能选已有 attribute 和已有值 */}
+{showMergeWithAttr && activeClass && (
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 w-[550px] max-h-[85vh] shadow-2xl border border-neutral-200 dark:border-neutral-800 flex flex-col">
+      <div className="flex items-center gap-3 mb-4 shrink-0">
+        <GitMerge className="w-6 h-6 text-purple-500" />
+        <h3 className="font-black text-lg">Merge Classes & Track Origin</h3>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-5 custom-scrollbar pr-1">
+        
+        {/* ========== 1. 源类选择区 ========== */}
+        <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800/50">
+          <p className="text-[10px] font-black text-amber-700 dark:text-amber-500 uppercase mb-2">
+            Source Classes ({allSourceClasses.length} selected)
+          </p>
+          <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+            {/* 当前 active class（固定参与） */}
+            <div className="flex items-center gap-2 p-2 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">
+              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: activeClass.color }} />
+              <span className="text-xs font-bold">{activeClass.name}</span>
+              <span className="ml-auto text-[9px] text-amber-600 font-bold uppercase">Selected</span>
+            </div>
+            {/* 其他可选类 */}
+            {sortedClasses
+              .filter((c: any) => c.id !== activeClass?.id)
+              .map((c: any) => {
+                const isSelected = mergeSourceClassIds.has(c.id);
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => {
+                      const next = new Set(mergeSourceClassIds);
+                      if (isSelected) {
+                        next.delete(c.id);
+                        const nextValues = { ...mergeAttrValues };
+                        delete nextValues[c.id];
+                        setMergeAttrValues(nextValues);
+                      } else {
+                        next.add(c.id);
+                      }
+                      setMergeSourceClassIds(next);
+                    }}
+                    className={`flex items-center gap-2 p-2 rounded cursor-pointer text-xs transition-colors ${
+                      isSelected
+                        ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
+                        : 'hover:bg-neutral-50 dark:hover:bg-neutral-800 border border-transparent'
+                    }`}
+                  >
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
+                    <span className="flex-1 font-medium">{c.name}</span>
+                    {isSelected ? (
+                      <CheckSquare className="w-4 h-4 text-blue-500" />
+                    ) : (
+                      <Square className="w-4 h-4 text-neutral-300" />
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        </div>
+
+        {/* ========== 2. 新类名输入区 ========== */}
+        <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-lg border border-green-200 dark:border-green-800/50">
+          <p className="text-[10px] font-black text-green-700 dark:text-green-500 uppercase mb-2">
+            ✨ New Class Name
+          </p>
+          <Input
+            value={newTargetClassName}
+            onChange={e => setNewTargetClassName(e.target.value)}
+            placeholder="e.g. crack"
+            className="h-9 text-sm font-bold"
+          />
+          {newTargetClassName.trim() && taxonomyClasses.some((c: any) => c.name.toLowerCase() === newTargetClassName.trim().toLowerCase()) && (
+            <p className="text-[9px] text-amber-600 mt-1">
+              ⚠️ A class with this name already exists. All shapes will be merged into it.
+            </p>
+          )}
+        </div>
+
+        {/* ========== 3. Attribute 选择区（只能选已有，值也只能选已有） ========== */}
+        <div className="bg-purple-50 dark:bg-purple-950/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800/50">
+          <p className="text-[10px] font-black text-purple-700 dark:text-purple-500 uppercase mb-2">
+            Track Origin With Attribute
+          </p>
+          <p className="text-[9px] text-neutral-500 mb-3">
+            Select an existing attribute to record which class each shape came from.
+          </p>
+          
+          {/* 🌟 Step 1: 选择 Attribute */}
+          <div className="mb-4">
+            <Label className="text-[10px] font-bold text-neutral-500 uppercase">1. Select Attribute</Label>
+            <Select value={mergeAttrName} onValueChange={(v) => {
+              setMergeAttrName(v);
+              // 🌟 切换 attribute 时，清空之前的值
+              setMergeAttrValues({});
+            }}>
+              <SelectTrigger className="h-9 text-sm mt-1">
+                <SelectValue placeholder="Choose an existing attribute..." />
+              </SelectTrigger>
+              <SelectContent>
+                {taxonomyAttributes.map((a: any) => (
+                  <SelectItem key={a.id} value={a.name}>
+                    <span className="flex items-center gap-2">
+                      <Settings className="w-3 h-3 text-purple-400" />
+                      {a.name}
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {taxonomyAttributes.length === 0 && (
+              <p className="text-[9px] text-amber-500 mt-1">
+                No attributes defined. Please create one in the Attributes tab first.
+              </p>
+            )}
+          </div>
+
+          {/* 🌟 Step 2: 为每个源类选择已有的 attribute value */}
+          {mergeAttrName && allSourceClasses.length > 0 && (() => {
+            // 🌟 获取该 attribute 的可选值列表
+            const selectedAttr = taxonomyAttributes.find((a: any) => a.name === mergeAttrName);
+            const availableValues: string[] = selectedAttr?.options || [];
+            
+            return (
+              <div>
+                <Label className="text-[10px] font-bold text-neutral-500 uppercase mb-1">
+                  2. Set Values for Each Class ({allSourceClasses.length} classes)
+                </Label>
+                
+                {availableValues.length === 0 ? (
+                  <p className="text-[9px] text-amber-500">
+                    Attribute "{mergeAttrName}" has no defined values. Please add options in the Attributes tab.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 mt-1 max-h-48 overflow-y-auto custom-scrollbar">
+                    {allSourceClasses.map((cls: any) => (
+                      <div
+                        key={cls.id}
+                        className="flex items-center gap-2 p-2 rounded border bg-white dark:bg-neutral-800 border-neutral-100 dark:border-neutral-700"
+                      >
+                        <div
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: cls.color }}
+                        />
+                        <span className="text-xs font-medium w-28 truncate">{cls.name}</span>
+                        <span className="text-[10px] text-neutral-400">→</span>
+                        
+                        {/* 🌟 核心修改：用 Select 替代 Input，只能选已有值 */}
+                        <Select
+                          value={mergeAttrValues[cls.id] || ''}
+                          onValueChange={(v) =>
+                            setMergeAttrValues(prev => ({
+                              ...prev,
+                              [String(cls.id)]: v,
+                            }))
+                          }
+                        >
+                          <SelectTrigger className="flex-1 h-7 text-xs">
+                            <SelectValue placeholder="Select value..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {availableValues.map((val: string) => (
+                              <SelectItem key={val} value={val} className="text-xs">
+                                {val}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      </div>
+
+      {/* ========== 底部按钮 ========== */}
+      <div className="flex justify-end items-center gap-2 mt-6 pt-4 border-t border-neutral-100 dark:border-neutral-800 shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setShowMergeWithAttr(false);
+            setMergeSourceClassIds(new Set());
+            setMergeAttrValues({});
+            setMergeAttrName('');
+            setNewTargetClassName('');
+          }}
+        >
+          Cancel
+        </Button>
+        <Button
+          size="sm"
+          className="bg-purple-600 hover:bg-purple-700 text-white font-bold"
+          onClick={executeMergeWithAttribute}
+          disabled={
+            !mergeAttrName.trim() ||
+            !newTargetClassName.trim() ||
+            allSourceClasses.length === 0 ||
+            isProcessing ||
+            allSourceClasses.some((cls: any) => !mergeAttrValues[cls.id]?.trim())
+          }
+        >
+          {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+          Merge into "{newTargetClassName || '...'}"
+        </Button>
+      </div>
+    </div>
+  </div>
+)}
+    
     </div>
   );
 }
