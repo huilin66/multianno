@@ -543,19 +543,22 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
             }
          }
       }
-
+      // 🌟 过滤掉隐藏的标注
+      const visibleAnnotations = currentAnnotations.filter(
+        (a: any) => !hiddenClasses.includes(a.label) && !hiddenAnnotations.includes(a.id)
+      );
       // 🌟 第二层检测：常规选中逻辑 (点击图形主体进行选中)
-      let clickedId = null;
-      for (let i = currentAnnotations.length - 1; i >= 0; i--) {
-        const ann = currentAnnotations[i];
+      let hitIds: string[] = [];
+      for (let i = visibleAnnotations.length - 1; i >= 0; i--) {
+        const ann = visibleAnnotations[i];
         
-        // 1. 矩形、椭圆、圆 (面积法)
+        // 1. 矩形、椭圆、圆
         if (ann.type === 'bbox' || ann.type === 'ellipse' || ann.type === 'circle') {
           const [p1, p2] = ann.points;
           const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
           const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
           if (mainX >= minX && mainX <= maxX && mainY >= minY && mainY <= maxY) {
-            clickedId = ann.id; break;
+            hitIds.push(ann.id);
           }
         } 
         // 2. 多边形、旋转框、3D立方体 (射线法)
@@ -567,9 +570,9 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
             const intersect = ((yi > mainY) !== (yj > mainY)) && (mainX < (xj - xi) * (mainY - yi) / (yj - yi) + xi);
             if (intersect) inside = !inside;
           }
-          if (inside) { clickedId = ann.id; break; }
+          if (inside) hitIds.push(ann.id);
         }
-        // 3. 线段、套索 (点到线段投影距离)
+        // 3. 线段
         else if (ann.type === 'line') {
           let hit = false;
           for (let j = 0; j < ann.points.length - 1; j++) {
@@ -577,28 +580,32 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
             const l2 = Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2);
             let t = l2 === 0 ? 0 : ((mainX - p1.x) * (p2.x - p1.x) + (mainY - p1.y) * (p2.y - p1.y)) / l2;
             t = Math.max(0, Math.min(1, t)); 
-            const projX = p1.x + t * (p2.x - p1.x);
-            const projY = p1.y + t * (p2.y - p1.y);
+            const projX = p1.x + t * (p2.x - p1.x), projY = p1.y + t * (p2.y - p1.y);
             if (Math.hypot(mainX - projX, mainY - projY) < 6 / viewport.zoom) { hit = true; break; }
           }
-          if (hit) { clickedId = ann.id; break; }
+          if (hit) hitIds.push(ann.id);
         }
-        // 4. 单点 (距离计算)
+        // 4. 单点
         else if (ann.type === 'point') {
           if (ann.points.length > 0 && Math.hypot(mainX - ann.points[0].x, mainY - ann.points[0].y) < 8 / viewport.zoom) {
-            clickedId = ann.id; break;
+            hitIds.push(ann.id);
           }
         }
       }
 
-      // 执行选中状态变更
-      setActiveAnnotationId(clickedId);
-      
-      // 如果什么都没点中，进入漫游模式
-      if (!clickedId) {
-        setIsPanning(true);
-        setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
+      // 🌟 如果有命中，循环切换
+      if (hitIds.length > 0) {
+        const currentIdx = hitIds.indexOf(activeAnnotationId);
+        // 如果当前选中的在命中列表中，切到下一个；否则选第一个
+        const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % hitIds.length : 0;
+        setActiveAnnotationId(hitIds[nextIdx]);
+        return;
       }
+
+      // 什么都没点中 → 取消选中，进入漫游
+      setActiveAnnotationId(null);
+      setIsPanning(true);
+      setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
       return;
     }
     // 2. 漫游拦截
