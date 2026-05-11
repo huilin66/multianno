@@ -10,7 +10,7 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, Route, EyeOff, Check, X, Scan, AlertCircle, Copy
+  Tag, Type, Hash, Route, EyeOff, Check, X, Scan, MapPin, Copy
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -47,7 +47,7 @@ export function RightPanel({
     stems, currentStem, setCurrentStem, taxonomyClasses, taxonomyAttributes, 
     activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta,
     updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll, addTaxonomyClass,
-    hiddenClasses, setHiddenClasses, toggleClassVisibility, classOrder,
+    hiddenClasses, setHiddenClasses, toggleClassVisibility, classOrder, viewport, setViewport,
   } = useStore() as any;
 
   const sortedClasses = React.useMemo(() => 
@@ -274,6 +274,40 @@ export function RightPanel({
     setNmsPanelOpen(false);
   };
 
+  const zoomToAnnotation = (ann: any) => {
+    if (!ann.points || ann.points.length === 0) return;
+    
+    // 计算包围盒
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    ann.points.forEach((p: any) => {
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x > maxX) maxX = p.x;
+      if (p.y > maxY) maxY = p.y;
+    });
+    
+    const objW = maxX - minX;
+    const objH = maxY - minY;
+    const objCX = (minX + maxX) / 2;
+    const objCY = (minY + maxY) / 2;
+    
+    // 找 Canvas 尺寸
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return;
+    const viewW = canvas.clientWidth;
+    const viewH = canvas.clientHeight;
+    
+    // 计算缩放比（留 20% 边距）
+    const padding = 0.8;
+    const zoom = Math.min((viewW * padding) / objW, (viewH * padding) / objH, 10);
+    
+    // 居中
+    const panX = (viewW / 2) - objCX * zoom;
+    const panY = (viewH / 2) - objCY * zoom;
+    
+    setViewport(zoom, panX, panY);
+    setActiveAnnotationId(ann.id);
+  };
   return (
     <div className="w-80 h-full border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-xl z-10">
 
@@ -1208,6 +1242,18 @@ export function RightPanel({
 
                   {/* 🌟 紧凑操作按钮组：眼睛 + 删除 — 始终可见 */}
                 <div className="flex items-center gap-0.5 shrink-0">
+                  {/* 定位按钮 */}
+                  <Button 
+                    variant="ghost" size="icon" 
+                    className="w-6 h-6 text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-all"
+                    onClick={(e) => { 
+                      e.stopPropagation();
+                      zoomToAnnotation(ann);
+                    }}
+                    title="Zoom to object"
+                  >
+                    <MapPin className="w-3.5 h-3.5" />
+                  </Button>
                   {/* 眼睛开关 */}
                   <Button 
                     variant="ghost" size="icon" 
