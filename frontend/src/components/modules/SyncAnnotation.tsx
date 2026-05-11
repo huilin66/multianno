@@ -270,6 +270,8 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
       
       // 手动保存
       if (matchedTool === 'save') { autoSave(); return; }
+      if (matchedTool === 'delete') { handleDelete(); return; }
+      if (matchedTool === 'clear') { handleClear(); return; }
 
       // 工具切换
       handleToolChange(matchedTool);
@@ -993,6 +995,19 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     performGlobalRedo();
   }, [tool, undonePoints, performGlobalRedo]);
   
+  const handleDelete = () => {
+    const state = useStore.getState();
+    const id = state.activeAnnotationId;
+    if (id) {
+      state.removeAnnotation(id);
+      state.setActiveAnnotationId(null);
+    }
+  };
+  const handleClear = () => {
+    if (!currentStem) return;
+    const currentAnnos = annotations.filter(a => a.stem === currentStem);
+    currentAnnos.forEach(a => removeAnnotation(a.id));
+  };
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
   const isCtrl = e.ctrlKey || e.metaKey;
     if (isCtrl && (e.key === 'y' || e.key === 'Y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
@@ -1007,15 +1022,6 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       return;
     }
 
-    if ((e.key === 'Delete' || e.key === 'Backspace') && activeAnnotationId) {
-      const targetAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
-      if (targetAnno) {
-        pushAction({ type: 'delete', anno: targetAnno }); 
-      }
-      removeAnnotation(activeAnnotationId);
-      setActiveAnnotationId(null);
-    }
-    
     if (e.key === 'Enter' && (tool === 'polygon' || tool === 'line') && currentPoints.length > 1) {
       if (tool === 'polygon' && currentPoints.length < 3) return;
       const lastPoint = currentPoints[currentPoints.length - 1];
@@ -1421,16 +1427,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
   }, [tempActiveAnno, formLabel, aiSettings.semiClass, currentStem, addAnnotation, pushAction, state.editorSettings, taxonomyAttributes]); 
   // 🎯 极度关键：必须把 taxonomyAttributes 放在依赖数组里！否则 React 会永远记住你刚刷新页面时空的属性列表。
 
-  const handleDelete = () => {
-    if (activeAnnotationId) {
-      removeAnnotation(activeAnnotationId);
-    }
-  };
-  const handleClear = () => {
-    if (!currentStem) return;
-    const currentAnnos = annotations.filter(a => a.stem === currentStem);
-    currentAnnos.forEach(a => removeAnnotation(a.id));
-  };
+
 
   const [toolbarPos, setToolbarPos] = useState({ x: -9999, y: 32 });
   const [isToolbarDragging, setIsToolbarDragging] = useState(false);
