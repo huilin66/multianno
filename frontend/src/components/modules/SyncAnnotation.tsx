@@ -1433,6 +1433,33 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     const currentAnnos = annotations.filter(a => a.stem === currentStem);
     currentAnnos.forEach(a => removeAnnotation(a.id));
   };
+
+  const [toolbarPos, setToolbarPos] = useState({ x: -9999, y: 32 });
+  const [isToolbarDragging, setIsToolbarDragging] = useState(false);
+  const toolbarDragRef = useRef({ startX: 0, startY: 0, origX: 0, origY: 0 });
+  useEffect(() => {
+    if (focusedViewId) {
+      setToolbarPos({ x:60, y: 2 });
+    }
+  }, [focusedViewId]);
+  useEffect(() => {
+    if (!isToolbarDragging) return;
+    
+    const handleMove = (e: PointerEvent) => {
+      setToolbarPos({
+        x: toolbarDragRef.current.origX + e.clientX - toolbarDragRef.current.startX,
+        y: toolbarDragRef.current.origY + e.clientY - toolbarDragRef.current.startY,
+      });
+    };
+    const handleUp = () => setIsToolbarDragging(false);
+    
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+  }, [isToolbarDragging]);
   return (
     <div 
     className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"
@@ -1513,15 +1540,22 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
         {/* 🌟 升级：多图层悬浮叠加控制器 (TopBar) */}
         {focusedViewId && views.length > 0 && (
           <div 
-            // 🌟 核心修复：把 z-50 改成 z-[1001]，必须大于底下的 Canvas (1000)
-            className="absolute top-8 left-1/2 -translate-x-1/2 z-50 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md p-1.5 rounded-full shadow-lg border border-neutral-200 dark:border-neutral-700 flex items-center gap-3 animate-in slide-in-from-top-4"
-            onPointerDown={e => e.stopPropagation()}
-            onWheel={e => e.stopPropagation()}
+            className="fixed z-50 bg-white/95 dark:bg-neutral-900/95 backdrop-blur-md p-1.5 rounded-full shadow-lg border border-neutral-200 dark:border-neutral-700 flex items-center gap-3 animate-in slide-in-from-top-4 cursor-grab active:cursor-grabbing select-none"
+            style={{ left: `${toolbarPos.x}px`, top: `${toolbarPos.y}px`, transform: 'translate(0, 0)' }}
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              setIsToolbarDragging(true);
+              toolbarDragRef.current = { 
+                startX: e.clientX, startY: e.clientY, 
+                origX: toolbarPos.x, origY: toolbarPos.y 
+              };
+            }}
+            onWheel={(e) => e.stopPropagation()}
           >
-            <div className="px-3 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-full uppercase tracking-wider">
+            <div className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-full uppercase tracking-wider">
               Single View
             </div>
-            <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-700" />
+            <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-700 mx-1" />
 
             {/* 🌟 终极修复 2：彻底放弃坑人的 Radix 自动回显，直接手动硬编码匹配文字！ */}
             <Select value={activeControlLayer || 'none'} onValueChange={setActiveControlLayer}>
@@ -1534,7 +1568,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                     (() => {
                       const v = views.find((v:any) => v.id === activeControlLayer);
                       if (!v) return "None (Disable FX)";
-                      return `${activeControlLayer === focusedViewId ? '✨ ' : ''}${v.isMain ? 'Main View' : `Aug View ${views.indexOf(v)}`}`;
+                      return `${activeControlLayer === focusedViewId ? '✨' : ''}${v.isMain ? 'Main View' : `Aug View ${views.indexOf(v)}`}`;
                     })()
                   )}
                 </SelectValue>
@@ -1581,6 +1615,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                 <div className="w-44 px-2 flex items-center gap-2">
                   <input 
                     type="range"
+                    onPointerDown={(e) => e.stopPropagation()}
                     min={0}
                     max={activeConfig.mode === 'opacity' ? 1 : 100}
                     step={activeConfig.mode === 'opacity' ? 0.01 : 1}
