@@ -13,6 +13,7 @@ import { AIToolPanel } from './annotation/AIToolPanel';
 import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM, SAMPoint } from '../../api/client'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useAnnotationAutoSave } from '../../hooks/useAnnotationAutoSave';
+import { createPortal } from 'react-dom';
 
 const CURSOR_FOCUS = `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='5' stroke='white' stroke-width='3' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='none'/%3E%3Ccircle cx='12' cy='12' r='5' stroke='%23262626' stroke-width='1.5' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round' fill='none'/%3E%3C/svg%3E") 12 12, auto`;
 const CURSOR_DRAG = `url("data:image/svg+xml,%3Csvg width='24' height='24' viewBox='0 0 24 24' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Ccircle cx='12' cy='12' r='5' stroke='white' stroke-width='3' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' stroke='white' stroke-width='3' stroke-linejoin='round' fill='white'/%3E%3Ccircle cx='12' cy='12' r='5' stroke='%23262626' stroke-width='1.5' fill='none'/%3E%3Cpath d='M12 6 L9 2 L15 2 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M12 18 L9 22 L15 22 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M6 12 L2 9 L2 15 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3Cpath d='M18 12 L22 9 L22 15 Z' fill='%23262626' stroke='%23262626' stroke-width='1.5' stroke-linejoin='round'/%3E%3C/svg%3E") 12 12, auto`;
@@ -930,33 +931,34 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     points: {x: number, y: number}[]
   ) => {
     const { truncated: isMathTruncated } = clampAndFlag(points);
-    setFormTruncated(isMathTruncated); // 将预判结果自动赋给弹窗的开关
+    setFormTruncated(isMathTruncated);
 
-    // 1. 统一初始化默认属性
     const initialAttrs: Record<string, any> = {};
     taxonomyAttributes?.forEach((attr: any) => {
       initialAttrs[attr.name] = attr.defaultValue || (attr.options?.[0] || '');
     });
     setFormAttributes(initialAttrs);
 
-    // 2. 统一设置待确认状态
     setPendingAnnotation({ type: annoType, points });
 
-    // 3. 智能避让坐标计算
-    const popoverW = 300; 
-    const popoverH = 400; 
-    const padding = 20;   
-    let safeX = clientX + 15; 
+    const popoverW = 300;
+    const popoverH = 400;
+    const padding = 20;
+    const winW = window.innerWidth;
+    const winH = window.innerHeight;
+
+    // 🌟 直接用鼠标屏幕坐标
+    let safeX = clientX + 15;
     let safeY = clientY + 15;
 
-    if (safeX + popoverW > window.innerWidth) safeX = window.innerWidth - popoverW - padding;
-    if (safeY + popoverH > window.innerHeight) safeY = window.innerHeight - popoverH - padding;
+    if (safeX + popoverW > winW - padding) safeX = winW - popoverW - padding;
+    if (safeY + popoverH > winH - padding) safeY = winH - popoverH - padding;
     if (safeX < padding) safeX = padding;
     if (safeY < padding) safeY = padding;
 
     setPopoverPos({ x: safeX, y: safeY });
     setPopoverOpen(true);
-  }, [taxonomyAttributes]); // 🌟 注意依赖项里加了 taxonomyAttributes
+  }, [taxonomyAttributes]);
 
   const handleUndo = useCallback(() => {
     // 场景 A：精确撤销多边形/线段/Lasso 的单个点
@@ -1669,7 +1671,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
 
         {/* 🎈 Floating Popover for Class Selection */}
         {/* 2. 悬浮弹窗 */}
-      {popoverOpen && (
+      {popoverOpen && createPortal(
         <ClassFormPopover 
           popoverPos={popoverPos} formLabel={formLabel} setFormLabel={setFormLabel}
           formText={formText} setFormText={setFormText} formGroupId={formGroupId} 
@@ -1681,7 +1683,8 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           setFormAttributes={setFormAttributes}
           handleCancelDrawing={handleCancelDrawing} savePendingAnnotationToStore={savePendingAnnotationToStore}
           taxonomyClasses={sortedClasses}
-        />
+        />,
+        document.body
       )}
       </div>
       
