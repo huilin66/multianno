@@ -433,6 +433,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       // 修复后自动刷新统计
       if (result.total_fixed > 0) {
         await loadStatistics(true);
+        useStore.getState().setStatsCacheValid?.(false);
       }
     } catch (err: any) {
       alert(`数据修复失败: ${err.message}`);
@@ -440,6 +441,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setIsRepairing(false);
     }
   };
+
   // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
   useEffect(() => { 
     if (folders?.length > 0) {
@@ -465,6 +467,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
   const loadStatistics = async (forceRefresh: boolean) => {
     if (folders.length === 0) return;
+    const { statsCacheValid } = useStore.getState() as any;
+    if (!forceRefresh && statsCacheValid && statsData) {
+      setStatsStatus('done');
+      return;
+    }
+  
     setStatsStatus('loading');
     try {
       const saveDirs = folders.map((f: any) => f.path);
@@ -493,11 +501,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         }
       }
 
+      useStore.getState().setStatsCacheValid?.(false);
       setStatsStatus('done');
     } catch (e: any) { 
       console.error(e); 
       setStatsStatus('idle'); 
     }
+    useStore.getState().setStatsCacheValid?.(true);
   };
 
   const handleAdd = (type: 'classes' | 'attributes') => {
@@ -604,6 +614,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         setSelectedClassId(null);
       }
       
+      useStore.getState().setStatsCacheValid?.(false);
       setMergeStage(0);
       alert(`Merged successfully into ${targetClass.name}`);
     } catch (err: any) {
@@ -637,6 +648,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         deleteTaxonomyClass(activeClass.id, isHardDelete);
         setSelectedClassId(null);
         setDeleteStage(0); // 重置状态
+
+        useStore.getState().setStatsCacheValid?.(false);
       } catch (err: any) { 
         alert(`Delete failed: ${err.message}`); 
       } finally { 
@@ -669,6 +682,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       // 3. 刷新统计大盘
       loadStatistics(true);
       setDeleteStage(0);
+      useStore.getState().setStatsCacheValid?.(false);
       alert('All background annotations have been cleaned successfully!');
     } catch (err: any) { 
       alert(`Clean failed: ${err.message}`); 
@@ -715,7 +729,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
       // 强行把洗过一遍的标注数据塞回 Store
       useStore.setState({ annotations: updatedAnnotations }); 
-
+      useStore.getState().setStatsCacheValid?.(false);
       // 4. 清理 UI 状态
       setAttrDraft(null); // 清空草稿，退出编辑状态
       alert(`Attribute synchronized to all JSON files successfully!`);
@@ -739,6 +753,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       // 删本地 Store
       deleteTaxonomyAttribute(activeAttribute.id);
       setSelectedAttributeId(null);
+      useStore.getState().setStatsCacheValid?.(false);
       setShowAttrDeleteConfirm(false);
     } catch (err: any) {
       alert(`Delete failed: ${err.message}`);

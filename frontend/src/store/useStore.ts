@@ -173,7 +173,7 @@ export interface AppState {
   isAnnotationDirty: boolean;
   isAIPanelOpen: boolean;
   aiPrompts: { x: number, y: number, label: number }[]; 
-
+  statsCacheValid: boolean;
 
   // setting
   theme: 'dark' | 'light';
@@ -241,6 +241,7 @@ export interface AppState {
   clearAnnotationDirty: () => void;
   setAIPanelOpen: (open: boolean) => void;
   setAiPrompts: (ptspts: { x: number, y: number, label: number }[]) => void;
+  setStatsCacheValid: (valid: boolean) => void;
 
   // view align function
   setCompletedViews: (views: string[]) => void;
@@ -290,6 +291,7 @@ export const useStore = create<AppState>()(
       isAnnotationDirty: false,
       isAIPanelOpen: false,
       aiPrompts: [],
+      statsCacheValid: false,
 
       // setting
       theme: 'dark', 
@@ -583,7 +585,7 @@ export const useStore = create<AppState>()(
         return { savedAlignments: [newAlignment, ...filteredAlignments] };
       }),
       removeSavedAlignment: (id) => set((state) => ({savedAlignments: state.savedAlignments.filter(a => a.id !== id)})),
-
+      setStatsCacheValid: (valid) => set({ statsCacheValid: valid }),
 
       // setting function
       setTheme: (theme) => set({ theme }),

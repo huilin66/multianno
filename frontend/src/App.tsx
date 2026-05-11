@@ -34,11 +34,10 @@ import { GlobalConfirmDialog } from './components/modules/GlobalConfirmDialog';
 
 export default function App() {
   const { t, i18n } = useTranslation();
-  const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings } = useStore();
+  const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings, projectMetaPath } = useStore();
   const annotationLastSavedTime = useStore((s) => s.annotationLastSavedTime);
-  const metaLastSavedTime = useStore((s) => s.metaLastSavedTime);
   const { annotationSaveStatus, autoSave } = useAnnotationAutoSave();
-  const { metaSaveStatus } = useMetaAutoSave();
+  const { metaSaveStatus, metaLastSavedTime, isDirty: isMetaDirty } = useMetaAutoSave();
 
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
@@ -134,49 +133,93 @@ export default function App() {
           <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-2" />
 
           <div className="flex items-center gap-0">
-            {folders && folders.length > 0 && (metaSaveStatus !== 'idle' || metaLastSavedTime) && (
+            {folders && folders.length > 0 && projectMetaPath && (
               <div
-                title={metaSaveStatus === 'error' ? t('header.projectMetaNotSaved') : t('header.projectMetaSaved') + ' ' + metaLastSavedTime}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${metaSaveStatus === 'error'
+                title={metaSaveStatus === 'error' 
+                  ? 'Project meta save failed' 
+                  : metaSaveStatus === 'saving'
+                    ? 'Saving project meta...'
+                    : metaSaveStatus === 'saved'
+                      ? 'Project meta saved at ' + metaLastSavedTime
+                      : isMetaDirty
+                        ? 'Unsaved changes' 
+                        : metaLastSavedTime
+                          ? 'Project meta up to date (saved ' + metaLastSavedTime + ')'
+                          : 'No meta data'
+                }
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${
+                  metaSaveStatus === 'error'
                     ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400'
                     : metaSaveStatus === 'saving'
-                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 text-blue-600 dark:text-blue-400'
-                      : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 text-blue-700 dark:text-blue-300'
-                  }`}
+                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800/50 text-yellow-600 dark:text-yellow-400'
+                      : metaSaveStatus === 'saved'
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50 text-green-600 dark:text-green-400'
+                        : isMetaDirty
+                          ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800/50 text-orange-600 dark:text-orange-400'
+                          : 'bg-neutral-50 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-500'
+                }`}
               >
                 {metaSaveStatus === 'saving' ? (
                   <CloudLightning className="w-3 h-3 animate-pulse" />
                 ) : (
-                  <Database className="w-3 h-3 opacity-70" />
+                  <Database className={`w-3 h-3 ${isMetaDirty ? 'animate-pulse' : 'opacity-70'}`} />
                 )}
-                {metaSaveStatus === 'error'
-                  ? t('common.error', 'Error')
-                  : metaSaveStatus === 'saving'
-                    ? t('common.saving', 'Saving...')
-                    : t('common.saved', 'Saved ') + metaLastSavedTime}
+                <span className="hidden sm:inline">
+                  {metaSaveStatus === 'error'
+                    ? 'Error'
+                    : metaSaveStatus === 'saving'
+                      ? 'Saving...'
+                      : metaSaveStatus === 'saved'
+                        ? 'Saved'
+                        : isMetaDirty
+                          ? 'Unsaved'
+                          : metaLastSavedTime
+                            ? 'Meta ' + metaLastSavedTime
+                            : 'Meta'
+                  }
+                </span>
               </div>
             )}
             <div className="h-4 w-[1px] bg-neutral-100 dark:bg-neutral-900 transition-colors mx-1" />
             {currentStem && (annotationSaveStatus !== 'idle' || annotationLastSavedTime) && (
               <div
-                title={annotationSaveStatus === 'error' ? t('header.annotationNotSaved') : t('header.annotationSaved') + ' ' + annotationLastSavedTime}
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${annotationSaveStatus === 'error'
+                title={annotationSaveStatus === 'error' 
+                  ? 'Annotation save failed' 
+                  : annotationSaveStatus === 'saving'
+                    ? 'Saving annotation...'
+                    : annotationSaveStatus === 'saved'
+                      ? 'Annotation saved at ' + annotationLastSavedTime
+                      : annotationLastSavedTime
+                        ? 'Annotation up to date (saved ' + annotationLastSavedTime + ')'
+                        : 'No annotation data'
+                }
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${
+                  annotationSaveStatus === 'error'
                     ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400'
                     : annotationSaveStatus === 'saving'
-                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50 text-blue-600 dark:text-blue-400'
-                      : 'bg-neutral-50 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-600 dark:text-neutral-300'
-                  }`}
+                      ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800/50 text-yellow-600 dark:text-yellow-400'
+                      : annotationSaveStatus === 'saved'
+                        ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50 text-green-600 dark:text-green-400'
+                        : 'bg-neutral-50 dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800 text-neutral-500'
+                }`}
               >
                 {annotationSaveStatus === 'saving' ? (
                   <CloudLightning className="w-3 h-3 animate-pulse" />
                 ) : (
-                  <Tag className="w-3 h-3 opacity-70" />
+                  <Tag className={`w-3 h-3 ${annotationSaveStatus !== 'idle' ? 'animate-pulse' : 'opacity-70'}`} />
                 )}
-                {annotationSaveStatus === 'error'
-                  ? t('common.error', 'Error')
-                  : annotationSaveStatus === 'saving'
-                    ? t('common.saving', 'Saving...')
-                    : t('common.saved', 'Saved ') + annotationLastSavedTime}
+                <span className="hidden sm:inline">
+                  {annotationSaveStatus === 'error'
+                    ? 'Error'
+                    : annotationSaveStatus === 'saving'
+                      ? 'Saving...'
+                      : annotationSaveStatus === 'saved'
+                        ? 'Saved'
+                        : annotationLastSavedTime
+                          ? 'Anno ' + annotationLastSavedTime
+                          : 'Anno'
+                  }
+                </span>
               </div>
             )}
           </div>
