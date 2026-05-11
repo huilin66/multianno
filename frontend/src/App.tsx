@@ -207,6 +207,13 @@ export default function App() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
+                  <Label className="text-xs">{t('headerSetting.showLongCrosshair', 'Long Crosshair')}</Label>
+                  <Switch
+                    checked={editorSettings.showLongCrosshair}
+                    onCheckedChange={(v) => updateEditorSettings({ showLongCrosshair: v })}
+                  />
+                </div>
+                <div className="flex items-center justify-between">
                   <Label className="text-xs">{t('headerSetting.continuousDrawing')}</Label>
                   <Switch
                     checked={editorSettings.continuousDrawing}

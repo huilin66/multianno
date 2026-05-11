@@ -104,7 +104,8 @@ export interface TaxonomyAttribute {
 // settings
 export interface EditorSettings {
   showCrosshair: boolean; 
-  showPixelValue: boolean; 
+  showPixelValue: boolean;
+  showLongCrosshair: boolean;
   continuousDrawing: boolean; 
   showToolLabels: boolean; 
   autoRefreshStats: boolean; 
@@ -296,6 +297,7 @@ export const useStore = create<AppState>()(
       editorSettings: { 
         showCrosshair: true, 
         showPixelValue: true, 
+        showLongCrosshair: false,
         continuousDrawing: false, 
         showToolLabels: false, 
         autoRefreshStats: true,

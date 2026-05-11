@@ -508,6 +508,14 @@ export function renderCanvasScene(params: RenderParams) {
   if (hoverPos && editorSettings.showCrosshair && hoverPos.viewId !== view.id) {
     drawSyncCursor(ctx, hoverPos, viewport);
   }
+  // 新增：在所有视图上绘制长十字
+   if (hoverPos) {
+    if (editorSettings.showLongCrosshair) {
+      drawLongCrosshair(ctx, viewport, hoverPos, canvas);
+    } else if (editorSettings.showCrosshair && hoverPos.viewId !== view.id) {
+      drawSyncCursor(ctx, hoverPos, viewport);
+    }
+  }
   // 4. 恢复全局状态
   ctx.restore();
 }
@@ -531,5 +539,38 @@ function drawSyncCursor(ctx: CanvasRenderingContext2D, hoverPos: {x: number, y: 
   ctx.lineTo(hoverPos.x, hoverPos.y + size);
   ctx.stroke();
   
+  ctx.restore();
+}
+
+function drawLongCrosshair(
+  ctx: CanvasRenderingContext2D,
+  viewport: { panX: number; panY: number; zoom: number },
+  hoverPos: { x: number; y: number },
+  canvas: HTMLCanvasElement
+) {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(0, 100, 255, 0.9)';  // 加深
+  ctx.lineWidth = 1.5 / viewport.zoom;
+  ctx.setLineDash([8 / viewport.zoom, 4 / viewport.zoom]);
+
+  // 画布坐标的范围（在主世界坐标系中）
+  const left = -viewport.panX / viewport.zoom;
+  const right = (canvas.width - viewport.panX) / viewport.zoom;
+  const top = -viewport.panY / viewport.zoom;
+  const bottom = (canvas.height - viewport.panY) / viewport.zoom;
+
+  // 水平线
+  ctx.beginPath();
+  ctx.moveTo(left, hoverPos.y);
+  ctx.lineTo(right, hoverPos.y);
+  ctx.stroke();
+
+  // 垂直线
+  ctx.beginPath();
+  ctx.moveTo(hoverPos.x, top);
+  ctx.lineTo(hoverPos.x, bottom);
+  ctx.stroke();
+
+  ctx.setLineDash([]);
   ctx.restore();
 }
