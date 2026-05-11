@@ -382,7 +382,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [mergeTargetId, setMergeTargetId] = useState<string>('');
   const [renameValue, setRenameValue] = useState('');
   const [showClassDeleteConfirm, setShowClassDeleteConfirm] = useState(false);
-  const [showMergeConfirm, setShowMergeConfirm] = useState(false); // 🌟 新增：Merge 的内联确认状态
   const initRef = useRef(false);
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
   const activeAttribute = taxonomyAttributes.find((a: any) => a.id === selectedAttributeId);
@@ -402,45 +401,15 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [classSortDir, setClassSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
   const [attrSortDir, setAttrSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
 
-  const [targetMode, setTargetMode] = useState<'new' | 'existing'>('new');
   const [newTargetClassName, setNewTargetClassName] = useState('');
-  const [existingTargetId, setExistingTargetId] = useState('');
 
-  const allMergedClasses = useMemo(() => {
-    if (!showMergeWithAttr) return [];
-    
-    const classes = new Map<string, any>();
-    
-    // 添加 activeClass（当前选中的类）
-    if (activeClass) {
-      classes.set(activeClass.id, activeClass);
+  const refreshStatsIfNeeded = async () => {
+    if (editorSettings.autoRefreshStats) {
+      await loadStatistics(true);
+    } else {
+      useStore.getState().setStatsCacheValid?.(false);
     }
-    
-    // 添加已勾选的源类
-    for (const sourceId of mergeSourceClassIds) {
-      const cls = taxonomyClasses.find((c: any) => c.id === sourceId);
-      if (cls) classes.set(cls.id, cls);
-    }
-    
-    // 如果选择了已有 target，也加入映射列表
-    if (targetMode === 'existing' && existingTargetId) {
-      const targetCls = taxonomyClasses.find((c: any) => c.id === existingTargetId);
-      if (targetCls && !classes.has(targetCls.id)) {
-        classes.set(targetCls.id, targetCls);
-      }
-    }
-    
-    // 如果是新建 target，加入临时对象
-    if (targetMode === 'new' && newTargetClassName.trim()) {
-      classes.set('__new_target__', {
-        id: '__new_target__',
-        name: newTargetClassName.trim(),
-        color: activeClass?.color || '#6366f1',
-      });
-    }
-    
-    return Array.from(classes.values());
-  }, [showMergeWithAttr, activeClass, mergeSourceClassIds, existingTargetId, targetMode, newTargetClassName, taxonomyClasses]);
+  };
 
   // 🌟 只包含源类，不包括 target
   const allSourceClasses = useMemo(() => {
@@ -540,7 +509,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       mergeTaxonomyClasses(sourceNames, targetClassName);
       
       useStore.getState().setStatsCacheValid?.(false);
-      
+      await refreshStatsIfNeeded();
       // 重置弹窗状态
       setShowMergeWithAttr(false);
       setMergeSourceClassIds(new Set());
@@ -605,12 +574,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
       const result = await repairData(safeSaveDirs, ['stem']);
       setRepairResult({ fixed: result.total_fixed, scanned: result.total_scanned });
-      
-      // 修复后自动刷新统计
-      if (result.total_fixed > 0) {
-        await loadStatistics(true);
-        useStore.getState().setStatsCacheValid?.(false);
-      }
+      await refreshStatsIfNeeded();
     } catch (err: any) {
       alert(`数据修复失败: ${err.message}`);
     } finally {
@@ -630,7 +594,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setRenameValue(activeClass.name); 
       setMergeTargetId(''); 
       setShowClassDeleteConfirm(false); 
-      setShowMergeConfirm(false);
     } 
   }, [activeClass]);
 
@@ -791,6 +754,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       }
       
       useStore.getState().setStatsCacheValid?.(false);
+      await refreshStatsIfNeeded();
       setMergeStage(0);
       alert(`Merged successfully into ${targetClass.name}`);
     } catch (err: any) {
@@ -822,6 +786,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         });
         
         deleteTaxonomyClass(activeClass.id, isHardDelete);
+        await refreshStatsIfNeeded();
         setSelectedClassId(null);
         setDeleteStage(0); // 重置状态
 
@@ -906,7 +871,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       // 强行把洗过一遍的标注数据塞回 Store
       useStore.setState({ annotations: updatedAnnotations }); 
       useStore.getState().setStatsCacheValid?.(false);
-      // 4. 清理 UI 状态
+      await refreshStatsIfNeeded();
       setAttrDraft(null); // 清空草稿，退出编辑状态
       alert(`Attribute synchronized to all JSON files successfully!`);
     } catch (err: any) {
@@ -928,6 +893,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       
       // 删本地 Store
       deleteTaxonomyAttribute(activeAttribute.id);
+      await refreshStatsIfNeeded();
       setSelectedAttributeId(null);
       useStore.getState().setStatsCacheValid?.(false);
       setShowAttrDeleteConfirm(false);
