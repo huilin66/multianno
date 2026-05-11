@@ -12,7 +12,7 @@ import { Input } from '../ui/input';
 import { batchMergeClass, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
-
+import { useDialogStore } from '../../store/useDialogStore';
 
 interface TaxonomyDashboardProps {
   onClose?: () => void;
@@ -362,6 +362,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     folders, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder
   } = useStore() as any;
 
+  const openDialog = useDialogStore((s) => s.openDialog);
   const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'attributes'>('overview');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
@@ -1454,9 +1455,24 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   <div 
                     key={stem}
                     onDoubleClick={() => {
-                      setCurrentStem(stem);        // 切换到该图片
-                      setActiveModule('workspace'); // 切换到工作区
-                      onClose?.();                  // 关闭管理面板
+                      const storeStems = useStore.getState().stems;
+                      const matchedStem = storeStems.find((s: string) => s.startsWith(stem));
+                      
+                      if (matchedStem) {
+                        onClose?.();
+                        setTimeout(() => {
+                          setCurrentStem(matchedStem);
+                          setActiveModule('workspace');
+                        }, 150);
+                      } else {
+                        openDialog({
+                          type: 'warning',
+                          title: 'Scene Not Found',
+                          description: `Cannot locate "${stem}" in the loaded workspace.\n\nThe scene group configuration may have changed. Please refresh statistics or reload the project.`,
+                          confirmText: 'Got it',
+                          hideCancel: true,
+                        });
+                      }
                     }}
                     title="Double click to open in Workspace"
                     className="group flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-all border border-transparent hover:border-blue-100 dark:hover:border-blue-800"
