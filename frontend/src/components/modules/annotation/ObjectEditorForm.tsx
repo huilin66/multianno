@@ -70,22 +70,6 @@ export function ObjectEditorForm({
         </div>
       </div>
 
-      {/* 状态开关 */}
-      <div className="flex items-center justify-between pt-2 mt-2 border-t border-neutral-100 dark:border-neutral-800">
-        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onDifficultChange(!difficult)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">Difficult</Label>
-          <Switch checked={difficult} onCheckedChange={onDifficultChange} className="scale-[0.7] origin-left m-0 shadow-none" />
-        </div>
-        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onOccludedChange(!occluded)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">Occluded</Label>
-          <Switch checked={occluded} onCheckedChange={onOccludedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
-        </div>
-        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onTruncatedChange(!truncated)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">Truncated</Label>
-          <Switch checked={truncated} onCheckedChange={onTruncatedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
-        </div>
-      </div>
-
       {/* Text */}
       <div className="flex items-center gap-2">
         <Label className="text-[11px] text-neutral-500 w-14 shrink-0">Text</Label>
@@ -97,7 +81,6 @@ export function ObjectEditorForm({
       </div>
 
       {/* Attributes */}
-      
       <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
         <Label className="text-[10px] text-neutral-400 mb-2 block uppercase tracking-wider">Attributes</Label>
           {taxonomyAttributes && taxonomyAttributes.length > 0 ? (
@@ -125,7 +108,21 @@ export function ObjectEditorForm({
         )}
       </div>
       
-
+      {/* 状态开关 */}
+      <div className="flex items-center justify-between pt-2 mt-2 border-t border-neutral-100 dark:border-neutral-800">
+        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onDifficultChange(!difficult)}>
+          <Label className="text-[11px] text-neutral-500 cursor-pointer">Difficult</Label>
+          <Switch checked={difficult} onCheckedChange={onDifficultChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+        </div>
+        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onOccludedChange(!occluded)}>
+          <Label className="text-[11px] text-neutral-500 cursor-pointer">Occluded</Label>
+          <Switch checked={occluded} onCheckedChange={onOccludedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+        </div>
+        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onTruncatedChange(!truncated)}>
+          <Label className="text-[11px] text-neutral-500 cursor-pointer">Truncated</Label>
+          <Switch checked={truncated} onCheckedChange={onTruncatedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+        </div>
+      </div>
     </div>
   );
 }
