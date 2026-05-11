@@ -962,7 +962,7 @@ export function RightPanel({
         {currentStem && (
           <>
             <SectionHeader 
-              title="Image Description (VLM)" icon={Database} 
+              title="Image Annotation" icon={Database} 
               isExpanded={expanded.vlm} onToggle={() => toggleSection('vlm')} 
             />
             {expanded.vlm && (
