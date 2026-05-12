@@ -21,7 +21,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -31,6 +31,7 @@ import { AISettingsModal } from './components/modules/settings/AISettingsModal';
 import { useMetaAutoSave } from './hooks/useMetaAutoSave';
 import { LocalVisualization } from './components/modules/LocalVisualization';
 import { GlobalConfirmDialog } from './components/modules/GlobalConfirmDialog';
+import { ViewLayoutSettingsModal } from './components/modules/settings/ViewLayoutSettingsModal';
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -38,7 +39,8 @@ export default function App() {
   const annotationLastSavedTime = useStore((s) => s.annotationLastSavedTime);
   const { annotationSaveStatus, autoSave } = useAnnotationAutoSave();
   const { metaSaveStatus, metaLastSavedTime, isDirty: isMetaDirty } = useMetaAutoSave();
-
+  
+  const [viewLayoutModalOpen, setViewLayoutModalOpen] = useState(false);
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
 
@@ -286,6 +288,13 @@ export default function App() {
                 </div>
                 <div className="border-t border-neutral-300 dark:border-neutral-700 pt-1" />
                 <button
+                  onClick={() => setViewLayoutModalOpen(true)}
+                  className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-1 transition-colors"
+                >
+                  <Label className="text-xs cursor-pointer">View Layout</Label>
+                  <LayoutTemplate className="w-3.5 h-3.5 text-indigo-400" />
+                </button>
+                <button
                   onClick={() => setShortcutModalOpen(true)}
                   className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-0.5 transition-colors"
                 >
@@ -477,6 +486,10 @@ export default function App() {
           </div>
         </DialogContent>
       </Dialog>
+      <ViewLayoutSettingsModal
+        open={viewLayoutModalOpen}
+        onClose={() => setViewLayoutModalOpen(false)}
+      />
       <ShortcutSettingsModal
         open={shortcutModalOpen}
         onClose={() => setShortcutModalOpen(false)}

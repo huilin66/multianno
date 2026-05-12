@@ -110,6 +110,8 @@ export interface EditorSettings {
   showToolLabels: boolean; 
   autoRefreshStats: boolean; 
   fillAnnotationShapes: boolean;
+  maxViews: number;
+  gridLayout: { rows: number; cols: number };
 }
 
 export const DEFAULT_SHORTCUTS_SETTINGS = {
@@ -305,6 +307,8 @@ export const useStore = create<AppState>()(
         showToolLabels: false, 
         autoRefreshStats: true,
         fillAnnotationShapes: true,
+        maxViews: 9,
+        gridLayout: { rows: 0, cols: 0 },
       },
       shortcutsSettings:DEFAULT_SHORTCUTS_SETTINGS,
       aiSettings: {
@@ -357,7 +361,7 @@ export const useStore = create<AppState>()(
             }
           })),
           
-          views: meta.views.slice(0, 9).map(v => ({
+          views: meta.views.map(v => ({
             id: v.id,
             folderId: String(v["folder id"]),
             bands: v.bands,
@@ -403,19 +407,15 @@ export const useStore = create<AppState>()(
       removeFolder: (id) => set((state) => ({ folders: state.folders.filter(f => f.id !== id) })),
       clearFolders: () => set({ folders: [] }),
       addView: (newView) => set((state) => {
-        // 🌟 终极防线：在数据层彻底锁死
-        if (state.views.length >= 9) {
-          console.warn("View limit reached: Cannot exceed 9 views.");
-          // 触发一个全局 Toast 提示用户（如果你有集成 sonner 或 react-hot-toast）
-          // toast.error("Maximum of 9 views allows!");
-          
-          return state; // 拒绝修改，直接返回当前状态
+        const maxViews = state.editorSettings.maxViews || 9;
+        if (state.views.length >= maxViews) {
+          console.warn(`View limit reached: Cannot exceed ${maxViews} views.`);
+          return state;
         }
 
         return {
           views: [...state.views, { 
             ...newView, 
-            // 🌟 确保新视图有默认调节参数
             settings: { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100] } 
           }]
         };

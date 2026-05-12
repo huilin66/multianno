@@ -19,7 +19,7 @@ import { saveProjectMeta, analyzeWorkspaceFolders } from '../../api/client';
 
 export function DataPreload() {
   const { t } = useTranslation();
-  const {projectName, folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule } = useStore();
+  const {projectName, folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule, editorSettings } = useStore();
   
   const [placeholders, setPlaceholders] = useState<{ id: string, path: string, suffix: string }[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
@@ -27,7 +27,7 @@ export function DataPreload() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [explorerMode, setExplorerMode] = useState<'dir' | 'file'>('dir');
-
+  const maxViews = editorSettings.maxViews || 9;
   useEffect(() => {
     const savedHistory = localStorage.getItem('multiAnno_recentPaths');
     if (savedHistory) {
@@ -306,8 +306,8 @@ export function DataPreload() {
         <CardHeader className="shrink-0 pb-4 border-b">
           <CardTitle className="flex items-center justify-between">
             <div className="flex items-center gap-2"><Info className="w-5 h-5" /> {t('dataPreload.views.title')}</div>
-            <Button onClick={handleAddView} variant="outline" size="sm" disabled={views.length >= 9}>
-              <Plus className="w-4 h-4 mr-2" /> {t('dataPreload.views.addView')} {views.length >= 9 && t('dataPreload.views.max9')}
+            <Button onClick={handleAddView} variant="outline" size="sm" disabled={views.length >= maxViews}>
+              <Plus className="w-4 h-4 mr-2" /> {t('dataPreload.views.addView')} {views.length >= maxViews && t('headerSetting.maxViews')}
             </Button>
           </CardTitle>
         </CardHeader>

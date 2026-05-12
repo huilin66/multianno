@@ -183,14 +183,6 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
 
   // 计算当前可被控制的图层列表 (当前图层 + 被勾选显示的图层)
   const operableLayers = layerOrder.filter(id => id === focusedViewId || visibleLayers[id]);
-  
-  // 🌟 新增：单视图模式下的叠加控制状态
-  const [overlayConfig, setOverlayConfig] = useState({
-    active: false,
-    overlayViewId: 'none',
-    mode: 'opacity' as 'opacity' | 'swipeX' | 'swipeY',
-    value: 0.5
-  });
 
   // 🌟 核心修复：单图模式显示焦点图层；多图模式下，严格按照右侧列表的拖拽顺序 (layerOrder) 重新排列网格！
   const displayViews = focusedViewId 
@@ -198,8 +190,13 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     : [...views].sort((a: any, b: any) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id));
   
   // 网格动态计算将自动把 1 个视图放大为 1x1 铺满
-  const gridCols = Math.ceil(Math.sqrt(Math.max(1, displayViews.length)));
-  const gridRows = Math.ceil(Math.max(1, displayViews.length) / gridCols);
+  const { gridLayout } = editorSettings;
+  const gridCols = gridLayout?.cols > 0 
+    ? gridLayout.cols 
+    : Math.ceil(Math.sqrt(Math.max(1, displayViews.length)));
+  const gridRows = gridLayout?.rows > 0 
+    ? gridLayout.rows 
+    : Math.ceil(Math.max(1, displayViews.length) / gridCols);
 
   // 🌟 表单状态升级为绑定 Taxonomy
   const [formLabel, setFormLabel] = useState(taxonomyClasses[0]?.name || 'object');

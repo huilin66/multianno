@@ -30,7 +30,8 @@
     "showAnnotationToolLabel": "Show Annotation Tool Label",
     "autoRefreshStats": "Auto Refresh Statistics",
     "shortcutSetting": "Shortcut Settings",
-    "aiSetting": "AI Settings"
+    "aiSetting": "AI Settings",
+    "maxViews": "Max Views"
   },
   "shortcuts":{
     "title": "Shortcut Settings",

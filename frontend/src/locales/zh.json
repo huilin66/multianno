@@ -30,7 +30,8 @@
     "showAnnotationToolLabel": "显示标注工具标签",
     "autoRefreshStats": "自动刷新统计信息",
     "shortcutSetting": "快捷键设置",
-    "aiSetting": "AI 设置"
+    "aiSetting": "AI 设置",
+    "maxViews": "最大视图数"
   },
     "shortcuts":{
     "title": "快捷键设置",
