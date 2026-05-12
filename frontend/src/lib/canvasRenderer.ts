@@ -275,6 +275,61 @@ function drawSavedObjects(params: RenderParams, colors: any) {
         ctx.beginPath(); ctx.arc(hx, hy, 4 / viewport.zoom, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       };
 
+      const drawCenterHandle = (cx: number, cy: number) => {
+        // 外圈（主题色）
+        ctx.beginPath();
+        ctx.arc(cx, cy, 7 / viewport.zoom, 0, Math.PI * 2);
+        ctx.strokeStyle = baseColor;
+        ctx.lineWidth = 2 / viewport.zoom;
+        ctx.stroke();
+        
+        // 内圈（白色填充）
+        ctx.beginPath();
+        ctx.arc(cx, cy, 4 / viewport.zoom, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fill();
+        
+        // 十字箭头图标
+        ctx.strokeStyle = baseColor;
+        ctx.lineWidth = 1.5 / viewport.zoom;
+        // 水平线
+        ctx.beginPath();
+        ctx.moveTo(cx - 2.5 / viewport.zoom, cy);
+        ctx.lineTo(cx + 2.5 / viewport.zoom, cy);
+        ctx.stroke();
+        // 垂直线
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 2.5 / viewport.zoom);
+        ctx.lineTo(cx, cy + 2.5 / viewport.zoom);
+        ctx.stroke();
+      };
+
+      // 🌟 计算并绘制中心点
+      const getCenter = (ann: any) => {
+        if (!ann.points || ann.points.length === 0) return null;
+        
+        if (['bbox', 'ellipse', 'circle'].includes(ann.type) && ann.points.length >= 2) {
+          const [p1, p2] = ann.points;
+          return {
+            x: (p1.x + p2.x) / 2,
+            y: (p1.y + p2.y) / 2
+          };
+        }
+        
+        // 多边形、线段等：计算所有点的中心
+        const sumX = ann.points.reduce((s: number, p: any) => s + p.x, 0);
+        const sumY = ann.points.reduce((s: number, p: any) => s + p.y, 0);
+        return {
+          x: sumX / ann.points.length,
+          y: sumY / ann.points.length
+        };
+      };
+
+      const center = getCenter(ann);
+      if (center) {
+        drawCenterHandle(center.x, center.y);
+      }
+
       // 1. 矩形、椭圆、圆形 (画出 4 个计算得到的包围盒角点)
       if (['bbox', 'ellipse', 'circle'].includes(ann.type) && ann.points.length === 2) {
         const [p1, p2] = ann.points;

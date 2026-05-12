@@ -531,6 +531,35 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
          const activeAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
          if (activeAnno) {
             const hitRadius = 8 / viewport.zoom;
+
+            // 🌟 新增：检测是否点击了中心平移点
+            const getCenter = (ann: any) => {
+              if (!ann.points || ann.points.length === 0) return null;
+              if (['bbox', 'ellipse', 'circle'].includes(ann.type) && ann.points.length >= 2) {
+                const [p1, p2] = ann.points;
+                return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+              }
+              const sumX = ann.points.reduce((s: number, p: any) => s + p.x, 0);
+              const sumY = ann.points.reduce((s: number, p: any) => s + p.y, 0);
+              return { x: sumX / ann.points.length, y: sumY / ann.points.length };
+            };
+            
+            const center = getCenter(activeAnno);
+            const centerHitRadius = 10 / viewport.zoom; // 中心点碰撞范围稍大
+            
+            if (center && Math.hypot(mainX - center.x, mainY - center.y) < centerHitRadius) {
+              // 🎯 进入平移模式
+              setCursorStyle('grabbing'); // 或者用自定义光标
+              setDragVertex({ 
+                index: -1, // 特殊标记：-1 表示中心点
+                type: 'center-translate',
+                startPos: { x: mainX, y: mainY },
+                originalPoints: JSON.parse(JSON.stringify(activeAnno.points)) // 深拷贝原始点
+              } as any);
+              setTempActiveAnno(JSON.parse(JSON.stringify(activeAnno))); // 深拷贝
+              return; // 拦截后续
+            }
+
             const ctrlPoints = getControlPoints(activeAnno); // 🌟 使用全能解析引擎
 
             const hit = ctrlPoints.find(p => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
@@ -695,15 +724,34 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 
     // 🌟 智能光标反馈：悬停在控制点附近变空心光标
     if (tool === 'select' && activeAnnotationId && !dragVertex) {
-      const activeAnno = currentAnnotations.find(a => a.id === activeAnnotationId);
+      const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
       if (activeAnno) {
-        const hitRadius = 8 / viewport.zoom;
-        const ctrlPoints = getControlPoints(activeAnno);
-        const isNearVertex = ctrlPoints.some(p => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
+        // 检查是否在中心点上
+        const getCenter = (ann: any) => {
+          if (!ann.points || ann.points.length === 0) return null;
+          if (['bbox', 'ellipse', 'circle'].includes(ann.type) && ann.points.length >= 2) {
+            const [p1, p2] = ann.points;
+            return { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+          }
+          const sumX = ann.points.reduce((s: number, p: any) => s + p.x, 0);
+          const sumY = ann.points.reduce((s: number, p: any) => s + p.y, 0);
+          return { x: sumX / ann.points.length, y: sumY / ann.points.length };
+        };
         
-        setCursorStyle(isNearVertex ? CURSOR_FOCUS : 'default');
+        const center = getCenter(activeAnno);
+        const centerHitRadius = 10 / viewport.zoom;
+        
+        if (center && Math.hypot(mainX - center.x, mainY - center.y) < centerHitRadius) {
+          setCursorStyle('grab'); // 手型光标表示可拖动
+        } else {
+          // 原有的顶点检测逻辑...
+          const hitRadius = 8 / viewport.zoom;
+          const ctrlPoints = getControlPoints(activeAnno);
+          const isNearVertex = ctrlPoints.some((p: any) => Math.hypot(mainX - p.x, mainY - p.y) < hitRadius);
+          setCursorStyle(isNearVertex ? CURSOR_FOCUS : 'default');
+        }
       }
-    } 
+    }
 
     // 🌟 光标状态清理：确保切换工具或离开时恢复正常箭头
     if (cursorStyle === CURSOR_FOCUS && (tool !== 'select' || dragVertex)) {
@@ -724,6 +772,22 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
         else if (dragVertex.index === 2) { p2.x = mainX; p2.y = mainY; }
         else if (dragVertex.index === 3) { p1.x = mainX; p2.y = mainY; }
         updatedAnno.points = [{ ...p1 }, { ...p2 }];
+      }else if (dragVertex.type === 'center-translate') {
+        // 🌟 中心平移：计算位移并应用到所有点
+        const dx = mainX - (dragVertex as any).startPos.x;
+        const dy = mainY - (dragVertex as any).startPos.y;
+        
+        updatedAnno.points = (dragVertex as any).originalPoints.map((p: any) => ({
+          x: p.x + dx,
+          y: p.y + dy
+        }));
+        
+        // 如果有孔洞，也一起平移
+        if (updatedAnno.holes) {
+          updatedAnno.holes = updatedAnno.holes.map((hole: any) =>
+            hole.map((p: any) => ({ x: p.x + dx, y: p.y + dy }))
+          );
+        }
       } else {
         // 多边形、线段等，直接更新对应的点
         updatedAnno.points[dragVertex.index] = { x: mainX, y: mainY };
