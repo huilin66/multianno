@@ -324,7 +324,23 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
         (target.tagName === 'TEXTAREA') ||
         (target.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'range')
       ) return;
-      
+
+
+      if (popoverOpen) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          savePendingAnnotationToStore();  // 直接保存
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          handleCancelDrawing();
+          return;
+        }
+        return;  // 弹窗打开时其他快捷键都不响应
+      }
+
+            
       // 安全锁 2：绘制中不切换
       if (isDrawing) return;
 

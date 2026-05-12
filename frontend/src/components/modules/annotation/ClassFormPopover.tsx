@@ -38,19 +38,6 @@ export function ClassFormPopover({
     (e.target as HTMLElement).releasePointerCapture(e.pointerId);
   };
 
-  // 全局快捷键
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && !document.querySelector('[role="listbox"]')) {
-        e.preventDefault(); savePendingAnnotationToStore();
-      } else if (e.key === 'Escape') {
-        e.preventDefault(); handleCancelDrawing();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [savePendingAnnotationToStore, handleCancelDrawing]);
-
   return (
     <div 
       ref={popoverRef}
@@ -64,10 +51,29 @@ export function ClassFormPopover({
       {/* 🌟 可拖拽的顶部把手区 */}
       <div 
         className={`px-3 py-2 bg-neutral-100/50 dark:bg-neutral-800/50 border-b border-neutral-200 dark:border-neutral-700 flex justify-between items-center select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`}
-        onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={handlePointerUp} onPointerCancel={handlePointerUp}
+        onPointerDown={handlePointerDown} 
+        onPointerMove={handlePointerMove} 
+        onPointerUp={handlePointerUp} 
+        onPointerCancel={handlePointerUp}
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          setIsDragging(false);
+          savePendingAnnotationToStore();
+        }}
       >
-        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">Object Details</span>
-        <button onClick={handleCancelDrawing} className="text-neutral-400 hover:text-red-500 transition-colors p-1" onPointerDown={e => e.stopPropagation()}>
+        <span className="text-[10px] font-bold text-neutral-500 uppercase tracking-wider">
+          Object Editor
+          <span className="text-[9px] text-neutral-400 font-normal normal-case tracking-normal pl-2 border-l border-neutral-200 dark:border-neutral-700">
+            double-click title/enter to confirm
+          </span>
+        </span>
+        <button 
+          onClick={handleCancelDrawing} 
+          className="text-neutral-400 hover:text-red-500 transition-colors p-1" 
+          onPointerDown={e => e.stopPropagation()}
+          title="Cancel (Esc)"
+        >
           <X className="w-3.5 h-3.5" />
         </button>
       </div>
