@@ -1068,9 +1068,11 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     }
   };
   const handleClear = () => {
-    if (!currentStem) return;
-    const currentAnnos = annotations.filter(a => a.stem === currentStem);
-    currentAnnos.forEach(a => removeAnnotation(a.id));
+    const state = useStore.getState();
+    const stem = state.currentStem;
+    if (!stem) return;
+    const currentAnnos = state.annotations.filter(a => a.stem === stem);
+    currentAnnos.forEach(a => state.removeAnnotation(a.id));
   };
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
   const isCtrl = e.ctrlKey || e.metaKey;
