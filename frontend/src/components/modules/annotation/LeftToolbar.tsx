@@ -106,20 +106,15 @@ export function LeftToolbar({
     const buttonClass = editorSettings?.showToolLabels 
       ? 'h-auto py-2 w-14 flex-col gap-1' 
       : 'h-9 w-9';
+    
     return (
       <Button
         key={t.id}
         variant="ghost"
         disabled={t.disabled}
         onClick={t.action ? t.action : () => setTool(t.id)} 
-        className={`transition-all duration-200 ${buttonClass} ${
-          isActive 
-            ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400' 
-            : t.disabled
-              ? 'opacity-30 cursor-not-allowed'
-              : 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100'
-        }`}
-        title={t.title}
+        className={`transition-all duration-200 ${buttonClass} ${getButtonStyle(t)}`}
+        title={t.disabled ? `${t.name} (unavailable)` : t.title}
       >
         <t.icon className={`${editorSettings?.showToolLabels ? "w-4 h-4" : "w-5 h-5"} ${t.className || ''}`} />
         
@@ -129,7 +124,7 @@ export function LeftToolbar({
               {t.name}
             </span>
             {t.shortcut && (
-              <span className="text-[8px] font-mono text-neutral-400 dark:text-neutral-500 leading-none">
+              <span className="text-[8px] font-mono leading-none opacity-60">
                 {t.shortcut}
               </span>
             )}
@@ -137,6 +132,22 @@ export function LeftToolbar({
         )}
       </Button>
     );
+  };
+
+  // 🌟 提取样式逻辑
+  const getButtonStyle = (t: any) => {
+    const isActive = tool === t.id && !t.action;
+    
+    if (isActive) {
+      return 'bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 shadow-sm ring-1 ring-blue-200 dark:ring-blue-800';
+    }
+    
+    if (t.disabled) {
+      // 🌟 不可用：降低对比度但保持可见
+      return 'opacity-40 text-neutral-300 dark:text-neutral-600 cursor-not-allowed';
+    }
+    
+    return 'text-neutral-500 hover:text-neutral-900 dark:hover:text-neutral-100 hover:bg-neutral-100 dark:hover:bg-neutral-800';
   };
 
   return (
