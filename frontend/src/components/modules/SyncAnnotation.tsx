@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useStore, Annotation } from '../../store/useStore';
 import { useTranslation } from 'react-i18next';
 import { ClassFormPopover } from './annotation/ClassFormPopover';
@@ -412,10 +412,18 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
       setShowFullExtent(prev => ({ ...prev, [viewId]: !prev[viewId] }));
     };
 
-  // const gridCols = Math.ceil(Math.sqrt(Math.max(1, views.length)));
-  // const gridRows = Math.ceil(Math.max(1, views.length) / gridCols);
-  const currentAnnotations = annotations.filter((a: Annotation) => a.stem === currentStem);
-  
+
+  const annotationsIndex = useMemo(() => {
+      const map = new Map<string, Annotation[]>();
+      annotations.forEach(ann => {
+          const list = map.get(ann.stem) || [];
+          list.push(ann);
+          map.set(ann.stem, list);
+      });
+      return map;
+  }, [annotations]);
+
+  const currentAnnotations = annotationsIndex.get(currentStem || '') || [];
   // 提取主视图的物理尺寸 (作为基准裁剪框)
   const mainViewConfig = views.find((v: any) => v.isMain);
   const mainViewFolder = folders?.find((f: any) => f.id === mainViewConfig?.folderId);
