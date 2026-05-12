@@ -548,16 +548,21 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
             const centerHitRadius = 10 / viewport.zoom; // 中心点碰撞范围稍大
             
             if (center && Math.hypot(mainX - center.x, mainY - center.y) < centerHitRadius) {
-              // 🎯 进入平移模式
-              setCursorStyle('grabbing'); // 或者用自定义光标
+              const state = useStore.getState();
+              const activeAnno = state.annotations.find((a: any) => a.id === state.activeAnnotationId);
+              
+              if (!activeAnno) return;
+              
+              setCursorStyle('grabbing');
               setDragVertex({ 
-                index: -1, // 特殊标记：-1 表示中心点
+                index: -1,
                 type: 'center-translate',
                 startPos: { x: mainX, y: mainY },
-                originalPoints: JSON.parse(JSON.stringify(activeAnno.points)) // 深拷贝原始点
+                originalPoints: JSON.parse(JSON.stringify(activeAnno.points)),
+                originalHoles: JSON.parse(JSON.stringify(activeAnno.holes || []))
               } as any);
-              setTempActiveAnno(JSON.parse(JSON.stringify(activeAnno))); // 深拷贝
-              return; // 拦截后续
+              setTempActiveAnno(JSON.parse(JSON.stringify(activeAnno)));
+              return;
             }
 
             const ctrlPoints = getControlPoints(activeAnno); // 🌟 使用全能解析引擎
@@ -831,23 +836,23 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 
     // 🌟 结束拖拽顶点并保存到全局 Store
     if (tool === 'select' && dragVertex && tempActiveAnno) {
-      // 🌟 在松手保存的瞬间执行裁剪！
       const { clampedPoints, truncated } = clampAndFlag(tempActiveAnno.points);
       const clampedHoles = tempActiveAnno.holes?.map((hole: any) => clampAndFlag(hole).clampedPoints);
 
-      const finalEditedAnno = {
-        ...tempActiveAnno,
-        points: clampedPoints,
-        holes: clampedHoles,
-        truncated // 🌟 写入截断标记
-      };
+      // 🌟 从 Store 获取修改前的原始状态
+      const state = useStore.getState();
+      const activeAnno = state.annotations.find((a: any) => a.id === state.activeAnnotationId);
+      
+      if (activeAnno) {
+        pushAction({ type: 'edit', anno: JSON.parse(JSON.stringify(activeAnno)) });
+      }
 
       updateAnnotation(tempActiveAnno.id, { 
         points: clampedPoints, 
         holes: clampedHoles, 
         truncated 
       }); 
-      pushAction({ type: 'edit', anno: finalEditedAnno }); 
+      
       setDragVertex(null);
       setTempActiveAnno(null);
       setCursorStyle('default'); 
@@ -892,33 +897,22 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
           return;
         }
 
-        // 1. Cutout 挖洞逻辑 (原生支持)
-// 1. Cutout 真正的几何擦除 (Boolean Difference)
         if (tool === 'cutout') {
           try {
-            // 将当前目标和橡皮擦转换为 PolyBool 数据格式
             const polyA = { regions: [activeAnno.points.map((p: any) => [p.x, p.y])], inverted: false };
             const polyB = { regions: [currentPoints.map((p: any) => [p.x, p.y])], inverted: false };
-
-            // 🌟 核心引擎：执行 A - B 的布尔差集运算
             const result = PolyBool.difference(polyA, polyB);
 
+            pushAction({ type: 'edit', anno: JSON.parse(JSON.stringify(activeAnno)) });
+
             if (result.regions.length === 0) {
-              // 橡皮擦太大了，图形被完全擦没，直接删除
               removeAnnotation(activeAnno.id);
               pushAction({ type: 'delete', anno: activeAnno });
               setActiveAnnotationId(null);
             } else {
-              // 🌟 智能判断：
-              // polybooljs 会自动帮我们算出结果。
-              // 如果只剩 1 个 region，说明只是削了边角（变成五边形），或者在内部挖了个纯净的洞
-              // 如果有多个 region，说明一刀擦下去，把原图形拦腰截断成了两半！
-              
-              // 第一块区域保留给原对象更新
               const newPoints = result.regions[0].map((pt: any) => ({ x: pt[0], y: pt[1] }));
               updateAnnotation(activeAnno.id, { points: newPoints, holes: [] }); 
 
-              // 如果断成了好几块，剩下的区域生成全新对象
               for (let i = 1; i < result.regions.length; i++) {
                  const extraPoints = result.regions[i].map((pt: any) => ({ x: pt[0], y: pt[1] }));
                  const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
@@ -927,21 +921,23 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
               pushAction({ type: 'edit', anno: activeAnno });
             }
           } catch (err) {
-            // 兜底：如果奇异几何情况计算失败，回退到存 holes
+            pushAction({ type: 'edit', anno: JSON.parse(JSON.stringify(activeAnno)) });
             const newHoles = activeAnno.holes ? [...activeAnno.holes, currentPoints] : [currentPoints];
             updateAnnotation(activeAnno.id, { holes: newHoles });
           }
         }
-        // 2. Cut 分割逻辑
         else if (tool === 'cut') {
           const splitResult = splitPolygonPureJS(activeAnno.points, currentPoints);
           if (splitResult && splitResult.length === 2) {
-             updateAnnotation(activeAnno.id, { points: splitResult[0] });
-             const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
-             addAnnotation({ ...activeAnno, id: newId, points: splitResult[1], holes: [] });
-             pushAction({ type: 'edit', anno: activeAnno }); 
-          } else {
-             alert("切割失败：折线必须从多边形外部穿入并穿出（有且仅有两个交点）。");
+            pushAction({ 
+              type: 'batch', 
+              batch: [
+                { type: 'edit', anno: JSON.parse(JSON.stringify(activeAnno)) },
+              ]
+            });
+            updateAnnotation(activeAnno.id, { points: splitResult[0] });
+            const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+            addAnnotation({ ...activeAnno, id: newId, points: splitResult[1], holes: [] });
           }
         }
 
@@ -1071,8 +1067,18 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     const state = useStore.getState();
     const stem = state.currentStem;
     if (!stem) return;
+    
     const currentAnnos = state.annotations.filter(a => a.stem === stem);
+    
+    if (currentAnnos.length === 0) return;
+    
+    pushAction({ 
+      type: 'batch', 
+      batch: currentAnnos.map(a => ({ type: 'delete' as const, anno: a }))
+    });
+    
     currentAnnos.forEach(a => state.removeAnnotation(a.id));
+    state.setActiveAnnotationId(null);
   };
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
   const isCtrl = e.ctrlKey || e.metaKey;
