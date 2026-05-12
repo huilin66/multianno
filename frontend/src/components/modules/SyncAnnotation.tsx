@@ -855,11 +855,6 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       }
     }
 
-    // 🌟 光标状态清理：确保切换工具或离开时恢复正常箭头
-    if (cursorStyle === CURSOR_FOCUS && (tool !== 'select' || dragVertex)) {
-        setCursorStyle('default');
-    }
-
     // 🌟 临时拖拽更新逻辑
     // 🌟 全能拖拽更新逻辑：区分普通点和 BBox 的角点
     // 🌟 临时拖拽更新逻辑：智能处理角点与普通点
@@ -1055,6 +1050,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       delete n[viewId];
       return n;
     });
+    setCursorStyle('default'); 
   };
 
 
@@ -1326,10 +1322,17 @@ const handleToolChange = async (newTool: string) => {
       const actionName = newTool === 'cut' ? "切割" : "擦除";
       alert(`请先选中一个多边形，然后再使用${actionName}工具。`);
       setTool('select'); 
+      setCursorStyle('default');
       return; 
     }
   }
-  
+  if (['bbox', 'polygon', 'ellipse', 'circle', 'line', 'point', 'cut', 'cutout', 'lasso', 'freemask', 'rbbox', 'cuboid'].includes(newTool)) {
+    setCursorStyle('crosshair');
+  } else if (newTool === 'pan' || newTool === 'ai_anno') {
+    setCursorStyle('grab');
+  } else if (newTool === 'select') {
+    setCursorStyle('default');
+  }
   setTool(newTool as any);
 };
 
