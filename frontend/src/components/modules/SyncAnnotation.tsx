@@ -158,6 +158,91 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
 
     return [poly1, poly2];
   };
+  // 🌟 核心 1：彻底清理当前正在绘制/待确认的所有状态
+  const handleCancelDrawing = useCallback(() => {
+    setPopoverOpen(false);
+    setPendingAnnotation(null);
+    setCurrentPoints([]);
+    setIsDrawing(false);
+    setDrawStep(0);
+    setFormText('');
+    setFormGroupId('');
+    setFormTrackId('');
+    setFormDifficult(false);
+    setFormOccluded(false);
+    setFormAttributes({});
+    setUndonePoints([]); // 取消绘制时清空点的重做栈
+    setTool('pan');
+    setDrawStep(0);
+    const { editorSettings } = useStore.getState() as any;
+    if (!editorSettings?.continuousDrawing) {
+      setTool('pan'); 
+    }
+  }, []);
+
+
+  // 计算当前可被控制的图层列表 (当前图层 + 被勾选显示的图层)
+  const operableLayers = layerOrder.filter(id => id === focusedViewId || visibleLayers[id]);
+  
+  // 🌟 新增：单视图模式下的叠加控制状态
+  const [overlayConfig, setOverlayConfig] = useState({
+    active: false,
+    overlayViewId: 'none',
+    mode: 'opacity' as 'opacity' | 'swipeX' | 'swipeY',
+    value: 0.5
+  });
+
+  // 🌟 核心修复：单图模式显示焦点图层；多图模式下，严格按照右侧列表的拖拽顺序 (layerOrder) 重新排列网格！
+  const displayViews = focusedViewId 
+    ? views.filter((v: any) => v.id === focusedViewId) 
+    : [...views].sort((a: any, b: any) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id));
+  
+  // 网格动态计算将自动把 1 个视图放大为 1x1 铺满
+  const gridCols = Math.ceil(Math.sqrt(Math.max(1, displayViews.length)));
+  const gridRows = Math.ceil(Math.max(1, displayViews.length) / gridCols);
+
+  // 🌟 表单状态升级为绑定 Taxonomy
+  const [formLabel, setFormLabel] = useState(taxonomyClasses[0]?.name || 'object');
+  const [formText, setFormText] = useState('');
+  const [formDifficult, setFormDifficult] = useState(false);
+  const [formOccluded, setFormOccluded] = useState(false);
+  const [formGroupId, setFormGroupId] = useState(''); 
+  const [formTrackId, setFormTrackId] = useState('');
+  const [undonePoints, setUndonePoints] = useState<{x: number, y: number}[]>([]);
+  const handleUndo = useCallback(() => {
+    // 场景 A：精确撤销多边形/线段/Lasso 的单个点
+    if (currentPoints.length > 0 && (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask')) {
+      const lastPoint = currentPoints[currentPoints.length - 1];
+      setUndonePoints(prev => [...prev, lastPoint]); 
+      
+      if (currentPoints.length === 1) {
+        setCurrentPoints([]); setIsDrawing(false); 
+      } else {
+        setCurrentPoints(prev => prev.slice(0, -1));
+      }
+      return;
+    }
+    // 场景 B：撤销正在拖拽的框、或者取消待确认的蓝色弹窗
+    if (isDrawing || pendingAnnotation || popoverOpen) {
+      handleCancelDrawing();
+      return;
+    }
+    // 场景 C：交给 Hook 执行全局级撤销
+    performGlobalUndo();
+  }, [currentPoints, tool, isDrawing, pendingAnnotation, popoverOpen, handleCancelDrawing, performGlobalUndo]);
+
+  const handleRedo = useCallback(() => {
+    // 场景 A：重做多边形/线段的点
+    if ((tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask') && undonePoints.length > 0) {
+      const pointToRestore = undonePoints[undonePoints.length - 1];
+      setUndonePoints(prev => prev.slice(0, -1));
+      setCurrentPoints(prev => [...prev, pointToRestore]);
+      setIsDrawing(true);
+      return;
+    }
+    // 场景 B：交给 Hook 执行全局级重做
+    performGlobalRedo();
+  }, [tool, undonePoints, performGlobalRedo]);
 
   // 🌟 1. 核心修复：建立 AI 状态同步监听器
   useEffect(() => {
@@ -231,6 +316,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
       }
+
       // 安全锁 1：输入框中不触发
       const target = e.target as HTMLElement;
       if (
@@ -241,7 +327,24 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
       
       // 安全锁 2：绘制中不切换
       if (isDrawing) return;
-      
+
+      if (e.key === 'Enter' && (tool === 'polygon' || tool === 'line') && currentPoints.length > 1) {
+        if (tool === 'polygon' && currentPoints.length < 3) return;
+        e.preventDefault();
+        const lastPoint = currentPoints[currentPoints.length - 1];
+        const screenX = (lastPoint.x * viewport.zoom) + viewport.panX;
+        const screenY = (lastPoint.y * viewport.zoom) + viewport.panY;
+        openSmartPopover(screenX, screenY, tool, currentPoints);
+        setCurrentPoints([]);
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleCancelDrawing();
+        setActiveAnnotationId(null);
+        return;
+      }
+
       const state = useStore.getState();
       const { shortcutsSettings } = state as any;
       if (!shortcutsSettings) return;
@@ -263,6 +366,9 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
 
       e.preventDefault();
 
+      if (matchedTool === 'undo') { handleUndo(); return; }
+      if (matchedTool === 'redo') { handleRedo(); return; }
+
       // 导航操作
       if (matchedTool === 'home') { handleHomeViewport(); return; }
       if (matchedTool === 'prev') { handlePrevStem(); return; }
@@ -279,37 +385,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isDrawing]);
-
-  // 计算当前可被控制的图层列表 (当前图层 + 被勾选显示的图层)
-  const operableLayers = layerOrder.filter(id => id === focusedViewId || visibleLayers[id]);
-  
-  // 🌟 新增：单视图模式下的叠加控制状态
-  const [overlayConfig, setOverlayConfig] = useState({
-    active: false,
-    overlayViewId: 'none',
-    mode: 'opacity' as 'opacity' | 'swipeX' | 'swipeY',
-    value: 0.5
-  });
-
-  // 🌟 核心修复：单图模式显示焦点图层；多图模式下，严格按照右侧列表的拖拽顺序 (layerOrder) 重新排列网格！
-  const displayViews = focusedViewId 
-    ? views.filter((v: any) => v.id === focusedViewId) 
-    : [...views].sort((a: any, b: any) => layerOrder.indexOf(a.id) - layerOrder.indexOf(b.id));
-  
-  // 网格动态计算将自动把 1 个视图放大为 1x1 铺满
-  const gridCols = Math.ceil(Math.sqrt(Math.max(1, displayViews.length)));
-  const gridRows = Math.ceil(Math.max(1, displayViews.length) / gridCols);
-
-  // 🌟 表单状态升级为绑定 Taxonomy
-  const [formLabel, setFormLabel] = useState(taxonomyClasses[0]?.name || 'object');
-  const [formText, setFormText] = useState('');
-  const [formDifficult, setFormDifficult] = useState(false);
-  const [formOccluded, setFormOccluded] = useState(false);
-  const [formGroupId, setFormGroupId] = useState(''); 
-  const [formTrackId, setFormTrackId] = useState('');
-  const [undonePoints, setUndonePoints] = useState<{x: number, y: number}[]>([]);
-
+  }, [isDrawing, handleUndo, handleRedo]);
   // 当切换图片(Stem)时，清空历史栈，防止跨图像撤销产生 Bug
   useEffect(() => {
     setUndonePoints([]);
@@ -918,7 +994,6 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
                  const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
                  addAnnotation({ ...activeAnno, id: newId, points: extraPoints, holes: [] });
               }
-              pushAction({ type: 'edit', anno: activeAnno });
             }
           } catch (err) {
             pushAction({ type: 'edit', anno: JSON.parse(JSON.stringify(activeAnno)) });
@@ -961,27 +1036,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     });
   };
 
-  // 🌟 核心 1：彻底清理当前正在绘制/待确认的所有状态
-  const handleCancelDrawing = useCallback(() => {
-    setPopoverOpen(false);
-    setPendingAnnotation(null);
-    setCurrentPoints([]);
-    setIsDrawing(false);
-    setDrawStep(0);
-    setFormText('');
-    setFormGroupId('');
-    setFormTrackId('');
-    setFormDifficult(false);
-    setFormOccluded(false);
-    setFormAttributes({});
-    setUndonePoints([]); // 取消绘制时清空点的重做栈
-    setTool('pan');
-    setDrawStep(0);
-    const { editorSettings } = useStore.getState() as any;
-    if (!editorSettings?.continuousDrawing) {
-      setTool('pan'); 
-    }
-  }, []);
+
 
 // 🌟 升级版：统一处理属性初始化、保存草稿、以及智能计算坐标
   const openSmartPopover = useCallback((
@@ -1020,45 +1075,14 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     setPopoverOpen(true);
   }, [taxonomyAttributes]);
 
-  const handleUndo = useCallback(() => {
-    // 场景 A：精确撤销多边形/线段/Lasso 的单个点
-    if (currentPoints.length > 0 && (tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask')) {
-      const lastPoint = currentPoints[currentPoints.length - 1];
-      setUndonePoints(prev => [...prev, lastPoint]); 
-      
-      if (currentPoints.length === 1) {
-        setCurrentPoints([]); setIsDrawing(false); 
-      } else {
-        setCurrentPoints(prev => prev.slice(0, -1));
-      }
-      return;
-    }
-    // 场景 B：撤销正在拖拽的框、或者取消待确认的蓝色弹窗
-    if (isDrawing || pendingAnnotation || popoverOpen) {
-      handleCancelDrawing();
-      return;
-    }
-    // 场景 C：交给 Hook 执行全局级撤销
-    performGlobalUndo();
-  }, [currentPoints, tool, isDrawing, pendingAnnotation, popoverOpen, handleCancelDrawing, performGlobalUndo]);
 
-  const handleRedo = useCallback(() => {
-    // 场景 A：重做多边形/线段的点
-    if ((tool === 'polygon' || tool === 'line' || tool === 'lasso' || tool === 'freemask') && undonePoints.length > 0) {
-      const pointToRestore = undonePoints[undonePoints.length - 1];
-      setUndonePoints(prev => prev.slice(0, -1));
-      setCurrentPoints(prev => [...prev, pointToRestore]);
-      setIsDrawing(true);
-      return;
-    }
-    // 场景 B：交给 Hook 执行全局级重做
-    performGlobalRedo();
-  }, [tool, undonePoints, performGlobalRedo]);
   
   const handleDelete = () => {
     const state = useStore.getState();
     const id = state.activeAnnotationId;
     if (id) {
+      const anno = state.annotations.find(a => a.id === id);
+      if (anno) pushAction({ type: 'delete', anno: anno });
       state.removeAnnotation(id);
       state.setActiveAnnotationId(null);
     }
@@ -1080,39 +1104,6 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     currentAnnos.forEach(a => state.removeAnnotation(a.id));
     state.setActiveAnnotationId(null);
   };
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-  const isCtrl = e.ctrlKey || e.metaKey;
-    if (isCtrl && (e.key === 'y' || e.key === 'Y' || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
-      e.preventDefault();
-      handleRedo();
-      return;
-    }
-    
-    if (isCtrl && !e.shiftKey && (e.key === 'z' || e.key === 'Z')) {
-      e.preventDefault();
-      handleUndo();
-      return;
-    }
-
-    if (e.key === 'Enter' && (tool === 'polygon' || tool === 'line') && currentPoints.length > 1) {
-      if (tool === 'polygon' && currentPoints.length < 3) return;
-      const lastPoint = currentPoints[currentPoints.length - 1];
-      const screenX = (lastPoint.x * viewport.zoom) + viewport.panX;
-      const screenY = (lastPoint.y * viewport.zoom) + viewport.panY;
-      openSmartPopover(screenX, screenY, tool, currentPoints);
-      setCurrentPoints([]);
-    } else if (e.key === 'Escape') {
-      handleCancelDrawing();
-      setActiveAnnotationId(null);
-    }
-  }, [currentPoints, tool, viewport, activeAnnotationId, 
-    removeAnnotation, setActiveAnnotationId, 
-    currentAnnotations, pushAction, handleUndo, handleRedo, handleCancelDrawing]);
-  
-    useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
 
   const savePendingAnnotationToStore = () => {
     if (pendingAnnotation && currentStem) {
