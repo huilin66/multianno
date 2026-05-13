@@ -4,7 +4,8 @@ import { Button } from '../../ui/button';
 import { 
   Hand, Square, Hexagon, Circle, CircleDot, Wand2, Eraser, Trash2,
   MoreHorizontal, ChevronLeft, ChevronRight, Box, Activity, Ban, Save,
-  Pencil, Cloud, MousePointer2, Undo2, Redo2, Columns2, Diamond, Home
+  Pencil, Cloud, MousePointer2, Undo2, Redo2, Columns2, Diamond, Home,
+  Copy, ClipboardPaste
 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { KEY_LABELS } from '../settings/ShortcutSettingsModal';
@@ -12,25 +13,29 @@ import { useTranslation } from 'react-i18next';
 
 interface LeftToolbarProps {
   tool: string;
-  setTool: (tool: any) => void;
-  onHomeClick: () => void;
-  handleUndo: () => void;
-  handleRedo: () => void;
-  canUndo: boolean;
-  canRedo: boolean;
-  handlePrevStem: () => void;
-  handleNextStem: () => void;
   hasPrev: boolean;
   hasNext: boolean;
+  canUndo: boolean;
+  canRedo: boolean;
+  canCopy: boolean;
+  canPaste: boolean;
+  setTool: (tool: any) => void;
+  onHomeClick: () => void;
+  handlePrevStem: () => void;
+  handleNextStem: () => void;
+  handleUndo: () => void;
+  handleRedo: () => void;
+  handleCopy: () => void;
+  handlePaste: () => void;
   handleDelete: () => void;
   handleClear: () => void;
   handleSave: () => void;
 }
 
 export function LeftToolbar({ 
-  tool, setTool, onHomeClick, handleUndo, handleRedo, canUndo, canRedo,
-  handlePrevStem, handleNextStem, hasPrev, hasNext, 
-  handleDelete, handleClear, handleSave
+  tool, hasPrev, hasNext, canUndo, canRedo, canCopy, canPaste,
+  setTool, onHomeClick, handlePrevStem, handleNextStem, 
+  handleUndo, handleRedo, handleCopy, handlePaste, handleDelete, handleClear, handleSave, 
 }: LeftToolbarProps) {
   const { t } = useTranslation();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
@@ -92,6 +97,8 @@ export function LeftToolbar({
     { id: 'separator', type: 'separator' },
     { id: 'undo', icon: Undo2, ...getToolInfo(t('shortcuts.undo'), 'undo'), action: handleUndo, disabled: !canUndo },
     { id: 'redo', icon: Redo2, ...getToolInfo(t('shortcuts.redo'), 'redo'), action: handleRedo, disabled: !canRedo },
+    { id: 'copy', icon: Copy, action: handleCopy, disabled: !canCopy },
+    { id: 'paste', icon: ClipboardPaste, action: handlePaste, disabled: !canPaste },
     { id: 'delete', icon: Trash2, ...getToolInfo(t('shortcuts.delete'), 'delete'), action: handleDelete },
     { id: 'clear', icon: Ban, ...getToolInfo(t('shortcuts.clear'), 'clear'), action: handleClear },
     { id: 'save', icon: Save, ...getToolInfo(t('shortcuts.save'), 'save'), action: handleSave },

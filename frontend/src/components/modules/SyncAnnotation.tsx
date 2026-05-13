@@ -79,7 +79,8 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const [mouseQuad, setMouseQuad] = useState<Record<string, { tl: boolean, tr: boolean }>>({});
   const [selectedAIViewId, setSelectedAIViewId] = useState<string>(views[0]?.id || '');
   type ToolType = 'select' | 'pan' | 'bbox' | 'polygon' | 'point' | 'line' | 'ellipse' | 'circle' | 'lasso' | 'freemask' | 'rbbox' | 'cuboid' | 'ai_anno' | 'cut' | 'cutout';
-
+  const [clipboard, setClipboard] = useState<Annotation | null>(null);
+  const [pasteOffset, setPasteOffset] = useState(0);
   const [tool, setTool] = useState<ToolType>('pan');
   const [isDrawing, setIsDrawing] = useState(false);
   const [drawStep, setDrawStep] = useState(0);
@@ -241,6 +242,76 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     performGlobalRedo();
   }, [tool, undonePoints, performGlobalRedo]);
 
+  const handleCopy = useCallback(() => {
+      const state = useStore.getState();
+      const id = state.activeAnnotationId;
+      if (!id) return;
+      setPasteOffset(0);
+      const anno = state.annotations.find((a: Annotation) => a.id === id);
+      if (anno) {
+          setClipboard(JSON.parse(JSON.stringify(anno))); // 深拷贝
+      }
+  }, []);
+
+  const handlePaste = useCallback(() => {
+    if (!clipboard || !currentStem) return;
+    const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+    
+    // 🌟 偏移量：每次粘贴累加，避免重叠
+    const offset = 30 + pasteOffset * 20;
+    console.log(offset, pasteOffset);
+    const offsetPoints = clipboard.points.map((p: { x: number; y: number }) => ({
+        x: p.x + offset,
+        y: p.y + offset,
+    }));
+
+    // 如果有孔洞，也偏移
+    const offsetHoles = clipboard.holes?.map((hole: { x: number; y: number }[]) =>
+        hole.map(p => ({ x: p.x + offset, y: p.y + offset }))
+    );
+
+    const newAnno = {
+        ...clipboard,
+        id: newId,
+        stem: currentStem,
+        points: offsetPoints,
+        holes: offsetHoles,
+    };
+    
+    addAnnotation(newAnno);
+    pushAction({ type: 'add', anno: newAnno });
+    setActiveAnnotationId(newId);
+    setPasteOffset(prev => prev + 1); // 累加计数
+  }, [clipboard, currentStem, pasteOffset]);
+  
+  const handleDelete = () => {
+    const state = useStore.getState();
+    const id = state.activeAnnotationId;
+    if (id) {
+      const anno = state.annotations.find(a => a.id === id);
+      if (anno) pushAction({ type: 'delete', anno: anno });
+      state.removeAnnotation(id);
+      state.setActiveAnnotationId(null);
+    }
+  };
+  const handleClear = () => {
+    const state = useStore.getState();
+    const stem = state.currentStem;
+    if (!stem) return;
+    
+    const currentAnnos = state.annotations.filter(a => a.stem === stem);
+    
+    if (currentAnnos.length === 0) return;
+    
+    pushAction({ 
+      type: 'batch', 
+      batch: currentAnnos.map(a => ({ type: 'delete' as const, anno: a }))
+    });
+    
+    currentAnnos.forEach(a => state.removeAnnotation(a.id));
+    state.setActiveAnnotationId(null);
+  };
+
   // 🌟 1. 核心修复：建立 AI 状态同步监听器
   useEffect(() => {
     // 只要图片路径(currentStem) 或者 推理的目标视图(selectedAIViewId) 发生任何变化
@@ -388,9 +459,11 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
       if (matchedTool === 'next') { handleNextStem(); return; }
       
       // 手动保存
-      if (matchedTool === 'save') { autoSave(); return; }
+      if (matchedTool === 'copy') { handleCopy(); return; }
+      if (matchedTool === 'paste') { handlePaste(); return; }
       if (matchedTool === 'delete') { handleDelete(); return; }
       if (matchedTool === 'clear') { handleClear(); return; }
+      if (matchedTool === 'save') { autoSave(); return; }
 
       // 工具切换
       handleToolChange(matchedTool);
@@ -398,7 +471,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isDrawing, handleUndo, handleRedo]);
+  }, [isDrawing, handleUndo, handleRedo, handleCopy, handlePaste]);
   // 当切换图片(Stem)时，清空历史栈，防止跨图像撤销产生 Bug
   useEffect(() => {
     setUndonePoints([]);
@@ -1093,34 +1166,8 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
   }, [taxonomyAttributes]);
 
 
-  
-  const handleDelete = () => {
-    const state = useStore.getState();
-    const id = state.activeAnnotationId;
-    if (id) {
-      const anno = state.annotations.find(a => a.id === id);
-      if (anno) pushAction({ type: 'delete', anno: anno });
-      state.removeAnnotation(id);
-      state.setActiveAnnotationId(null);
-    }
-  };
-  const handleClear = () => {
-    const state = useStore.getState();
-    const stem = state.currentStem;
-    if (!stem) return;
-    
-    const currentAnnos = state.annotations.filter(a => a.stem === stem);
-    
-    if (currentAnnos.length === 0) return;
-    
-    pushAction({ 
-      type: 'batch', 
-      batch: currentAnnos.map(a => ({ type: 'delete' as const, anno: a }))
-    });
-    
-    currentAnnos.forEach(a => state.removeAnnotation(a.id));
-    state.setActiveAnnotationId(null);
-  };
+
+
 
   const savePendingAnnotationToStore = () => {
     if (pendingAnnotation && currentStem) {
@@ -1553,15 +1600,20 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
         {leftPanelOpen ? (
           <LeftToolbar 
             tool={tool} 
-            setTool={handleToolChange}
-            onHomeClick={handleHomeViewport}
-            handleUndo={handleUndo} handleRedo={handleRedo} 
-            canUndo={undoCount > 0 || currentPoints.length > 0}
-            canRedo={redoCount > 0 || undonePoints.length > 0}
-            handlePrevStem={handlePrevStem}
-            handleNextStem={handleNextStem}
             hasPrev={stemIndex > 0}
             hasNext={stemIndex < stems.length - 1}
+            canUndo={undoCount > 0 || currentPoints.length > 0}
+            canRedo={redoCount > 0 || undonePoints.length > 0}
+            canCopy={!!activeAnnotationId}
+            canPaste={!!clipboard}
+            setTool={handleToolChange}
+            onHomeClick={handleHomeViewport}
+            handlePrevStem={handlePrevStem}
+            handleNextStem={handleNextStem}
+            handleUndo={handleUndo} 
+            handleRedo={handleRedo} 
+            handleCopy={handleCopy}
+            handlePaste={handlePaste}
             handleDelete={handleDelete}
             handleClear={handleClear}
             handleSave={autoSave}

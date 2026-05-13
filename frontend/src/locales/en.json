@@ -61,6 +61,8 @@
     "next": "Next",
     "undo": "Undo",
     "redo": "Redo",
+    "copy": "Copy",
+    "paste": "Paste",
     "delete": "Delete",
     "clear": "Clear",
     "save": "Save"

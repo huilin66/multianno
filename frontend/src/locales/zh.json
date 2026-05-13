@@ -61,6 +61,8 @@
     "next": "下一场景",
     "undo": "撤销",
     "redo": "重做",
+    "copy": "复制",
+    "paste": "粘贴",
     "delete": "删除",
     "clear": "清空",
     "save": "保存"
