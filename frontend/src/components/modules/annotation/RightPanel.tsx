@@ -112,7 +112,7 @@ export function RightPanel({
   // 核心数据结构：{ annoId: { groupName: 'OP_1', isMaster: boolean } }
   const [nmsGroups, setNmsGroups] = React.useState<Record<string, { groupName: string, isMaster: boolean }>>({});
   const [hasScanned, setHasScanned] = React.useState(false);
-  const [showHiddenObjects, setShowHiddenObjects] = React.useState(false);
+  const [showHiddenObjects, setShowHiddenObjects] = React.useState(true);
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
