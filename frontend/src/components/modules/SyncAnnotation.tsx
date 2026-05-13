@@ -1869,6 +1869,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             visibleLayers={visibleLayers} setVisibleLayers={setVisibleLayers}
             hiddenAnnotations={hiddenAnnotations}
             toggleAnnotationVisibility={toggleAnnotationVisibility}
+            handleClear={handleClear}
           />
         ) : (
           <button
