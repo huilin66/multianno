@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../../store/useStore';
 import { renderCanvasScene } from '../../../lib/canvasRenderer';
-import { getPreviewImageUrl } from '../../../api/client';
+import { getPreviewImageUrl, prefetchImages } from '../../../api/client';
 import { getLutColor } from '../../../config/colors';
 
 // 1. 把 PixelInfoBadge 移过来
@@ -86,11 +86,11 @@ export function CanvasView({
   formLabel, pendingAnnotation, onDoubleClick, 
   hoverPos, onMouseLeave, editorSettings, mouseQuad,
   layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent, tempViewSettings, cursorStyle,
-  aiPrompts
+  aiPrompts, onImageLoaded
 }: any) {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { viewport, sceneGroups } = useStore();
+  const { viewport, sceneGroups, stems } = useStore();
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
 
 
@@ -103,31 +103,65 @@ export function CanvasView({
 
   // 🌟 增加一个 rawImage 状态来保存后端的原始数据
   const [rawImage, setRawImage] = useState<HTMLImageElement | null>(null);
-
-  // 避免拉伸范围数组频繁导致 useEffect 重新触发
-  const minMaxStr = JSON.stringify(baseSettings.minMax || [0, 100]);
-
-
-
+  const preloadStem = (stem: string, folder: any) => {
+      const preloadFileName = sceneGroups?.[stem]?.[folder.path] || `${stem}${folder.suffix || '.tif'}`;
+      const forceGray = view.bands?.length === 1 ? 'gray' : (view.colormap || 'gray');
+      const preloadUrl = getPreviewImageUrl(folder.path, preloadFileName, view.bands, forceGray);
+      const preloadImg = new Image();
+      preloadImg.crossOrigin = 'anonymous';
+      preloadImg.src = preloadUrl;
+  };
+  const getFullPath = (stem: string, folder: any) => {
+      const exactFileName = sceneGroups?.[stem]?.[folder.path];
+      const fileName = exactFileName || `${stem}${folder.suffix || '.tif'}`;
+      // 在 valid_extensions 中匹配实际文件
+      // 简化版：直接用 folder.path + fileName
+      return `${folder.path}/${fileName}`;
+  };
   // 🌟 阶段 1：网络请求（仅在图层或波段改变时触发，彻底忽略 colormap 的改变，减少后端压力）
   useEffect(() => {
-    if (!currentStem || !folders) return;
-    const folder = folders.find((f: any) => f.id === view.folderId);
-    if (!folder) return;
+      if (!currentStem || !folders || !stems) return;
+      const folder = folders.find((f: any) => f.id === view.folderId);
+      if (!folder) return;
 
-    const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
-    const fileName = exactFileName || `${currentStem}${folder.suffix || '.tif'}`;
-    
-    // ⚠️ 极其核心：强制后端返回 gray 原始数据！无论前端选了什么色带！
-    const forceGray = view.bands?.length === 1 ? 'gray' : (view.colormap || 'gray');
-    const url = getPreviewImageUrl(folder.path, fileName, view.bands, forceGray);
+      setRawImage(null)
 
-    const img = new Image();
-    img.crossOrigin = 'anonymous'; 
-    img.src = url;
-    
-    img.onload = () => setRawImage(img);
-  }, [view.folderId, view.bands, currentStem, folders, view.id]);
+      // ========== 加载当前图片 ==========
+      const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
+      const fileName = exactFileName || `${currentStem}${folder.suffix || '.tif'}`;
+      const forceGray = view.bands?.length === 1 ? 'gray' : (view.colormap || 'gray');
+      const url = getPreviewImageUrl(folder.path, fileName, view.bands, forceGray);
+
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.src = url;
+
+      img.onload = () => {
+          console.log('🟢 CanvasView img.onload for stem:', currentStem);
+          setRawImage(img);
+          onImageLoaded?.();
+      };
+
+      // ========== 预加载前后各 3 张 ==========
+      const idx = stems.indexOf(currentStem);
+      const prefetchPaths: string[] = [];
+      
+      for (let i = 1; i <= 3; i++) {
+          if (idx - i >= 0) {
+              preloadStem(stems[idx - i], folder);
+              prefetchPaths.push(getFullPath(stems[idx - i], folder));
+          }
+          if (idx + i < stems.length) {
+              preloadStem(stems[idx + i], folder);
+              prefetchPaths.push(getFullPath(stems[idx + i], folder));
+          }
+      }
+      
+      // 异步通知后端提前解码到内存缓存
+      if (prefetchPaths.length > 0) {
+          prefetchImages(prefetchPaths);
+      }
+}, [view.folderId, view.bands, currentStem, folders, stems, view.id]);
 
   // 🌟 引擎阶段 2：纯前端内存像素级渲染（极速重绘 Colormap 和 Stretch Range）
 // 🌟 阶段 2：内存像素管线（当滑块、参数或原始图发生变化时，纯前端极速重绘）
@@ -291,7 +325,7 @@ export function CanvasView({
 
     // 🌟 1. 拦截保护：不让底层引擎处理 ai_preview，防止数据格式不兼容报错
     const safePendingAnnotation = pendingAnnotation?.id === 'ai_preview' ? null : pendingAnnotation;
-
+    console.log('🎨 CanvasView render - rawImage:', !!rawImage, 'stem:', currentStem);
     // 调用外部渲染引擎
     renderCanvasScene({
       canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 

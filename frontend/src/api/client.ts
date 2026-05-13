@@ -155,7 +155,18 @@ export const fetchProjectStatisticsStream = async (
     onError(error);
   }
 };
-
+// 🌟 通知后端预取相邻图片到内存缓存
+export const prefetchImages = async (paths: string[]) => {
+  try {
+    await fetch(`${API_BASE_URL}/project/prefetch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths }),
+    });
+  } catch {
+    // 静默失败，不影响主流程
+  }
+};
 // ==========================================
 // 🌟 5. 获取全局项目统计数据大盘
 // ==========================================

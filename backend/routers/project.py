@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 
 import cv2
@@ -11,6 +12,12 @@ from models import AnalyzeRequest, ProjectMetaPayload, StatsRequest
 from skimage import io
 
 router = APIRouter(prefix="/api", tags=["Project"])
+
+
+@lru_cache(maxsize=20)
+def _read_image_cached(image_path: str):
+    """缓存原始图像 numpy 数组，避免重复磁盘 IO + 解码"""
+    return io.imread(image_path)
 
 
 def calculate_list_stats(*lists):
@@ -262,7 +269,7 @@ async def get_preview(folderPath: str, fileName: str = "", bands: str = ""):
         return Response(status_code=404)
 
     try:
-        img = io.imread(image_path)
+        img = _read_image_cached(image_path)
     except Exception as e:
         print(f"Failed to read image: {e}")
         return Response(status_code=500)
@@ -325,6 +332,28 @@ async def get_preview(folderPath: str, fileName: str = "", bands: str = ""):
 
         traceback.print_exc()
         return Response(status_code=500)
+
+
+@router.post("/project/prefetch")
+async def prefetch_images(request: dict):
+    """
+    前端在切换场景后调用，通知后端提前解码相邻图片
+    payload: { "paths": ["/data/img1.tif", "/data/img2.tif"] }
+    """
+    paths = request.get("paths", [])
+    for path in paths:
+        if os.path.exists(path):
+            try:
+                _read_image_cached(path)
+            except Exception:
+                pass
+    return {"status": "ok", "cached": len(paths)}
+
+
+@router.post("/project/clear_cache")
+async def clear_cache():
+    _read_image_cached.cache_clear()
+    return {"status": "ok"}
 
 
 @router.post("/project/save_meta")

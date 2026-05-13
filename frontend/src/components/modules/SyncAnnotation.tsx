@@ -10,9 +10,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
 import { AIToolPanel } from './annotation/AIToolPanel';
-import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM, SAMPoint } from '../../api/client'
+import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM, SAMPoint, getPreviewImageUrl } from '../../api/client'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useAnnotationAutoSave } from '../../hooks/useAnnotationAutoSave';
 import { createPortal } from 'react-dom';
 import { CURSOR_FOCUS, CURSOR_DRAG } from '../../lib/cursors';
 
@@ -111,7 +110,15 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const [visibleLayers, setVisibleLayers] = useState<Record<string, boolean>>({}); // 控制其他图层的显示
   const [layerConfigs, setLayerConfigs] = useState<Record<string, { mode: 'opacity' | 'swipeX' | 'swipeY', value: number }>>({}); // 独立控制每个图层的特效
   const [activeControlLayer, setActiveControlLayer] = useState<string>(''); // 顶部控制条当前选中的图层
+  type RenderState = 'loading' | 'ready';
+  const [renderState, setRenderState] = useState<RenderState>('ready');
 
+
+  // CanvasView 图片加载完成
+  const handleImageLoaded = () => {
+      console.log('🟢 handleImageLoaded, set renderState=ready');
+      setRenderState('ready');
+  };
 // 🌟 2. 新增：原生纯 JS 多边形折线切割算法
   const splitPolygonPureJS = (poly: {x: number, y: number}[], line: {x: number, y: number}[]) => {
     const getIntersection = (A: any, B: any, C: any, D: any) => {
@@ -1229,12 +1236,9 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     const state = useStore.getState();
     const { stems, currentStem, setCurrentStem } = state;
     const idx = stems.indexOf(currentStem);
-    
-    console.log('BEFORE — currentStem:', currentStem, 'stemIndex:', idx);
-    
     if (idx > 0) {
       const newStem = stems[idx - 1];
-      console.log('SETTING currentStem to:', newStem);
+      setRenderState('loading');
       setCurrentStem(newStem);
       setActiveAnnotationId(null);
     } else {
@@ -1243,17 +1247,16 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
   };
 
   const handleNextStem = () => {
+    console.log('🟡 handleNextStem START');
     const state = useStore.getState();
     const { stems, currentStem, setCurrentStem } = state;
     const idx = stems.indexOf(currentStem);
-    
-    console.log('BEFORE — currentStem:', currentStem, 'stemIndex:', idx);
-    
     if (idx < stems.length - 1) {
       const newStem = stems[idx + 1];
-      console.log('SETTING currentStem to:', newStem);
+      setRenderState('loading');
       setCurrentStem(newStem);
       setActiveAnnotationId(null);
+      console.log('🟡 setCurrentStem done, newStem:', newStem);
     } else {
       console.log('Already at last stem');
     }
@@ -1566,6 +1569,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
   const [toolbarPos, setToolbarPos] = useState({ x: -9999, y: 32 });
   const [isToolbarDragging, setIsToolbarDragging] = useState(false);
   const toolbarDragRef = useRef({ startX: 0, startY: 0, origX: 0, origY: 0 });
+
   useEffect(() => {
     if (focusedViewId) {
       setToolbarPos({ x:60, y: 2 });
@@ -1795,12 +1799,15 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                 
                 <CanvasView 
                   view={view} 
-                  annotations={(tempActiveAnno && tempActiveAnno.id !== 'ai_preview' 
-                    ? currentAnnotations.map((a: any) => a.id === tempActiveAnno.id ? tempActiveAnno : a) 
-                    : currentAnnotations)
-                    .filter((a: any) => !hiddenClasses.includes(a.label))
-                    .filter((a: any) => !hiddenAnnotations.includes(a.id))
+                  annotations={renderState === 'ready' 
+                    ? (tempActiveAnno && tempActiveAnno.id !== 'ai_preview' 
+                      ? currentAnnotations.map((a: any) => a.id === tempActiveAnno.id ? tempActiveAnno : a) 
+                      : currentAnnotations)
+                      .filter((a: any) => !hiddenClasses.includes(a.label))
+                      .filter((a: any) => !hiddenAnnotations.includes(a.id))
+                    : []
                   }
+                  onImageLoaded={handleImageLoaded}
                   activeAnnotationId={activeAnnotationId}
                   taxonomyClasses={sortedClasses}
                   currentPoints={currentPoints}
