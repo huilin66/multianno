@@ -1054,7 +1054,7 @@ export function RightPanel({
                 }`}
                 title={showHiddenObjects ? "Hide hidden objects" : "Show hidden objects"}
               >
-                {showHiddenObjects ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                {showHiddenObjects ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
               </button>
               <button
                   onClick={(e) => { e.stopPropagation(); setNmsPanelOpen(!nmsPanelOpen); }}
