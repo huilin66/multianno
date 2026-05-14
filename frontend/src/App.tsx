@@ -339,48 +339,36 @@ export default function App() {
         <SyncAnnotation autoSave={autoSave} />
       </main>
 
-      {/* ============== 以下是各种 Dialog 容器 ============== */}
+      {/* ============== Dialog Containers ============== */}
 
-      {/* 🌟 新增：Create Project 弹窗 */}
       <Dialog
         open={activeModule === 'createproject'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        {/* 🌟 修复后：去掉了 bg-neutral-900 text-white 等，使用标准样式 */}
         <DialogContent className="max-w-md w-[95vw] h-auto flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
-            <DialogTitle className="flex items-center gap-2">
-              <FolderPlus className="w-5 h-5 text-primary" /> {t('menu.createProject')}
-            </DialogTitle>
+            <DialogTitle> {t('menu.createProject')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-            {/* 传入 onClose 回调，以便组件内部点 Cancel 时可以关闭弹窗 */}
             <CreateProject onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* 🌟 新增：Load Project 弹窗 */}
       <Dialog
         open={activeModule === 'loadproject'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        {/* 🌟 修复后：去掉硬编码颜色 */}
         <DialogContent className="max-w-md w-[95vw] h-auto flex flex-col p-0 overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
-            <DialogTitle className="flex items-center gap-2">
-              <Upload className="w-5 h-5 text-primary" /> {t('menu.loadProject')}
-            </DialogTitle>
+            <DialogTitle> {t('menu.loadProject')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-            <LoadProject
-              onClose={() => setActiveModule('workspace')}
-            />
+            <LoadProject onClose={() => setActiveModule('workspace')}/>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* 原有的 Preload 弹窗 */}
       <Dialog
         open={activeModule === 'preload'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
@@ -390,102 +378,95 @@ export default function App() {
             <DialogTitle>{t('menu.dataPreload')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-            <DataPreload />
+            <DataPreload onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* 原有的 Extent Check 弹窗 */}
       <Dialog
         open={activeModule === 'extent'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-6xl sm:max-w-6xl h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800">
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
             <DialogTitle>{t('menu.viewExtentCheck')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-            <ViewExtentCheck />
+            <ViewExtentCheck onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>
 
-
-      {/* 统一格式的 Project Meta 弹窗 */}
       <Dialog
         open={activeModule === 'meta'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-6xl sm:max-w-6xl w-[95vw] h-[85vh] flex flex-col p-0 bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-800 overflow-hidden">
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-            <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-              <Database className="w-5 h-5 text-blue-400" /> {t('menu.projectMeta')}
-            </DialogTitle>
+            <DialogTitle>{t('menu.projectMeta')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <ProjectMetaDashboard onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>
-      {/* 🌟 新增：Taxonomy Manager 弹窗 */}
+
       <Dialog
         open={activeModule === 'taxonomy'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 bg-neutral-50 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-800 overflow-hidden">
-          {/* 🌟 1. 补齐缺失的标准头部 (DialogHeader) */}
-          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
-            <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-              <Tags className="w-5 h-5 text-primary" /> {t('menu.taxonomyManager')}
-            </DialogTitle>
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden">
+          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
+            <DialogTitle>{t('menu.taxonomyManager')}</DialogTitle>
           </DialogHeader>
-
           <div className="flex-grow overflow-hidden relative">
-            {/* 🌟 2. 传入标准的 onClose 回调 */}
             <TaxonomyDashboard onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>
-      {/* 🌟 数据导入/导出 统一弹窗 */}
-      {/* 🌟 导入弹窗 */}
+
       <Dialog
         open={activeModule === 'exchange_import'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-2xl sm:max-w-2xl h-[70vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
-          <DataImport onClose={() => setActiveModule('workspace')} />
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden shadow-2xl">
+          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
+            <DialogTitle>{t('menu.importData')}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-grow overflow-hidden relative">
+            <DataImport onClose={() => setActiveModule('workspace')} />
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* 🌟 导出弹窗 */}
       <Dialog
         open={activeModule === 'exchange_export'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-3xl sm:max-w-3xl h-[85vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
-          <DataExport onClose={() => setActiveModule('workspace')} />
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden shadow-2xl">
+          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
+            <DialogTitle>{t('menu.exportData')}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-grow overflow-hidden relative">
+            <DataExport onClose={() => setActiveModule('workspace')} />
+          </div>
         </DialogContent>
       </Dialog>
 
-      {/* 🌟 新增：Local Visualization 弹窗 */}
       <Dialog
         open={activeModule === 'local_visualization'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 overflow-hidden shadow-2xl">
-
-          {/* 🌟 补充标准头部，保持与其他模块高度一致 */}
-          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
-            <DialogTitle className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100">
-              <Airplay className="w-5 h-5 text-indigo-500" /> {t('menu.localVisualization', '本地可视化引擎')}
-            </DialogTitle>
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden shadow-2xl">
+          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
+            <DialogTitle>{t('menu.localVisualization')}</DialogTitle>
           </DialogHeader>
-
           <div className="flex-grow overflow-hidden relative">
             <LocalVisualization onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>
+
       <ViewLayoutSettingsModal
         open={viewLayoutModalOpen}
         onClose={() => setViewLayoutModalOpen(false)}
@@ -494,12 +475,12 @@ export default function App() {
         open={shortcutModalOpen}
         onClose={() => setShortcutModalOpen(false)}
       />
-
       <AISettingsModal
         open={aiSettingsModalOpen}
         onClose={() => setAiSettingsModalOpen(false)}
       />
       <GlobalConfirmDialog />
+
     </div>
   );
 }

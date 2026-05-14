@@ -15,7 +15,7 @@ import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { getPreviewImageUrl } from '../../api/client';
 import { saveProjectMeta } from '../../api/client';
 
-export function ViewExtentCheck() {
+export function ViewExtentCheck({onClose }: {onClose: () => void }) {
   const { t } = useTranslation();
   const {projectName, stems, sceneGroups, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
 // 🛡️ 兜底防线：如果没有绑定 View 或没有数据

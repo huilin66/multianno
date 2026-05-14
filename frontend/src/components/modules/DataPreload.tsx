@@ -16,7 +16,7 @@ import { Alert, AlertDescription } from '../ui/alert';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson } from '../../api/client';
 
-export function DataPreload() {
+export function DataPreload({onClose }: {onClose: () => void }) {
   const { t } = useTranslation();
   const {folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule, editorSettings } = useStore();
   
