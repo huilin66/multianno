@@ -97,10 +97,11 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
               // C. 定位主视图，重新触发安全全量加载引擎！
               const mainViewFolderId = meta.views.find((v:any) => v.isMain)?.["folder id"];
               const mainFolder = meta.folders.find((f:any) => f.Id === mainViewFolderId) || meta.folders[0];
-              
-              if (mainFolder && mainFolder.path) {
-                // 后台并发抓取所有更新后的 JSON 标注文件
-                loadAllProjectAnnotations(analyzeResult.commonStems, mainFolder.path);
+
+              const state = useStore.getState();
+              const loadPath = state.workspacePath || mainFolder?.path || '';
+              if (loadPath) {
+                  loadAllProjectAnnotations(analyzeResult.commonStems, loadPath);
               }
             }
           }

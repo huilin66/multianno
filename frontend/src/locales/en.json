@@ -141,6 +141,18 @@
       "confirmMap": "Confirm & Map Extents",
       "confirmStart": "Confirm & Start Annotation"
     },
+    "workspace": {
+      "title": "Workspace Path",
+      "description": "Annotation Save Path",
+      "default": "Default",
+      "reset": "reset",
+      "placeholder": "Select workspace directory...",
+      "browse": "Browse folder",
+      "customPathHint": "Custom path differs from Main View folder",
+      "emptyHint": "Will default to Main View folder",
+      "confirm": "Confirm Path",
+      "saving": "Saving..."
+    },
     "alerts": {
       "cancelFolders": "Are you sure you want to cancel all pending folders?",
       "resetViews": "Are you sure you want to reset all View configurations?",
@@ -151,7 +163,8 @@
       "confirmSingleView": "Only 1 view is configured. Are you sure you want to start annotation directly with this configuration?\n(This will skip the alignment stage, save the project config, and enter the workspace)",
       "exportSuccess": "✅ Export Successful!\n\nproject_meta.json has been saved locally.\nEntering annotation workspace...",
       "exportCancelled": "Export cancelled or failed. Do you still want to force enter the annotation workspace?"
-    }
+    },
+    "confirmAndAlign": "Confirm & Start Align"
   },
   "viewExtent": {
     "errors": {
@@ -313,8 +326,11 @@
     "cancel": "Cancel",
     "edit": "Edit",
     "error": "Error",
+    "exit": "Exit",
+    "reset": "Reset",
     "success": "Success",
     "saved": "Saved",
+    "saving": "Saving...",
     "done": "Done"
   }
 }

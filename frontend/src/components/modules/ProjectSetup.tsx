@@ -154,9 +154,10 @@ export function LoadProject({onClose}: {onClose: () => void}) {
             const mainViewFolderId = meta.views.find((v:any) => v.isMain)?.["folder id"];
             const mainFolder = meta.folders.find((f:any) => f.Id === mainViewFolderId) || meta.folders[0];
             
-            if (mainFolder && mainFolder.path) {
-               // 不用 await 阻塞它，让它在后台默默去扫，我们直接进入工作区即可！
-               loadAllProjectAnnotations(result.commonStems, mainFolder.path);
+            const state = useStore.getState();
+            const loadPath = state.workspacePath || mainFolder?.path || '';
+            if (loadPath) {
+                loadAllProjectAnnotations(result.commonStems, loadPath);
             }
           }
         } catch (analyzeError) {

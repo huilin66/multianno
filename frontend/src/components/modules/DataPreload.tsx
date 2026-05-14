@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
@@ -9,17 +9,16 @@ import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from 
 import { useTranslation } from 'react-i18next';
 
 import { 
-  FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History
+  FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History, Save, Eye, LogOut
 } from 'lucide-react';
 import { FileExplorerDialog } from './FileExplorerDialog'; 
 import { Alert, AlertDescription } from '../ui/alert';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
-import { API_BASE_URL } from '../../api/client';
 import { saveProjectMeta, analyzeWorkspaceFolders } from '../../api/client';
 
 export function DataPreload() {
   const { t } = useTranslation();
-  const {projectName, folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule, editorSettings } = useStore();
+  const {folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule, editorSettings } = useStore();
   
   const [placeholders, setPlaceholders] = useState<{ id: string, path: string, suffix: string }[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
@@ -27,7 +26,44 @@ export function DataPreload() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [explorerMode, setExplorerMode] = useState<'dir' | 'file'>('dir');
+  const [workspacePath, setWorkspacePath] = useState('');
+  const [isWorkspaceCustom, setIsWorkspaceCustom] = useState(false);
+  const [workspaceExplorerOpen, setWorkspaceExplorerOpen] = useState(false);
+  const [isWorkspaceConfirming, setIsWorkspaceConfirming] = useState(false);
+  const [isGlobalConfirming, setIsGlobalConfirming] = useState(false);
+
+  const workspaceStorePath = useStore(s => s.workspacePath);
+  const setWorkspaceStorePath = useStore(s => s.setWorkspacePath);
+
+  const mainViewFolder = useMemo(() => {
+      const mainView = views.find(v => v.isMain);
+      return folders.find(f => f.id === mainView?.folderId);
+  }, [views, folders]);
+
   const maxViews = editorSettings.maxViews || 9;
+
+
+  // 显示状态
+  const workspaceStatus = isWorkspaceCustom ? 'defined' : 'default';
+
+  // 1. 简化初始化逻辑
+  useEffect(() => {
+    if (workspaceStorePath && workspaceStorePath !== mainViewFolder?.path) {
+      // Store 中有自定义路径，恢复 defined 状态
+      setWorkspacePath(workspaceStorePath);
+      setIsWorkspaceCustom(true);
+    }
+    // 否则保持 default 状态，跟随 mainViewFolder
+  }, []); // 只在挂载时执行一次
+
+  // 2. 简化 useEffect - 只在 default 状态下跟随 mainViewFolder
+  useEffect(() => {
+    if (!isWorkspaceCustom && mainViewFolder?.path) {
+      setWorkspacePath(mainViewFolder.path);
+    }
+  }, [mainViewFolder?.path, isWorkspaceCustom]);
+
+  // 加载历史路径
   useEffect(() => {
     const savedHistory = localStorage.getItem('multiAnno_recentPaths');
     if (savedHistory) {
@@ -40,26 +76,30 @@ export function DataPreload() {
   }, []);
 
   const savePathsToHistory = (paths: string[]) => {
-    let newHistory = [...recentPaths];
-    paths.forEach(path => {
-      const trimmed = path.trim().replace(/\\/g, '/'); 
-      if (trimmed) {
-        newHistory = newHistory.filter(p => p !== trimmed); 
-        newHistory.unshift(trimmed); 
-      }
+    setRecentPaths(prev => {
+        let newHistory = [...prev];
+        
+        paths.forEach(path => {
+            const trimmed = path.trim().replace(/\\/g, '/'); 
+            if (trimmed) {
+                newHistory = newHistory.filter(p => p !== trimmed); 
+                newHistory.unshift(trimmed); 
+            }
+        });
+        
+        const updated = newHistory.slice(0, 5);
+        localStorage.setItem('multiAnno_recentPaths', JSON.stringify(updated));
+        return updated; 
     });
-    newHistory = newHistory.slice(0, 5);
-    setRecentPaths(newHistory);
-    localStorage.setItem('multiAnno_recentPaths', JSON.stringify(newHistory));
   };
 
-  const handleAddPlaceholder = () => setPlaceholders([...placeholders, { id: Math.random().toString(36).substr(2, 9), path: '', suffix: '' }]);
-  const handleAddFromHistory = (path: string) => setPlaceholders(prev => [...prev, { id: Math.random().toString(36).substr(2, 9), path, suffix: '' }]);
+  const handleAddPlaceholder = () => setPlaceholders([...placeholders, { id: Math.random().toString(36).slice(2, 11), path: '', suffix: '' }]);
+  const handleAddFromHistory = (path: string) => setPlaceholders(prev => [...prev, { id: Math.random().toString(36).slice(2, 11), path, suffix: '' }]);
   const handleRemovePlaceholder = (id: string) => setPlaceholders(placeholders.filter(p => p.id !== id));
   const handleUpdatePath = (id: string, newPath: string) => setPlaceholders(placeholders.map(p => p.id === id ? { ...p, path: newPath } : p));
   const openExplorerFor = (id: string) => { setActivePlaceholderId(id); setExplorerOpen(true); };
 
-  const handleExplorerConfirm = (selectedPaths: string[]) => {
+  const handleFolderSelectConfirm = (selectedPaths: string[]) => {
     if (selectedPaths.length === 0 || !activePlaceholderId) return;
     const newPlaceholders = [...placeholders];
     const targetIndex = newPlaceholders.findIndex(p => p.id === activePlaceholderId);
@@ -67,7 +107,7 @@ export function DataPreload() {
     if (targetIndex !== -1) {
       newPlaceholders[targetIndex].path = selectedPaths[0];
       const extraPlaceholders = selectedPaths.slice(1).map(path => ({
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).slice(2, 11),
         path: path
       }));
       newPlaceholders.splice(targetIndex + 1, 0, ...extraPlaceholders);
@@ -76,17 +116,17 @@ export function DataPreload() {
     setExplorerOpen(false);
     savePathsToHistory(selectedPaths);
   };
-
+  const handleWorkspaceSelectConfirm = (paths: string[]) => {
+    if (paths.length > 0) {
+      setWorkspacePath(paths[0]);
+      setIsWorkspaceCustom(true); // 🆕 手动选择，切换为 defined
+    }
+    setWorkspaceExplorerOpen(false);
+  };
   const cancelFolders = () => {
     if (window.confirm(t('dataPreload.alerts.cancelFolders'))) { // 🌟
       setPlaceholders([]);
       clearFolders();
-      clearViews();
-    }
-  };
-
-  const handleResetViews = () => {
-    if (window.confirm(t('dataPreload.alerts.resetViews'))) { // 🌟
       clearViews();
     }
   };
@@ -112,7 +152,7 @@ export function DataPreload() {
         const originalPath = payloadData[index].path; 
         const originalSuffix = payloadData[index].suffix;
         addFolder({
-          id: `folder-${Date.now()}-${index}-${Math.random().toString(36).substr(2, 5)}`,
+          id: `folder-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
           path: folderMeta.folderPath || originalPath, 
           suffix: originalSuffix,
           files: [], 
@@ -146,10 +186,16 @@ export function DataPreload() {
     }
   };
 
+  const handleResetViews = () => {
+    if (window.confirm(t('dataPreload.alerts.resetViews'))) { // 🌟
+      clearViews();
+    }
+  };
+
   const handleAddView = () => {
-    if (views.length >= 9) return;
+    if (views.length >= maxViews) return;
     addView({
-      id: Math.random().toString(36).substr(2, 9),
+      id: Math.random().toString(36).slice(2, 11),
       folderId: '',
       bands: [1, 2, 3],
       isMain: views.length === 0,
@@ -158,49 +204,89 @@ export function DataPreload() {
     });
   };
 
-  const handleConfirmViews = async () => {
-    if (views.length === 0) return;
+  
+  // 🆕 Workspace 确认处理
+  const handleWorkspaceConfirm = async () => {
+    const finalPath = isWorkspaceCustom 
+      ? workspacePath 
+      : mainViewFolder?.path || '';
+      
+    if (!finalPath) return;
+    
+    setIsWorkspaceConfirming(true);
+    // 🆕 setWorkspaceStorePath 是同步操作，不需要 try-catch
+    setWorkspaceStorePath(finalPath);
+    setIsWorkspaceConfirming(false);
+  };
 
-    if (views.length > 1) {
-      if (window.confirm(t('dataPreload.alerts.confirmExtent'))) { 
-        setActiveModule('extent');
-      }
+  // 🆕 Workspace 取消/重置
+  const handleWorkspaceReset = () => {
+    setWorkspacePath(mainViewFolder?.path || '');
+    setIsWorkspaceCustom(false); // 🆕 恢复 default 状态
+  };
+  // 🆕 全局最终确认 - 进入工作区
+  const handleGlobalConfirm = async () => {
+    if (folders.length === 0) {
+      alert(t('dataPreload.alerts.noFoldersConfigured'));
+      return;
+    }
+    if (!mainViewFolder) {
+      alert(t('dataPreload.alerts.noMainView'));
       return;
     }
 
-    if (views.length === 1) {
-      if (!window.confirm(t('dataPreload.alerts.confirmSingleView'))) return; 
-      
+    setIsGlobalConfirming(true);
+    try {
+      // 确保 workspace 路径已保存
+      const finalPath = isWorkspaceCustom ? workspacePath : mainViewFolder?.path || '';
+      if (finalPath) {
+        setWorkspaceStorePath(finalPath);
+      }
+
       const projectMeta = generateProjectMetaConfig(useStore.getState());
       const metaPath = useStore.getState().projectMetaPath;
-      
-      try {
-        // 🌟 如果路径存在，静默写入硬盘
-        if (metaPath) {
-          await saveProjectMeta({ file_path: metaPath, content: projectMeta });
-        }
-        // 直接进入工作区，把下面的 showSaveFilePicker 全删了！
-        setActiveModule('workspace'); 
-      } catch (err) {
-        alert("配置保存失败，请检查路径权限");
-        // 失败的话也可以强行进入或者让用户检查
-        setActiveModule('workspace');
+      if (metaPath) {
+        await saveProjectMeta({ file_path: metaPath, content: projectMeta });
       }
+      
+      setActiveModule('extent');
+    } catch (err) {
+      console.error("Failed to enter workspace:", err);
+      alert("配置保存失败，请检查路径权限");
+    } finally {
+      setIsGlobalConfirming(false);
     }
   };
-  
+
+  // 🆕 退出
+  const handleExit = () => {
+    if (window.confirm(t('dataPreload.alerts.confirmExit'))) {
+      setActiveModule('workspace'); // 或者其他初始模块
+    }
+  };
+
   return (
-    <div className="grid grid-cols-2 h-full gap-6 p-6 overflow-hidden">
-      {/* 左侧：Folders Section */}
-      <Card className="flex flex-col flex-1 min-h-0 transition-colors">
-        <CardHeader className="shrink-0 pb-4 border-b">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2"><FolderOpen className="w-5 h-5" /> {t('dataPreload.folders.title')}</div>
-            <Button onClick={handleAddPlaceholder} variant="outline" size="sm" disabled={isConfirming}>
-              <Plus className="w-4 h-4 mr-2" /> {t('dataPreload.folders.add')}
-            </Button>
-          </CardTitle>
-        </CardHeader>
+    <div className="h-full flex flex-col gap-6 p-6 overflow-hidden">
+
+      {/* ============ 上半部分：左右两栏 ============ */}
+      <div className="grid grid-cols-2 gap-6 flex-1 min-h-0">
+
+        {/* 左侧：Folders + Workspace */}
+        <div className="flex flex-col gap-4 min-h-0">
+          {/* Folders Card */}
+          <Card className="flex flex-col flex-1 min-h-0 transition-colors">
+            <CardHeader className="shrink-0 pb-4 border-b">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-5 h-5" /> 
+                  {t('dataPreload.folders.title')}
+                </div>
+                <Button onClick={handleAddPlaceholder} variant="outline" size="sm" disabled={isConfirming}>
+                  <Plus className="w-4 h-4 mr-2" /> 
+                  {t('dataPreload.folders.add')}
+                </Button>
+              </CardTitle>
+            </CardHeader>
         
         <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar">
           <div className="flex-1 space-y-3">
@@ -227,7 +313,22 @@ export function DataPreload() {
                 <div className="flex items-center gap-4">
                   <div className="p-2 bg-background rounded-md border"><FolderOpen className="w-6 h-6 text-primary" /></div>
                   <div>
-                    <h3 className="font-semibold" title={folder.path}>{folder.path}</h3>
+                    <h3 className="font-semibold max-w-[300px]" title={folder.path}>
+                        {(() => {
+                            const path = folder.path;
+                            const len = path.length;
+                            const showLen = Math.floor(len * 0.8);
+                            const first = path.slice(0, Math.floor(showLen * 0.5));
+                            const last = path.slice(-Math.floor(showLen * 0.5));
+                            return (
+                                <span className="inline-flex items-center min-w-0">
+                                    <span className="truncate">{first}</span>
+                                    <span className="whitespace-nowrap flex-shrink-0">&nbsp;...&nbsp;</span>
+                                    <span className="whitespace-nowrap flex-shrink-0">{last}</span>
+                                </span>
+                            );
+                        })()}
+                    </h3>
                     <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-muted-foreground">
                       <span>{t('dataPreload.folders.size')} {folder.metadata.width}x{folder.metadata.height}</span>
                       <span>{t('dataPreload.folders.bands')} {folder.metadata.bands}</span>
@@ -286,31 +387,152 @@ export function DataPreload() {
                 </Button>
               </div>
             ))}
-
           </div>
 
+          {/* Folders 底部按钮 */}
           <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t shrink-0">
-            <span className="text-sm text-muted-foreground mr-auto">{placeholders.length} {t('dataPreload.folders.pendingCount')}</span>
+            <span className="text-sm text-muted-foreground mr-auto">
+              {placeholders.length} {t('dataPreload.folders.pendingCount')}
+            </span>
             <Button onClick={cancelFolders} variant="outline" disabled={(placeholders.length === 0 && folders.length === 0) || isConfirming}>
-              <X className="w-4 h-4 mr-2" /> {t('dataPreload.folders.cancelAll')}
+              <X className="w-4 h-4 mr-2" /> {t('common.reset')}
             </Button>
             <Button onClick={confirmFolders} variant="default" className="text-white" disabled={placeholders.length === 0 || isConfirming}>
-              {isConfirming ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('dataPreload.folders.analyzing')}</> : <><Check className="w-4 h-4 mr-2" /> {t('dataPreload.folders.confirmUpload')}</>}
+              {isConfirming ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('dataPreload.folders.analyzing')}</>
+              ) : (
+                <><Check className="w-4 h-4 mr-2" /> {t('common.confirm')}</>
+              )}
             </Button>
           </div>
         </CardContent>
-      </Card>
+          </Card>
+      
+          {/* Workspace Card */}
+          <Card className="flex flex-col min-h-0 transition-colors">
+            <CardHeader className="shrink-0 pb-3 border-b">
+              <CardTitle className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <FolderOpen className="w-5 h-5" />
+                  {t('dataPreload.workspace.title') || 'Workspace'}
+                  
+                  {/* 状态标签 */}
+                  <span className={`text-xs px-2 py-0.5 rounded-full font-normal ${
+                    workspaceStatus === 'default'
+                      ? 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                  }`}>
+                    {workspaceStatus}
+                  </span>
+                </div>
+              </CardTitle>
+            </CardHeader>
+            
+            <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar">
+              <div className="flex-1 space-y-3">
+                {folders.length > 0 ? (
+                  <>
+                    {/* 说明信息 */}
+                    <Label className="text-xs text-muted-foreground">
+                        {t('dataPreload.workspace.description') || 'Annotation save path'}
+                    </Label>
 
-      {/* 右侧：Views Configuration Section */}
-      <Card className="flex flex-col flex-1 min-h-0">
-        <CardHeader className="shrink-0 pb-4 border-b">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center gap-2"><Info className="w-5 h-5" /> {t('dataPreload.views.title')}</div>
-            <Button onClick={handleAddView} variant="outline" size="sm" disabled={views.length >= maxViews}>
-              <Plus className="w-4 h-4 mr-2" /> {t('dataPreload.views.addView')} {views.length >= maxViews && t('headerSetting.maxViews')}
-            </Button>
-          </CardTitle>
-        </CardHeader>
+                    {/* 路径配置 */}
+                    <div className="space-y-2">
+
+                      
+                      {/* 路径输入框 */}
+                      <div className="relative">
+                        <Input
+                          value={isWorkspaceCustom ? workspacePath : (mainViewFolder?.path || 'default')}
+                          placeholder="default"
+                          onChange={e => {
+                            const val = e.target.value;
+                            setWorkspacePath(val);
+                            if (!val || val === mainViewFolder?.path) {
+                              setIsWorkspaceCustom(false);
+                            } else {
+                              setIsWorkspaceCustom(true);
+                            }
+                          }}
+                          className={`h-8 text-xs pr-8 font-mono bg-background ${
+                            !isWorkspaceCustom ? 'text-muted-foreground' : 'text-foreground'
+                          }`}
+                          disabled={isWorkspaceConfirming}
+                        />
+                        <button
+                          onClick={() => setWorkspaceExplorerOpen(true)}
+                          disabled={isWorkspaceConfirming}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                        >
+                          <FolderOpen size={13} />
+                        </button>
+                      </div>
+
+                      {/* 当前路径信息 */}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <span>{t('dataPreload.workspace.default') || 'Default'}:</span>
+                        <span className="font-mono truncate" title={mainViewFolder?.path}>
+                          {mainViewFolder?.path || t('dataPreload.workspace.notSet') || 'Not set'}
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  /* 没有文件夹时的提示 */
+                  <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                    <FolderOpen className="w-10 h-10 mb-2 opacity-50" />
+                    <p className="text-sm text-center">
+                      {t('dataPreload.workspace.noFoldersHint') || 'Add folders first to configure workspace path'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Workspace 底部按钮 - 与 Folders 统一风格 */}
+              <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t shrink-0">
+
+                <Button 
+                  onClick={handleWorkspaceReset} 
+                  variant="outline" 
+                  disabled={!isWorkspaceCustom || isWorkspaceConfirming} // 只在 defined 状态可点击
+                >
+                  <X className="w-4 h-4 mr-2" /> 
+                  {t('common.reset') || 'Reset'}
+                </Button>
+                <Button 
+                  onClick={handleWorkspaceConfirm} 
+                  variant="default"
+                  className="text-white" 
+                  disabled={isWorkspaceConfirming || (!workspacePath && !mainViewFolder?.path)}
+                >
+                  {isWorkspaceConfirming ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('common.saving') || 'Saving...'}</>
+                  ) : (
+                    <><Check className="w-4 h-4 mr-2" /> {t('common.confirm') || 'Confirm'}</>
+                  )}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+
+      {/* 右侧：Views Configuration */}
+        <Card className="flex flex-col flex-1 min-h-0">
+          <CardHeader className="shrink-0 pb-4 border-b">
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Info className="w-5 h-5" /> 
+                {t('dataPreload.views.title')}
+              </div>
+              <Button onClick={handleAddView} variant="outline" size="sm" disabled={views.length >= maxViews}>
+                <Plus className="w-4 h-4 mr-2" /> 
+                {t('dataPreload.views.addView')} 
+                {views.length >= maxViews && t('headerSetting.maxViews')}
+              </Button>
+            </CardTitle>
+          </CardHeader>
         
         <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar">
           <div className="flex-1 space-y-4">
@@ -337,9 +559,23 @@ export function DataPreload() {
                         }}
                       >
                         {/* 🌟 修改点：使用 bg-background, text-foreground, bg-popover */}
-                        <SelectTrigger className="h-8 bg-background border-input text-foreground text-xs font-medium shadow-sm flex-1">
-                          <SelectValue placeholder={t('dataPreload.views.selectFolder')}>
-                            {view.folderId ? folders.find(f => f.id === view.folderId)?.path : t('dataPreload.views.selectFolder')}
+                        <SelectTrigger className="h-8 w-[200px] bg-background border-input text-foreground text-xs font-medium shadow-sm flex-1 min-w-0 overflow-hidden">
+                            <SelectValue placeholder={t('dataPreload.views.selectFolder')}>
+                              {view.folderId ? (() => {
+                                  const path = folders.find(f => f.id === view.folderId)?.path || '';
+                                  if (!path) return t('dataPreload.views.selectFolder');
+                                  const len = path.length;
+                                  const showLen = Math.floor(len * 0.8);
+                                  const first = path.slice(0, Math.floor(showLen * 0.5));
+                                  const last = path.slice(-Math.floor(showLen * 0.5));
+                                  return (
+                                      <span className="inline-flex items-center min-w-0" title={path}>
+                                          <span className="truncate">{first}</span>
+                                          <span className="whitespace-nowrap flex-shrink-0">&nbsp;...&nbsp;</span>
+                                          <span className="whitespace-nowrap flex-shrink-0">{last}</span>
+                                      </span>
+                                  );
+                              })() : t('dataPreload.views.selectFolder')}
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent className="bg-popover border-border">
@@ -505,32 +741,79 @@ export function DataPreload() {
               ))
             )}
           </div>
-          
-          <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t shrink-0">
-            <span className="text-sm text-muted-foreground mr-auto">
-              {views.length} {t('dataPreload.views.configuredCount')}
-            </span>
-            <Button onClick={handleResetViews} variant="outline" disabled={views.length === 0}>
-              <X className="w-4 h-4 mr-2" /> {t('dataPreload.views.reset')}
-            </Button>
-            <Button 
-              onClick={handleConfirmViews} 
-              disabled={views.length === 0} 
-              variant="default"
-              className="text-white font-medium"
-            >
-              <Check className="w-4 h-4 mr-2" /> 
-              {views.length > 1 ? t('dataPreload.views.confirmMap') : t('dataPreload.views.confirmStart')}
-            </Button>
-          </div>
         </CardContent>
-      </Card>
+        </Card>
+    </div>
+
+
+      {/* ============ 底部：全局操作栏 ============ */}
+      <div className="flex items-center justify-between p-4 bg-card border rounded-lg shadow-sm shrink-0">
+        {/* 左侧状态信息 */}
+        <div className="flex items-center gap-6 text-sm">
+          <div className="flex items-center gap-1.5">
+            <FolderOpen className="w-4 h-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Folders:</span>
+            <span className="font-semibold">{folders.length}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Eye className="w-4 h-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Views:</span>
+            <span className="font-semibold">{views.length}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Save className="w-4 h-4 text-muted-foreground" />
+            <span className="text-muted-foreground">Workspace:</span>
+            <span className={`font-semibold ${
+              workspaceStatus === 'default' 
+                ? 'text-gray-500 dark:text-gray-400' 
+                : 'text-blue-600 dark:text-blue-400'
+            }`}>
+              {workspaceStatus === 'default' ? 'default' : 'defined'}
+            </span>
+          </div>
+        </div>
+
+        {/* 右侧操作按钮 */}
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={handleExit}
+            variant="outline"
+            size="sm"
+            disabled={isGlobalConfirming}
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            {t('common.exit') || 'Exit'}
+          </Button>
+          
+
+          <Button
+            onClick={handleGlobalConfirm}
+            variant="default"
+            size="sm"
+            className="text-white font-semibold"
+            disabled={folders.length === 0 || isGlobalConfirming}
+          >
+            {isGlobalConfirming ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Entering...</>
+            ) : (
+              <><Check className="w-4 h-4 mr-2" /> {t('dataPreload.confirmAndAlign') || 'Confirm & Start Align'}</>
+            )}
+          </Button>
+        </div>
+      </div>
 
       <FileExplorerDialog 
         open={explorerOpen}
         initialPath={activePlaceholderId ? placeholders.find(p => p.id === activePlaceholderId)?.path || '' : ''}
         onClose={() => setExplorerOpen(false)}
-        onConfirm={handleExplorerConfirm}
+        onConfirm={handleFolderSelectConfirm}
+        selectType={explorerMode}
+      />
+      <FileExplorerDialog 
+        open={workspaceExplorerOpen}
+        initialPath={workspacePath || mainViewFolder?.path || ''}
+        onClose={() => setWorkspaceExplorerOpen(false)}
+        onConfirm={handleWorkspaceSelectConfirm}
         selectType={explorerMode}
       />
     </div>

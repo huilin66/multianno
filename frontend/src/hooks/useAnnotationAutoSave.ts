@@ -18,11 +18,11 @@ export function useAnnotationAutoSave() {
     setAnnotationSaveStatus('saving');
     try {
       const state = useStore.getState();
-      const mainViewFolder = state.folders.find(
-        (f: any) => f.id === state.views.find((v: any) => v.isMain)?.folderId
-      ) || state.folders[0];
-      const saveDir = mainViewFolder?.path || '';
-      if (!state.folders || state.folders.length === 0 || !saveDir) {
+      const saveDir = state.workspacePath || 
+        state.folders.find((f: any) => f.id === state.views.find((v: any) => v.isMain)?.folderId)?.path ||
+        state.folders[0]?.path ||
+        '';
+      if (!saveDir) {
         setAnnotationSaveStatus('idle');
         return;
       }

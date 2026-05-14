@@ -158,6 +158,7 @@ export interface AppState {
   projectMetadata: FolderMetadata[]; 
   folders: FolderData[];
   views: ViewConfig[];
+  workspacePath: string | null;
   stems: string[];
   stemMetadata: Record<string, StemMetadata>; 
   sceneGroups: Record<string, Record<string, string>>;
@@ -218,6 +219,7 @@ export interface AppState {
   updateView: (id: string, data: Partial<ViewConfig>) => void;
   removeView: (id: string) => void;
   clearViews: () => void;
+  setWorkspacePath: (path: string | null) => void;
   setStems: (stems: string[]) => void;
   updateStemMetadata: (stem: string, data: Partial<StemMetadata>) => void;
   setSceneGroups: (groups: Record<string, Record<string, string>>) => void;
@@ -278,6 +280,7 @@ export const useStore = create<AppState>()(
       projectMetadata: [],
       folders: [],
       views: [],
+      workspacePath: null,
       stems: [],
       stemMetadata: {}, 
       sceneGroups: {},
@@ -394,6 +397,7 @@ export const useStore = create<AppState>()(
         projectName: 'Untitled Project',
         folders: [],
         views: [],              // 必须清空视图
+        workspacePath: null,
         stems: [],
         currentStem: null,      // 类型必须是 null 而不是 ''
         annotations: [],
@@ -433,6 +437,7 @@ export const useStore = create<AppState>()(
       updateView: (id, data) => set((state) => ({views: state.views.map(v => v.id === id ? { ...v, ...data } : v)})),
       removeView: (id) => set((state) => ({ views: state.views.filter(v => v.id !== id) })),
       clearViews: () => set({ views: [] }),
+      setWorkspacePath: (path: string | null) => set({ workspacePath: path }),
       setStems: (stems) => set({ stems }),
       updateStemMetadata: (stem, data) => set((state) => ({
         stemMetadata: {
@@ -666,6 +671,7 @@ export const useStore = create<AppState>()(
         projectMetadata: state.projectMetadata,
         folders: state.folders,
         views: state.views,         
+        workspacePath: state.workspacePath,
         stems: state.stems,
         sceneGroups: state.sceneGroups,
         annotationLastSavedTime: state.annotationLastSavedTime,
