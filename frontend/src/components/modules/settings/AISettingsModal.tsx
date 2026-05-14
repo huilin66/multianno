@@ -98,7 +98,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
             <DialogTitle>{t("aiSettings.title")}</DialogTitle>
           </DialogHeader>
 
-          <div className="p-5 space-y-5">
+          <div className="p-5 pt-1 space-y-5">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
                 {t("aiSettings.modelType")}

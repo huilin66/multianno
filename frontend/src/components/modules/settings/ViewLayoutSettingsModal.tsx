@@ -75,7 +75,7 @@ export function ViewLayoutSettingsModal({ open, onClose }: ViewLayoutSettingsMod
         <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
           <DialogTitle>{t('viewLayout.title')}</DialogTitle>
         </DialogHeader>
-        <div className="p-5 space-y-5">
+        <div className="p-5 pt-1 space-y-5">
           
           {/* ========== 1. Max Views ========== */}
           <div className="flex items-center gap-2 text-xs">
