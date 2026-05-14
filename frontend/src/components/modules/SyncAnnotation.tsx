@@ -40,7 +40,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const {
     views, folders, annotations, addAnnotation, removeAnnotation,
     viewport, setViewport, currentStem,  theme,
-    stems, setCurrentStem,
+    setCurrentStem,
     taxonomyClasses = [{ id: 'default', name: 'object', color: '#3B82F6' }],
     taxonomyAttributes = [],
     activeAnnotationId = null,
@@ -49,6 +49,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     tempViewSettings, updateAnnotation,
     setSettingsOpen, aiSettings, setAISettings
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
+  const stems = useStore(s => s.stems);
   const classOrder = useStore((s) => (s as any).classOrder || []);
   const sortedClasses = [...taxonomyClasses].sort((a: any, b: any) => 
     classOrder.indexOf(a.id) - classOrder.indexOf(b.id)

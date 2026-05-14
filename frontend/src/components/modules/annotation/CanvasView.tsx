@@ -78,7 +78,7 @@ function PixelInfoBadge({ hoverPos, imageObj, view, mouseQuad }: any) {
 }
 
 // 2. 把 CanvasView 移过来，并 export 暴露出去
-export function CanvasView({ 
+const CanvasViewInner=({ 
   view, annotations, activeAnnotationId, taxonomyClasses, currentPoints, 
   tool, theme, folders, currentStem, isPanning,
   mainWidth, mainHeight, isFullExtent,
@@ -87,7 +87,7 @@ export function CanvasView({
   hoverPos, onMouseLeave, editorSettings, mouseQuad,
   layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent, tempViewSettings, cursorStyle,
   aiPrompts, onImageLoaded
-}: any) {
+}: any) => {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { viewport, sceneGroups, stems } = useStore();
@@ -612,3 +612,23 @@ return (
     </>
   );
 }
+
+export const CanvasView = React.memo(CanvasViewInner, (prev, next) => {
+    return (
+        prev.annotations === next.annotations &&
+        prev.activeAnnotationId === next.activeAnnotationId &&
+        prev.currentPoints === next.currentPoints &&
+        prev.tool === next.tool &&
+        prev.hoverPos === next.hoverPos &&
+        prev.pendingAnnotation === next.pendingAnnotation &&
+        prev.currentStem === next.currentStem &&
+        prev.view.id === next.view.id &&
+        prev.cursorStyle === next.cursorStyle &&
+        prev.aiPrompts === next.aiPrompts &&
+        prev.isPanning === next.isPanning &&
+        prev.formLabel === next.formLabel &&
+        prev.editorSettings === next.editorSettings &&
+        prev.mainWidth === next.mainWidth &&
+        prev.mainHeight === next.mainHeight
+    );
+});
