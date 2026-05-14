@@ -105,15 +105,10 @@
   },
   "createProject": {
     "defaultName": "multianno project1",
-    "nameLabel": "Project Name",
+    "projectName": "Project Name",
     "namePlaceholder": "Enter project name...",
-    "importLabel": "Optional: Import Parameters",
-    "importDesc": "You can reuse folder paths, view settings, and alignments from an existing project.",
-    "paramsLoaded": "Parameters Loaded",
-    "loadJson": "Load existing JSON...",
-    "cancel": "Cancel",
-    "submit": "Create Project",
-    "invalidJson": "Invalid JSON file"
+    "projectMetaPath": "Project Metadata Path",
+    "projectMetaPlaceholder": "Enter or click to set project metadata path ..."
   },
   "loadProject": {
     "descPre": "Select a ",

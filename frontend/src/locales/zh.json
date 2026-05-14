@@ -105,15 +105,10 @@
   },
   "createProject": {
     "defaultName": "multianno 项目1",
-    "nameLabel": "项目名称",
+    "projectName": "项目名称",
     "namePlaceholder": "请输入项目名称...",
-    "importLabel": "可选：导入已有参数",
-    "importDesc": "您可以复用已有项目中的文件夹路径、视图配置以及对齐参数。",
-    "paramsLoaded": "参数已成功导入",
-    "loadJson": "加载已有的 JSON 配置...",
-    "cancel": "取消",
-    "submit": "创建项目",
-    "invalidJson": "非法的 JSON 配置文件"
+    "projectMetaPath": "项目元数据路径",
+    "projectMetaPlaceholder": "请输入或点击项目元数据路径..."
   },
   "loadProject": {
     "descPre": "请选择一个 ",

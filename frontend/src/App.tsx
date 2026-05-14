@@ -340,9 +340,9 @@ export default function App() {
         open={activeModule === 'createproject'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-md w-[95vw] h-auto flex flex-col p-0 overflow-hidden">
+        <DialogContent className="max-w-xl sm:max-w-xl p-0 border-border overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
-            <DialogTitle> {t('menu.createProject')}</DialogTitle>
+            <DialogTitle>{t('menu.createProject')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <CreateProject onClose={() => setActiveModule('workspace')} />
@@ -354,9 +354,9 @@ export default function App() {
         open={activeModule === 'loadproject'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-md w-[95vw] h-auto flex flex-col p-0 overflow-hidden">
+        <DialogContent className="max-w-xl sm:max-w-xl p-0 border-border overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
-            <DialogTitle> {t('menu.loadProject')}</DialogTitle>
+            <DialogTitle>{t('menu.loadProject')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <LoadProject onClose={() => setActiveModule('workspace')}/>
