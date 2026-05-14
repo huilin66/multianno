@@ -147,6 +147,7 @@ class VisExportRequest(BaseModel):
 class RepairRequest(BaseModel):
     save_dirs: List[str]
     repair_types: List[str] = ["stem"]
+    stems: List[str]
 
 
 class MergeRule(BaseModel):

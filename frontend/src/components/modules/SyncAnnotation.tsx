@@ -112,7 +112,10 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const [activeControlLayer, setActiveControlLayer] = useState<string>(''); // 顶部控制条当前选中的图层
   type RenderState = 'loading' | 'ready';
   const [renderState, setRenderState] = useState<RenderState>('ready');
-
+  useEffect(() => {
+      console.log('🔴 currentStem changed, set renderState=loading');
+      setRenderState('loading');
+  }, [currentStem]);
 
   // CanvasView 图片加载完成
   const handleImageLoaded = () => {

@@ -481,11 +481,11 @@ export const requestVisExportStream = async (payload: any, onProgress: (p: numbe
 
 
 // 🌟 数据修复接口
-export const repairData = async (saveDirs: string[], repairTypes: string[] = ['stem']) => {
+export const repairData = async (saveDirs: string[], stems: string[], repairTypes: string[] = ['stem']) => {
   const response = await fetch(`${API_BASE_URL}/taxonomy/repair`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ save_dirs: saveDirs, repair_types: repairTypes }),
+    body: JSON.stringify({ save_dirs: saveDirs, stems: stems, repair_types: repairTypes }),
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));

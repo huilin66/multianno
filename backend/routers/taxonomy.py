@@ -1,6 +1,7 @@
 import json
 import math
 import os
+import shutil
 import traceback
 from datetime import datetime
 
@@ -536,6 +537,7 @@ async def repair_project_data(req: RepairRequest):
     - attribute: 修复缺失的属性默认值
     - duplicate: 清理重复标注
     """
+    print(f"📥 [Backend] Received Request: {req.dict()}")
     result = {"total_scanned": 0, "total_fixed": 0, "details": {}}
 
     for repair_type in req.repair_types:
@@ -544,7 +546,11 @@ async def repair_project_data(req: RepairRequest):
             result["details"]["stem"] = stem_result
             result["total_scanned"] += stem_result["scanned"]
             result["total_fixed"] += stem_result["fixed"]
-
+        if repair_type == "json_file":
+            json_file_result = _repair_json_files(req.save_dirs, req.stems)
+            result["details"]["json_file"] = json_file_result
+            result["total_scanned"] += json_file_result["scanned"]
+            result["total_fixed"] += json_file_result["fixed"]
     return result
 
 
@@ -589,21 +595,49 @@ def _repair_stems(save_dirs: list) -> dict:
                     data["stem"] = file_stem
                     changed = True
 
-                # 修复每个 shape 的 stem
-                if "shapes" in data:
-                    for shape in data["shapes"]:
-                        shape_stem = shape.get("stem", "")
-                        if (
-                            shape_stem
-                            and shape_stem != file_stem
-                            and shape_stem.startswith(file_stem)
-                        ):
-                            shape["stem"] = file_stem
-                            changed = True
-
                 if changed:
                     with open(fpath, "w", encoding="utf-8") as f:
                         json.dump(data, f, ensure_ascii=False, indent=2)
+                    fixed += 1
+                    fixed_files.append(fname)
+
+            except Exception as e:
+                print(f"❌ [Repair] Failed on {fpath}: {e}")
+
+    return {"scanned": scanned, "fixed": fixed, "fixed_files": fixed_files}
+
+
+def _repair_json_files(save_dirs: list, stems: list) -> dict:
+    """
+    修复规则：
+    如果 JSON 内的 stem 字段与文件名不一致，
+    说明带了下游文件的后缀，需要修正为文件名。
+    """
+    scanned = 0
+    fixed = 0
+    fixed_files = []
+
+    for directory in save_dirs:
+        if not os.path.exists(directory):
+            continue
+        directory_backup_error = directory + "_backup_error"
+        os.makedirs(directory_backup_error, exist_ok=True)
+        for fname in os.listdir(directory):
+            if not fname.endswith(".json"):
+                continue
+            if fname.endswith("_meta.json"):
+                continue
+
+            fpath = os.path.join(directory, fname)
+            scanned += 1
+
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                current_stem = data.get("stem", "")
+                if current_stem not in stems:
+                    fpath_backup_error = os.path.join(directory_backup_error, fname)
+                    shutil.move(fpath, fpath_backup_error)
                     fixed += 1
                     fixed_files.append(fname)
 

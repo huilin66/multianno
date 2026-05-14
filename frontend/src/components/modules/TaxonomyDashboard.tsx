@@ -362,7 +362,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
     folders, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
-    mergeTaxonomyClassesWithAttributes
+    mergeTaxonomyClassesWithAttributes, stems
   } = useStore() as any;
 
   const openDialog = useDialogStore((s) => s.openDialog);
@@ -572,7 +572,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setRepairResult(null);
     try {
       const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
-      const result = await repairData(safeSaveDirs, ['stem']);
+      const result = await repairData(safeSaveDirs, stems, ['stem', 'json_file']);
       setRepairResult({ fixed: result.total_fixed, scanned: result.total_scanned });
       await refreshStatsIfNeeded();
     } catch (err: any) {
