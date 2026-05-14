@@ -259,7 +259,12 @@
     "errorRead": "读取失败: ",
     "errorConnect": "无法连接到 Python 后端，请检查 FastAPI 服务是否正常运行。",
     "localDrive": "本地磁盘",
-    "historyRecord": "历史记录"
+    "historyRecord": "历史记录",
+    "fileName": "文件名",
+    "createNewFolder": "创建新文件夹",
+    "newFolderName": "新文件夹名",
+    "parentFolder": "父文件夹",
+    "home": "根目录"
   },
   "projectMeta": {
     "empty": {

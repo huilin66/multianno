@@ -293,7 +293,12 @@
     "errorRead": "Read failed: ",
     "errorConnect": "Cannot connect to Python backend. Please check if FastAPI is running.",
     "localDrive": "Local Disk",
-    "historyRecord": "History"
+    "historyRecord": "History",
+    "fileName": "File Name",
+    "createNewFolder": "Create New Folder",
+    "newFolderName": "New Folder Name",
+    "parentFolder": "Parent Folder",
+    "home": "Home"
   },
   "taxonomy": {
     "title": "Taxonomy Manager",

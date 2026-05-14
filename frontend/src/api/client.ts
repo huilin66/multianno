@@ -530,3 +530,46 @@ export const checkWorkspaceJson = async (path: string) => {
   
   return response.json();
 };
+
+
+
+export const exploreDirectory = async (path: string) => {
+  const savedHistory = localStorage.getItem('multiAnno_recentPaths');
+  let historyParams = '';
+  if (savedHistory) {
+    try {
+      const paths = JSON.parse(savedHistory);
+      if (Array.isArray(paths)) {
+        historyParams = paths.map((p: string) => `&history=${encodeURIComponent(p)}`).join('');
+      }
+    } catch (e) {
+      console.error('Failed to parse history', e);
+    }
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/fs/explore?path=${encodeURIComponent(path)}${historyParams}`
+  );
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error || err.detail || 'Failed to read directory');
+  }
+
+  return response.json();
+};
+
+export const createFolder = async (path: string, name: string) => {
+  const response = await fetch(`${API_BASE_URL}/fs/mkdir`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path, name: name.trim() }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || err.error || 'Failed to create folder');
+  }
+
+  return response.json();
+};

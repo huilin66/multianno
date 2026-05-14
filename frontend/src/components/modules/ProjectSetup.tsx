@@ -61,15 +61,9 @@ export function CreateProject({ onClose }: { onClose: () => void }) {
 
       <div className="space-y-1.5">
         <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-          {t('createProject.savePathLabel')}
+          {t('createProject.projectMetaPath')}
         </Label>
         <div className="relative">
-          <Input 
-            value={metaPath} 
-            onChange={(e) => setMetaPath(e.target.value)}
-            placeholder={t('createProject.projectMetaPlaceholder')}
-            className="h-9 text-xs pr-9 font-mono"
-          />
           <button
             type="button"
             onClick={() => setExplorerOpen(true)}
@@ -77,6 +71,12 @@ export function CreateProject({ onClose }: { onClose: () => void }) {
           >
             <FolderSearch size={14} />
           </button>
+          <Input 
+            value={metaPath} 
+            onChange={(e) => setMetaPath(e.target.value)}
+            placeholder={t('createProject.projectMetaPlaceholder')}
+            className="h-9 text-xs pr-9 font-mono"
+          />
         </div>
       </div>
 
