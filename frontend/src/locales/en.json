@@ -114,7 +114,8 @@
     "projectMetaPath": "Project Metadata Path",
     "projectMetaPlaceholder": "Enter or click to set project metadata path ...",
     "confirmResetTitle": "Load Project",
-    "confirmReset": "Are you sure you want to load the project? This will delete all data and start a new project."
+    "confirmReset": "Are you sure you want to load the project? This will delete all data and start a new project.",
+    "loadingAnnotations": "Loading Annotations: "
   },
   "dataPreload": {
     "folders": {

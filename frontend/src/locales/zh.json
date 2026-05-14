@@ -114,7 +114,8 @@
     "projectMetaPath": "项目元数据路径",
     "projectMetaPlaceholder": "请输入或点击项目元数据路径...",
     "confirmResetTitle": "加载项目",
-    "confirmReset": "确认加载项目吗？这将删除所有数据并开始新项目。"
+    "confirmReset": "确认加载项目吗？这将删除所有数据并开始新项目。",
+    "loadingAnnotations": "加载标注: "
   },
   "dataPreload": {
     "folders": {

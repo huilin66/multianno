@@ -108,6 +108,14 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const handleExplorerConfirm = (paths: string[]) => {
+    setExplorerOpen(false);
+    if (paths.length > 0) {
+      setSelectedPath(paths[0]);
+    }
+  };
+  const [loadProgress, setLoadProgress] = useState({ current: 0, total: 0 });
+
   const handleLoadFile = async () => {
     const filePath = selectedPath.trim();
     if (!filePath) return;
@@ -116,14 +124,12 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
       type: 'warning',
       title: t('loadProject.confirmResetTitle'),
       description: t('loadProject.confirmReset'),
-      confirmText: t('common.confirm'),
-      cancelText: t('common.cancel'),
     });
-
     if (!confirmed) return;
 
     setIsLoading(true);
     setError('');
+    setLoadProgress({ current: 0, total: 0 });
 
     try {
       const meta = await loadProjectMetaFromServer(filePath);
@@ -148,13 +154,18 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
             useStore.getState().setSceneGroups(result.sceneGroups);
             useStore.getState().setCurrentStem(result.commonStems[0]);
 
-            const mainViewFolderId = meta.views.find((v: any) => v.isMain)?.["folder id"];
-            const mainFolder = meta.folders.find((f: any) => f.Id === mainViewFolderId) || meta.folders[0];
-            
             const state = useStore.getState();
+            const mainViewFolderId = meta.views?.find((v: any) => v.isMain)?.["folder id"];
+            const mainFolder = meta.folders?.find((f: any) => f.Id === mainViewFolderId) || meta.folders[0];
             const loadPath = state.workspacePath || mainFolder?.path || '';
-            if (loadPath) {
-              loadAllProjectAnnotations(result.commonStems, loadPath);
+            
+             if (loadPath) {
+              await loadAllProjectAnnotations(
+                result.commonStems, 
+                loadPath, 
+                (current, total) => setLoadProgress({ current, total }),
+                10,
+              );
             }
           }
         } catch (analyzeError) {
@@ -165,16 +176,9 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
       setActiveModule('workspace');
       onClose();
     } catch (err: any) {
-      setError(err.message || t('loadProject.failLoad'));
+      setError(t('common.error')+err.message);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleExplorerConfirm = (paths: string[]) => {
-    setExplorerOpen(false);
-    if (paths.length > 0) {
-      setSelectedPath(paths[0]);
     }
   };
 
@@ -214,7 +218,27 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
+      <div className="flex items-center justify-between pt-2 border-t border-border">
+        {isLoading && loadProgress.total > 0 ? (
+          <div className="flex items-center gap-3 flex-1 mr-4">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {t('loadProject.loadingAnnotations')}
+              <span className="font-mono font-bold text-foreground ml-1">
+                {loadProgress.current}/{loadProgress.total}
+              </span>
+            </span>
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${(loadProgress.current / loadProgress.total) * 100}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+          <span />
+        )}
+
+      <div className="flex items-center gap-3 shrink-0">
         <Button variant="outline" size="sm" onClick={onClose} disabled={isLoading}>
           {t('common.cancel')}
         </Button>
@@ -225,12 +249,13 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
           disabled={isLoading || !selectedPath.trim()}
         >
           {isLoading ? (
-            <>{t('common.loading')}</>
+            <> {t('common.loading')}</>
           ) : (
             t('common.confirm')
           )}
         </Button>
       </div>
+    </div>
 
       <FileExplorerDialog 
         open={explorerOpen} 
