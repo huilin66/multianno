@@ -1,12 +1,13 @@
 // src/components/modules/AISettingsModal.tsx
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../../store/useStore';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { Button } from '../../ui/button';
+import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { Slider } from '../../ui/slider';
-import { CloudLightning, Loader2, Save, FolderSearch, History } from 'lucide-react';
+import { Loader2, FolderSearch, History, Check, X } from 'lucide-react';
 import { updateAIConfig } from '../../../api/client';
 import { FileExplorerDialog } from '../FileExplorerDialog'; 
 import { useTranslation } from 'react-i18next';
@@ -21,10 +22,10 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const { t } = useTranslation();
   const aiSettings = useStore((s) => s.aiSettings);
   const setAISettings = useStore((s) => s.setAISettings);
+  
   const [localSettings, setLocalSettings] = useState(aiSettings);
   const [isVerifying, setIsVerifying] = useState(false);
   const [fileExplorerOpen, setFileExplorerOpen] = useState(false);
-  
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
 
   useEffect(() => { 
@@ -45,17 +46,16 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
     const trimmed = path.trim().replace(/\\/g, '/');
     if (!trimmed) return;
     
-    let newHistory = [...recentPaths];
-    newHistory = newHistory.filter(p => p !== trimmed);
-    newHistory.unshift(trimmed);
-    newHistory = newHistory.slice(0, 5);
-
+    const newHistory = [trimmed, ...recentPaths.filter(p => p !== trimmed)].slice(0, 5);
     setRecentPaths(newHistory);
     localStorage.setItem('multiAnno_aiModelPaths', JSON.stringify(newHistory));
   };
 
   const handleSaveAndVerify = async () => {
-    if (!localSettings.modelPath.trim()) return alert(t("aiSettings.alsertSetAI"));
+    if (!localSettings.modelPath.trim()) {
+      alert(t("aiSettings.alertSetAI"));
+      return;
+    }
     
     setIsVerifying(true);
     try {
@@ -70,107 +70,152 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
 
       await showDialog({
         type: 'success',
-        title: t("common.success", "Success"),
-        description: t("aiSettings.alsertSetAIDone"),
+        title: t("common.success"),
+        description: t("aiSettings.alertSetAIDone"),
       });
       onClose();
     } catch (error: any) {
       await showDialog({
         type: 'danger',
-        title: t("common.error", "Error"),
-        description: t("aiSettings.alsertSetAIFail") + error.message,
+        title: t("common.error"),
+        description: t("aiSettings.alertSetAIFail") + error.message,
       });
     } finally {
       setIsVerifying(false);
     }
   };
 
+  const handleCancel = () => {
+    setLocalSettings(aiSettings);
+    onClose();
+  };
+
   return (
     <>
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[450px] bg-white dark:bg-neutral-900">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <CloudLightning className="w-5 h-5 text-blue-500" /> {t("aiSettings.title")}
-          </DialogTitle>
-        </DialogHeader>
+      <Dialog open={open} onOpenChange={(open) => !open && handleCancel()}>
+        <DialogContent className="max-w-md sm:max-w-md p-0 border-border overflow-hidden">
+          <DialogHeader className="p-4 border-b border-border shrink-0">
+            <DialogTitle>{t("aiSettings.title")}</DialogTitle>
+          </DialogHeader>
 
-        <div className="space-y-4 mt-2">
-          <div className="space-y-2">
-            <Label className="text-xs text-neutral-500">{t("aiSettings.modelType")}</Label>
-            <Select value={localSettings.model} onValueChange={(v) => setLocalSettings({ ...localSettings, model: v })}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SAM-3">Segment Anything 3</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-xs text-neutral-500">{t("aiSettings.modelPath")}</Label>
-            <div className="flex gap-2">
-              <input 
-                className="flex-1 text-xs p-2 border rounded-md"
-                placeholder={t("aiSettings.infoModelPath")}
-                value={localSettings.modelPath}
-                onChange={(e) => setLocalSettings({ ...localSettings, modelPath: e.target.value })}
-              />
-              <Button variant="outline" className="px-3" onClick={() => setFileExplorerOpen(true)}>
-                <FolderSearch className="w-4 h-4" />
-              </Button>
+          <div className="p-5 space-y-5">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                {t("aiSettings.modelType")}
+              </Label>
+              <Select 
+                value={localSettings.model} 
+                onValueChange={(v) => setLocalSettings({ ...localSettings, model: v })}
+              >
+                <SelectTrigger className="h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SAM-3">Segment Anything 3</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-            
-            {recentPaths.length > 0 && (
-              <div className="pt-1">
-                <span className="text-[10px] text-neutral-400 flex items-center gap-1 mb-1">
-                  <History className="w-3 h-3" /> {t("aiSettings.infoHistoricalModelPath")}
-                </span>
-                <div className="flex flex-wrap gap-1">
-                  {recentPaths.map((p: string, i: number) => (
-                    <span 
-                      key={i} onClick={() => setLocalSettings({ ...localSettings, modelPath: p })}
-                      className="text-[10px] bg-neutral-100 dark:bg-neutral-800 px-2 py-1 rounded cursor-pointer hover:bg-blue-100 text-neutral-600 truncate max-w-[200px] border border-transparent hover:border-blue-300"
-                      title={p}
-                    >
-                      {p.split('/').pop() || p.split('\\').pop()}
-                    </span>
-                  ))}
-                </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                {t("aiSettings.modelPath")}
+              </Label>
+              <div className="relative">
+                <Input 
+                  className="h-9 text-xs pr-9 font-mono"
+                  placeholder={t("aiSettings.infoModelPath")}
+                  value={localSettings.modelPath}
+                  onChange={(e) => setLocalSettings({ ...localSettings, modelPath: e.target.value })}
+                />
+                <button
+                  onClick={() => setFileExplorerOpen(true)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <FolderSearch size={14} />
+                </button>
               </div>
-            )}
-          </div>
-          
-          <div className="space-y-3 pt-2">
-            <div className="flex justify-between items-center">
-              <Label className="text-xs text-neutral-500">{t("aiSettings.confidence")}</Label>
-              <span className="text-xs">{(localSettings.confidence ?? 0.25).toFixed(2)}</span>
+              
+              {recentPaths.length > 0 && (
+                <div className="pt-1">
+                  <span className="text-[10px] text-muted-foreground flex items-center gap-1 mb-1.5">
+                    <History className="w-3 h-3" /> {t("aiSettings.infoHistoricalModelPath")}
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {recentPaths.map((p, i) => (
+                      <button
+                        key={i} 
+                        onClick={() => setLocalSettings({ ...localSettings, modelPath: p })}
+                        className="text-[10px] bg-muted hover:bg-primary/10 text-muted-foreground hover:text-primary px-2 py-1 rounded transition-colors truncate max-w-[180px] border border-transparent hover:border-primary/30"
+                        title={p}
+                      >
+                        {p.split('/').pop() || p.split('\\').pop()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <Slider 
-              value={[(localSettings.confidence ?? 0.25) * 100]} max={100} step={1}
-              onValueChange={(val) => setLocalSettings({ ...localSettings, confidence: (Array.isArray(val) ? val[0] : val) / 100 })}
-            />
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                  {t("aiSettings.confidence")}
+                </Label>
+                <span className="text-xs font-mono font-bold">
+                  {(localSettings.confidence ?? 0.25).toFixed(2)}
+                </span>
+              </div>
+              <Slider 
+                value={[(localSettings.confidence ?? 0.25) * 100]} 
+                max={100} 
+                step={1}
+                onValueChange={(val) => setLocalSettings({ 
+                  ...localSettings, 
+                  confidence: (Array.isArray(val) ? val[0] : val) / 100 
+                })}
+                className="py-1"
+              />
+              <div className="flex justify-between text-[10px] text-muted-foreground">
+                <span>0</span>
+                <span>0.5</span>
+                <span>1.0</span>
+              </div>
+            </div>
           </div>
-        </div>
 
-        <DialogFooter className="mt-2">
-          <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" onClick={handleSaveAndVerify} disabled={isVerifying}>
-            {isVerifying ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t("aiSettings.infoLoadingModelPath")}</> :
-             <><Save className="w-4 h-4 mr-2" /> {t("aiSettings.loadModel")}</>}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <div className="flex items-center justify-end gap-3 p-4 border-t border-border shrink-0">
+            <Button variant="outline" size="sm" onClick={handleCancel}>
+              <X className="w-3.5 h-3.5 mr-1.5" />
+              {t("common.cancel")}
+            </Button>
+            <Button 
+              size="sm" 
+              className="text-white" 
+              onClick={handleSaveAndVerify} 
+              disabled={isVerifying}
+            >
+              {isVerifying ? (
+                <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {t("common.loading")}</>
+              ) : (
+                <><Check className="w-3.5 h-3.5 mr-1.5" /> {t("common.confirm")}</>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-    <FileExplorerDialog 
-      open={fileExplorerOpen}
-      initialPath="/"
-      selectType="file" 
-      onClose={() => setFileExplorerOpen(false)}
-      onConfirm={(paths) => {
-        if (paths.length > 0) setLocalSettings({ ...localSettings, modelPath: paths[0] });
-        setFileExplorerOpen(false);
-      }}
-    />
+      <FileExplorerDialog 
+        open={fileExplorerOpen}
+        initialPath={localSettings.modelPath || '/'}
+        selectType="file" 
+        onClose={() => setFileExplorerOpen(false)}
+        onConfirm={(paths) => {
+          if (paths.length > 0) {
+            setLocalSettings({ ...localSettings, modelPath: paths[0] });
+          }
+          setFileExplorerOpen(false);
+        }}
+      />
     </>
   );
 }
