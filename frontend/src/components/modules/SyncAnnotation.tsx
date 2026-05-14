@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
 import { AIToolPanel } from './annotation/AIToolPanel';
-import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM, getPreviewImageUrl } from '../../api/client'
+import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM } from '../../api/client'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { createPortal } from 'react-dom';
 import { CURSOR_FOCUS, CURSOR_DRAG } from '../../lib/cursors';

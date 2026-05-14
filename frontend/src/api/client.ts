@@ -1,14 +1,8 @@
 // frontend/src/api/client.ts
 
-// ==========================================
-// 基础配置
-// ==========================================
 export const API_BASE_URL = 'http://localhost:8080/api';
 const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
 
-// ==========================================
-// 通用请求辅助
-// ==========================================
 const post = async (url: string, body: any) => {
   const response = await fetch(url, {
     method: 'POST',
@@ -31,9 +25,6 @@ const get = async (url: string) => {
   return response.json();
 };
 
-// ==========================================
-// 项目配置 (Project Meta)
-// ==========================================
 export const saveProjectMeta = (payload: { file_path: string; content: any }) =>
   post(`${API_BASE_URL}/project/save_meta`, payload);
 
@@ -43,15 +34,9 @@ export const loadProjectMetaFromServer = (file_path: string) =>
 export const analyzeWorkspaceFolders = (folders: { path: string; suffix?: string }[]) =>
   post(`${API_BASE_URL}/project/analyze`, { folders });
 
-// ==========================================
-// 工作区 (Workspace)
-// ==========================================
 export const checkWorkspaceJson = (path: string) =>
   post(`${API_BASE_URL}/workspace/check-json`, { path });
 
-// ==========================================
-// 标注 (Annotations)
-// ==========================================
 export const saveAnnotation = (payload: {
   save_dir: string;
   file_name: string;
@@ -61,9 +46,6 @@ export const saveAnnotation = (payload: {
 export const getFileContent = (path: string) =>
   get(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`);
 
-// ==========================================
-// 分类学 (Taxonomy)
-// ==========================================
 export const batchMergeClass = (payload: {
   save_dirs: string[];
   old_names: string[];
@@ -102,18 +84,12 @@ export const batchMergeClassWithAttribute = (params: {
 export const fetchProjectStatistics = (saveDirs: string[], forceRefresh = false) =>
   post(`${API_BASE_URL}/taxonomy/statistics`, { save_dirs: saveDirs, force_refresh: forceRefresh });
 
-// ==========================================
-// 数据交换 (Exchange)
-// ==========================================
 export const exportData = (payload: any) =>
   post(`${API_BASE_URL}/exchange/export`, payload);
 
 export const importData = (payload: any) =>
   post(`${API_BASE_URL}/exchange/import`, payload);
 
-// ==========================================
-// 文件系统 (File System)
-// ==========================================
 export const exploreDirectory = async (path: string) => {
   const savedHistory = localStorage.getItem('multiAnno_recentPaths');
   let historyParams = '';
@@ -133,9 +109,6 @@ export const exploreDirectory = async (path: string) => {
 export const createFolder = (path: string, name: string) =>
   post(`${API_BASE_URL}/fs/mkdir`, { path, name: name.trim() });
 
-// ==========================================
-// AI 视觉 (Vision AI)
-// ==========================================
 export const checkVisionAIStatus = async () => {
   try {
     return await get(`${VISION_AI_API_URL}/status`);
@@ -175,9 +148,6 @@ export const predictAutoSAM = (
   image_size?: number
 ) => post(`${VISION_AI_API_URL}/auto`, { image_path: imagePath, texts, conf, image_size });
 
-// ==========================================
-// 可视化 (Visualization)
-// ==========================================
 export const requestVisPreview = (payload: any) =>
   post(`${API_BASE_URL}/vis/preview`, payload);
 
@@ -206,7 +176,7 @@ export const requestVisExportStream = async (payload: any, onProgress: (p: numbe
           if (data.type === 'progress' || data.type === 'complete') onProgress(data.percent);
           if (data.type === 'error') throw new Error(data.message);
         } catch {
-          // 忽略解析失败的行
+
         }
       }
     }
@@ -217,9 +187,6 @@ export const requestVisExportStream = async (payload: any, onProgress: (p: numbe
   return { success: true };
 };
 
-// ==========================================
-// 其他工具
-// ==========================================
 export const getPreviewImageUrl = (
   folderPath: string,
   fileName: string | undefined,
@@ -235,54 +202,5 @@ export const prefetchImages = async (paths: string[]) => {
   try {
     await post(`${API_BASE_URL}/project/prefetch`, { paths });
   } catch {
-    // 静默失败
   }
 };
-
-export const fetchProjectStatisticsStream = async (
-  saveDirs: string[],
-  targetClass: string,
-  onProgress: (current: number, total: number) => void,
-  onComplete: (data: any) => void,
-  onError: (err: Error) => void
-) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/stats/project`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ save_dirs: saveDirs, target_class: targetClass }),
-    });
-
-    if (!response.body) throw new Error('ReadableStream not supported');
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const msg = JSON.parse(line);
-          if (msg.type === 'progress') onProgress(msg.current, msg.total);
-          else if (msg.type === 'result') onComplete(msg.data);
-        } catch (e) {
-          console.error('JSON parse error:', line);
-        }
-      }
-    }
-  } catch (error: any) {
-    onError(error);
-  }
-};
-
-// 保留 scanFolder（如果其他地方有用）
-export const scanFolder = (path: string) =>
-  post(`${API_BASE_URL}/scan-folder`, { path });
