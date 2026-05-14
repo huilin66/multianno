@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../../store/useStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { Button } from '../../ui/button';
-import { Keyboard, Command, ChevronUp, RotateCcw, X } from 'lucide-react';
+import { RotateCcw} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useToolNames } from '../../../hooks/useToolNames';
 
