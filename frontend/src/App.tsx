@@ -287,21 +287,21 @@ export default function App() {
                   className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-1 transition-colors"
                 >
                   <Label className="text-xs cursor-pointer">{t('headerSetting.viewLayout')}</Label>
-                  <LayoutTemplate className="w-3.5 h-3.5 text-indigo-400" />
+                  <LayoutTemplate className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setShortcutModalOpen(true)}
                   className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-0.5 transition-colors"
                 >
                   <Label className="text-xs cursor-pointer">{t('headerSetting.shortcutSetting')}</Label>
-                  <Keyboard className="w-3.5 h-3.5 text-neutral-400 dark:text-neutral-500" />
+                  <Keyboard className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => setAiSettingsModalOpen(true)}
                   className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-0.5 transition-colors"
                 >
                   <Label className="text-xs cursor-pointer">{t('headerSetting.aiSetting')}</Label>
-                  <CloudLightning className="w-3.5 h-3.5 text-blue-400 dark:text-blue-300" />
+                  <CloudLightning className="w-4 h-4" />
                 </button>
               </div>
             </PopoverContent>
