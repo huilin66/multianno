@@ -185,7 +185,6 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
 
           <div className="flex items-center justify-end gap-3 p-4 border-t border-border shrink-0">
             <Button variant="outline" size="sm" onClick={handleCancel}>
-              <X className="w-3.5 h-3.5 mr-1.5" />
               {t("common.cancel")}
             </Button>
             <Button 
@@ -195,9 +194,9 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
               disabled={isVerifying}
             >
               {isVerifying ? (
-                <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {t("common.loading")}</>
+                <>{t("common.loading")}</>
               ) : (
-                <><Check className="w-3.5 h-3.5 mr-1.5" /> {t("common.confirm")}</>
+                <>{t("common.confirm")}</>
               )}
             </Button>
           </div>

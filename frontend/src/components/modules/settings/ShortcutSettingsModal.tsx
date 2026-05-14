@@ -98,43 +98,42 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
           <DialogTitle>{t('shortcuts.title')}</DialogTitle>
         </DialogHeader>
 
-        <div className="max-h-[55vh] overflow-y-auto custom-scrollbar">
-          {groups.map((group, gi) => (
-            <div key={gi}>
-              {gi > 0 && <div className="h-px bg-border mx-4" />}
-              <div className="p-4 space-y-1.5">
-                {group.items.map(([tool, setting]) => (
-                  <div 
-                    key={tool} 
-                    className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <span className="text-xs font-medium">
-                      {toolNames[tool] || tool}
-                    </span>
 
-                    {recordingTool === tool ? (
-                      <div
-                        ref={recordingRef}
-                        className="px-3 py-1 h-7 min-w-[90px] text-center bg-primary/10 text-primary text-[10px] font-bold rounded ring-2 ring-primary outline-none animate-pulse cursor-default flex items-center justify-center"
-                        tabIndex={0}
-                        onKeyDown={(e) => handleKeyDown(e, tool)}
-                        onBlur={() => setRecordingTool(null)}
-                      >
-                        {t('shortcuts.pressKey')}
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setRecordingTool(tool)}
-                        className="px-3 py-1 h-7 min-w-[90px] bg-background border border-border text-xs font-bold rounded hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-1"
-                      >
-                        {setting?.ctrl && <span className="text-[10px] font-semibold">⌃</span>}
-                        {setting?.shift && <span className="text-[10px] font-semibold">⇧</span>}
-                        <span className="text-[10px]">{setting ? formatShortcut(setting) : ''}</span>
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
+        <div className="max-h-[55vh] overflow-y-auto custom-scrollbar p-4">
+          {groups.map((group, gi) => (
+            <div key={gi} className="space-y-1.5">
+              {gi > 0 && <div className="h-px bg-border my-3" />}
+              {group.items.map(([tool, setting]) => (
+                <div 
+                  key={tool} 
+                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border/50"
+                >
+                  <span className="text-xs font-medium">
+                    {toolNames[tool] || tool}
+                  </span>
+
+                  {recordingTool === tool ? (
+                    <div
+                      ref={recordingRef}
+                      className="px-3 py-1 h-7 min-w-[90px] text-center bg-primary/10 text-primary text-[10px] font-bold rounded ring-2 ring-primary outline-none animate-pulse cursor-default flex items-center justify-center"
+                      tabIndex={0}
+                      onKeyDown={(e) => handleKeyDown(e, tool)}
+                      onBlur={() => setRecordingTool(null)}
+                    >
+                      {t('shortcuts.pressKey')}
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setRecordingTool(tool)}
+                      className="px-3 py-1 h-7 min-w-[90px] bg-background border border-border text-xs font-bold rounded hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-1 shadow-sm"
+                    >
+                      {setting?.ctrl && <span className="text-[10px] font-semibold">⌃</span>}
+                      {setting?.shift && <span className="text-[10px] font-semibold">⇧</span>}
+                      <span className="text-[10px]">{setting ? formatShortcut(setting) : ''}</span>
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -145,7 +144,6 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
           </span>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" onClick={handleReset}>
-              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
               {t('common.reset')}
             </Button>
             <Button onClick={onClose} size="sm" className="text-white">
