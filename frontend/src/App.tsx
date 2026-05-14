@@ -14,14 +14,9 @@ import {
   DataImport
 } from './components/Modules';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu';
+import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderOpen, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -68,13 +63,13 @@ export default function App() {
                 <FolderPlus className="w-4 h-4 mr-2" /> {t('menu.createProject')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('loadproject')}>
-                <Upload className="w-4 h-4 mr-2" /> {t('menu.loadProject')}
+                <FolderDown className="w-4 h-4 mr-2" /> {t('menu.loadProject')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('preload')}>
-                <FolderOpen className="w-4 h-4 mr-2" /> {t('menu.dataPreload')}
+                <FolderCog className="w-4 h-4 mr-2" /> {t('menu.dataPreload')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('extent')}>
-                <Settings className="w-4 h-4 mr-2" /> {t('menu.viewExtentCheck')}
+                <Folders className="w-4 h-4 mr-2" /> {t('menu.viewExtentCheck')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('meta')}>
                 <Database className="w-4 h-4 mr-2" /> {t('menu.projectMeta')}
