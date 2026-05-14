@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useStore } from '../../../store/useStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { Button } from '../../ui/button';
-import { Keyboard, Command, ChevronUp, RotateCcw } from 'lucide-react';
+import { Keyboard, Command, ChevronUp, RotateCcw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useToolNames } from '../../../hooks/useToolNames';
 
@@ -35,11 +35,10 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
   const { t } = useTranslation();
   const shortcutsSettings = useStore((s) => s.shortcutsSettings);
   const updateShortcutSettings = useStore((s) => s.updateShortcutSettings);
-  const resetShortcutSettings = useStore((s) => s.resetShortcutSettings); 
+  const resetShortcutSettings = useStore((s) => s.resetShortcutSettings);
   
   const [recordingTool, setRecordingTool] = useState<string | null>(null);
   const toolNames = useToolNames();
-
   const recordingRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -75,68 +74,83 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
     }
   };
 
+  const groups: { label?: string; items: [string, any][] }[] = [];
+  let currentGroup: [string, any][] = [];
+  
+  Object.entries(shortcutsSettings).forEach(([tool, setting]) => {
+    if ((setting as any)?.key === '__separator__') {
+      if (currentGroup.length > 0) {
+        groups.push({ items: currentGroup });
+        currentGroup = [];
+      }
+    } else {
+      currentGroup.push([tool, setting]);
+    }
+  });
+  if (currentGroup.length > 0) {
+    groups.push({ items: currentGroup });
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[460px] bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-neutral-800 dark:text-neutral-200">
-            <Keyboard className="w-5 h-5 text-blue-500" />
-            {t('shortcuts.title', 'Shortcut Settings')}
-          </DialogTitle>
+    <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-md sm:max-w-md p-0 border-border overflow-hidden">
+        <DialogHeader className="p-4 border-b border-border shrink-0">
+          <DialogTitle>{t('shortcuts.title')}</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-2 mt-4 max-h-[60vh] overflow-y-auto custom-scrollbar pr-2">
-          {Object.entries(shortcutsSettings).map(([tool, setting]) => {
-            if ((setting as any)?.key === '__separator__') {
-              return (
-                <div key={tool} className="flex items-center gap-3 my-3">
-                  <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
-                </div>
-              );
-            }
-  
-            return (
-            <div 
-              key={tool} 
-              className="flex items-center justify-between p-3 rounded-lg bg-neutral-50 dark:bg-black/40 border border-neutral-100 dark:border-neutral-800/50"
-            >
-              <span className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
-                {toolNames[tool] || tool}
-              </span>
+        <div className="max-h-[55vh] overflow-y-auto custom-scrollbar">
+          {groups.map((group, gi) => (
+            <div key={gi}>
+              {gi > 0 && <div className="h-px bg-border mx-4" />}
+              <div className="p-4 space-y-1.5">
+                {group.items.map(([tool, setting]) => (
+                  <div 
+                    key={tool} 
+                    className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <span className="text-xs font-medium">
+                      {toolNames[tool] || tool}
+                    </span>
 
-              {recordingTool === tool ? (
-                <div
-                  ref={recordingRef}
-                  className="px-3 py-1.5 h-8 min-w-[100px] text-center bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold rounded ring-2 ring-blue-500 outline-none animate-pulse cursor-default focus:outline-none flex items-center justify-center"
-                  tabIndex={0}
-                  onKeyDown={(e) => handleKeyDown(e, tool)}
-                  onBlur={() => setRecordingTool(null)}
-                >
-                  {t('shortcuts.pressKey', 'Press Key...')}
-                </div>
-              ) : (
-                <button
-                  onClick={() => setRecordingTool(tool)}
-                  className="px-3 py-1.5 h-8 min-w-[100px] bg-white dark:bg-neutral-800 text-neutral-600 dark:text-neutral-300 text-xs font-bold rounded border border-neutral-200 dark:border-neutral-700 hover:border-blue-500 hover:text-blue-500 transition-colors flex items-center justify-center gap-1 shadow-sm"
-                >
-                  {setting?.ctrl && <Command className="w-3 h-3 text-blue-500" />}
-                  {setting?.shift && <ChevronUp className="w-3 h-3 text-amber-500" />}
-                  <span>{setting ? formatShortcut(setting) : ''}</span>
-                </button>
-              )}
+                    {recordingTool === tool ? (
+                      <div
+                        ref={recordingRef}
+                        className="px-3 py-1 h-7 min-w-[90px] text-center bg-primary/10 text-primary text-[10px] font-bold rounded ring-2 ring-primary outline-none animate-pulse cursor-default flex items-center justify-center"
+                        tabIndex={0}
+                        onKeyDown={(e) => handleKeyDown(e, tool)}
+                        onBlur={() => setRecordingTool(null)}
+                      >
+                        {t('shortcuts.pressKey')}
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setRecordingTool(tool)}
+                        className="px-3 py-1 h-7 min-w-[90px] bg-background border border-border text-xs font-bold rounded hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-1"
+                      >
+                        {setting?.ctrl && <span className="text-[10px] font-semibold">⌃</span>}
+                        {setting?.shift && <span className="text-[10px] font-semibold">⇧</span>}
+                        <span className="text-[10px]">{setting ? formatShortcut(setting) : ''}</span>
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            );
-          })}
+          ))}
         </div>
 
-        <div className="pt-4 mt-2 border-t border-neutral-100 dark:border-neutral-800 text-xs text-neutral-500 flex justify-between items-center">
-          <span>{t('shortcuts.pressCombineKey', 'Click a button to rebind')}</span>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleReset} className="text-neutral-500 hover:text-neutral-900 dark:hover:text-white">
-              <RotateCcw className="w-3 h-3 mr-1.5" />
-              {t('common.reset', 'Reset')}
+        <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
+          <span className="text-[10px] text-muted-foreground">
+            {t('shortcuts.pressCombineKey')}
+          </span>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={handleReset}>
+              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+              {t('common.reset')}
             </Button>
-            <Button onClick={onClose} size="sm">{t('common.done', 'Done')}</Button>
+            <Button onClick={onClose} size="sm" className="text-white">
+              {t('common.done')}
+            </Button>
           </div>
         </div>
       </DialogContent>
