@@ -15,9 +15,14 @@
     "projectName": "项目名称: ",
     "sceneGroupName": "当前场景组: ",
     "projectMetaNotSaved": "项目元数据保存失败",
+    "projectMetaSaving": "保存项目元数据...",
     "projectMetaSaved": "项目元数据已保存 ",
+    "projectMetaUnsaved": "项目元数据未保存",
+    "projectMetaMiss": "项目元数据缺失",
     "annotationNotSaved": "标注保存失败",
+    "annotationSaving": "保存标注...",
     "annotationSaved": "标注已保存 ",
+    "annotationMiss": "标注缺失",
     "settings": "设置",
     "themeLight": "切换为浅色模式",
     "themeDark": "切换为深色模式",
@@ -26,12 +31,14 @@
   "headerSetting":{
     "showCrosshair": "显示十字准星",
     "showPixelValue": "显示像素值",
+    "showLongCrosshair": "显示长十字准星",
     "continuousDrawing": "连续绘制",
+    "fillShapes": "填充掩膜",
     "showAnnotationToolLabel": "显示标注工具标签",
     "autoRefreshStats": "自动刷新统计信息",
     "shortcutSetting": "快捷键设置",
     "aiSetting": "AI 设置",
-    "maxViews": "最大视图数"
+    "viewLayout": "视图布局"
   },
     "shortcuts":{
     "title": "快捷键设置",

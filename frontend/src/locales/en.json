@@ -15,9 +15,14 @@
     "projectName": "Project Name: ",
     "sceneGroupName": "Current Scene Group: ",
     "projectMetaNotSaved": "Project Metadata Save Failed",
+    "projectMetaSaving": "Saving Project Metadata...",
     "projectMetaSaved": "Project Metadata Saved ",
+    "projectMetaUnsaved": "Project Metadata Unsaved",
+    "projectMetaMiss": "Project Metadata Missing",
     "annotationNotSaved": "Annotation Save Failed",
+    "annotationSaving": "Saving Annotation...",
     "annotationSaved": "Annotation Saved ",
+    "annotationMiss": "Annotation Missing",
     "settings": "Settings",
     "themeLight": "Switch to Light Mode",
     "themeDark": "Switch to Dark Mode",
@@ -26,12 +31,14 @@
   "headerSetting":{
     "showCrosshair": "Show Crosshair",
     "showPixelValue": "Show Pixel Value",
+    "showLongCrosshair": "Show Long Crosshair",
     "continuousDrawing": "Continuous Drawing",
+    "fillShapes": "Fill Shapes",
     "showAnnotationToolLabel": "Show Annotation Tool Label",
     "autoRefreshStats": "Auto Refresh Statistics",
     "shortcutSetting": "Shortcut Settings",
     "aiSetting": "AI Settings",
-    "maxViews": "Max Views"
+    "viewLayout": "View Layout"
   },
   "shortcuts":{
     "title": "Shortcut Settings",

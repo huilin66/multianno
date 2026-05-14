@@ -138,16 +138,16 @@ export default function App() {
             {folders && folders.length > 0 && projectMetaPath && (
               <div
                 title={metaSaveStatus === 'error' 
-                  ? 'Project meta save failed' 
+                  ? t('header.projectMetaNotSaved') 
                   : metaSaveStatus === 'saving'
-                    ? 'Saving project meta...'
+                    ? t('header.projectMetaSaving')
                     : metaSaveStatus === 'saved'
-                      ? 'Project meta saved at ' + metaLastSavedTime
+                      ? t('header.projectMetaSaved') + metaLastSavedTime
                       : isMetaDirty
-                        ? 'Unsaved changes' 
+                        ? t('header.projectMetaUnsaved') 
                         : metaLastSavedTime
-                          ? 'Project meta up to date (saved ' + metaLastSavedTime + ')'
-                          : 'No meta data'
+                          ? t('header.projectMetaSaved') + metaLastSavedTime
+                          : t('header.projectMetaMiss')
                 }
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${
                   metaSaveStatus === 'error'
@@ -186,14 +186,14 @@ export default function App() {
             {currentStem && (annotationSaveStatus !== 'idle' || annotationLastSavedTime) && (
               <div
                 title={annotationSaveStatus === 'error' 
-                  ? 'Annotation save failed' 
+                  ? t('header.annotationNotSaved') 
                   : annotationSaveStatus === 'saving'
-                    ? 'Saving annotation...'
+                    ? t('header.annotationSaving')
                     : annotationSaveStatus === 'saved'
-                      ? 'Annotation saved at ' + annotationLastSavedTime
+                      ? t('header.annotationSaved') + annotationLastSavedTime
                       : annotationLastSavedTime
-                        ? 'Annotation up to date (saved ' + annotationLastSavedTime + ')'
-                        : 'No annotation data'
+                        ? t('header.annotationSaved') + annotationLastSavedTime
+                        : t('header.annotationMiss')
                 }
                 className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${
                   annotationSaveStatus === 'error'
@@ -252,7 +252,7 @@ export default function App() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.showLongCrosshair', 'Long Crosshair')}</Label>
+                  <Label className="text-xs">{t('headerSetting.showLongCrosshair')}</Label>
                   <Switch
                     checked={editorSettings.showLongCrosshair}
                     onCheckedChange={(v) => updateEditorSettings({ showLongCrosshair: v })}
@@ -266,7 +266,7 @@ export default function App() {
                   />
                 </div>
                 <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.fillShapes', 'Fill Shapes')}</Label>
+                  <Label className="text-xs">{t('headerSetting.fillShapes')}</Label>
                   <Switch
                     checked={editorSettings.fillAnnotationShapes}
                     onCheckedChange={(v) => updateEditorSettings({ fillAnnotationShapes: v })}
@@ -291,7 +291,7 @@ export default function App() {
                   onClick={() => setViewLayoutModalOpen(true)}
                   className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-1 transition-colors"
                 >
-                  <Label className="text-xs cursor-pointer">View Layout</Label>
+                  <Label className="text-xs cursor-pointer">{t('headerSetting.viewLayout')}</Label>
                   <LayoutTemplate className="w-3.5 h-3.5 text-indigo-400" />
                 </button>
                 <button
