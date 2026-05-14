@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
 import { Download, Folder, GripVertical, FileText, RotateCcw } from 'lucide-react';
-import { FileExplorerDialog } from './FileExplorerDialog';
+import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { exportData, getFileContent } from '../../api/client';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
 

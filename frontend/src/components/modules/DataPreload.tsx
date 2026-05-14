@@ -11,7 +11,7 @@ import { useTranslation } from 'react-i18next';
 import { 
   FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History, Save, Eye, LogOut
 } from 'lucide-react';
-import { FileExplorerDialog } from './FileExplorerDialog'; 
+import { FileExplorerDialog } from '../modals/FileExplorerDialog'; 
 import { Alert, AlertDescription } from '../ui/alert';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson } from '../../api/client';

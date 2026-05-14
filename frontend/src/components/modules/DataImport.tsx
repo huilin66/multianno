@@ -6,9 +6,9 @@ import { Input } from '../ui/input';
 import { Switch } from '../ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Upload, Folder, FileText, AlertTriangle, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { FileExplorerDialog } from './FileExplorerDialog';
+import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { importData, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
-import { loadAllProjectAnnotations } from '../../lib/projectUtils';
+import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
 
 export function DataImport({ onClose }: { onClose?: () => void }) {

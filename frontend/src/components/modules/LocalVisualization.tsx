@@ -11,7 +11,7 @@ import { Loader2, MonitorPlay, Download, Layers, Database, Search, Info, Plus, T
     Cpu, LayoutTemplate, FileText, RefreshCw, AlertCircle, CheckCircle2, ChevronLeft, ChevronRight 
 } from 'lucide-react';
 import { requestVisPreview, requestVisExportStream, getFileContent, analyzeWorkspaceFolders} from '../../api/client';
-import { FileExplorerDialog } from './FileExplorerDialog'; 
+import { FileExplorerDialog } from '../modals/FileExplorerDialog'; 
 import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
 
 interface ViewMeta {

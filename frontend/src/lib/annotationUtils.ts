@@ -23,43 +23,36 @@ const mapFrontendTypeToDiskType = (frontendType: string) => {
   return typeMap[frontendType] || 'polygon';
 };
 
-/**
- * ==========================================
- * 2. 读逻辑 (Read / Import)
- * ==========================================
- * 批量加载所有场景的标注数据，并转换为前端使用的状态格式
- */
-export const loadAllProjectAnnotations = async (stems: string[], mainFolderPath: string) => {
+export const loadAllProjectAnnotations = async (
+  stems: string[], 
+  mainFolderPath: string,
+  onProgress?: (current: number, total: number) => void,
+  chunkSize?: number
+) => {
   if (!stems || stems.length === 0 || !mainFolderPath) return;
 
   const allLoadedAnnotations: Annotation[] = [];
-  const CHUNK_SIZE = 50; // 每次并发请求 50 个文件，保护浏览器网络队列
-
-  // 统一路径分隔符
+  const CHUNK_SIZE = chunkSize || 50; 
   const separator = mainFolderPath.includes('\\') ? '\\' : '/';
   const cleanPath = mainFolderPath.endsWith(separator) ? mainFolderPath : mainFolderPath + separator;
 
   console.log(`🚀 开始全量加载 ${stems.length} 个场景的标注数据...`);
 
-  // 分批处理[cite: 4]
   for (let i = 0; i < stems.length; i += CHUNK_SIZE) {
     const chunk = stems.slice(i, i + CHUNK_SIZE);
     
     const promises = chunk.map(async (stem) => {
       const jsonPath = `${cleanPath}${stem}.json`;
       try {
-        // 调用封装好的 client API 获取原文件[cite: 4]
         const rawData = await getFileContent(jsonPath);
         const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
         
-        // 将后端的 shape 转换为前端的 Annotation 格式[cite: 4]
         return (data.shapes || []).map((shape: any) => ({
           id: crypto.randomUUID(), 
           stem: stem,
           label: shape.label,
           text: shape.text || '',
-          type: mapDiskTypeToFrontend(shape.shape_type), // 使用映射函数
-          // 兼容后端数组 [x,y] 或对象 {x,y} 格式[cite: 4]
+          type: shape.shape_type === 'rectangle' ? 'bbox' : shape.shape_type,
           points: shape.points.map((p: any) => ({ x: p[0] ?? p.x, y: p[1] ?? p.y })),
           attributes: shape.attributes || {},
           difficult: shape.difficult || false,
@@ -67,23 +60,23 @@ export const loadAllProjectAnnotations = async (stems: string[], mainFolderPath:
           group_id: shape.group_id
         }));
       } catch (error) {
-        // 文件不存在或解析失败，直接忽略（说明这张图还没标）[cite: 4]
         return []; 
       }
     });
 
-    // 等待这一批请求全部完成[cite: 4]
     const chunkResults = await Promise.all(promises);
     
-    // 拍平数组并收集[cite: 4]
     chunkResults.forEach(annos => {
       if (annos && annos.length > 0) {
         allLoadedAnnotations.push(...annos);
       }
     });
 
-    // 🌟 每加载完 50 个，就更新一次内存，实现 UI 进度跳动体验[cite: 4]
     useStore.setState({ annotations: [...allLoadedAnnotations] });
+
+    // 🆕 每完成一个 chunk，回调进度
+    const completed = Math.min(i + CHUNK_SIZE, stems.length);
+    onProgress?.(completed, stems.length);
   }
 
   console.log(`✅ 全量加载完成！共读取到 ${allLoadedAnnotations.length} 个标注对象。`);
