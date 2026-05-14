@@ -10,6 +10,7 @@ export function useMetaAutoSave() {
   const [metaSaveStatus, setMetaSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const { i18n } = useTranslation();
   
+  const workspacePath = useStore((s) => s.workspacePath);
   const projectMetaPath = useStore((s) => s.projectMetaPath);
   const taxonomyClasses = useStore((s) => s.taxonomyClasses);
   const taxonomyAttributes = useStore((s) => s.taxonomyAttributes);
@@ -31,6 +32,7 @@ export function useMetaAutoSave() {
 
     // 🌟 生成当前快照
     const currentSnapshot = JSON.stringify({
+      workspacePath,
       taxonomyClasses: taxonomyClasses.map(c => ({ id: c.id, name: c.name, color: c.color })),
       taxonomyAttributes: taxonomyAttributes.map(a => ({ id: a.id, name: a.name, options: a.options })),
       sceneGroups,

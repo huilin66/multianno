@@ -10,10 +10,8 @@ import { saveProjectMeta, loadProjectMetaFromServer, analyzeWorkspaceFolders } f
 import { FileExplorerDialog } from './FileExplorerDialog';
 import { loadAllProjectAnnotations } from '../../lib/projectUtils';
 import { useTranslation } from 'react-i18next';
+import { showDialog } from '../../store/useDialogStore';
 
-// ==========================================
-// Create New Project
-// ==========================================
 export function CreateProject({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const { resetProject, setProjectName, setProjectMetaPath, setActiveModule } = useStore();
@@ -101,22 +99,28 @@ export function CreateProject({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ==========================================
-// Load Project
-// ==========================================
+
 export function LoadProject({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const { loadProjectMeta, setActiveModule, resetProject } = useStore();
   const [error, setError] = useState('');
+  const [selectedPath, setSelectedPath] = useState(''); // 🆕 输入的路径
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const handleLoadFile = async (paths: string[]) => {
-    if (!paths || paths.length === 0) return;
-    const filePath = paths[0];
+  const handleLoadFile = async () => {
+    const filePath = selectedPath.trim();
+    if (!filePath) return;
 
-    const confirmMsg = t('loadProject.confirmReset');
-    if (!window.confirm(confirmMsg)) return;
+    const confirmed = await showDialog({
+      type: 'warning',
+      title: t('loadProject.confirmResetTitle'),
+      description: t('loadProject.confirmReset'),
+      confirmText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+    });
+
+    if (!confirmed) return;
 
     setIsLoading(true);
     setError('');
@@ -126,6 +130,10 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
       resetProject();
       useStore.getState().setProjectMetaPath(filePath);
       loadProjectMeta(meta);
+
+      if (meta.workspacePath) {
+        useStore.getState().setWorkspacePath(meta.workspacePath);
+      }
 
       if (meta.folders && meta.folders.length > 0) {
         try {
@@ -163,38 +171,39 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const handleExplorerConfirm = (paths: string[]) => {
+    setExplorerOpen(false);
+    if (paths.length > 0) {
+      setSelectedPath(paths[0]);
+    }
+  };
+
   return (
-    <div className="p-5 space-y-5 h-full flex flex-col">
+    <div className="p-5 pt-1 space-y-5 h-full flex flex-col">
       <div className="flex-1 space-y-4">
-        <div className="flex justify-center">
-          <div className="w-14 h-14 rounded-full bg-muted flex items-center justify-center">
-            <FolderSearch className="w-7 h-7 text-muted-foreground" />
-          </div>
-        </div>
-        
-        <p className="text-xs text-muted-foreground text-center leading-relaxed">
-          {t('loadProject.description1')}{' '}
-          <span className="text-foreground font-mono font-medium">
-            project_meta.json
-          </span>{' '}
-          {t('loadProject.description2')}
-        </p>
 
         <div className="space-y-1.5">
           <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-            {t('loadProject.selectFile')}
+            {t('loadProject.projectMetaPath')}
           </Label>
-          <Button 
-            variant="outline" 
-            className="w-full justify-start text-xs font-mono h-9"
-            onClick={() => setExplorerOpen(true)}
-            disabled={isLoading}
-          >
-            <FolderSearch className="w-4 h-4 mr-2 shrink-0" />
-            <span className="truncate">
-              {t('loadProject.clickToSelect')}
-            </span>
-          </Button>
+          <div className="relative">
+            <Input
+              value={selectedPath}
+              onChange={(e) => setSelectedPath(e.target.value)}
+              placeholder={t('loadProject.projectMetaPlaceholder')}
+              className="h-9 text-xs pr-9 font-mono"
+              disabled={isLoading}
+              onKeyDown={(e) => e.key === 'Enter' && handleLoadFile()}
+            />
+            <button
+              type="button"
+              onClick={() => setExplorerOpen(true)}
+              disabled={isLoading}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+            >
+              <FolderSearch size={14} />
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -207,29 +216,28 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
 
       <div className="flex items-center justify-end gap-3 pt-2 border-t border-border">
         <Button variant="outline" size="sm" onClick={onClose} disabled={isLoading}>
-          <X className="w-3.5 h-3.5 mr-1.5" />
           {t('common.cancel')}
         </Button>
         <Button 
           size="sm" 
           className="text-white" 
-          onClick={() => setExplorerOpen(true)}
-          disabled={isLoading}
+          onClick={handleLoadFile}
+          disabled={isLoading || !selectedPath.trim()}
         >
-          <FolderSearch className="w-3.5 h-3.5 mr-1.5" />
-          {t('loadProject.load')}
+          {isLoading ? (
+            <>{t('common.loading')}</>
+          ) : (
+            t('common.confirm')
+          )}
         </Button>
       </div>
 
       <FileExplorerDialog 
         open={explorerOpen} 
-        initialPath="/" 
+        initialPath={selectedPath || '/'}
         selectType="file"
         onClose={() => setExplorerOpen(false)} 
-        onConfirm={(paths) => {
-          setExplorerOpen(false);
-          handleLoadFile(paths);
-        }} 
+        onConfirm={handleExplorerConfirm}
       />
     </div>
   );

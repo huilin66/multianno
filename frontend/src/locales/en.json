@@ -111,10 +111,10 @@
     "projectMetaPlaceholder": "Enter or click to set project metadata path ..."
   },
   "loadProject": {
-    "descPre": "Select a ",
-    "descPost": " file to restore your workspace, folders, and view configurations.",
-    "failLoad": "Failed to load project",
-    "browse": "Browse JSON File"
+    "projectMetaPath": "Project Metadata Path",
+    "projectMetaPlaceholder": "Enter or click to set project metadata path ...",
+    "confirmResetTitle": "Load Project",
+    "confirmReset": "Are you sure you want to load the project? This will delete all data and start a new project."
   },
   "dataPreload": {
     "folders": {

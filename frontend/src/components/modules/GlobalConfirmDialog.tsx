@@ -1,73 +1,78 @@
 // src/components/GlobalConfirmDialog.tsx
 import React from 'react';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { useDialogStore, handleDialogConfirm, handleDialogCancel } from '../../store/useDialogStore';
 import { AlertTriangle, Info, CheckCircle2, AlertOctagon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+const typeConfig = {
+  info: {
+    icon: Info,
+    iconBg: 'bg-blue-100 dark:bg-blue-900/30',
+    iconColor: 'text-blue-500',
+    btnClass: 'text-white',
+  },
+  success: {
+    icon: CheckCircle2,
+    iconBg: 'bg-green-100 dark:bg-green-900/30',
+    iconColor: 'text-green-500',
+    btnClass: 'text-white',
+  },
+  warning: {
+    icon: AlertTriangle,
+    iconBg: 'bg-amber-100 dark:bg-amber-900/30',
+    iconColor: 'text-amber-500',
+    btnClass: 'text-white',
+  },
+  danger: {
+    icon: AlertOctagon,
+    iconBg: 'bg-red-100 dark:bg-red-900/30',
+    iconColor: 'text-red-500',
+    btnClass: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
+  },
+};
+
 export function GlobalConfirmDialog() {
   const { t } = useTranslation();
   const { isOpen, title, description, type, confirmText, cancelText, hideCancel } = useDialogStore();
-
-  const typeConfig = {
-    info: {
-      icon: <Info className="w-6 h-6 text-blue-500" />,
-      btnClass: 'bg-blue-600 hover:bg-blue-700 text-white',
-    },
-    success: {
-      icon: <CheckCircle2 className="w-6 h-6 text-green-500" />,
-      btnClass: 'bg-green-600 hover:bg-green-700 text-white',
-    },
-    warning: {
-      icon: <AlertTriangle className="w-6 h-6 text-amber-500" />,
-      btnClass: 'bg-amber-500 hover:bg-amber-600 text-white',
-    },
-    danger: {
-      icon: <AlertOctagon className="w-6 h-6 text-red-500" />,
-      btnClass: 'bg-red-600 hover:bg-red-700 text-white',
-    },
-  };
-
-  const currentConfig = typeConfig[type || 'info'];
+  const config = typeConfig[type || 'info'];
+  const Icon = config.icon;
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleDialogCancel()}>
-      <DialogContent className="sm:max-w-[400px] bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-800">
-        <DialogHeader className="flex flex-row items-start gap-4 space-y-0 pt-2">
-          <div className={`p-2 rounded-full flex-shrink-0 ${type === 'danger' ? 'bg-red-100 dark:bg-red-900/30' : type === 'warning' ? 'bg-amber-100 dark:bg-amber-900/30' : type === 'success' ? 'bg-green-100 dark:bg-green-900/30' : 'bg-blue-100 dark:bg-blue-900/30'}`}>
-            {currentConfig.icon}
-          </div>
-          <div className="flex-1">
-            <DialogTitle className="text-lg font-semibold text-neutral-900 dark:text-neutral-100 leading-tight">
-              {title}
-            </DialogTitle>
-            {description && (
-              <p className="mt-2 text-sm text-neutral-500 dark:text-neutral-400">
-                {description}
-              </p>
-            )}
+      <DialogContent className="max-w-sm sm:max-w-sm p-0 border-border overflow-hidden">
+        <DialogHeader className="p-4 border-b border-border shrink-0">
+          <div className="flex items-start gap-3">
+            <div className={`p-2 rounded-full shrink-0 ${config.iconBg}`}>
+              <Icon className={`w-5 h-5 ${config.iconColor}`} />
+            </div>
+            <div className="min-w-0">
+              <DialogTitle>{title}</DialogTitle>
+              {description && (
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  {description}
+                </p>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
-        <DialogFooter className="mt-6 flex gap-2 sm:justify-end">
+        <div className="flex items-center justify-end gap-3 p-4">
           {!hideCancel && (
-            <Button 
-              variant="outline" 
-              onClick={handleDialogCancel}
-              className="text-neutral-600 dark:text-neutral-300"
-            >
-              {cancelText || t('common.cancel', 'Cancel')}
+            <Button variant="outline" size="sm" onClick={handleDialogCancel}>
+              {cancelText || t('common.cancel')}
             </Button>
           )}
-          <Button 
-            className={currentConfig.btnClass}
+          <Button
+            size="sm"
+            className={config.btnClass}
             onClick={handleDialogConfirm}
             autoFocus
           >
-            {confirmText || (hideCancel ? t('common.gotIt', 'Got it') : t('common.confirm', 'Confirm'))}
+            {confirmText || (hideCancel ? t('common.gotIt') : t('common.confirm'))}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

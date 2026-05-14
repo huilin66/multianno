@@ -28,6 +28,7 @@ export function generateProjectMetaConfig(state: AppState): ProjectMetaContract 
 
   return {
         projectName: state.projectName || "Untitled Project",
+        workspacePath: state.workspacePath || '',
         sceneGroups: sceneGroups || {},
         taxonomyClasses: taxonomyClasses || [],
         taxonomyAttributes: taxonomyAttributes || [],

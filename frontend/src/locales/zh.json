@@ -111,10 +111,10 @@
     "projectMetaPlaceholder": "请输入或点击项目元数据路径..."
   },
   "loadProject": {
-    "descPre": "请选择一个 ",
-    "descPost": " 文件，以恢复您的工作区、文件夹及视图配置。",
-    "failLoad": "项目加载失败",
-    "browse": "浏览并选择 JSON 文件"
+    "projectMetaPath": "项目元数据路径",
+    "projectMetaPlaceholder": "请输入或点击项目元数据路径...",
+    "confirmResetTitle": "加载项目",
+    "confirmReset": "确认加载项目吗？这将删除所有数据并开始新项目。"
   },
   "dataPreload": {
     "folders": {
