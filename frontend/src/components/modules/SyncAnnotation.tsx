@@ -10,11 +10,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
 import { AIToolPanel } from './annotation/AIToolPanel';
-import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM, SAMPoint, getPreviewImageUrl } from '../../api/client'
+import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM, getPreviewImageUrl } from '../../api/client'
 import { X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { createPortal } from 'react-dom';
 import { CURSOR_FOCUS, CURSOR_DRAG } from '../../lib/cursors';
 
+export interface SAMPoint {
+  x: number;
+  y: number;
+  label: 1 | 0; // 1 为正样本，0 为负样本
+}
 
 const getControlPoints = (anno: any) => {
   if ((anno.type === 'bbox' || anno.type === 'ellipse' || anno.type === 'circle') && anno.points.length === 2) {

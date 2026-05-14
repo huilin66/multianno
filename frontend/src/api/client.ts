@@ -1,538 +1,119 @@
 // frontend/src/api/client.ts
 
-// 🌟 1. 定义并导出全局的 Base URL
+// ==========================================
+// 基础配置
+// ==========================================
 export const API_BASE_URL = 'http://localhost:8080/api';
-
-export const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
-
-
-// 🌟 2. 改造你现有的方法，使用模板字符串拼接
-export async function scanFolder(path: string) {
-  const response = await fetch(`${API_BASE_URL}/scan-folder`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path }),
-  });
-  return response.json();
-}
-
+const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
 
 // ==========================================
-// 🌟 1. 静默保存单张切片的标注 (日常高频调用)
+// 通用请求辅助
 // ==========================================
-export async function saveAnnotation(payload: {
-  save_dir: string;
-  file_name: string;
-  content: Record<string, any>; // 这里将传入组装好的 SceneAnnotationJSON
-}) {
-  const response = await fetch(`${API_BASE_URL}/annotations/save`, {
+const post = async (url: string, body: any) => {
+  const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(body),
   });
-  
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'Failed to save annotation');
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || err.error || 'Request failed');
   }
   return response.json();
-}
+};
+
+const get = async (url: string) => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || err.error || 'Request failed');
+  }
+  return response.json();
+};
 
 // ==========================================
-// 🌟 2. 批量合并/重命名类别
+// 项目配置 (Project Meta)
 // ==========================================
-export async function batchMergeClass(payload: {
+export const saveProjectMeta = (payload: { file_path: string; content: any }) =>
+  post(`${API_BASE_URL}/project/save_meta`, payload);
+
+export const loadProjectMetaFromServer = (file_path: string) =>
+  get(`${API_BASE_URL}/project/load_meta?file_path=${encodeURIComponent(file_path)}`);
+
+export const analyzeWorkspaceFolders = (folders: { path: string; suffix?: string }[]) =>
+  post(`${API_BASE_URL}/project/analyze`, { folders });
+
+// ==========================================
+// 工作区 (Workspace)
+// ==========================================
+export const checkWorkspaceJson = (path: string) =>
+  post(`${API_BASE_URL}/workspace/check-json`, { path });
+
+// ==========================================
+// 标注 (Annotations)
+// ==========================================
+export const saveAnnotation = (payload: {
+  save_dir: string;
+  file_name: string;
+  content: Record<string, any>;
+}) => post(`${API_BASE_URL}/annotations/save`, payload);
+
+export const getFileContent = (path: string) =>
+  get(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`);
+
+// ==========================================
+// 分类学 (Taxonomy)
+// ==========================================
+export const batchMergeClass = (payload: {
   save_dirs: string[];
   old_names: string[];
   new_name: string;
-}) {
-  const response = await fetch(`${API_BASE_URL}/taxonomy/merge_class`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  
-  if (!response.ok) throw new Error('Failed to merge classes');
-  return response.json(); // 返回格式: { status: "success", modified_files: 15 }
-}
+}) => post(`${API_BASE_URL}/taxonomy/merge_class`, payload);
 
-// ==========================================
-// 🌟 3. 批量删除类别 (支持软硬删除)
-// ==========================================
-// ==========================================
-// 🌟 3. 批量删除类别 (支持软硬删除)
-// ==========================================
-export async function batchDeleteClass(payload: {
+export const batchDeleteClass = (payload: {
   save_dirs: string[];
   class_name: string;
   hard_delete: boolean;
-}) {
-  const response = await fetch(`${API_BASE_URL}/taxonomy/delete_class`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  
-  if (!response.ok) {
-    // 🌟 核心升级：拦截并解析 FastAPI 的具体校验报错
-    const errorData = await response.json().catch(() => ({}));
-    const errorDetail = errorData.detail 
-      ? JSON.stringify(errorData.detail, null, 2) 
-      : 'Unknown Backend Error';
-    throw new Error(`\n[FastAPI 422 Rejection]:\n${errorDetail}`);
-  }
-  
-  return response.json(); 
-}
+}) => post(`${API_BASE_URL}/taxonomy/delete_class`, payload);
 
-
-export function getPreviewImageUrl(
-  folderPath: string, 
-  fileName: string | undefined, // 🌟 改为可选
-  bands: number[], 
-  colormap: string = 'gray'
-): string {
-  const params = new URLSearchParams();
-  params.append('folderPath', folderPath);
-  
-  // 如果传了 fileName 才拼接到 URL 里
-  if (fileName) {
-    params.append('fileName', fileName);
-  }
-  
-  params.append('bands', bands.join(','));
-  params.append('colormap', colormap);
-  
-  return `${API_BASE_URL}/project/preview?${params.toString()}`;
-}
-// 🌟 请求流式统计接口，支持实时回调
-export const fetchProjectStatisticsStream = async (
-  saveDirs: string[],
-  targetClass: string,
-  onProgress: (current: number, total: number) => void,
-  onComplete: (data: any) => void,
-  onError: (err: Error) => void
-) => {
-  try {
-    const response = await fetch('/api/stats/project', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ save_dirs: saveDirs, target_class: targetClass })
-    });
-
-    if (!response.body) throw new Error('ReadableStream not supported.');
-    
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      
-      // 将二进制块解码为字符串，并拼接到缓冲区
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      
-      // 最后一行可能是不完整的 JSON，保留在缓冲区等下一次读取
-      buffer = lines.pop() || ''; 
-
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const msg = JSON.parse(line);
-          if (msg.type === 'progress') {
-            onProgress(msg.current, msg.total);
-          } else if (msg.type === 'result') {
-            onComplete(msg.data);
-          }
-        } catch (e) {
-          console.error("JSON parse error on stream chunk:", line);
-        }
-      }
-    }
-  } catch (error: any) {
-    onError(error);
-  }
-};
-// 🌟 通知后端预取相邻图片到内存缓存
-export const prefetchImages = async (paths: string[]) => {
-  try {
-    await fetch(`${API_BASE_URL}/project/prefetch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ paths }),
-    });
-  } catch {
-    // 静默失败，不影响主流程
-  }
-};
-// ==========================================
-// 🌟 5. 获取全局项目统计数据大盘
-// ==========================================
-export const fetchProjectStatistics = async (saveDirs: string[], forceRefresh: boolean = false) => {
-  const response = await fetch(`${API_BASE_URL}/taxonomy/statistics`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ 
-      save_dirs: saveDirs,
-      force_refresh: forceRefresh // 🌟 新增参数
-    })
-  });
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || 'Failed to fetch project statistics');
-  }
-
-  return response.json();
-};
-
-export interface SAMPoint {
-  x: number;
-  y: number;
-  label: 1 | 0; // 1 为正样本，0 为负样本
-}
-
-export interface SAMInitRequest {
-  image_path?: string;
-  image_data?: string; // 用于传输 Base64 渲染图
-  image_size?: number; // 🌟 新增
-  crop_x?: number;
-  crop_y?: number;
-  crop_w?: number;
-  crop_h?: number;
-}
-
-// 2. 🌟 新增：获取后端 AI 真实状态的探针
-export const checkVisionAIStatus = async () => {
-  try {
-    const res = await fetch(`${VISION_AI_API_URL}/status`);
-    if (!res.ok) return { is_loaded: false };
-    return await res.json();
-  } catch (e) {
-    return { is_loaded: false }; // 后端没开或者断联
-  }
-};
-
-// 1. 初始化/预热图片
-export const initSAM = async (req: SAMInitRequest) => {
-  try {
-    const res = await fetch(`${VISION_AI_API_URL}/init`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(req),
-    });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || 'Backend Internal Error');
-    }
-    return await res.json();
-  } catch (e) {
-    // 🌟 区分是“没连接”还是“后端报错”
-    if (e instanceof TypeError && e.message === 'Failed to fetch') {
-      throw new Error('无法连接到后端服务，请检查 Python 进程是否启动并监听 8080 端口');
-    }
-    throw e;
-  }
-};
-
-// 2. 半自动交互 (给点/给框)
-export const predictSAM = async (
-  imagePath: string, 
-  points?: SAMPoint[], 
-  box?: number[], 
-  conf?: number, // 🌟 1. 加上这第 4 个可选参数
-  image_size?: number
-) => {
-  const res = await fetch(`${VISION_AI_API_URL}/predict`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // 🌟 2. 把 conf 一起打包发给后端
-    body: JSON.stringify({ image_path: imagePath, points, box, conf, image_size }), 
-    
-  });
-  if (!res.ok) throw new Error('SAM Predict Failed');
-  return res.json();
-};
-
-// 3. 全自动标注 (文本 prompt)
-export const autoPredictSAM = async (imagePath: string, texts: string[]) => {
-  const res = await fetch(`${VISION_AI_API_URL}/auto`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_path: imagePath, texts }),
-  });
-  if (!res.ok) throw new Error('SAM Auto Failed');
-  return res.json();
-};
-
-
-export const updateAIConfig = async (config: {
-  model_path: string;
-  model_type: string;
-  confidence: number;
-}) => {
-  const res = await fetch(`${VISION_AI_API_URL}/config`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || 'Failed to update AI config');
-  }
-  return await res.json();
-};
-
-
-export const predictAutoSAM = async (
-  imagePath: string, 
-  texts: string[], 
-  conf: number,
-  image_size?: number
-) => {
-  const res = await fetch(`${VISION_AI_API_URL}/auto`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ image_path: imagePath, texts, conf, image_size }), 
-  });
-  if (!res.ok) throw new Error('Auto Predict Failed');
-  return res.json();
-};
-// src/api/client.ts (最后两个函数替换)
-
-export const batchApplyAttribute = async (payload: { save_dirs: string[], attribute_name: string, new_default: string, old_default?: string }) => {
-  console.log("🚀 [Frontend] Sending payload to backend:", payload); 
-  
-  try {
-    // 🌟 修复：加上 `${API_BASE_URL}` 前缀！
-    const response = await fetch(`${API_BASE_URL}/taxonomy/apply_attribute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`❌ [Frontend] HTTP Error ${response.status}:`, errorText);
-      throw new Error(`Server error ${response.status}: ${errorText}`);
-    }
-    
-    return await response.json();
-  } catch (err) {
-    console.error("💥 [Frontend] Request completely failed (Aborted or Network Error):", err);
-    throw err;
-  }
-};
-
-export const batchDeleteAttribute = async (payload: { save_dirs: string[], attribute_name: string }) => {
-  // 🌟 修复：加上 `${API_BASE_URL}` 前缀！
-  const response = await fetch(`${API_BASE_URL}/taxonomy/delete_attribute`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error('Failed to delete attribute');
-  return response.json();
-};
-
-
-export const getFileContent = async (path: string) => {
-  const res = await fetch(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`);
-  if (!res.ok) {
-    throw new Error(`Failed to read file at ${path}`);
-  }
-  return res.json();
-};
-
-// 🌟 只保留这两个，删掉 processDataExchange
-export const exportData = async (payload: any) => {
-  const response = await fetch(`${API_BASE_URL}/exchange/export`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error(await response.text());
-  return response.json();
-};
-
-export const importData = async (payload: any) => {
-  const response = await fetch(`${API_BASE_URL}/exchange/import`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error(await response.text());
-  return response.json();
-};
-
-export const saveProjectMeta = async (payload: { file_path: string; content: any }) => {
-  const response = await fetch(`${API_BASE_URL}/project/save_meta`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error('Failed to save project meta');
-  return response.json();
-};
-
-export const loadProjectMetaFromServer = async (file_path: string) => {
-  const response = await fetch(`${API_BASE_URL}/project/load_meta?file_path=${encodeURIComponent(file_path)}`);
-  if (!response.ok) throw new Error('Failed to load project meta');
-  return response.json();
-};
-
-export const analyzeWorkspaceFolders = async (folders: { path: string; suffix?: string }[]) => {
-  const response = await fetch(`${API_BASE_URL}/project/analyze`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    // 注意：后端需要的外层包装是 { "folders": [...] }
-    body: JSON.stringify({ folders }), 
-  });
-  
-  if (!response.ok) {
-    throw new Error('Failed to analyze workspace folders');
-  }
-  return response.json();
-};
-
-
-/**
- * 🌟 获取本地可视化预览 (返回 JSON 字典)
- */
-export const requestVisPreview = async (payload: any) => {
-  const response = await fetch(`${API_BASE_URL}/vis/preview`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error(await response.text());
-  
-  // 🌟 核心修复：这里必须返回 JSON，而不是 blob()
-  return response.json(); 
-};
-
-/**
- * 🌟 启动全量本地可视化导出
- */
-export const requestVisExport = async (payload: any) => {
-  const response = await fetch(`${API_BASE_URL}/vis/export`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) throw new Error(await response.text());
-  return response.json();
-};
-
-
-// src/api/client.ts
-
-export const requestVisExportStream = async (payload: any, onProgress: (p: number) => void) => {
-    const response = await fetch(`${API_BASE_URL}/vis/export`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) throw new Error('Export service unavailable');
-    if (!response.body) throw new Error('No response body');
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let isFinished = false;
-
-    try {
-        while (!isFinished) {
-            const { done, value } = await reader.read();
-            if (done) {
-                isFinished = true;
-                break;
-            }
-
-            const chunk = decoder.decode(value, { stream: true });
-            // 🌟 核心修复：处理粘包或不完整行
-            const lines = chunk.split('\n').filter(line => line.trim());
-            
-            for (const line of lines) {
-                try {
-                    const data = JSON.parse(line);
-                    if (data.type === 'progress' || data.type === 'complete') {
-                        onProgress(data.percent);
-                    }
-                    if (data.type === 'complete') isFinished = true;
-                    if (data.type === 'error') throw new Error(data.message);
-                } catch (e) {
-                    // 忽略解析失败的行（可能是最后一行残留）
-                    console.warn("Skipping partial line:", line);
-                }
-            }
-        }
-    } catch (err) {
-        // 如果是中途断开，但进度已经 100% 了，我们就认为它成功了
-        console.error("Stream read error:", err);
-    } finally {
-        reader.releaseLock(); // 🌟 显式释放锁，防止内存泄漏和 ABORTED 报错
-    }
-
-    return { success: true };
-};
-
-
-// 🌟 数据修复接口
-export const repairData = async (saveDirs: string[], stems: string[], repairTypes: string[] = ['stem']) => {
-  const response = await fetch(`${API_BASE_URL}/taxonomy/repair`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ save_dirs: saveDirs, stems: stems, repair_types: repairTypes }),
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || 'Data repair failed');
-  }
-  return response.json();
-};
-
-// 🌟 合并类并设置属性
-export async function batchMergeClassWithAttribute(params: {
+export const batchApplyAttribute = (payload: {
   save_dirs: string[];
-  merges: {
-    old_name: string;
-    new_name: string;
-    attribute_name: string;
-    attribute_value: string;
-  }[];
-}): Promise<{ modified_files: number; total_objects: number }> {
-  const res = await fetch(`${API_BASE_URL}/taxonomy/merge_with_attribute`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err.detail || 'Merge with attribute failed');
-  }
-  return res.json();
-}
+  attribute_name: string;
+  new_default: string;
+  old_default?: string;
+}) => post(`${API_BASE_URL}/taxonomy/apply_attribute`, payload);
 
-export const checkWorkspaceJson = async (path: string) => {
-  const response = await fetch(`${API_BASE_URL}/workspace/check-json`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: path }),
-  });
-  
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || 'Failed to check workspace');
-  }
-  
-  return response.json();
-};
+export const batchDeleteAttribute = (payload: {
+  save_dirs: string[];
+  attribute_name: string;
+}) => post(`${API_BASE_URL}/taxonomy/delete_attribute`, payload);
 
+export const repairData = (
+  saveDirs: string[],
+  stems: string[],
+  repairTypes: string[] = ['stem']
+) => post(`${API_BASE_URL}/taxonomy/repair`, { save_dirs: saveDirs, stems, repair_types: repairTypes });
 
+export const batchMergeClassWithAttribute = (params: {
+  save_dirs: string[];
+  merges: { old_name: string; new_name: string; attribute_name: string; attribute_value: string }[];
+}) => post(`${API_BASE_URL}/taxonomy/merge_with_attribute`, params);
 
+export const fetchProjectStatistics = (saveDirs: string[], forceRefresh = false) =>
+  post(`${API_BASE_URL}/taxonomy/statistics`, { save_dirs: saveDirs, force_refresh: forceRefresh });
+
+// ==========================================
+// 数据交换 (Exchange)
+// ==========================================
+export const exportData = (payload: any) =>
+  post(`${API_BASE_URL}/exchange/export`, payload);
+
+export const importData = (payload: any) =>
+  post(`${API_BASE_URL}/exchange/import`, payload);
+
+// ==========================================
+// 文件系统 (File System)
+// ==========================================
 export const exploreDirectory = async (path: string) => {
   const savedHistory = localStorage.getItem('multiAnno_recentPaths');
   let historyParams = '';
@@ -546,30 +127,162 @@ export const exploreDirectory = async (path: string) => {
       console.error('Failed to parse history', e);
     }
   }
-
-  const response = await fetch(
-    `${API_BASE_URL}/fs/explore?path=${encodeURIComponent(path)}${historyParams}`
-  );
-
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || err.detail || 'Failed to read directory');
-  }
-
-  return response.json();
+  return get(`${API_BASE_URL}/fs/explore?path=${encodeURIComponent(path)}${historyParams}`);
 };
 
-export const createFolder = async (path: string, name: string) => {
-  const response = await fetch(`${API_BASE_URL}/fs/mkdir`, {
+export const createFolder = (path: string, name: string) =>
+  post(`${API_BASE_URL}/fs/mkdir`, { path, name: name.trim() });
+
+// ==========================================
+// AI 视觉 (Vision AI)
+// ==========================================
+export const checkVisionAIStatus = async () => {
+  try {
+    return await get(`${VISION_AI_API_URL}/status`);
+  } catch {
+    return { is_loaded: false };
+  }
+};
+
+export const updateAIConfig = (config: {
+  model_path: string;
+  model_type: string;
+  confidence: number;
+}) => post(`${VISION_AI_API_URL}/config`, config);
+
+export const initSAM = (req: {
+  image_path?: string;
+  image_data?: string;
+  image_size?: number;
+  crop_x?: number;
+  crop_y?: number;
+  crop_w?: number;
+  crop_h?: number;
+}) => post(`${VISION_AI_API_URL}/init`, req);
+
+export const predictSAM = (
+  imagePath: string,
+  points?: { x: number; y: number; label: 1 | 0 }[],
+  box?: number[],
+  conf?: number,
+  image_size?: number
+) => post(`${VISION_AI_API_URL}/predict`, { image_path: imagePath, points, box, conf, image_size });
+
+export const predictAutoSAM = (
+  imagePath: string,
+  texts: string[],
+  conf: number,
+  image_size?: number
+) => post(`${VISION_AI_API_URL}/auto`, { image_path: imagePath, texts, conf, image_size });
+
+// ==========================================
+// 可视化 (Visualization)
+// ==========================================
+export const requestVisPreview = (payload: any) =>
+  post(`${API_BASE_URL}/vis/preview`, payload);
+
+export const requestVisExportStream = async (payload: any, onProgress: (p: number) => void) => {
+  const response = await fetch(`${API_BASE_URL}/vis/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path, name: name.trim() }),
+    body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || err.error || 'Failed to create folder');
+  if (!response.ok) throw new Error('Export service unavailable');
+  if (!response.body) throw new Error('No response body');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const lines = decoder.decode(value, { stream: true }).split('\n').filter(l => l.trim());
+      for (const line of lines) {
+        try {
+          const data = JSON.parse(line);
+          if (data.type === 'progress' || data.type === 'complete') onProgress(data.percent);
+          if (data.type === 'error') throw new Error(data.message);
+        } catch {
+          // 忽略解析失败的行
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
   }
 
-  return response.json();
+  return { success: true };
 };
+
+// ==========================================
+// 其他工具
+// ==========================================
+export const getPreviewImageUrl = (
+  folderPath: string,
+  fileName: string | undefined,
+  bands: number[],
+  colormap = 'gray'
+) => {
+  const params = new URLSearchParams({ folderPath, bands: bands.join(','), colormap });
+  if (fileName) params.append('fileName', fileName);
+  return `${API_BASE_URL}/project/preview?${params.toString()}`;
+};
+
+export const prefetchImages = async (paths: string[]) => {
+  try {
+    await post(`${API_BASE_URL}/project/prefetch`, { paths });
+  } catch {
+    // 静默失败
+  }
+};
+
+export const fetchProjectStatisticsStream = async (
+  saveDirs: string[],
+  targetClass: string,
+  onProgress: (current: number, total: number) => void,
+  onComplete: (data: any) => void,
+  onError: (err: Error) => void
+) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/stats/project`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ save_dirs: saveDirs, target_class: targetClass }),
+    });
+
+    if (!response.body) throw new Error('ReadableStream not supported');
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const msg = JSON.parse(line);
+          if (msg.type === 'progress') onProgress(msg.current, msg.total);
+          else if (msg.type === 'result') onComplete(msg.data);
+        } catch (e) {
+          console.error('JSON parse error:', line);
+        }
+      }
+    }
+  } catch (error: any) {
+    onError(error);
+  }
+};
+
+// 保留 scanFolder（如果其他地方有用）
+export const scanFolder = (path: string) =>
+  post(`${API_BASE_URL}/scan-folder`, { path });
