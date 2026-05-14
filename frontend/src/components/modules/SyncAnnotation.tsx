@@ -450,7 +450,9 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
         const setting = shortcutsSettings[tool];
         if (!setting) return false;
         
-        const keyMatch = e.key.toLowerCase() === setting.key.toLowerCase();
+        const keyMatch = setting.key === 'space' 
+          ? (e.key === ' ' || e.key === 'Spacebar')
+          : e.key.toLowerCase() === setting.key.toLowerCase();
         const shiftMatch = setting.shift ? e.shiftKey : !e.shiftKey;
         const ctrlMatch = setting.ctrl ? (e.ctrlKey || e.metaKey) : !e.ctrlKey && !e.metaKey;
         

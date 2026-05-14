@@ -68,7 +68,7 @@ export function LeftToolbar({
   const mainDrawTools = [
     { id: 'bbox', icon: Square, ...getToolInfo(t('shortcuts.bbox'), 'bbox') },
     { id: 'polygon', icon: Hexagon, ...getToolInfo(t('shortcuts.polygon'), 'polygon') },
-    { id: 'ai_anno', icon: Wand2, ...getToolInfo(t('shortcuts.ai_anno'), 'ai_anno') } 
+    { id: 'ai_anno', icon: Wand2, ...getToolInfo(t('shortcuts.aiAnno'), 'ai_anno') } 
   ];
 
   const moreTools = [
