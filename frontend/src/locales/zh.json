@@ -40,7 +40,23 @@
     "aiSetting": "AI 设置",
     "viewLayout": "视图布局"
   },
-    "shortcuts":{
+  "viewLayout":{
+    "title": "视图布局",
+    "views": "视图数",
+    "maxViews": "最大视图数:",
+    "currentViews": "当前视图数:",
+    "presets_auto": "自动",
+    "quickPresets": "快速预设",
+    "customGrid": "自定义网格",
+    "rows": "行",
+    "columns": "列",
+    "cells": "单元格",
+    "livePreview": "实时预览",
+    "mainView": "主视图",
+    "augViews": "增强视图",
+    "empty": "空"
+  },
+  "shortcuts":{
     "title": "快捷键设置",
     "pressKey": "请按键...",
     "pressCombineKey": "请按下键/组合键(Ctrl/Shift+键)以设置快捷键",

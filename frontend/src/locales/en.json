@@ -40,6 +40,22 @@
     "aiSetting": "AI Settings",
     "viewLayout": "View Layout"
   },
+  "viewLayout":{
+    "title": "View Layout",
+    "views": "Views",
+    "maxViews": "Max Views:",
+    "currentViews": "Current Views:",
+    "presets_auto": "Auto",
+    "quickPresets": "Quick Presets",
+    "customGrid": "Custom Grid",
+    "rows": "Rows",
+    "columns": "Columns",
+    "cells": "Cells",
+    "livePreview": "Live Preview",
+    "mainView": "Main View",
+    "augViews": "Aug Views",
+    "empty": "Empty"
+  },
   "shortcuts":{
     "title": "Shortcut Settings",
     "pressKey": "Please Press Key...",
