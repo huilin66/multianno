@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from models import AnalyzeRequest, ProjectMetaPayload, StatsRequest
+from models import AnalyzeRequest, CheckJsonRequest, ProjectMetaPayload, StatsRequest
 from skimage import io
 
 router = APIRouter(prefix="/api", tags=["Project"])
@@ -384,3 +384,20 @@ async def load_project_meta(file_path: str):
         return data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/workspace/check-json")
+async def check_workspace_json(req: CheckJsonRequest):
+    try:
+        if not os.path.exists(req.path):
+            return {"hasJson": False}
+
+        # 递归检查目录下是否有 .json 文件
+        for root, dirs, files in os.walk(req.path):
+            for file in files:
+                if file.endswith(".json"):
+                    return {"hasJson": True}
+
+        return {"hasJson": False}
+    except Exception as e:
+        return {"hasJson": False}

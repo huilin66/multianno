@@ -515,3 +515,18 @@ export async function batchMergeClassWithAttribute(params: {
   }
   return res.json();
 }
+
+export const checkWorkspaceJson = async (path: string) => {
+  const response = await fetch(`${API_BASE_URL}/workspace/check-json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: path }),
+  });
+  
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || 'Failed to check workspace');
+  }
+  
+  return response.json();
+};

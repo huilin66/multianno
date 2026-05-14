@@ -14,7 +14,7 @@ import {
 import { FileExplorerDialog } from './FileExplorerDialog'; 
 import { Alert, AlertDescription } from '../ui/alert';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
-import { saveProjectMeta, analyzeWorkspaceFolders } from '../../api/client';
+import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson } from '../../api/client';
 
 export function DataPreload() {
   const { t } = useTranslation();
@@ -31,6 +31,9 @@ export function DataPreload() {
   const [workspaceExplorerOpen, setWorkspaceExplorerOpen] = useState(false);
   const [isWorkspaceConfirming, setIsWorkspaceConfirming] = useState(false);
   const [isGlobalConfirming, setIsGlobalConfirming] = useState(false);
+
+  const [workspaceHasJson, setWorkspaceHasJson] = useState(false);
+  const [isCheckingWorkspace, setIsCheckingWorkspace] = useState(false);
 
   const workspaceStorePath = useStore(s => s.workspacePath);
   const setWorkspaceStorePath = useStore(s => s.setWorkspacePath);
@@ -52,14 +55,17 @@ export function DataPreload() {
       // Store 中有自定义路径，恢复 defined 状态
       setWorkspacePath(workspaceStorePath);
       setIsWorkspaceCustom(true);
+      checkWorkspaceForJson(workspaceStorePath);
+    } else if (mainViewFolder?.path) {
+      checkWorkspaceForJson(mainViewFolder.path);
     }
-    // 否则保持 default 状态，跟随 mainViewFolder
-  }, []); // 只在挂载时执行一次
+  }, []);
 
   // 2. 简化 useEffect - 只在 default 状态下跟随 mainViewFolder
   useEffect(() => {
     if (!isWorkspaceCustom && mainViewFolder?.path) {
       setWorkspacePath(mainViewFolder.path);
+      checkWorkspaceForJson(mainViewFolder.path);
     }
   }, [mainViewFolder?.path, isWorkspaceCustom]);
 
@@ -74,7 +80,20 @@ export function DataPreload() {
       }
     }
   }, []);
-
+  const checkWorkspaceForJson = async (path: string) => {
+    if (!path) return;
+    
+    setIsCheckingWorkspace(true);
+    try {
+      const data = await checkWorkspaceJson(path);
+      setWorkspaceHasJson(data.hasJson || false);
+    } catch (error) {
+      console.error('Failed to check workspace:', error);
+      setWorkspaceHasJson(false);
+    } finally {
+      setIsCheckingWorkspace(false);
+    }
+  };
   const savePathsToHistory = (paths: string[]) => {
     setRecentPaths(prev => {
         let newHistory = [...prev];
@@ -214,15 +233,15 @@ export function DataPreload() {
     if (!finalPath) return;
     
     setIsWorkspaceConfirming(true);
-    // 🆕 setWorkspaceStorePath 是同步操作，不需要 try-catch
     setWorkspaceStorePath(finalPath);
+    await checkWorkspaceForJson(finalPath);
     setIsWorkspaceConfirming(false);
   };
 
   // 🆕 Workspace 取消/重置
   const handleWorkspaceReset = () => {
     setWorkspacePath(mainViewFolder?.path || '');
-    setIsWorkspaceCustom(false); // 🆕 恢复 default 状态
+    setIsWorkspaceCustom(false);
   };
   // 🆕 全局最终确认 - 进入工作区
   const handleGlobalConfirm = async () => {
@@ -416,14 +435,27 @@ export function DataPreload() {
                   <FolderOpen className="w-5 h-5" />
                   {t('dataPreload.workspace.title') || 'Workspace'}
                   
-                  {/* 状态标签 */}
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-normal ${
-                    workspaceStatus === 'default'
-                      ? 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                      : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                  }`}>
-                    {workspaceStatus}
-                  </span>
+                  {/* 🆕 状态标签 - 三种状态 */}
+                  {isCheckingWorkspace ? (
+                    <span className="text-xs px-2 py-0.5 rounded-full font-normal bg-muted text-muted-foreground">
+                      <Loader2 className="w-3 h-3 inline animate-spin mr-1" />
+                      checking...
+                    </span>
+                  ) : workspaceHasJson ? (
+                    /* 🔒 locked 状态 */
+                    <span className="text-xs px-2 py-0.5 rounded-full font-normal bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
+                      locked
+                    </span>
+                  ) : (
+                    /* default 或 defined 状态 */
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-normal ${
+                      workspaceStatus === 'default'
+                        ? 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
+                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                    }`}>
+                      {workspaceStatus}
+                    </span>
+                  )}
                 </div>
               </CardTitle>
             </CardHeader>
@@ -432,54 +464,59 @@ export function DataPreload() {
               <div className="flex-1 space-y-3">
                 {folders.length > 0 ? (
                   <>
-                    {/* 说明信息 */}
                     <Label className="text-xs text-muted-foreground">
-                        {t('dataPreload.workspace.description') || 'Annotation save path'}
+                      {t('dataPreload.workspace.description') || 'Annotation save path'}
                     </Label>
 
-                    {/* 路径配置 */}
-                    <div className="space-y-2">
-
-                      
-                      {/* 路径输入框 */}
-                      <div className="relative">
-                        <Input
-                          value={isWorkspaceCustom ? workspacePath : (mainViewFolder?.path || 'default')}
-                          placeholder="default"
-                          onChange={e => {
-                            const val = e.target.value;
-                            setWorkspacePath(val);
-                            if (!val || val === mainViewFolder?.path) {
-                              setIsWorkspaceCustom(false);
-                            } else {
-                              setIsWorkspaceCustom(true);
-                            }
-                          }}
-                          className={`h-8 text-xs pr-8 font-mono bg-background ${
-                            !isWorkspaceCustom ? 'text-muted-foreground' : 'text-foreground'
-                          }`}
-                          disabled={isWorkspaceConfirming}
-                        />
-                        <button
-                          onClick={() => setWorkspaceExplorerOpen(true)}
-                          disabled={isWorkspaceConfirming}
-                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
-                        >
-                          <FolderOpen size={13} />
-                        </button>
+                    {/* 🆕 有 JSON 文件时显示锁定信息 */}
+                    {workspaceHasJson && !isCheckingWorkspace ? (
+                      <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg space-y-2">
+                        <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+                          <Info className="w-4 h-4 flex-shrink-0" />
+                          <span className="text-xs font-medium">
+                            Workspace contains annotation files. Path is locked.
+                          </span>
+                        </div>
+                        <div className="text-xs text-amber-600 dark:text-amber-400 font-mono truncate bg-amber-100/50 dark:bg-amber-900/50 px-2 py-1 rounded">
+                          {workspacePath || mainViewFolder?.path}
+                        </div>
                       </div>
+                    ) : (
+                      /* 无 JSON 文件，正常可编辑 */
+                      <div className="space-y-2">
+                        <div className="relative">
+                          <Input
+                            value={isWorkspaceCustom ? workspacePath : (mainViewFolder?.path || '')}
+                            placeholder={mainViewFolder?.path || 'default'}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setWorkspacePath(val);
+                              setIsWorkspaceCustom(!!(val && val !== mainViewFolder?.path));
+                            }}
+                            className={`h-8 text-xs pr-8 font-mono bg-background ${
+                              !isWorkspaceCustom ? 'text-muted-foreground' : 'text-foreground'
+                            }`}
+                            disabled={isWorkspaceConfirming || isCheckingWorkspace}
+                          />
+                          <button
+                            onClick={() => setWorkspaceExplorerOpen(true)}
+                            disabled={isWorkspaceConfirming || isCheckingWorkspace}
+                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                          >
+                            <FolderOpen size={13} />
+                          </button>
+                        </div>
 
-                      {/* 当前路径信息 */}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <span>{t('dataPreload.workspace.default') || 'Default'}:</span>
-                        <span className="font-mono truncate" title={mainViewFolder?.path}>
-                          {mainViewFolder?.path || t('dataPreload.workspace.notSet') || 'Not set'}
-                        </span>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>{t('dataPreload.workspace.default') || 'Default'}:</span>
+                          <span className="font-mono truncate" title={mainViewFolder?.path}>
+                            {mainViewFolder?.path || t('dataPreload.workspace.notSet') || 'Not set'}
+                          </span>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </>
                 ) : (
-                  /* 没有文件夹时的提示 */
                   <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground border-2 border-dashed rounded-lg">
                     <FolderOpen className="w-10 h-10 mb-2 opacity-50" />
                     <p className="text-sm text-center">
@@ -489,13 +526,12 @@ export function DataPreload() {
                 )}
               </div>
 
-              {/* Workspace 底部按钮 - 与 Folders 统一风格 */}
+              {/* 🆕 底部按钮 - 始终显示，根据状态禁用 */}
               <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t shrink-0">
-
                 <Button 
                   onClick={handleWorkspaceReset} 
                   variant="outline" 
-                  disabled={!isWorkspaceCustom || isWorkspaceConfirming} // 只在 defined 状态可点击
+                  disabled={!isWorkspaceCustom || isWorkspaceConfirming || workspaceHasJson}
                 >
                   <X className="w-4 h-4 mr-2" /> 
                   {t('common.reset') || 'Reset'}
@@ -504,7 +540,7 @@ export function DataPreload() {
                   onClick={handleWorkspaceConfirm} 
                   variant="default"
                   className="text-white" 
-                  disabled={isWorkspaceConfirming || (!workspacePath && !mainViewFolder?.path)}
+                  disabled={isWorkspaceConfirming || isCheckingWorkspace || (!workspacePath && !mainViewFolder?.path)}
                 >
                   {isWorkspaceConfirming ? (
                     <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('common.saving') || 'Saving...'}</>

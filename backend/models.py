@@ -160,3 +160,7 @@ class MergeRule(BaseModel):
 class MergeWithAttributeRequest(BaseModel):
     save_dirs: List[str]
     merges: List[MergeRule]
+
+
+class CheckJsonRequest(BaseModel):
+    path: str
