@@ -39,7 +39,8 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     f.id === views?.find((v: any) => v.isMain)?.folderId
   ) || folders?.[0];
   
-  const safeWorkspacePath = mainViewFolder?.path || '';
+  const workspacePath = useStore(s => s.workspacePath);
+  const safeWorkspacePath = workspacePath || mainViewFolder?.path || '';
 
   // --- 状态定义 ---
   const [taskType, setTaskType] = useState('object_detection');

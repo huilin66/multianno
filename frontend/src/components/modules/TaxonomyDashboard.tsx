@@ -362,7 +362,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
     folders, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
-    mergeTaxonomyClassesWithAttributes, stems
+    mergeTaxonomyClassesWithAttributes, stems, workspacePath 
   } = useStore() as any;
 
   const openDialog = useDialogStore((s) => s.openDialog);
@@ -402,7 +402,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [attrSortDir, setAttrSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
 
   const [newTargetClassName, setNewTargetClassName] = useState('');
-
+  const getSaveDirs = (): string[] => {
+      if (workspacePath) return [workspacePath];
+      return folders.map((f: any) => f.path).filter(Boolean);
+  };
   const refreshStatsIfNeeded = async () => {
     if (editorSettings.autoRefreshStats) {
       await loadStatistics(true);
@@ -462,7 +465,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     
     setIsProcessing(true);
     try {
-      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      const safeSaveDirs = getSaveDirs();
       
       await batchMergeClassWithAttribute({
         save_dirs: safeSaveDirs,
@@ -571,7 +574,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setIsRepairing(true);
     setRepairResult(null);
     try {
-      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      const safeSaveDirs = getSaveDirs();
       const result = await repairData(safeSaveDirs, stems, ['stem', 'json_file']);
       setRepairResult({ fixed: result.total_fixed, scanned: result.total_scanned });
       await refreshStatsIfNeeded();
@@ -614,7 +617,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   
     setStatsStatus('loading');
     try {
-      const saveDirs = folders.map((f: any) => f.path);
+      const saveDirs = getSaveDirs();
       const rawData = await fetchProjectStatistics(saveDirs, forceRefresh);
       
       // 🌟 核心修复 1：拦截后端数据，把不兼容的 'rectangle' 或 'Rectangle' 强制转为引擎识别的 'bbox'
@@ -715,7 +718,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
     setIsProcessing(true);
     try {
-      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      const safeSaveDirs = getSaveDirs();
       
       // 1. 后端合并：将所有标注从 old_name 改为 new_name
       await batchMergeClass({ 
@@ -778,7 +781,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       
       setIsProcessing(true);
       try {
-        const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+        const safeSaveDirs = getSaveDirs();
         await batchDeleteClass({ 
           save_dirs: safeSaveDirs, 
           class_name: activeClass.name, 
@@ -806,7 +809,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     }
     setIsProcessing(true);
     try {
-      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      const safeSaveDirs = getSaveDirs();
       
       // 1. 调用后端的删除接口，使用 hard_delete 物理抹除所有的 background 框
       await batchDeleteClass({ 
@@ -838,7 +841,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     if (!activeAttribute || !attrDraft) return;
     setIsProcessing(true);
     try {
-      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      const safeSaveDirs = getSaveDirs();
       
       // 1. 同步到所有后端的 JSON 文件
       await batchApplyAttribute({
@@ -886,7 +889,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     if (!activeAttribute) return;
     setIsProcessing(true);
     try {
-      const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+      const safeSaveDirs = getSaveDirs();
       
       // 同步删除后端 JSON 里的该属性
       await batchDeleteAttribute({ save_dirs: safeSaveDirs, attribute_name: activeAttribute.name });
@@ -1389,7 +1392,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             setIsProcessing(true);
                             
                             try {
-                              const safeSaveDirs = folders.map((f: any) => f.path).filter(Boolean);
+                              const safeSaveDirs = getSaveDirs();
                               const result = await batchMergeClass({
                                 save_dirs: safeSaveDirs,
                                 old_names: [oldName],

@@ -17,7 +17,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
     f.id === views?.find((v: any) => v.isMain)?.folderId
   ) || folders?.[0];
   
-  const safeWorkspaceDir = mainViewFolder?.path || '';
+  const workspacePath = useStore(s => s.workspacePath);
+  const safeWorkspaceDir = workspacePath || mainViewFolder?.path || '';
 
   const [taskType, setTaskType] = useState('object_detection');
   const [format, setFormat] = useState('yolo');

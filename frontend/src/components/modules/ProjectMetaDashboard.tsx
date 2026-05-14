@@ -17,6 +17,7 @@ interface ProjectMetaDashboardProps {
 export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}) {
   const { t } = useTranslation(); // 🌟 激活翻译钩子
   const {projectName, folders, views, setActiveModule } = useStore();
+  const workspacePath = useStore(s => s.workspacePath);
 
   // 🛡️ 这里加上我们之前讨论的防白屏兜底代码！
   if (!folders || folders.length === 0) {
@@ -48,7 +49,6 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
       {/* 核心展示区：左右双栏布局 */}
       <div className="flex-1 grid grid-cols-2 gap-6 p-6 overflow-hidden">
-        
         {/* 左侧：Folders 信息 */}
         <div className="flex flex-col h-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden rounded-xl">
           <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
@@ -58,6 +58,14 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
             </h3>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+            {workspacePath && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-2">
+                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">Workspace</span>
+                    <p className="text-[10px] font-mono text-neutral-600 dark:text-neutral-400 mt-0.5 truncate" title={workspacePath}>
+                        {workspacePath}
+                    </p>
+                </div>
+            )}
             {meta.folders.map((folder) => (
             // {/* 🌟 1. 外层卡片：日间浅灰，夜间深灰 */}
             <div key={folder.Id} className="bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 space-y-3 transition-colors">
