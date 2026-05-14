@@ -8,7 +8,7 @@ import {
   Copy, ClipboardPaste
 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
-import { KEY_LABELS } from '../settings/ShortcutSettingsModal';
+import { KEY_LABELS } from '../../modals/settings/ShortcutSettingsModal';
 import { useTranslation } from 'react-i18next';
 
 interface LeftToolbarProps {

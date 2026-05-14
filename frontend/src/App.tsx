@@ -21,12 +21,12 @@ import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
 import { useAnnotationAutoSave } from './hooks/useAnnotationAutoSave';
-import { ShortcutSettingsModal } from './components/modules/settings/ShortcutSettingsModal';
-import { AISettingsModal } from './components/modules/settings/AISettingsModal';
+import { ShortcutSettingsModal } from './components/modals/settings/ShortcutSettingsModal';
+import { AISettingsModal } from './components/modals/settings/AISettingsModal';
 import { useMetaAutoSave } from './hooks/useMetaAutoSave';
 import { LocalVisualization } from './components/modules/LocalVisualization';
-import { GlobalConfirmDialog } from './components/modules/GlobalConfirmDialog';
-import { ViewLayoutSettingsModal } from './components/modules/settings/ViewLayoutSettingsModal';
+import { GlobalConfirmDialog } from './components/modals/GlobalConfirmDialog';
+import { ViewLayoutSettingsModal } from './components/modals/settings/ViewLayoutSettingsModal';
 
 export default function App() {
   const { t, i18n } = useTranslation();
