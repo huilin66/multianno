@@ -1023,16 +1023,15 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
         <div className="flex items-center gap-3 shrink-0">
           <Button variant="outline" size="sm" onClick={onClose} disabled={isExporting}>
-            <X className="w-3.5 h-3.5 mr-1.5" />
             {t('common.cancel')}
           </Button>
           <Button size="sm" className="text-white" onClick={handleExecute}
             disabled={isExporting || !targetDir}
           >
             {isExporting ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {t('dataExport.exporting')}</>
+              <>{t('common.cancel')}</>
             ) : (
-              <><Download className="w-3.5 h-3.5 mr-1.5" /> {t('dataExport.execute')}</>
+              <><Download className="w-3.5 h-3.5 mr-1.5" /> {t('common.running')}</>
             )}
           </Button>
         </div>

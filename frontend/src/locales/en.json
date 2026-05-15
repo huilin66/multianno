@@ -387,7 +387,8 @@
       "generateReport": "Generate Report",
       "reportHint": "Generate a report with export statistics after the export.",
       "targetRequired": "Target folder is required before export."
-    }
+    },
+    "exporting": "Exporting..."
   },
   "common": {
     "confirm": "Confirm",
@@ -397,6 +398,7 @@
     "exit": "Exit",
     "loading": "Loading...",
     "reset": "Reset",
+    "running": "Running...",
     "success": "Success",
     "saved": "Saved",
     "saving": "Saving...",
