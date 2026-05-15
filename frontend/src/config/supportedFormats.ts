@@ -1,62 +1,156 @@
 // src/config/supportedFormats.ts
 
-export type TaskType = 'object_detection' | 'instance_segmentation' | 'semantic_segmentation';
+export type TaskType = 'object_detection' | 'instance_segmentation' | 'image_segmentation' | 'change_detection';
 
-export interface FormatConfig {
-  id: string;
+// ==========================================
+// 1. task definition
+// ==========================================
+export interface TaskInfo {
   label: string;
-  extensions: string[];
-  defaultExtension: string;
+  description: string;
+  formats: string[];
 }
 
-// 🌟 1. 任务定义映射
-export const SUPPORTED_TASKS: Record<TaskType, { label: string; formats: string[] }> = {
+export const SUPPORTED_TASKS: Record<TaskType, TaskInfo> = {
   object_detection: {
     label: 'Object Detection',
-    formats: ['yolo', 'coco', 'multianno'],
+    description: 'Bounding box detection',
+    formats: ['yolo', 'coco', 'voc', 'multianno'],
   },
   instance_segmentation: {
     label: 'Instance Segmentation',
-    formats: ['yolo', 'coco', 'multianno'],
+    description: 'Polygon-based instance masks',
+    formats: ['coco', 'yolo', 'multianno'],
   },
-  semantic_segmentation: {
-    label: 'Semantic Segmentation',
-    formats: ['image', 'multianno'],
+  image_segmentation: {
+    label: 'Image Segmentation',
+    description: 'Class-based pixel masks',
+    formats: ['mask', 'multianno'],
+  },
+  change_detection: {
+    label: 'Change Detection',
+    description: 'Class-based pixel change detection masks',
+    formats: ['mask', 'multianno'],
   },
 };
 
-// 🌟 2. 格式详细属性
-export const FORMAT_DETAILS: Record<string, FormatConfig> = {
+// ==========================================
+// 2. format definition
+// ==========================================
+export interface FormatInfo {
+  id: string;
+  label: string;
+  defaultExtension: string;
+  extensions: string[];
+  description: string;
+}
+
+export const FORMAT_DETAILS: Record<string, FormatInfo> = {
   yolo: {
     id: 'yolo',
-    label: 'YOLO 格式',
-    extensions: ['.txt'],
+    label: 'YOLO',
     defaultExtension: '.txt',
+    extensions: ['.txt'],
+    description: 'YOLO format bounding boxes',
   },
   coco: {
     id: 'coco',
-    label: 'COCO 格式',
-    extensions: ['.json'],
+    label: 'COCO',
     defaultExtension: '.json',
+    extensions: ['.json'],
+    description: 'COCO JSON format',
+  },
+  voc: {
+    id: 'voc',
+    label: 'VOC',
+    defaultExtension: '.xml',
+    extensions: ['.xml'],
+    description: 'Pascal VOC XML format',
   },
   multianno: {
     id: 'multianno',
-    label: 'MultiAnno 格式',
+    label: 'MultiAnno',
     extensions: ['.json'],
     defaultExtension: '.json',
+    description: 'MultiAnno JSON format',
   },
-  // 兼容 Local Visualization 的 key
-  image: {
-    id: 'image',
-    label: 'Mask 图像',
+  mask: {
+    id: 'mask',
+    label: 'Mask',
     extensions: ['.png', '.tif', '.jpg', '.bmp'],
     defaultExtension: '.png',
+    description: 'Mask image format',
   },
-  // 兼容 Data Import / Export 的 key
-  images_only: {
-    id: 'images_only',
-    label: 'Mask 图像',
-    extensions: ['.png', '.tif', '.jpg', '.bmp'],
-    defaultExtension: '.png',
-  }
 };
+
+export const IMAGE_EXT_MAP: Record<string, string> = {
+  'TIFF': '.tif',
+  'TIF': '.tif',
+  'PNG': '.png',
+  'JPEG': '.jpg',
+  'JPG': '.jpg',
+  'BMP': '.bmp',
+};
+
+// ==========================================
+// 3. shape compatibility mapping
+// ==========================================
+export type ShapeStatus = 'native' | 'convertible' | 'incompatible';
+
+export const ALL_SHAPES = [
+  'bbox', 'polygon', 
+  'oriented_bbox', 'cuboid',
+  'ellipse', 'circle', 
+  'keypoints',
+  'point', 'line'
+] as const;
+
+
+export const TASK_SHAPE_MAPPINGS: Record<TaskType, Record<string, ShapeStatus>> = {
+  object_detection: {
+    bbox: 'native',
+    oriented_bbox: 'incompatible',
+    polygon: 'incompatible',
+    ellipse: 'incompatible',
+    circle: 'incompatible',
+    cuboid: 'incompatible',
+    point: 'incompatible',
+    line: 'incompatible',
+    keypoints: 'incompatible',
+  },
+  instance_segmentation: {
+    polygon: 'native',
+    bbox: 'convertible',
+    ellipse: 'convertible',
+    circle: 'convertible',
+    oriented_bbox: 'convertible',
+    point: 'incompatible',
+    line: 'incompatible',
+    cuboid: 'incompatible',
+    keypoints: 'incompatible',
+  },
+  image_segmentation: {
+    polygon: 'native',
+    bbox: 'convertible',
+    ellipse: 'convertible',
+    circle: 'convertible',
+    oriented_bbox: 'convertible',
+    point: 'incompatible',
+    line: 'incompatible',
+    cuboid: 'incompatible',
+    keypoints: 'incompatible',
+  },
+  change_detection: {
+    polygon: 'native',
+    bbox: 'convertible',
+    ellipse: 'convertible',
+    circle: 'convertible',
+    oriented_bbox: 'convertible',
+    point: 'incompatible',
+    line: 'incompatible',
+    cuboid: 'incompatible',
+    keypoints: 'incompatible',
+  },
+};
+
+

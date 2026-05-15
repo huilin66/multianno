@@ -345,6 +345,50 @@
     "folders": "FOLDERS",
     "views": "VIEWS"
   },
+  "dataExport": {
+    "steps": "Steps",
+    "stepTask": {
+      "title": "Task Format",
+      "exportMode": "Export Mode",
+      "annotation": "Annotation",
+      "annoOnly": "Only export annotation",
+      "data": "Data",
+      "dataFull": "Export Full Data (annotation + images)",
+      "task": "Task Type",
+      "format": "Format"
+    },
+
+    "stepNaming": {
+      "title": "Annotation Format",
+      "preview": "Preview",
+      "suffix": "Suffix",
+      "extension": "Extension",
+      "subdir": "Subdirectory Name",
+      "andMore": "files more"
+    },
+    "stepImages": {
+      "title": "Image Format",
+      "preview": "Preview"
+    },
+    "stepSplit": {
+      "title": "Dataset Split",
+      "preview": "Preview"
+    },
+    "stepShapes": {
+      "title": "Annotation Selection",
+      "shapeFilter": "Shape Selection",
+      "classOrder": "Class Source & Order",
+      "panel": "Panel",
+      "file": "File"
+    },
+    "stepTarget": {
+      "title": "Target Folder",
+      "targetFolder": "Please select or input target folder path...",
+      "generateReport": "Generate Report",
+      "reportHint": "Generate a report with export statistics after the export.",
+      "targetRequired": "Target folder is required before export."
+    }
+  },
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",
@@ -356,6 +400,7 @@
     "success": "Success",
     "saved": "Saved",
     "saving": "Saving...",
-    "done": "Done"
+    "done": "Done",
+    "suffix_example": "Example: _T, _V, _M"
   }
 }

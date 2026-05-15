@@ -345,6 +345,50 @@
     "folders": "文件夹",
     "views": "视图"
   },
+    "dataExport": {
+    "steps": "步骤",
+    "stepTask": {
+      "title": "任务格式",
+      "exportMode": "导出模式",
+      "annotation": "标注",
+      "annoOnly": "仅导出标注",
+      "data": "数据",
+      "dataFull": "导出完整数据 (标注 + 图像)",
+      "task": "任务类型",
+      "format": "格式"
+    },
+
+    "stepNaming": {
+      "title": "标注格式",
+      "preview": "Preview",
+      "suffix": "Suffix",
+      "extension": "扩展名",
+      "subdir": "子目录名称",
+      "andMore": "更多文件"
+    },
+    "stepImages": {
+      "title": "图像格式",
+      "preview": "Preview"
+    },
+    "stepSplit": {
+      "title": "数据集分割",
+      "preview": "Preview"
+    },
+    "stepShapes": {
+      "title": "标注选择",  
+      "shapeFilter": "形状选择器",
+      "classOrder": "类别来源 & 顺序",
+      "panel": "面板",
+      "file": "文件"
+    },
+    "stepTarget": {
+      "title": "目标文件夹",
+      "targetFolder": "请选择或输入目标文件夹路径...",
+      "generateReport": "生成报告",
+      "reportHint": "导出后生成报告，包含导出统计信息。",
+      "targetRequired": "导出前必须指定目标文件夹。"
+    }
+  },
   "common": {
     "confirm": "确认",
     "cancel": "取消",
@@ -356,6 +400,7 @@
     "success": "成功",
     "saved": "已保存",
     "saving": "保存中...",
-    "done": "完成"
+    "done": "完成",
+    "suffix_example": "示例: _T, _V, _M"
   }
 }
