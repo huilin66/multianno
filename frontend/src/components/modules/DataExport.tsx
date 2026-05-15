@@ -73,7 +73,7 @@ const DefaultSplitConfig = {
 // ==========================================
 export function DataExport({ onClose }: { onClose?: () => void }) {
   const { t } = useTranslation();
-
+  const [exportStatus, setExportStatus] = useState<'idle' | 'exporting' | 'done' | 'error'>('idle');
   // --- Store ---
   const folders = useStore(s => s.folders);
   const views = useStore(s => s.views);
@@ -281,53 +281,73 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   };
 
   const handleExecute = async () => {
-    if (!targetDir) { alert(t('dataExport.selectTarget')); return; }
+    if (!targetDir) { return; }
 
     const selectedClassNames = exportClasses.filter(c => c.selected).map(c => c.name);
     const allowedShapes = Object.entries(shapeSelection).filter(([, v]) => v).map(([s]) => s);
 
+    setExportStatus('exporting');
     setIsExporting(true);
     setExportProgress(0);
 
     try {
+      const total = stems.length;
+      const CHUNK_SIZE = 10;
+
       if (exportMode === 'dataset') {
-        const total = stems.length;
-        const CHUNK = Math.max(1, Math.ceil(total / 50));
-        for (let i = 0; i < total; i += CHUNK) {
+        for (let i = 0; i < total; i += CHUNK_SIZE) {
+          const chunk = stems.slice(i, i + CHUNK_SIZE);
           await exportData({
             source_dirs: [workspacePath],
             target_dir: targetDir,
             task_type: taskType, format,
             selected_classes: selectedClassNames,
-            custom_suffix: '', extension: annoExtension,
+            custom_suffix: annoSuffix, extension: annoExtension,
             allowed_shapes: allowedShapes,
             generate_report: false,
-            stems: stems.slice(i, i + CHUNK),
+            stems: chunk,
             export_mode: 'dataset',
             anno_subdir: annoSubdir,
-            view_configs: viewConfigs.map(vc => ({ suffix: vc.suffix, extension: vc.extension, subdir: vc.subdir, keep_original: vc.keepOriginal })),
+            view_configs: viewConfigs.map(vc => ({
+              suffix: vc.suffix,
+              extension: vc.extension,
+              subdir: vc.subdir,
+              keep_original: vc.keepOriginal,
+            })),
             split: { train: splitTrain, val: splitVal, test: splitTest },
             random_seed: randomSeed,
+            split_files: {
+              train: splitTrainFile,
+              val: splitValFile,
+              test: splitTestFile,
+            },
           });
-          setExportProgress(Math.min(100, Math.round(((i + CHUNK) / total) * 100)));
+          setExportProgress(Math.min(100, Math.round(((i + CHUNK_SIZE) / total) * 100)));
         }
       } else {
-        await exportData({
-          source_dirs: [workspacePath],
-          target_dir: targetDir,
-          task_type: taskType, format,
-          selected_classes: selectedClassNames,
-          custom_suffix: '', extension: annoExtension,
-          allowed_shapes: allowedShapes,
-          generate_report: generateReport,
-          export_mode: 'annotation',
-        });
-        setExportProgress(100);
+        for (let i = 0; i < total; i += CHUNK_SIZE) {
+          const chunk = stems.slice(i, i + CHUNK_SIZE);
+          await exportData({
+            source_dirs: [workspacePath],
+            target_dir: targetDir,
+            task_type: taskType, format,
+            selected_classes: selectedClassNames,
+            custom_suffix: annoSuffix, extension: annoExtension,
+            allowed_shapes: allowedShapes,
+            generate_report: generateReport,
+            stems: chunk,
+            export_mode: 'annotation',
+          });
+          setExportProgress(Math.min(100, Math.round(((i + CHUNK_SIZE) / total) * 100)));
+        }
       }
-      alert(t('dataExport.success'));
+      
+      setExportProgress(100);
+      setExportStatus('done');
       onClose?.();
     } catch (err: any) {
-      alert(`${t('dataExport.failed')}: ${err.message}`);
+      setExportStatus('error');
+      setTimeout(() => setExportStatus('idle'), 3000);
     } finally {
       setIsExporting(false);
     }
@@ -1004,16 +1024,26 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
       {/* 底部按钮 */}
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
-        {isExporting ? (
+        {exportStatus === 'exporting' ? (
           <div className="flex items-center gap-3 flex-1 mr-4">
             <span className="text-xs text-muted-foreground whitespace-nowrap">
               {t('dataExport.exporting')}
-              <span className="font-mono font-bold text-foreground ml-1">{exportProgress}%</span>
+              <span className="font-mono font-bold text-foreground ml-1">
+                {Math.round(stems.length * exportProgress / 100)}/{stems.length}
+              </span>
             </span>
             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
               <div className="h-full bg-primary rounded-full transition-all duration-300"
                 style={{ width: `${exportProgress}%` }} />
             </div>
+          </div>
+        ) : exportStatus === 'done' ? (
+          <div className="flex items-center gap-2 text-xs text-emerald-600">
+            {t('dataExport.success')}
+          </div>
+        ) : exportStatus === 'error' ? (
+          <div className="flex items-center gap-2 text-xs text-red-500">
+            {t('dataExport.failed')}
           </div>
         ) : (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -1029,9 +1059,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
             disabled={isExporting || !targetDir}
           >
             {isExporting ? (
-              <>{t('common.cancel')}</>
+              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {t('dataExport.exporting')}</>
             ) : (
-              <><Download className="w-3.5 h-3.5 mr-1.5" /> {t('common.running')}</>
+              <>{t('common.confirm')}</>
             )}
           </Button>
         </div>
