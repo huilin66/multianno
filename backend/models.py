@@ -182,3 +182,15 @@ class MergeWithAttributeRequest(BaseModel):
 
 class CheckJsonRequest(BaseModel):
     path: str
+
+
+class InferSuffixRequest(BaseModel):
+    folders: List[FolderPayload]
+
+
+class InferSuffixResult(BaseModel):
+    folder_index: int
+    suffix: str
+    extension: str
+    sample_file: str
+    total_files: int

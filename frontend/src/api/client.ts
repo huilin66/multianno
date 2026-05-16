@@ -204,3 +204,6 @@ export const prefetchImages = async (paths: string[]) => {
   } catch {
   }
 };
+
+export const inferSuffix = (folders: { path: string; suffix?: string }[]) =>
+  post(`${API_BASE_URL}/project/infer_suffix`, { folders });

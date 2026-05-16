@@ -8,7 +8,13 @@ import cv2
 import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
-from models import AnalyzeRequest, CheckJsonRequest, ProjectMetaPayload, StatsRequest
+from models import (
+    AnalyzeRequest,
+    CheckJsonRequest,
+    InferSuffixRequest,
+    ProjectMetaPayload,
+    StatsRequest,
+)
 from skimage import io
 
 router = APIRouter(prefix="/api", tags=["Project"])
@@ -401,3 +407,73 @@ async def check_workspace_json(req: CheckJsonRequest):
         return {"hasJson": False}
     except Exception as e:
         return {"hasJson": False}
+
+
+@router.post("/project/infer_suffix")
+async def infer_suffix(req: InferSuffixRequest):
+    all_first_files = []
+    valid_folders = []
+
+    # 第一遍：收集有效文件夹
+    for idx, folder in enumerate(req.folders):
+        if not os.path.exists(folder.path):
+            continue
+        image_files = sorted(
+            [
+                f
+                for f in os.listdir(folder.path)
+                if f.lower().endswith(
+                    (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp")
+                )
+            ]
+        )
+        if image_files:
+            all_first_files.append(image_files[0])
+            valid_folders.append((idx, folder, image_files))
+
+    # 第二遍：公共前缀
+    common_prefix = ""
+    if len(all_first_files) >= 2:
+        stems = [Path(f).stem for f in all_first_files]
+        common_prefix = os.path.commonprefix(stems)
+
+    # 第三遍：生成结果
+    results = []
+    for idx in range(len(req.folders)):
+        match = [vf for vf in valid_folders if vf[0] == idx]
+        if not match:
+            results.append(
+                {
+                    "folder_index": idx,
+                    "suffix": "",
+                    "extension": "",
+                    "sample_file": "",
+                    "total_files": 0,
+                }
+            )
+            continue
+
+        _, folder, image_files = match[0]
+        first_stem = Path(image_files[0]).stem  # 'DJI_20260211154928_0008_T'
+        ext = Path(image_files[0]).suffix  # '.JPG'
+        ext_clean = ext.lstrip(".")
+
+        # 去掉公共前缀
+        if common_prefix and first_stem.startswith(common_prefix):
+            suffix = first_stem[len(common_prefix) :]  # 'T'
+        elif len(all_first_files) == 1:
+            suffix = ""
+        else:
+            suffix = first_stem
+
+        results.append(
+            {
+                "folder_index": idx,
+                "suffix": suffix,  # 'T' / 'V'
+                "extension": ext_clean,  # 'jpg'
+                "sample_file": image_files[0],
+                "total_files": len(image_files),
+            }
+        )
+    print(results)
+    return {"results": results}

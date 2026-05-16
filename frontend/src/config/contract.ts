@@ -44,7 +44,8 @@ export interface ProjectMetaContract {
   folders: {
     Id: number;                  
     path: string;                
-    suffix: string;              
+    suffix: string;
+    extension: string;
     "files in sceneGroups": number;
     "files Skipped": number;
     "files total": number;

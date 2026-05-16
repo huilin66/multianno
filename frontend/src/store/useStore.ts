@@ -7,6 +7,7 @@ export interface FolderData {
   id: string;
   path: string;
   suffix: string;
+  extension: string;
   files: File[];
   metadata: {
     height: number;
@@ -355,6 +356,7 @@ export const useStore = create<AppState>()(
             id: String(f.Id),
             path: f.path,
             suffix: f.suffix || '',
+            extension: f.extension || '',
             files: [], 
             metadata: {
               height: f["image meta"].height === 'Unknown' ? 0 : Number(f["image meta"].height),

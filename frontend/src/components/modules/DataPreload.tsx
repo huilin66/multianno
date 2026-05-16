@@ -1,58 +1,75 @@
-import React, { useState, useEffect, useMemo } from 'react';
+// src/components/modules/DataPreload.tsx
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../../store/useStore';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../../config/colors';
-import { useTranslation } from 'react-i18next';
-
-import { 
-  FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History, Save, Eye, LogOut
-} from 'lucide-react';
-import { FileExplorerDialog } from '../modals/FileExplorerDialog'; 
+import { Checkbox } from '../ui/checkbox';
+import { Switch } from '../ui/switch';
+import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { Alert, AlertDescription } from '../ui/alert';
+import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../../config/colors';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
-import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson } from '../../api/client';
+import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
+import {
+  FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History,
+  Save, Eye, LogOut, ChevronRight, RotateCcw, AlertCircle, Search
+} from 'lucide-react';
 
-export function DataPreload({onClose }: {onClose: () => void }) {
+// ==========================================
+// 主组件
+// ==========================================
+export function DataPreload({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
-  const {folders, views, addFolder, removeFolder, clearFolders, addView, removeView, updateView, clearViews, setActiveModule, editorSettings } = useStore();
-  
-  const [placeholders, setPlaceholders] = useState<{ id: string, path: string, suffix: string }[]>([]);
+  const {
+    folders, views, addFolder, removeFolder, clearFolders, updateFolder,
+    addView, removeView, updateView, clearViews,
+    setActiveModule, editorSettings
+  } = useStore();
+
+  // --- 导航 ---
+  const [activeStep, setActiveStep] = useState('folders');
+
+  // --- Folders ---
+  const [placeholders, setPlaceholders] = useState<{ id: string; path: string; suffix: string }[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [activePlaceholderId, setActivePlaceholderId] = useState<string | null>(null);
   const [isConfirming, setIsConfirming] = useState(false);
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [explorerMode, setExplorerMode] = useState<'dir' | 'file'>('dir');
+  const [inferredData, setInferredData] = useState<Record<string, { suffix: string; extension: string; sample: string }>>({});
+
+  // --- Workspace ---
   const [workspacePath, setWorkspacePath] = useState('');
   const [isWorkspaceCustom, setIsWorkspaceCustom] = useState(false);
   const [workspaceExplorerOpen, setWorkspaceExplorerOpen] = useState(false);
   const [isWorkspaceConfirming, setIsWorkspaceConfirming] = useState(false);
-  const [isGlobalConfirming, setIsGlobalConfirming] = useState(false);
-
   const [workspaceHasJson, setWorkspaceHasJson] = useState(false);
   const [isCheckingWorkspace, setIsCheckingWorkspace] = useState(false);
+
+  // --- Views ---
+  const maxViews = editorSettings.maxViews || 9;
+
+  // --- Global ---
+  const [isGlobalConfirming, setIsGlobalConfirming] = useState(false);
 
   const workspaceStorePath = useStore(s => s.workspacePath);
   const setWorkspaceStorePath = useStore(s => s.setWorkspacePath);
 
   const mainViewFolder = useMemo(() => {
-      const mainView = views.find(v => v.isMain);
-      return folders.find(f => f.id === mainView?.folderId);
+    const mainView = views.find(v => v.isMain);
+    return folders.find(f => f.id === mainView?.folderId);
   }, [views, folders]);
 
-  const maxViews = editorSettings.maxViews || 9;
-
-
-  // 显示状态
   const workspaceStatus = isWorkspaceCustom ? 'defined' : 'default';
 
-  // 1. 简化初始化逻辑
+  // ==========================================
+  // 初始化
+  // ==========================================
   useEffect(() => {
     if (workspaceStorePath && workspaceStorePath !== mainViewFolder?.path) {
-      // Store 中有自定义路径，恢复 defined 状态
       setWorkspacePath(workspaceStorePath);
       setIsWorkspaceCustom(true);
       checkWorkspaceForJson(workspaceStorePath);
@@ -61,7 +78,6 @@ export function DataPreload({onClose }: {onClose: () => void }) {
     }
   }, []);
 
-  // 2. 简化 useEffect - 只在 default 状态下跟随 mainViewFolder
   useEffect(() => {
     if (!isWorkspaceCustom && mainViewFolder?.path) {
       setWorkspacePath(mainViewFolder.path);
@@ -69,148 +85,126 @@ export function DataPreload({onClose }: {onClose: () => void }) {
     }
   }, [mainViewFolder?.path, isWorkspaceCustom]);
 
-  // 加载历史路径
   useEffect(() => {
     const savedHistory = localStorage.getItem('multiAnno_recentPaths');
     if (savedHistory) {
-      try {
-        setRecentPaths(JSON.parse(savedHistory));
-      } catch (e) {
-        console.error("Failed to parse history", e);
-      }
+      try { setRecentPaths(JSON.parse(savedHistory)); }
+      catch (e) { console.error("Failed to parse history", e); }
     }
   }, []);
+
+  // ==========================================
+  // 步骤定义
+  // ==========================================
+  const steps = useMemo(() => [
+    { id: 'folders', label: t('dataPreload.steps.folders'), icon: <FolderOpen className="w-4 h-4" />, required: true },
+    { id: 'views', label: t('dataPreload.steps.views'), icon: <Eye className="w-4 h-4" />, required: true },
+    { id: 'workspace', label: t('dataPreload.steps.workspace'), icon: <Save className="w-4 h-4" />, required: true },
+ 
+  ], [t]);
+
+  const getStepStatus = (stepId: string): 'current' | 'done' | 'pending' => {
+    if (activeStep === stepId) return 'current';
+    switch (stepId) {
+      case 'folders': return folders.length > 0 ? 'done' : 'pending';
+      case 'workspace': return workspaceHasJson || isWorkspaceCustom ? 'done' : 'pending';
+      case 'views': return views.length > 0 ? 'done' : 'pending';
+      default: return 'pending';
+    }
+  };
+
+  // ==========================================
+  // Folder 操作
+  // ==========================================
   const checkWorkspaceForJson = async (path: string) => {
     if (!path) return;
-    
     setIsCheckingWorkspace(true);
     try {
       const data = await checkWorkspaceJson(path);
       setWorkspaceHasJson(data.hasJson || false);
-    } catch (error) {
-      console.error('Failed to check workspace:', error);
-      setWorkspaceHasJson(false);
-    } finally {
-      setIsCheckingWorkspace(false);
-    }
+    } catch { setWorkspaceHasJson(false); }
+    finally { setIsCheckingWorkspace(false); }
   };
+
   const savePathsToHistory = (paths: string[]) => {
     setRecentPaths(prev => {
-        let newHistory = [...prev];
-        
-        paths.forEach(path => {
-            const trimmed = path.trim().replace(/\\/g, '/'); 
-            if (trimmed) {
-                newHistory = newHistory.filter(p => p !== trimmed); 
-                newHistory.unshift(trimmed); 
-            }
-        });
-        
-        const updated = newHistory.slice(0, 5);
-        localStorage.setItem('multiAnno_recentPaths', JSON.stringify(updated));
-        return updated; 
+      let newHistory = [...prev];
+      paths.forEach(path => {
+        const trimmed = path.trim().replace(/\\/g, '/');
+        if (trimmed) {
+          newHistory = newHistory.filter(p => p !== trimmed);
+          newHistory.unshift(trimmed);
+        }
+      });
+      const updated = newHistory.slice(0, 5);
+      localStorage.setItem('multiAnno_recentPaths', JSON.stringify(updated));
+      return updated;
     });
   };
+// 🆕 常驻输入框的路径
+const [newFolderPath, setNewFolderPath] = useState('');
 
-  const handleAddPlaceholder = () => setPlaceholders([...placeholders, { id: Math.random().toString(36).slice(2, 11), path: '', suffix: '' }]);
-  const handleAddFromHistory = (path: string) => setPlaceholders(prev => [...prev, { id: Math.random().toString(36).slice(2, 11), path, suffix: '' }]);
-  const handleRemovePlaceholder = (id: string) => setPlaceholders(placeholders.filter(p => p.id !== id));
-  const handleUpdatePath = (id: string, newPath: string) => setPlaceholders(placeholders.map(p => p.id === id ? { ...p, path: newPath } : p));
-  const openExplorerFor = (id: string) => { setActivePlaceholderId(id); setExplorerOpen(true); };
+// 🆕 处理添加文件夹
+const handleAddFolder = async (path: string) => {
+  if (!path.trim()) return;
+  setIsConfirming(true);
+  try {
+    await handleAutoAnalyze({ id: Math.random().toString(36).slice(2, 11), path: path.trim(), suffix: '' });
+    setNewFolderPath('');
+  } finally {
+    setIsConfirming(false);
+  }
+};
 
-  const handleFolderSelectConfirm = (selectedPaths: string[]) => {
-    if (selectedPaths.length === 0 || !activePlaceholderId) return;
-    const newPlaceholders = [...placeholders];
-    const targetIndex = newPlaceholders.findIndex(p => p.id === activePlaceholderId);
-
-    if (targetIndex !== -1) {
-      newPlaceholders[targetIndex].path = selectedPaths[0];
-      const extraPlaceholders = selectedPaths.slice(1).map(path => ({
-        id: Math.random().toString(36).slice(2, 11),
-        path: path
-      }));
-      newPlaceholders.splice(targetIndex + 1, 0, ...extraPlaceholders);
+// 文件浏览器确认
+const handleFolderSelectConfirm = (selectedPaths: string[]) => {
+  setExplorerOpen(false);
+  if (selectedPaths.length > 0) {
+    if (activePlaceholderId) {
+      // 修改已有 folder 的路径
+      updateFolder(activePlaceholderId, { path: selectedPaths[0] });
+    } else {
+      // 新增 folder
+      handleAddFolder(selectedPaths[0]);
     }
-    setPlaceholders(newPlaceholders);
-    setExplorerOpen(false);
-    savePathsToHistory(selectedPaths);
+  }
+};
+
+// 历史路径
+const handleAddFromHistory = (path: string) => {
+  handleAddFolder(path);
+};
+
+
+
+  // ==========================================
+  // Workspace 操作
+  // ==========================================
+  const handleWorkspaceConfirm = async () => {
+    const finalPath = isWorkspaceCustom ? workspacePath : mainViewFolder?.path || '';
+    if (!finalPath) return;
+    setIsWorkspaceConfirming(true);
+    setWorkspaceStorePath(finalPath);
+    await checkWorkspaceForJson(finalPath);
+    setIsWorkspaceConfirming(false);
   };
+
+  const handleWorkspaceReset = () => {
+    setWorkspacePath(mainViewFolder?.path || '');
+    setIsWorkspaceCustom(false);
+  };
+
   const handleWorkspaceSelectConfirm = (paths: string[]) => {
     if (paths.length > 0) {
       setWorkspacePath(paths[0]);
-      setIsWorkspaceCustom(true); // 🆕 手动选择，切换为 defined
+      setIsWorkspaceCustom(true);
     }
     setWorkspaceExplorerOpen(false);
   };
-  const cancelFolders = () => {
-    if (window.confirm(t('dataPreload.alerts.cancelFolders'))) { // 🌟
-      setPlaceholders([]);
-      clearFolders();
-      clearViews();
-    }
-  };
 
-  const confirmFolders = async () => {
-    const validPlaceholders = placeholders.filter(p => p.path.trim() !== "");
-    if (validPlaceholders.length === 0) return;
-    setIsConfirming(true);
-    
-    try {
-      const payloadData = validPlaceholders.map(p => ({ path: p.path.trim(), suffix: p.suffix.trim() }));
-
-      const result = await analyzeWorkspaceFolders(payloadData);
-      const backendData = result.data;
-
-      if (!backendData || backendData.length === 0) {
-        alert(t('dataPreload.alerts.noImagesFound')); // 🌟
-        setIsConfirming(false);
-        return;
-      }
-
-      backendData.forEach((folderMeta: any, index: number) => {
-        const originalPath = payloadData[index].path; 
-        const originalSuffix = payloadData[index].suffix;
-        addFolder({
-          id: `folder-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-          path: folderMeta.folderPath || originalPath, 
-          suffix: originalSuffix,
-          files: [], 
-          metadata: {
-            width: folderMeta.width || 1024,
-            height: folderMeta.height || 1024,
-            bands: folderMeta.bands || 3,
-            fileType: folderMeta.dtype || 'TIFF',
-            dataType: "Remote Sensing Imagery",
-            sceneGroupsLoaded: folderMeta.group_success || 0, 
-            sceneGroupsSkipped: folderMeta.group_fail || 0
-          }
-        });
-      });
-
-      if (result.commonStems && result.commonStems.length > 0) {
-        useStore.getState().setStems(result.commonStems);
-        useStore.getState().setCurrentStem(result.commonStems[0]);
-        useStore.getState().setSceneGroups(result.sceneGroups);
-      } else {
-        alert(t('dataPreload.alerts.noCommonStems')); // 🌟
-      }
-      
-      savePathsToHistory(payloadData.map(p => p.path));
-      setPlaceholders([]);
-    } catch (error) {
-      console.error("Error connecting to backend:", error);
-      alert(t('dataPreload.alerts.backendFailed')); // 🌟
-    } finally {
-      setIsConfirming(false);
-    }
-  };
-
-  const handleResetViews = () => {
-    if (window.confirm(t('dataPreload.alerts.resetViews'))) { // 🌟
-      clearViews();
-    }
-  };
-
+  // ==========================================
+  // Views 操作
+  // ==========================================
   const handleAddView = () => {
     if (views.length >= maxViews) return;
     addView({
@@ -223,568 +217,643 @@ export function DataPreload({onClose }: {onClose: () => void }) {
     });
   };
 
-  
-  // 🆕 Workspace 确认处理
-  const handleWorkspaceConfirm = async () => {
-    const finalPath = isWorkspaceCustom 
-      ? workspacePath 
-      : mainViewFolder?.path || '';
-      
-    if (!finalPath) return;
-    
-    setIsWorkspaceConfirming(true);
-    setWorkspaceStorePath(finalPath);
-    await checkWorkspaceForJson(finalPath);
-    setIsWorkspaceConfirming(false);
+  const handleResetViews = () => {
+    if (window.confirm(t('dataPreload.alerts.resetViews'))) clearViews();
   };
 
-  // 🆕 Workspace 取消/重置
-  const handleWorkspaceReset = () => {
-    setWorkspacePath(mainViewFolder?.path || '');
-    setIsWorkspaceCustom(false);
-  };
-  // 🆕 全局最终确认 - 进入工作区
+  // ==========================================
+  // 全局操作
+  // ==========================================
   const handleGlobalConfirm = async () => {
-    if (folders.length === 0) {
-      alert(t('dataPreload.alerts.noFoldersConfigured'));
-      return;
-    }
-    if (!mainViewFolder) {
-      alert(t('dataPreload.alerts.noMainView'));
-      return;
-    }
+    if (folders.length === 0) { alert(t('dataPreload.alerts.noFoldersConfigured')); return; }
+    if (!mainViewFolder) { alert(t('dataPreload.alerts.noMainView')); return; }
 
     setIsGlobalConfirming(true);
     try {
-      // 确保 workspace 路径已保存
       const finalPath = isWorkspaceCustom ? workspacePath : mainViewFolder?.path || '';
-      if (finalPath) {
-        setWorkspaceStorePath(finalPath);
-      }
+      if (finalPath) setWorkspaceStorePath(finalPath);
 
       const projectMeta = generateProjectMetaConfig(useStore.getState());
       const metaPath = useStore.getState().projectMetaPath;
-      if (metaPath) {
-        await saveProjectMeta({ file_path: metaPath, content: projectMeta });
-      }
-      
+      if (metaPath) await saveProjectMeta({ file_path: metaPath, content: projectMeta });
+
       setActiveModule('extent');
     } catch (err) {
-      console.error("Failed to enter workspace:", err);
-      alert("配置保存失败，请检查路径权限");
+      console.error("Failed:", err);
+      alert("配置保存失败");
     } finally {
       setIsGlobalConfirming(false);
     }
   };
 
-  // 🆕 退出
   const handleExit = () => {
     if (window.confirm(t('dataPreload.alerts.confirmExit'))) {
-      setActiveModule('workspace'); // 或者其他初始模块
+      setActiveModule('workspace');
     }
   };
+const handleAutoAnalyze = async (item: { id: string; path: string; suffix: string }) => {
+  if (!item.path.trim()) return;
+  
+  setIsConfirming(true);
+  try {
+    const existingFolders = folders.map(f => ({ path: f.path, suffix: f.suffix || '' }));
+    const allFolders = [
+      ...existingFolders,
+      { path: item.path.trim(), suffix: item.suffix.trim() }
+    ];
+    
+    // 1. 推理所有 folder 的 suffix
+    const inferenceResult = await inferSuffix(allFolders);
+    const infNew = inferenceResult.results?.find((r: any) => r.folder_index === allFolders.length - 1) || {};
+    
+    // 2. 计算新 folder 的 cleanSuffix
+    let cleanSuffix = item.suffix || infNew.suffix || '';
+    let detectedExt = infNew.extension || '';
+    const KNOWN_EXTS = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'];
+    for (const ext of KNOWN_EXTS) {
+      if (cleanSuffix.toLowerCase().endsWith(ext.toLowerCase())) {
+        cleanSuffix = cleanSuffix.slice(0, -ext.length);
+        detectedExt = ext.replace('.', '');
+        break;
+      }
+    }
 
-  return (
-    <div className="h-full flex flex-col gap-6 p-6 overflow-hidden">
+    // 3. 🆕 用所有 folder 进行分析（求交集 scene group）
+// 3. 🆕 构建 analysisPayload：用推理结果更新 suffix
+    const analysisPayload = allFolders.map((f, i) => {
+      const inf = inferenceResult.results?.find((r: any) => r.folder_index === i);
+      const suffix = i === allFolders.length - 1 
+        ? cleanSuffix 
+        : (inf?.suffix || f.suffix || '');
+      return { path: f.path, suffix };
+    });
+    const result = await analyzeWorkspaceFolders(analysisPayload);
+    const backendData = result.data;
 
-      {/* ============ 上半部分：左右两栏 ============ */}
-      <div className="grid grid-cols-2 gap-6 flex-1 min-h-0">
+    if (!backendData || backendData.length === 0) {
+      alert(t('dataPreload.alerts.noImagesFound'));
+      return;
+    }
 
-        {/* 左侧：Folders + Workspace */}
-        <div className="flex flex-col gap-4 min-h-0">
-          {/* Folders Card */}
-          <Card className="flex flex-col flex-1 min-h-0 transition-colors">
-            <CardHeader className="shrink-0 pb-4 border-b">
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FolderOpen className="w-5 h-5" /> 
-                  {t('dataPreload.folders.title')}
-                </div>
-                <Button onClick={handleAddPlaceholder} variant="outline" size="sm" disabled={isConfirming}>
-                  <Plus className="w-4 h-4 mr-2" /> 
-                  {t('dataPreload.folders.add')}
-                </Button>
-              </CardTitle>
-            </CardHeader>
-        
-        <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar">
-          <div className="flex-1 space-y-3">
+    const newFolderId = `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+
+    // 4. 添加新 folder
+    const newFolderMeta = backendData.find((m: any) => m.folderPath === item.path.trim() || m.folderPath === allFolders[allFolders.length - 1].path) || backendData[backendData.length - 1];
+    
+    addFolder({
+      id: newFolderId,
+      path: newFolderMeta.folderPath || item.path,
+      suffix: cleanSuffix,
+      extension: detectedExt || newFolderMeta.dtype || 'tif',
+      files: [],
+      metadata: {
+        width: newFolderMeta.width || 1024,
+        height: newFolderMeta.height || 1024,
+        bands: newFolderMeta.bands || 3,
+        fileType: detectedExt || newFolderMeta.dtype || 'TIFF',
+        dataType: "Remote Sensing Imagery",
+        sceneGroupsLoaded: newFolderMeta.group_success || 0,
+        sceneGroupsSkipped: newFolderMeta.group_fail || 0
+      },
+    });
+
+    // 5. 更新所有 folder 的推理数据
+    const newInferred: Record<string, any> = {};
+    const pathToId: Record<string, string> = {};
+    folders.forEach(f => { pathToId[f.path] = f.id; });
+    pathToId[item.path.trim()] = newFolderId;
+
+    inferenceResult.results?.forEach((r: any) => {
+      const targetPath = allFolders[r.folder_index]?.path;
+      const targetId = pathToId[targetPath];
+      if (targetId) {
+        newInferred[targetId] = {
+          suffix: r.suffix || '',
+          extension: r.extension || '',
+          sample: r.sample_file || '',
+        };
+      }
+    });
+    // 🆕 更新所有 folder 的 metadata（包括已有的）
+    backendData.forEach((meta: any) => {
+      const existingFolder = folders.find(f => f.path === meta.folderPath);
+      if (existingFolder) {
+        updateFolder(existingFolder.id, {
+          metadata: {
+            ...existingFolder.metadata,
+            width: meta.width || existingFolder.metadata.width,
+            height: meta.height || existingFolder.metadata.height,
+            bands: meta.bands || existingFolder.metadata.bands,
+            sceneGroupsLoaded: meta.group_success || 0,
+            sceneGroupsSkipped: meta.group_fail || 0,
+          }
+        });
+      }
+    });
+    setInferredData(prev => ({ ...prev, ...newInferred }));
+
+    // 6. 自动填入已有 folder 的空 suffix
+    inferenceResult.results?.forEach((r: any) => {
+      if (r.folder_index !== allFolders.length - 1) {
+        const targetPath = allFolders[r.folder_index]?.path;
+        const existingFolder = folders.find(f => f.path === targetPath);
+        if (existingFolder && !existingFolder.suffix && r.suffix) {
+          updateFolder(existingFolder.id, {
+            suffix: r.suffix || '',
+            extension: r.extension || existingFolder.extension,
+          });
+        }
+      }
+    });
+
+    // 7. 更新 store 中的 stems 和 sceneGroups
+    if (result.commonStems && result.commonStems.length > 0) {
+      useStore.getState().setStems(result.commonStems);
+      useStore.getState().setCurrentStem(result.commonStems[0]);
+      useStore.getState().setSceneGroups(result.sceneGroups);
+    }
+
+    setPlaceholders(prev => prev.filter(p => p.id !== item.id));
+    savePathsToHistory([item.path]);
+  } catch (error) {
+    console.error("Auto analyze error:", error);
+    alert(t('dataPreload.alerts.backendFailed'));
+  } finally {
+    setIsConfirming(false);
+  }
+};
+
+const reAnalyzeFolder = async (folderId: string) => {
+  const folder = folders.find(f => f.id === folderId);
+  if (!folder?.path) return;
+
+  setIsConfirming(true);
+  try {
+    const allFolders = folders.map(f => ({ path: f.path, suffix: f.suffix || '' }));
+    
+    // 只用当前 folder 的 suffix 去分析，不推理覆盖
+    const result = await analyzeWorkspaceFolders(allFolders);
+    
+    // 🆕 更新所有 folder 的 metadata
+    result.data?.forEach((meta: any) => {
+      const existingFolder = folders.find(f => f.path === meta.folderPath);
+      if (existingFolder) {
+        updateFolder(existingFolder.id, {
+          metadata: {
+            ...existingFolder.metadata,
+            width: meta.width || existingFolder.metadata.width,
+            height: meta.height || existingFolder.metadata.height,
+            bands: meta.bands || existingFolder.metadata.bands,
+            sceneGroupsLoaded: meta.group_success || 0,
+            sceneGroupsSkipped: meta.group_fail || 0,
+          }
+        });
+      }
+    });
+
+    // 🆕 更新 stems
+    if (result.commonStems && result.commonStems.length > 0) {
+      useStore.getState().setStems(result.commonStems);
+      useStore.getState().setCurrentStem(result.commonStems[0]);
+      useStore.getState().setSceneGroups(result.sceneGroups);
+    }
+
+  } catch (error) {
+    console.error("Re-analyze error:", error);
+  } finally {
+    setIsConfirming(false);
+  }
+};
+  // ==========================================
+  // 渲染内容
+  // ==========================================
+  const renderStepContent = () => {
+    switch (activeStep) {
+      case 'folders':
+        return (
+          <div className="space-y-5">
+            {/* 历史路径 */}
             {recentPaths.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/20 rounded-lg border border-border border-dashed mb-4">
+              <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/20 rounded-lg border border-dashed">
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
-                  <History className="w-3 h-3"/> {t('dataPreload.folders.recent')}
+                  <History className="w-3 h-3" /> {t('dataPreload.folders.recent')}
                 </span>
-                {recentPaths.map((path) => (
-                  <button
-                    key={path}
-                    onClick={() => handleAddFromHistory(path)}
-                    className="text-[10px] bg-secondary hover:bg-secondary/80 text-secondary-foreground px-2 py-1 rounded border border-border transition-colors truncate max-w-[200px]"
-                    title={`${t('dataPreload.folders.clickToAdd')} ${path}`} // 🌟 完美翻译
-                  >
-                    + {path}
-                  </button>
-                ))}
+                {recentPaths.map((path) => {
+                  const maxLen = 30;
+                  const displayPath = path.length > maxLen 
+                    ? '...' + path.slice(-maxLen) 
+                    : path;
+                  return (
+                    <button key={path} onClick={() => handleAddFromHistory(path)}
+                      className="text-[10px] bg-secondary hover:bg-secondary/80 px-2 py-1 rounded border truncate max-w-[200px]"
+                      title={path}>+ {displayPath}</button>
+                  );
+                })}
               </div>
             )}
 
-            {folders.map((folder) => (
-              <div key={folder.id} className="flex items-center justify-between p-4 border rounded-lg bg-muted/30">
-                <div className="flex items-center gap-4">
-                  <div className="p-2 bg-background rounded-md border"><FolderOpen className="w-6 h-6 text-primary" /></div>
-                  <div>
-                    <h3 className="font-semibold max-w-[300px]" title={folder.path}>
-                        {(() => {
-                            const path = folder.path;
-                            const len = path.length;
-                            const showLen = Math.floor(len * 0.8);
-                            const first = path.slice(0, Math.floor(showLen * 0.5));
-                            const last = path.slice(-Math.floor(showLen * 0.5));
-                            return (
-                                <span className="inline-flex items-center min-w-0">
-                                    <span className="truncate">{first}</span>
-                                    <span className="whitespace-nowrap flex-shrink-0">&nbsp;...&nbsp;</span>
-                                    <span className="whitespace-nowrap flex-shrink-0">{last}</span>
-                                </span>
-                            );
-                        })()}
-                    </h3>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-xs text-muted-foreground">
-                      <span>{t('dataPreload.folders.size')} {folder.metadata.width}x{folder.metadata.height}</span>
-                      <span>{t('dataPreload.folders.bands')} {folder.metadata.bands}</span>
-                      <span className="text-green-600 dark:text-green-400">{t('dataPreload.folders.loaded')} {folder.metadata.sceneGroupsLoaded}</span>
-                      {folder.metadata.sceneGroupsSkipped ? (<span className="text-destructive">{t('dataPreload.folders.skipped')} {folder.metadata.sceneGroupsSkipped}</span>) : null}
-                      {folder.suffix && (
-                        <span className="text-amber-500 font-mono font-bold bg-amber-500/10 px-1.5 rounded">
-                          {t('dataPreload.folders.suffix')} {folder.suffix}
-                        </span>
-                      )}
-                    </div>
+            {/* 🆕 常驻输入框 — 输入路径或选择文件夹 */}
+            <div className="relative">
+              <Input
+                value={newFolderPath}
+                onChange={(e) => setNewFolderPath(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleAddFolder(newFolderPath)}
+                placeholder={t('dataPreload.folders.pathPlaceholder')}
+                className="font-mono text-xs h-9 pr-9"
+                disabled={isConfirming}
+              />
+              <button
+                onClick={() => {
+                  setExplorerMode('dir');
+                  setExplorerOpen(true);
+                }}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                disabled={isConfirming}
+              >
+                <FolderOpen size={14} />
+              </button>
+            </div>
+
+            {/* 已确认文件夹 */}
+            {folders.map((folder: any, idx: number) => {
+              const inf = inferredData[folder.id] || { suffix: '', extension: '', sample: '' };
+              const suffixChanged = folder.suffix !== inf.suffix;
+              const extChanged = folder.extension !== inf.extension;
+
+              return (
+                <div key={folder.id} className="p-4 border rounded-lg bg-muted/30 space-y-3">
+
+                  {/* 路径 */}
+                  <div className="relative">
+                    <Input
+                      value={folder.path}
+                      onChange={(e) => updateFolder(folder.id, { path: e.target.value })}
+                      onBlur={() => reAnalyzeFolder(folder.id)}
+                      className="font-mono text-xs h-8 pr-9"
+                    />
+                    <button
+                      onClick={() => {
+                        setActivePlaceholderId(folder.id);
+                        setExplorerMode('dir');
+                        setExplorerOpen(true);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      <FolderOpen size={14} />
+                    </button>
                   </div>
-                </div>
-                <Button variant="ghost" size="icon" className="text-destructive flex-shrink-0" onClick={() => removeFolder(folder.id)} disabled={isConfirming}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
 
-            {folders.length === 0 && placeholders.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground border-2 border-dashed rounded-lg">
-                <UploadCloud className="w-10 h-10 mb-2 opacity-50" />
-                <p>{t('dataPreload.folders.emptyHint')}</p>
-              </div>
-            )}
+                  {/* Suffix + Extension + 推理提示 */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Label className="text-[10px] text-muted-foreground shrink-0">Suffix:</Label>
+                      <Input
+                        value={folder.suffix || ''}
+                        onChange={(e) => updateFolder(folder.id, { suffix: e.target.value })}
+                        onBlur={() => reAnalyzeFolder(folder.id)}
+                        className="h-7 text-[11px] font-mono w-24"
+                      />
+                      <span className="text-muted-foreground text-[10px]">.</span>
+                      <Label className="text-[10px] text-muted-foreground shrink-0">Ext:</Label>
+                      <Input
+                        value={folder.extension || ''}
+                        onChange={(e) => updateFolder(folder.id, { extension: e.target.value })}
+                        onBlur={() => reAnalyzeFolder(folder.id)} 
+                        className="h-7 text-[11px] font-mono w-16"
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive h-7 w-7 shrink-0 ml-auto"
+                        onClick={() => removeFolder(folder.id)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
 
-            {placeholders.map((item) => (
-              <div key={item.id} className="flex items-center gap-3 p-3 bg-primary/5 border border-dashed border-primary/50 rounded-lg">
-                <button 
-                  onClick={() => openExplorerFor(item.id)}
-                  className="p-2 bg-background rounded-md border border-dashed border-neutral-600 hover:border-primary hover:text-primary transition-colors group flex-shrink-0"
-                  disabled={isConfirming}
-                >
-                  <FolderOpen className="w-5 h-5 text-muted-foreground group-hover:text-primary" />
-                </button>
-                <div className="flex-1 min-w-0">
-                  <Input 
-                    value={item.path} 
-                    onChange={(e) => handleUpdatePath(item.id, e.target.value)}
-                    placeholder={t('dataPreload.folders.pathPlaceholder')}
-                    className="font-mono text-xs bg-background h-8"
-                    disabled={isConfirming}
-                  />
-                </div>
-                <div className="w-28 shrink-0">
-                  <Input 
-                    value={item.suffix} 
-                    onChange={(e) => setPlaceholders(placeholders.map(p => p.id === item.id ? { ...p, suffix: e.target.value } : p))}
-                    placeholder={t('dataPreload.folders.suffixPlaceholder')}
-                    className="font-mono text-xs bg-background h-8"
-                    disabled={isConfirming}
-                  />
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => handleRemovePlaceholder(item.id)} className="text-destructive flex-shrink-0" disabled={isConfirming}>
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-
-          {/* Folders 底部按钮 */}
-          <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t shrink-0">
-            <span className="text-sm text-muted-foreground mr-auto">
-              {placeholders.length} {t('dataPreload.folders.pendingCount')}
-            </span>
-            <Button onClick={cancelFolders} variant="outline" disabled={(placeholders.length === 0 && folders.length === 0) || isConfirming}>
-              <X className="w-4 h-4 mr-2" /> {t('common.reset')}
-            </Button>
-            <Button onClick={confirmFolders} variant="default" className="text-white" disabled={placeholders.length === 0 || isConfirming}>
-              {isConfirming ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('dataPreload.folders.analyzing')}</>
-              ) : (
-                <><Check className="w-4 h-4 mr-2" /> {t('common.confirm')}</>
-              )}
-            </Button>
-          </div>
-        </CardContent>
-          </Card>
-      
-          {/* Workspace Card */}
-          <Card className="flex flex-col min-h-0 transition-colors">
-            <CardHeader className="shrink-0 pb-3 border-b">
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FolderOpen className="w-5 h-5" />
-                  {t('dataPreload.workspace.title') || 'Workspace'}
-                  
-                  {/* 🆕 状态标签 - 三种状态 */}
-                  {isCheckingWorkspace ? (
-                    <span className="text-xs px-2 py-0.5 rounded-full font-normal bg-muted text-muted-foreground">
-                      <Loader2 className="w-3 h-3 inline animate-spin mr-1" />
-                      checking...
-                    </span>
-                  ) : workspaceHasJson ? (
-                    /* 🔒 locked 状态 */
-                    <span className="text-xs px-2 py-0.5 rounded-full font-normal bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300">
-                      locked
-                    </span>
-                  ) : (
-                    /* default 或 defined 状态 */
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-normal ${
-                      workspaceStatus === 'default'
-                        ? 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400'
-                        : 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                    }`}>
-                      {workspaceStatus}
-                    </span>
-                  )}
-                </div>
-              </CardTitle>
-            </CardHeader>
-            
-            <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar">
-              <div className="flex-1 space-y-3">
-                {folders.length > 0 ? (
-                  <>
-                    <Label className="text-xs text-muted-foreground">
-                      {t('dataPreload.workspace.description') || 'Annotation save path'}
-                    </Label>
-
-                    {/* 🆕 有 JSON 文件时显示锁定信息 */}
-                    {workspaceHasJson && !isCheckingWorkspace ? (
-                      <div className="p-3 bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-800 rounded-lg space-y-2">
-                        <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
-                          <Info className="w-4 h-4 flex-shrink-0" />
-                          <span className="text-xs font-medium">
-                            Workspace contains annotation files. Path is locked.
+                    {/* 🆕 推理信息 */}
+                    {inf.sample ? (
+                      <div className="flex items-center gap-2 text-[9px]">
+                        <Search size={10} className="text-muted-foreground shrink-0" />
+                        <span className="text-muted-foreground">
+                          auto inferred
+                          {inf.suffix && <span> suffix: <span className="font-mono text-amber-500">{inf.suffix || '(empty)'}</span></span>}
+                          {inf.extension && <span>, ext: <span className="font-mono text-primary">{inf.extension}</span></span>}
+                          {' from '}
+                          <span className="font-mono text-foreground/70">
+                            {inf.sample.split('/').pop() || inf.sample.split('\\').pop()}
                           </span>
-                        </div>
-                        <div className="text-xs text-amber-600 dark:text-amber-400 font-mono truncate bg-amber-100/50 dark:bg-amber-900/50 px-2 py-1 rounded">
-                          {workspacePath || mainViewFolder?.path}
-                        </div>
+                        </span>
+                        {(suffixChanged || extChanged) && (
+                          <button
+                            onClick={() => {
+                              updateFolder(folder.id, {
+                                suffix: inf.suffix,
+                                extension: inf.extension,
+                              });
+                            }}
+                            className="text-primary hover:underline ml-1"
+                          >
+                            restore auto
+                          </button>
+                        )}
                       </div>
                     ) : (
-                      /* 无 JSON 文件，正常可编辑 */
-                      <div className="space-y-2">
-                        <div className="relative">
-                          <Input
-                            value={isWorkspaceCustom ? workspacePath : (mainViewFolder?.path || '')}
-                            placeholder={mainViewFolder?.path || 'default'}
-                            onChange={e => {
-                              const val = e.target.value;
-                              setWorkspacePath(val);
-                              setIsWorkspaceCustom(!!(val && val !== mainViewFolder?.path));
-                            }}
-                            className={`h-8 text-xs pr-8 font-mono bg-background ${
-                              !isWorkspaceCustom ? 'text-muted-foreground' : 'text-foreground'
-                            }`}
-                            disabled={isWorkspaceConfirming || isCheckingWorkspace}
-                          />
-                          <button
-                            onClick={() => setWorkspaceExplorerOpen(true)}
-                            disabled={isWorkspaceConfirming || isCheckingWorkspace}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
-                          >
-                            <FolderOpen size={13} />
-                          </button>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span>{t('dataPreload.workspace.default') || 'Default'}:</span>
-                          <span className="font-mono truncate" title={mainViewFolder?.path}>
-                            {mainViewFolder?.path || t('dataPreload.workspace.notSet') || 'Not set'}
-                          </span>
-                        </div>
+                      <div className="text-[9px] text-muted-foreground/50">
+                        no inference data
                       </div>
                     )}
-                  </>
-                ) : (
-                  <div className="flex flex-col items-center justify-center h-full py-8 text-muted-foreground border-2 border-dashed rounded-lg">
-                    <FolderOpen className="w-10 h-10 mb-2 opacity-50" />
-                    <p className="text-sm text-center">
-                      {t('dataPreload.workspace.noFoldersHint') || 'Add folders first to configure workspace path'}
-                    </p>
                   </div>
-                )}
-              </div>
 
-              {/* 🆕 底部按钮 - 始终显示，根据状态禁用 */}
-              <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t shrink-0">
-                <Button 
-                  onClick={handleWorkspaceReset} 
-                  variant="outline" 
-                  disabled={!isWorkspaceCustom || isWorkspaceConfirming || workspaceHasJson}
-                >
-                  <X className="w-4 h-4 mr-2" /> 
-                  {t('common.reset') || 'Reset'}
-                </Button>
-                <Button 
-                  onClick={handleWorkspaceConfirm} 
-                  variant="default"
-                  className="text-white" 
-                  disabled={isWorkspaceConfirming || isCheckingWorkspace || (!workspacePath && !mainViewFolder?.path)}
-                >
-                  {isWorkspaceConfirming ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {t('common.saving') || 'Saving...'}</>
-                  ) : (
-                    <><Check className="w-4 h-4 mr-2" /> {t('common.confirm') || 'Confirm'}</>
-                  )}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+                  {/* 图像信息 */}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground border-t border-border pt-2">
+                    <span>📐 {folder.metadata.width}×{folder.metadata.height}</span>
+                    <span>🎨 {folder.metadata.bands} bands</span>
+                    <span>📄 {folder.metadata.fileType}</span>
+                    <span className="text-green-600">✓ {folder.metadata.sceneGroupsLoaded} loaded</span>
+                    {folder.metadata.sceneGroupsSkipped > 0 && (
+                      <span className="text-destructive">✗ {folder.metadata.sceneGroupsSkipped} skipped</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
 
-
-      {/* 右侧：Views Configuration */}
-        <Card className="flex flex-col flex-1 min-h-0">
-          <CardHeader className="shrink-0 pb-4 border-b">
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Info className="w-5 h-5" /> 
-                {t('dataPreload.views.title')}
+            {/* 空状态 */}
+            {folders.length === 0 && (
+              <div className="flex flex-col items-center justify-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+                <UploadCloud className="w-8 h-8 mb-2 opacity-50" />
+                <p className="text-xs">{t('dataPreload.folders.emptyHint')}</p>
               </div>
-              <Button onClick={handleAddView} variant="outline" size="sm" disabled={views.length >= maxViews}>
-                <Plus className="w-4 h-4 mr-2" /> 
-                {t('dataPreload.views.addView')} 
-                {views.length >= maxViews && t('headerSetting.maxViews')}
-              </Button>
-            </CardTitle>
-          </CardHeader>
+            )}
+          </div>
+        );
         
-        <CardContent className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar">
-          <div className="flex-1 space-y-4">
+      case 'views':
+        return (
+          <div className="space-y-4">
             {views.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
+              <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
                 {t('dataPreload.views.emptyHint')}
               </div>
             ) : (
-              views.map((view, index) => (
-                <div key={view.id} className="flex flex-col p-4 border rounded-xl bg-card shadow-sm border-border">
-                  <div className="flex items-center gap-4">
-                    <span className={`px-3 py-1 text-xs font-bold rounded-full shrink-0 ${view.isMain ? 'bg-primary text-white shadow-md' : 'bg-background border border-border text-muted-foreground'}`}>
-                      {view.isMain ? t('dataPreload.views.mainView') : `${t('dataPreload.views.augView')} ${index}`}
-                    </span>
-                    <div className="flex-1 flex items-center gap-3">
-                      <Label className="text-xs font-bold text-neutral-500 uppercase tracking-wider shrink-0">{t('dataPreload.views.sourceFolder')}</Label>
-                      <Select 
-                        value={view.folderId} 
-                        onValueChange={(val) => {
-                          const selectedFolder = folders.find(f => f.id === val);
-                          const numBands = selectedFolder?.metadata?.bands || 3;
-                          const newBands = numBands >= 3 ? [1, 2, 3] : [1];
-                          updateView(view.id, { folderId: val, bands: newBands, colormap: 'gray' });
-                        }}
-                      >
-                        {/* 🌟 修改点：使用 bg-background, text-foreground, bg-popover */}
-                        <SelectTrigger className="h-8 w-[200px] bg-background border-input text-foreground text-xs font-medium shadow-sm flex-1 min-w-0 overflow-hidden">
-                            <SelectValue placeholder={t('dataPreload.views.selectFolder')}>
-                              {view.folderId ? (() => {
-                                  const path = folders.find(f => f.id === view.folderId)?.path || '';
-                                  if (!path) return t('dataPreload.views.selectFolder');
-                                  const len = path.length;
-                                  const showLen = Math.floor(len * 0.8);
-                                  const first = path.slice(0, Math.floor(showLen * 0.5));
-                                  const last = path.slice(-Math.floor(showLen * 0.5));
-                                  return (
-                                      <span className="inline-flex items-center min-w-0" title={path}>
-                                          <span className="truncate">{first}</span>
-                                          <span className="whitespace-nowrap flex-shrink-0">&nbsp;...&nbsp;</span>
-                                          <span className="whitespace-nowrap flex-shrink-0">{last}</span>
-                                      </span>
-                                  );
-                              })() : t('dataPreload.views.selectFolder')}
+              views.map((view, index) => {
+                const selectedFolder = folders.find(f => f.id === view.folderId);
+                const totalBands = selectedFolder?.metadata?.bands || 0;
+                const isNotUint8 = selectedFolder?.metadata?.fileType && !selectedFolder.metadata.fileType.toLowerCase().includes('uint8');
+
+                return (
+                  <div key={view.id} className="p-4 border rounded-xl space-y-3">
+                    {/* 标题行 */}
+                    <div className="flex items-center justify-between">
+                      <span className={`px-3 py-1 text-xs font-bold rounded-full ${view.isMain ? 'bg-primary text-white' : 'bg-background border'}`}>
+                        {view.isMain ? t('dataPreload.views.mainView') : `${t('dataPreload.views.augView')} ${index}`}
+                      </span>
+                      <Button variant="ghost" size="icon" className="h-7 w-7"
+                        onClick={() => removeView(view.id)} disabled={view.isMain && views.length > 1}>
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+
+                    {/* Folder 选择 */}
+                    <div className="flex items-center gap-3">
+                      <Label className="text-[10px] font-bold text-muted-foreground uppercase shrink-0">Source Folder</Label>
+                      <Select value={view.folderId} onValueChange={(val) => {
+                        const sf = folders.find(f => f.id === val);
+                        const numBands = sf?.metadata?.bands || 3;
+                        updateView(view.id, { folderId: val, bands: numBands >= 3 ? [1, 2, 3] : [1], colormap: 'gray' });
+                      }}>
+                        <SelectTrigger className="h-8 text-xs flex-1" title={selectedFolder?.path}>
+                          <SelectValue placeholder="Select folder">
+                            {(() => {
+                              const sf = folders.find(f => f.id === view.folderId);
+                              if (!sf) return "Select folder";
+                              const path = sf.path;
+                              const maxLen = 70;
+                              if (path.length > maxLen) {
+                                return '...' + path.slice(-maxLen);
+                              }
+                              return path;
+                            })()}
                           </SelectValue>
                         </SelectTrigger>
-                        <SelectContent className="bg-popover border-border">
+                        <SelectContent>
                           {folders.map(f => (
-                            <SelectItem key={f.id} value={f.id} className="text-xs text-popover-foreground focus:bg-accent focus:text-accent-foreground">{f.path}</SelectItem>
+                            <SelectItem key={f.id} value={f.id} className="text-xs" title={f.path}>{f.path}</SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
 
-                    <Button variant="ghost" size="icon" className="text-neutral-500 dark:text-neutral-400 hover:text-red-500 hover:bg-red-50 h-8 w-8 shrink-0" onClick={() => removeView(view.id)} disabled={view.isMain && views.length > 1} >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  
-                  {view.folderId && (() => {
-                    const selectedFolder = folders.find(f => f.id === view.folderId);
-                    const totalBands = selectedFolder?.metadata?.bands || 0;
-                    const isNotUint8 = selectedFolder?.metadata?.fileType && !selectedFolder.metadata.fileType.toLowerCase().includes('uint8');
-
-                    return (
-                      <div className="mt-4 p-4 bg-background border border-border rounded-lg shadow-sm flex flex-col gap-4">
+                    {/* 波段选择 */}
+                    {view.folderId && (
+                      <div className="space-y-2">
                         {isNotUint8 && (
-                          <Alert variant="warning" className="py-2 px-3 animate-in fade-in [&>svg]:translate-y-0 [&>svg]:mt-[1px]">
-                            <Info className="w-3.5 h-3.5" />
-                            <AlertDescription className="text-[10px] leading-relaxed">
-                              <strong>{t('dataPreload.views.stretchTitle')}</strong> {t('dataPreload.views.stretchDesc1')} <code className="bg-black/5 dark:bg-white/10 px-1 rounded font-mono">{selectedFolder.metadata.fileType}</code>. {t('dataPreload.views.stretchDesc2')}
-                            </AlertDescription>
+                          <Alert variant="warning" className="py-1.5 px-3 text-[10px]">
+                            <Info className="w-3 h-3" />Non-uint8 data: {selectedFolder?.metadata.fileType}
                           </Alert>
                         )}
-
-                        <div className="grid grid-cols-2 gap-6 items-center">
-                          <div className="space-y-2">
-                            <Label className="text-[10px] text-neutral-500 uppercase font-bold tracking-wider block">
-                              {t('dataPreload.views.selectChannels')}
-                            </Label>
-                            <div className="flex flex-wrap gap-1.5">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-1.5">
+                            <Label className="text-[10px] text-muted-foreground uppercase">Channels</Label>
+                            <div className="flex flex-wrap gap-1">
                               {Array.from({ length: totalBands }, (_, i) => i + 1).map(b => {
                                 const isSelected = view.bands.includes(b);
-                                const selectedStyle = isSelected ? (BAND_COLORS[(b - 1) % BAND_COLORS.length] + " border-2") : BAND_UNSELECTED_STYLE;
                                 return (
-                                  <button 
-                                    key={b} 
-                                    onClick={() => {
-                                      let active = [...view.bands];
-                                      if (active.includes(b)) active = active.filter(band => band !== b);
-                                      else active.push(b);
-                                      updateView(view.id, { bands: active });
-                                    }} 
-                                    className={`${BAND_BASE_STYLE} ${selectedStyle}`}
-                                  >
-                                    {b}
-                                  </button>
+                                  <button key={b} onClick={() => {
+                                    let active = [...view.bands];
+                                    if (active.includes(b)) active = active.filter(x => x !== b);
+                                    else active.push(b);
+                                    updateView(view.id, { bands: active });
+                                  }}
+                                    className={`w-7 h-7 text-[10px] font-bold rounded border transition-colors ${
+                                      isSelected ? BAND_COLORS[(b - 1) % BAND_COLORS.length] + " border-2" : BAND_UNSELECTED_STYLE
+                                    }`}>{b}</button>
                                 );
                               })}
                             </div>
                           </div>
-
-                          <div className="border-l border-neutral-100 pl-6 h-full flex flex-col justify-center">
-                            {view.bands.length === 1 ? (
-                            <div className="grid grid-cols-2 gap-3 animate-in fade-in duration-200">
-                              <div className="space-y-1">
-                                <Label className="text-xs text-neutral-600">{t('dataPreload.views.displayBand')}</Label>
-                                <Select value={view.bands[0].toString()} onValueChange={(val) => updateView(view.id, { bands: [parseInt(val)] })}>
-                                  <SelectTrigger className="h-8 bg-background border-input text-foreground text-xs">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent className="bg-popover border-border">
-                                    {Array.from({ length: totalBands }, (_, i) => i + 1).map(b => (
-                                      <SelectItem key={b} value={b.toString()} className="text-xs text-popover-foreground focus:bg-accent focus:text-accent-foreground">{t('dataPreload.views.band')} {b}</SelectItem>
+                          <div>
+                            {view.bands.length === 1 && (
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] text-muted-foreground">Colormap</Label>
+                                <Select value={view.colormap || 'gray'} onValueChange={(val) => updateView(view.id, { colormap: val })}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {COLOR_MAPS.map(cm => (
+                                      <SelectItem key={cm.name} value={cm.name} className="text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <div className={`w-8 h-3 rounded bg-gradient-to-r ${cm.css}`} />
+                                          {cm.label}
+                                        </div>
+                                      </SelectItem>
                                     ))}
                                   </SelectContent>
                                 </Select>
                               </div>
-
-                                <div className="space-y-1">
-                                  <Label className="text-xs text-amber-600 font-medium">{t('dataPreload.views.colorMap')}</Label>
-                                  <Select value={view.colormap || 'gray'} onValueChange={(val: any) => updateView(view.id, { colormap: val})}>
-                                    <SelectTrigger className="h-8 bg-background border-input text-foreground text-xs">
-                                      <SelectValue>
-                                        {(() => {
-                                          // 🌟 统一从 config/colors.ts 引入 COLOR_MAPS
-                                          const currentMap = COLOR_MAPS.find(cm => cm.name === (view.colormap || 'gray'));
-                                          if (currentMap) {
-                                            return (
-                                              <div className="flex items-center gap-2">
-                                                {/* 🌟 修复：使用 bg-gradient-to-r 和全局定义的 css 类名 */}
-                                                <div className={`w-6 h-3 rounded-sm shadow-inner border border-neutral-300 shrink-0 bg-gradient-to-r ${currentMap.css}`} />
-                                                <span className="capitalize font-medium">{currentMap.label}</span>
-                                              </div>
-                                            );
-                                          }
-                                          return t('dataPreload.views.selectColormap');
-                                        })()}
-                                      </SelectValue>
-                                    </SelectTrigger>
-                                    <SelectContent className="bg-popover border-border">
-                                      {COLOR_MAPS.map(cm => (
-                                        <SelectItem key={cm.name} value={cm.name} className="text-xs text-popover-foreground focus:bg-accent focus:text-accent-foreground">
-                                          <div className="flex items-center gap-2">
-                                            {/* 🌟 修复：统一使用渐变色预览 */}
-                                            <div className={`w-12 h-3.5 rounded-sm shadow-inner border border-neutral-300 shrink-0 bg-gradient-to-r ${cm.css}`} />
-                                            <span className="capitalize font-medium">{cm.label}</span>
-                                          </div>
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-
-
-                            </div>
-                            ) : view.bands.length === 3 ? (
-                            <div className="space-y-2 animate-in fade-in duration-200">
-                              <Label className="text-xs text-neutral-600">{t('dataPreload.views.rgbMapping')}</Label>
-                              <div className="flex gap-2">
-                                {['R', 'G', 'B'].map((channel, idx) => (
-                                  <div key={channel} className="flex-1">
-                                    <Select 
-                                      value={view.bands[idx]?.toString()} 
-                                      onValueChange={(val) => {
-                                        const newBands = [...view.bands]; 
-                                        newBands[idx] = parseInt(val);
-                                        updateView(view.id, { bands: newBands });
-                                      }}
-                                    >
-                                      <SelectTrigger className={`h-8 w-full bg-background border-input text-foreground text-xs focus:ring-1 ${channel==='R'?'focus:ring-red-500':channel==='G'?'focus:ring-green-500':'focus:ring-blue-500'}`}>
-                                        <div className="flex items-center gap-1.5">
-                                          <span className={`font-black text-[11px] ${channel==='R'?'text-red-600':channel==='G'?'text-green-600':'text-blue-600'}`}>
-                                            {channel}
-                                          </span>
-                                          <span className="text-neutral-300">|</span>
+                            )}
+                            {view.bands.length === 3 && (
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] text-muted-foreground">RGB Mapping</Label>
+                                <div className="flex gap-1.5">
+                                  {['R', 'G', 'B'].map((ch, idx) => (
+                                    <React.Fragment key={ch}>
+                                      <Select 
+                                        value={view.bands[idx]?.toString()}
+                                        onValueChange={(val) => {
+                                          const newBands = [...view.bands];
+                                          newBands[idx] = parseInt(val);
+                                          updateView(view.id, { bands: newBands });
+                                        }}>
+                                        <SelectTrigger className="h-8 text-xs w-full">
+                                          <span className={`font-bold text-[10px] ${ch === 'R' ? 'text-red-500' : ch === 'G' ? 'text-green-500' : 'text-blue-500'}`}>{ch}</span>
                                           <SelectValue />
-                                        </div>
-                                      </SelectTrigger>
-                                      <SelectContent className="bg-popover border-border">
-                                        {Array.from({ length: totalBands }, (_, i) => i + 1).map(b => (
-                                          <SelectItem key={b} value={b.toString()} className="text-xs text-popover-foreground focus:bg-accent focus:text-accent-foreground">
-                                            {t('dataPreload.views.band')} {b}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                ))}
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {Array.from({ length: totalBands }, (_, i) => i + 1).map(b => (
+                                            <SelectItem key={b} value={b.toString()} className="text-xs">Band {b}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </React.Fragment>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
-                            ) : (
-                              <Alert variant="warning" className="flex items-center justify-center py-2 h-[56px] animate-in fade-in [&>svg]:translate-y-0">
-                                <Info className="w-4 h-4 mr-2" />
-                                <AlertDescription className="text-xs m-0 font-medium">
-                                  {t('dataPreload.views.select1or3')}
-                                </AlertDescription>
-                              </Alert>
                             )}
                           </div>
                         </div>
                       </div>
-                    );
-                  })()}
-
-                </div>
-              ))
+                    )}
+                  </div>
+                );
+              })
             )}
           </div>
-        </CardContent>
-        </Card>
-    </div>
+        );
+
+      case 'workspace':
+        return (
+          <div className="space-y-5">
+            <Label className="text-xs text-muted-foreground">{t('dataPreload.workspace.description')}</Label>
+
+            {workspaceHasJson && !isCheckingWorkspace ? (
+              <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 rounded-lg space-y-2">
+                <div className="flex items-center gap-2 text-amber-700"><Info className="w-4 h-4" /><span className="text-xs font-medium">Workspace contains annotation files. Path is locked.</span></div>
+                <div className="text-xs font-mono truncate">{workspacePath || mainViewFolder?.path}</div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="relative">
+                  <Input value={isWorkspaceCustom ? workspacePath : (mainViewFolder?.path || '')}
+                    placeholder={mainViewFolder?.path || 'default'}
+                    onChange={e => { setWorkspacePath(e.target.value); setIsWorkspaceCustom(!!(e.target.value && e.target.value !== mainViewFolder?.path)); }}
+                    className="h-9 text-xs pr-9 font-mono" disabled={isWorkspaceConfirming || isCheckingWorkspace} />
+                  <button onClick={() => setWorkspaceExplorerOpen(true)} disabled={isWorkspaceConfirming || isCheckingWorkspace}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
+                    <FolderOpen size={14} />
+                  </button>
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Default: <span className="font-mono">{mainViewFolder?.path || 'Not set'}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+  const originalPaths = useRef<Record<string, string>>({});
+
+// 在 addFolder 后记录原始路径
+useEffect(() => {
+  folders.forEach(f => {
+    if (!originalPaths.current[f.id]) {
+      originalPaths.current[f.id] = f.path;
+    }
+  });
+}, [folders]);
 
 
-      {/* ============ 底部：全局操作栏 ============ */}
-      <div className="flex items-center justify-between p-4 bg-card border rounded-lg shadow-sm shrink-0">
-        {/* 左侧状态信息 */}
+  // ==========================================
+  // 主渲染
+  // ==========================================
+  return (
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className="flex flex-1 min-h-0">
+        {/* 左侧导航 */}
+        <div className="w-[200px] shrink-0 border-r border-border bg-muted/20 flex flex-col">
+          <div className="flex-1 overflow-y-auto p-3">
+            {steps.map((step) => {
+              const status = getStepStatus(step.id);
+              return (
+                <button key={step.id} onClick={() => setActiveStep(step.id)}
+                  className={`w-full flex items-stretch text-left transition-all mb-0.5 rounded-lg overflow-hidden ${
+                    status === 'current' ? 'bg-primary/5' : 'hover:bg-muted'
+                  }`}>
+                  <div className={`w-1 shrink-0 rounded-full my-1.5 ml-1 transition-colors ${
+                    status === 'done' ? 'bg-emerald-400' : status === 'current' ? 'bg-primary' : 'bg-muted-foreground/25'
+                  }`} />
+                  <div className={`flex-1 py-2.5 px-3 min-w-0 text-xs truncate transition-colors ${
+                    status === 'current' ? 'text-primary font-semibold' : status === 'done' ? 'text-foreground font-medium' : 'text-muted-foreground'
+                  }`}>
+                    <span className="flex items-center gap-2">
+                      {step.icon}
+                      {step.label}
+                    </span>
+                  </div>
+                  {status === 'current' && <ChevronRight className="w-3 h-3 text-primary shrink-0 my-auto mr-2" />}
+                </button>
+              );
+            })}
+          </div>
+          <div className="p-3 border-t border-border space-y-1.5">
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />Configured</div>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0" />Current</div>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/25 shrink-0" />Pending</div>
+          </div>
+        </div>
+
+        {/* 右侧内容 */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
+            <div className="max-w-2xl">
+              
+              {/* 步骤标题 + Add 按钮 */}
+              <div className="flex items-center justify-between mb-5">
+  <h3 className="text-sm font-bold">{steps.find(s => s.id === activeStep)?.label}</h3>
+  <div className="flex items-center gap-2">
+    {/* 🆕 Add View 按钮 — 仅 views 步骤，在 Reset 左侧 */}
+    {activeStep === 'views' && (
+      <Button onClick={handleAddView} variant="outline" size="sm" disabled={views.length >= maxViews}>
+        <Plus className="w-3.5 h-3.5 mr-1.5" />
+        {t('dataPreload.views.addView')}
+      </Button>
+    )}
+    {/* Reset 按钮 */}
+    <Button variant="ghost" size="sm"
+      disabled={(activeStep === 'folders' && folders.length === 0) || (activeStep === 'views' && views.length === 0)}
+      onClick={() => {
+        if (activeStep === 'folders') { clearFolders(); setInferredData({}); }
+        else if (activeStep === 'views') clearViews();
+        else if (activeStep === 'workspace') handleWorkspaceReset(); 
+      }}>
+      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />{t('common.reset')}
+    </Button>
+  </div>
+</div>
+
+              <div key={activeStep}>
+                {renderStepContent()}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+            {/* 底部全局按钮 */}
+      <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
         <div className="flex items-center gap-6 text-sm">
           <div className="flex items-center gap-1.5">
             <FolderOpen className="w-4 h-4 text-muted-foreground" />
@@ -809,35 +878,32 @@ export function DataPreload({onClose }: {onClose: () => void }) {
           </div>
         </div>
 
-        {/* 右侧操作按钮 */}
         <div className="flex items-center gap-3">
           <Button
-            onClick={handleExit}
             variant="outline"
             size="sm"
+            onClick={handleExit}
             disabled={isGlobalConfirming}
           >
-            <LogOut className="w-4 h-4 mr-2" />
+            <LogOut className="w-3.5 h-3.5 mr-1.5" />
             {t('common.exit') || 'Exit'}
           </Button>
-          
-
           <Button
-            onClick={handleGlobalConfirm}
-            variant="default"
             size="sm"
             className="text-white font-semibold"
+            onClick={handleGlobalConfirm}
             disabled={folders.length === 0 || isGlobalConfirming}
           >
             {isGlobalConfirming ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Entering...</>
+              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {t('common.processing') || 'Processing...'}</>
             ) : (
-              <><Check className="w-4 h-4 mr-2" /> {t('dataPreload.confirmAndAlign') || 'Confirm & Start Align'}</>
+              <><Check className="w-3.5 h-3.5 mr-1.5" /> {t('dataPreload.confirmAndAlign') || 'Confirm & Start Align'}</>
             )}
           </Button>
         </div>
       </div>
 
+      {/* 文件浏览器 */}
       <FileExplorerDialog 
         open={explorerOpen}
         initialPath={activePlaceholderId ? placeholders.find(p => p.id === activePlaceholderId)?.path || '' : ''}
@@ -850,7 +916,7 @@ export function DataPreload({onClose }: {onClose: () => void }) {
         initialPath={workspacePath || mainViewFolder?.path || ''}
         onClose={() => setWorkspaceExplorerOpen(false)}
         onConfirm={handleWorkspaceSelectConfirm}
-        selectType={explorerMode}
+        selectType="dir"
       />
     </div>
   );

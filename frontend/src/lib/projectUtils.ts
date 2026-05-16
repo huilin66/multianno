@@ -36,6 +36,7 @@ export function generateProjectMetaConfig(state: AppState): ProjectMetaContract 
           Id: i + 1,
           path: f.path,
           suffix: f.suffix || "",
+          extension: f.extension || 'png',
           "files in sceneGroups": f.metadata?.sceneGroupsLoaded || 0,
           "files Skipped": f.metadata?.sceneGroupsSkipped || 0,
           "files total": f.files ? f.files.length : 0,
