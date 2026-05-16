@@ -118,72 +118,62 @@
     "loadingAnnotations": "Loading Annotations: "
   },
   "dataPreload": {
+    "steps": {
+      "folders": "Folders",
+      "views": "Views",
+      "workspace": "Workspace"
+    },
     "folders": {
-      "title": "Data Folders",
-      "add": "Add Folder",
-      "recent": "Recent:",
-      "size": "Size:",
-      "bands": "Bands:",
-      "loaded": "Loaded:",
-      "skipped": "Skipped:",
-      "suffix": "Suffix:",
-      "emptyHint": "Click \"Add Folder\" to start configuring",
-      "pathPlaceholder": "Enter absolute path or click icon to browse...",
-      "suffixPlaceholder": "Suffix (e.g. _T)",
-      "pendingCount": "folder(s) pending",
-      "cancelAll": "Cancel All",
-      "analyzing": "Analyzing...",
-      "confirmUpload": "Confirm Upload",
-      "clickToAdd": "Click to Add"
+      "recent": "Recent",
+      "pathPlaceholder": "Enter or select folder path...",
+      "emptyHint": "Add a folder to get started",
+      "suffix": "Suffix",
+      "ext": "Ext",
+      "autoInferred": "auto inferred",
+      "inferredSuffix": "suffix:",
+      "inferredExt": ", ext:",
+      "inferredFrom": "from",
+      "restoreAuto": "restore auto",
+      "noInferenceData": "no inference data"
     },
     "views": {
-      "title": "View Configuration",
       "addView": "Add View",
-      "max9": "(Max 9)",
-      "emptyHint": "No views configured. Add a view to start mapping data.",
+      "emptyHint": "No views configured",
       "mainView": "Main View",
       "augView": "Aug View",
       "sourceFolder": "Source Folder",
-      "selectFolder": "Select folder...",
-      "stretchTitle": "Data Stretch Applied:",
-      "stretchDesc1": "Original source is",
-      "stretchDesc2": "The display preview has been auto-scaled to 8-bit for visualization.",
-      "selectChannels": "Select Channels (Click 1 or 3)",
-      "displayBand": "Display Band",
-      "band": "Band",
-      "colorMap": "Color Map",
-      "selectColormap": "Select Colormap",
-      "rgbMapping": "RGB Channel Mapping",
-      "select1or3": "Please select exactly 1 or 3 blocks.",
-      "configuredCount": "view(s) configured",
-      "reset": "Reset",
-      "confirmMap": "Confirm & Map Extents",
-      "confirmStart": "Confirm & Start Annotation"
+      "selectFolder": "Select folder",
+      "channels": "Channels",
+      "colormap": "Colormap",
+      "rgbMapping": "RGB Mapping",
+      "nonUint8": "Non-uint8 data"
     },
     "workspace": {
-      "title": "Workspace Path",
-      "description": "Annotation Save Path",
+      "description": "Annotation save path",
+      "locked": "Workspace contains annotation files. Path is locked.",
       "default": "Default",
-      "reset": "reset",
-      "placeholder": "Select workspace directory...",
-      "browse": "Browse folder",
-      "customPathHint": "Custom path differs from Main View folder",
-      "emptyHint": "Will default to Main View folder",
-      "confirm": "Confirm Path",
-      "saving": "Saving..."
+      "notSet": "Not set"
     },
+    "status": {
+      "folders": "Folders",
+      "views": "Views",
+      "workspace": "Workspace"
+    },
+    "legend": {
+      "configured": "Configured",
+      "current": "Current",
+      "pending": "Pending"
+    },
+    "confirmAndAlign": "Confirm & Start Align",
     "alerts": {
-      "cancelFolders": "Are you sure you want to cancel all pending folders?",
-      "resetViews": "Are you sure you want to reset all View configurations?",
-      "noImagesFound": "Python could not find any image data in this path. Please check the path.",
-      "noCommonStems": "Warning: No images with matching names were found in the selected folders. Sync views cannot be established!",
-      "backendFailed": "Failed to connect to Python backend. Please ensure FastAPI is running.",
-      "confirmExtent": "Are you sure you want to proceed to the View Extent Check (Multi-view Alignment) stage with the current settings?",
-      "confirmSingleView": "Only 1 view is configured. Are you sure you want to start annotation directly with this configuration?\n(This will skip the alignment stage, save the project config, and enter the workspace)",
-      "exportSuccess": "✅ Export Successful!\n\nproject_meta.json has been saved locally.\nEntering annotation workspace...",
-      "exportCancelled": "Export cancelled or failed. Do you still want to force enter the annotation workspace?"
-    },
-    "confirmAndAlign": "Confirm & Start Align"
+      "noImagesFound": "No images found",
+      "backendFailed": "Backend connection failed",
+      "noFoldersConfigured": "Please configure at least one folder",
+      "noMainView": "Please set a Main View",
+      "resetViews": "Reset all views?",
+      "confirmExit": "Exit without saving?",
+      "saveFailed": "Failed to save configuration"
+    }
   },
   "viewExtent": {
     "errors": {
@@ -399,6 +389,7 @@
     "exit": "Exit",
     "failed": "Failed",
     "loading": "Loading...",
+    "processing": "Processing...",
     "reset": "Reset",
     "running": "Running...",
     "success": "Success",

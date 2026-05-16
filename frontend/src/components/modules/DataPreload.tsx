@@ -6,21 +6,16 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Checkbox } from '../ui/checkbox';
-import { Switch } from '../ui/switch';
-import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { Alert, AlertDescription } from '../ui/alert';
+import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../../config/colors';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
 import {
   FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History,
-  Save, Eye, LogOut, ChevronRight, RotateCcw, AlertCircle, Search
+  Save, Eye, LogOut, ChevronRight, RotateCcw, Search
 } from 'lucide-react';
 
-// ==========================================
-// 主组件
-// ==========================================
 export function DataPreload({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const {
@@ -29,10 +24,7 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
     setActiveModule, editorSettings
   } = useStore();
 
-  // --- 导航 ---
   const [activeStep, setActiveStep] = useState('folders');
-
-  // --- Folders ---
   const [placeholders, setPlaceholders] = useState<{ id: string; path: string; suffix: string }[]>([]);
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [activePlaceholderId, setActivePlaceholderId] = useState<string | null>(null);
@@ -40,8 +32,8 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
   const [explorerMode, setExplorerMode] = useState<'dir' | 'file'>('dir');
   const [inferredData, setInferredData] = useState<Record<string, { suffix: string; extension: string; sample: string }>>({});
+  const [newFolderPath, setNewFolderPath] = useState('');
 
-  // --- Workspace ---
   const [workspacePath, setWorkspacePath] = useState('');
   const [isWorkspaceCustom, setIsWorkspaceCustom] = useState(false);
   const [workspaceExplorerOpen, setWorkspaceExplorerOpen] = useState(false);
@@ -49,12 +41,9 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
   const [workspaceHasJson, setWorkspaceHasJson] = useState(false);
   const [isCheckingWorkspace, setIsCheckingWorkspace] = useState(false);
 
-  // --- Views ---
-  const maxViews = editorSettings.maxViews || 9;
-
-  // --- Global ---
   const [isGlobalConfirming, setIsGlobalConfirming] = useState(false);
 
+  const maxViews = editorSettings.maxViews || 9;
   const workspaceStorePath = useStore(s => s.workspacePath);
   const setWorkspaceStorePath = useStore(s => s.setWorkspacePath);
 
@@ -64,6 +53,8 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
   }, [views, folders]);
 
   const workspaceStatus = isWorkspaceCustom ? 'defined' : 'default';
+
+  const originalPaths = useRef<Record<string, string>>({});
 
   // ==========================================
   // 初始化
@@ -93,22 +84,29 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
     }
   }, []);
 
+  useEffect(() => {
+    folders.forEach(f => {
+      if (!originalPaths.current[f.id]) {
+        originalPaths.current[f.id] = f.path;
+      }
+    });
+  }, [folders]);
+
   // ==========================================
   // 步骤定义
   // ==========================================
   const steps = useMemo(() => [
-    { id: 'folders', label: t('dataPreload.steps.folders'), icon: <FolderOpen className="w-4 h-4" />, required: true },
-    { id: 'views', label: t('dataPreload.steps.views'), icon: <Eye className="w-4 h-4" />, required: true },
-    { id: 'workspace', label: t('dataPreload.steps.workspace'), icon: <Save className="w-4 h-4" />, required: true },
- 
+    { id: 'folders', label: t('dataPreload.steps.folders'), required: true },
+    { id: 'views', label: t('dataPreload.steps.views'), required: true },
+    { id: 'workspace', label: t('dataPreload.steps.workspace'), required: true },
   ], [t]);
 
   const getStepStatus = (stepId: string): 'current' | 'done' | 'pending' => {
     if (activeStep === stepId) return 'current';
     switch (stepId) {
       case 'folders': return folders.length > 0 ? 'done' : 'pending';
-      case 'workspace': return workspaceHasJson || isWorkspaceCustom ? 'done' : 'pending';
       case 'views': return views.length > 0 ? 'done' : 'pending';
+      case 'workspace': return workspaceHasJson || isWorkspaceCustom ? 'done' : 'pending';
       default: return 'pending';
     }
   };
@@ -141,41 +139,187 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
       return updated;
     });
   };
-// 🆕 常驻输入框的路径
-const [newFolderPath, setNewFolderPath] = useState('');
 
-// 🆕 处理添加文件夹
-const handleAddFolder = async (path: string) => {
-  if (!path.trim()) return;
-  setIsConfirming(true);
-  try {
-    await handleAutoAnalyze({ id: Math.random().toString(36).slice(2, 11), path: path.trim(), suffix: '' });
-    setNewFolderPath('');
-  } finally {
-    setIsConfirming(false);
-  }
-};
-
-// 文件浏览器确认
-const handleFolderSelectConfirm = (selectedPaths: string[]) => {
-  setExplorerOpen(false);
-  if (selectedPaths.length > 0) {
-    if (activePlaceholderId) {
-      // 修改已有 folder 的路径
-      updateFolder(activePlaceholderId, { path: selectedPaths[0] });
-    } else {
-      // 新增 folder
-      handleAddFolder(selectedPaths[0]);
+  const handleAddFolder = async (path: string) => {
+    if (!path.trim()) return;
+    setIsConfirming(true);
+    try {
+      await handleAutoAnalyze({ id: Math.random().toString(36).slice(2, 11), path: path.trim(), suffix: '' });
+      setNewFolderPath('');
+    } finally {
+      setIsConfirming(false);
     }
-  }
-};
+  };
 
-// 历史路径
-const handleAddFromHistory = (path: string) => {
-  handleAddFolder(path);
-};
+  const handleFolderSelectConfirm = (selectedPaths: string[]) => {
+    setExplorerOpen(false);
+    if (selectedPaths.length > 0) {
+      if (activePlaceholderId) {
+        updateFolder(activePlaceholderId, { path: selectedPaths[0] });
+      } else {
+        handleAddFolder(selectedPaths[0]);
+      }
+    }
+  };
 
+  const handleAddFromHistory = (path: string) => {
+    handleAddFolder(path);
+  };
 
+  const handleAutoAnalyze = async (item: { id: string; path: string; suffix: string }) => {
+    if (!item.path.trim()) return;
+    setIsConfirming(true);
+    try {
+      const existingFolders = folders.map(f => ({ path: f.path, suffix: f.suffix || '' }));
+      const allFolders = [...existingFolders, { path: item.path.trim(), suffix: item.suffix.trim() }];
+
+      const inferenceResult = await inferSuffix(allFolders);
+      const infNew = inferenceResult.results?.find((r: any) => r.folder_index === allFolders.length - 1) || {};
+
+      let cleanSuffix = item.suffix || infNew.suffix || '';
+      let detectedExt = infNew.extension || '';
+      const KNOWN_EXTS = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'];
+      for (const ext of KNOWN_EXTS) {
+        if (cleanSuffix.toLowerCase().endsWith(ext.toLowerCase())) {
+          cleanSuffix = cleanSuffix.slice(0, -ext.length);
+          detectedExt = ext.replace('.', '');
+          break;
+        }
+      }
+
+      const analysisPayload = allFolders.map((f, i) => {
+        const inf = inferenceResult.results?.find((r: any) => r.folder_index === i);
+        const suffix = i === allFolders.length - 1 ? cleanSuffix : (inf?.suffix || f.suffix || '');
+        return { path: f.path, suffix };
+      });
+      const result = await analyzeWorkspaceFolders(analysisPayload);
+      const backendData = result.data;
+
+      if (!backendData || backendData.length === 0) {
+        alert(t('dataPreload.alerts.noImagesFound'));
+        return;
+      }
+
+      const newFolderId = `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const newFolderMeta = backendData.find((m: any) =>
+        m.folderPath === item.path.trim() || m.folderPath === allFolders[allFolders.length - 1].path
+      ) || backendData[backendData.length - 1];
+
+      addFolder({
+        id: newFolderId,
+        path: newFolderMeta.folderPath || item.path,
+        suffix: cleanSuffix,
+        extension: detectedExt || newFolderMeta.dtype || 'tif',
+        files: [],
+        metadata: {
+          width: newFolderMeta.width || 1024,
+          height: newFolderMeta.height || 1024,
+          bands: newFolderMeta.bands || 3,
+          fileType: detectedExt || newFolderMeta.dtype || 'TIFF',
+          dataType: "Remote Sensing Imagery",
+          sceneGroupsLoaded: newFolderMeta.group_success || 0,
+          sceneGroupsSkipped: newFolderMeta.group_fail || 0
+        },
+      });
+
+      backendData.forEach((meta: any) => {
+        const existingFolder = folders.find(f => f.path === meta.folderPath);
+        if (existingFolder) {
+          updateFolder(existingFolder.id, {
+            metadata: {
+              ...existingFolder.metadata,
+              width: meta.width || existingFolder.metadata.width,
+              height: meta.height || existingFolder.metadata.height,
+              bands: meta.bands || existingFolder.metadata.bands,
+              sceneGroupsLoaded: meta.group_success || 0,
+              sceneGroupsSkipped: meta.group_fail || 0,
+            }
+          });
+        }
+      });
+
+      const newInferred: Record<string, any> = {};
+      const pathToId: Record<string, string> = {};
+      folders.forEach(f => { pathToId[f.path] = f.id; });
+      pathToId[item.path.trim()] = newFolderId;
+
+      inferenceResult.results?.forEach((r: any) => {
+        const targetPath = allFolders[r.folder_index]?.path;
+        const targetId = pathToId[targetPath];
+        if (targetId) {
+          newInferred[targetId] = {
+            suffix: r.suffix || '',
+            extension: r.extension || '',
+            sample: r.sample_file || '',
+          };
+        }
+      });
+      setInferredData(prev => ({ ...prev, ...newInferred }));
+
+      inferenceResult.results?.forEach((r: any) => {
+        if (r.folder_index !== allFolders.length - 1) {
+          const targetPath = allFolders[r.folder_index]?.path;
+          const existingFolder = folders.find(f => f.path === targetPath);
+          if (existingFolder && !existingFolder.suffix && r.suffix) {
+            updateFolder(existingFolder.id, {
+              suffix: r.suffix || '',
+              extension: r.extension || existingFolder.extension,
+            });
+          }
+        }
+      });
+
+      if (result.commonStems && result.commonStems.length > 0) {
+        useStore.getState().setStems(result.commonStems);
+        useStore.getState().setCurrentStem(result.commonStems[0]);
+        useStore.getState().setSceneGroups(result.sceneGroups);
+      }
+
+      setPlaceholders(prev => prev.filter(p => p.id !== item.id));
+      savePathsToHistory([item.path]);
+    } catch (error) {
+      console.error("Auto analyze error:", error);
+      alert(t('dataPreload.alerts.backendFailed'));
+    } finally {
+      setIsConfirming(false);
+    }
+  };
+
+  const reAnalyzeFolder = async (folderId: string) => {
+    const folder = folders.find(f => f.id === folderId);
+    if (!folder?.path) return;
+    setIsConfirming(true);
+    try {
+      const allFolders = folders.map(f => ({ path: f.path, suffix: f.suffix || '' }));
+      const result = await analyzeWorkspaceFolders(allFolders);
+
+      result.data?.forEach((meta: any) => {
+        const existingFolder = folders.find(f => f.path === meta.folderPath);
+        if (existingFolder) {
+          updateFolder(existingFolder.id, {
+            metadata: {
+              ...existingFolder.metadata,
+              width: meta.width || existingFolder.metadata.width,
+              height: meta.height || existingFolder.metadata.height,
+              bands: meta.bands || existingFolder.metadata.bands,
+              sceneGroupsLoaded: meta.group_success || 0,
+              sceneGroupsSkipped: meta.group_fail || 0,
+            }
+          });
+        }
+      });
+
+      if (result.commonStems && result.commonStems.length > 0) {
+        useStore.getState().setStems(result.commonStems);
+        useStore.getState().setCurrentStem(result.commonStems[0]);
+        useStore.getState().setSceneGroups(result.sceneGroups);
+      }
+    } catch (error) {
+      console.error("Re-analyze error:", error);
+    } finally {
+      setIsConfirming(false);
+    }
+  };
 
   // ==========================================
   // Workspace 操作
@@ -232,15 +376,13 @@ const handleAddFromHistory = (path: string) => {
     try {
       const finalPath = isWorkspaceCustom ? workspacePath : mainViewFolder?.path || '';
       if (finalPath) setWorkspaceStorePath(finalPath);
-
       const projectMeta = generateProjectMetaConfig(useStore.getState());
       const metaPath = useStore.getState().projectMetaPath;
       if (metaPath) await saveProjectMeta({ file_path: metaPath, content: projectMeta });
-
       setActiveModule('extent');
     } catch (err) {
       console.error("Failed:", err);
-      alert("配置保存失败");
+      alert(t('dataPreload.alerts.saveFailed'));
     } finally {
       setIsGlobalConfirming(false);
     }
@@ -251,188 +393,15 @@ const handleAddFromHistory = (path: string) => {
       setActiveModule('workspace');
     }
   };
-const handleAutoAnalyze = async (item: { id: string; path: string; suffix: string }) => {
-  if (!item.path.trim()) return;
-  
-  setIsConfirming(true);
-  try {
-    const existingFolders = folders.map(f => ({ path: f.path, suffix: f.suffix || '' }));
-    const allFolders = [
-      ...existingFolders,
-      { path: item.path.trim(), suffix: item.suffix.trim() }
-    ];
-    
-    // 1. 推理所有 folder 的 suffix
-    const inferenceResult = await inferSuffix(allFolders);
-    const infNew = inferenceResult.results?.find((r: any) => r.folder_index === allFolders.length - 1) || {};
-    
-    // 2. 计算新 folder 的 cleanSuffix
-    let cleanSuffix = item.suffix || infNew.suffix || '';
-    let detectedExt = infNew.extension || '';
-    const KNOWN_EXTS = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'];
-    for (const ext of KNOWN_EXTS) {
-      if (cleanSuffix.toLowerCase().endsWith(ext.toLowerCase())) {
-        cleanSuffix = cleanSuffix.slice(0, -ext.length);
-        detectedExt = ext.replace('.', '');
-        break;
-      }
-    }
 
-    // 3. 🆕 用所有 folder 进行分析（求交集 scene group）
-// 3. 🆕 构建 analysisPayload：用推理结果更新 suffix
-    const analysisPayload = allFolders.map((f, i) => {
-      const inf = inferenceResult.results?.find((r: any) => r.folder_index === i);
-      const suffix = i === allFolders.length - 1 
-        ? cleanSuffix 
-        : (inf?.suffix || f.suffix || '');
-      return { path: f.path, suffix };
-    });
-    const result = await analyzeWorkspaceFolders(analysisPayload);
-    const backendData = result.data;
-
-    if (!backendData || backendData.length === 0) {
-      alert(t('dataPreload.alerts.noImagesFound'));
-      return;
-    }
-
-    const newFolderId = `folder-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-    // 4. 添加新 folder
-    const newFolderMeta = backendData.find((m: any) => m.folderPath === item.path.trim() || m.folderPath === allFolders[allFolders.length - 1].path) || backendData[backendData.length - 1];
-    
-    addFolder({
-      id: newFolderId,
-      path: newFolderMeta.folderPath || item.path,
-      suffix: cleanSuffix,
-      extension: detectedExt || newFolderMeta.dtype || 'tif',
-      files: [],
-      metadata: {
-        width: newFolderMeta.width || 1024,
-        height: newFolderMeta.height || 1024,
-        bands: newFolderMeta.bands || 3,
-        fileType: detectedExt || newFolderMeta.dtype || 'TIFF',
-        dataType: "Remote Sensing Imagery",
-        sceneGroupsLoaded: newFolderMeta.group_success || 0,
-        sceneGroupsSkipped: newFolderMeta.group_fail || 0
-      },
-    });
-
-    // 5. 更新所有 folder 的推理数据
-    const newInferred: Record<string, any> = {};
-    const pathToId: Record<string, string> = {};
-    folders.forEach(f => { pathToId[f.path] = f.id; });
-    pathToId[item.path.trim()] = newFolderId;
-
-    inferenceResult.results?.forEach((r: any) => {
-      const targetPath = allFolders[r.folder_index]?.path;
-      const targetId = pathToId[targetPath];
-      if (targetId) {
-        newInferred[targetId] = {
-          suffix: r.suffix || '',
-          extension: r.extension || '',
-          sample: r.sample_file || '',
-        };
-      }
-    });
-    // 🆕 更新所有 folder 的 metadata（包括已有的）
-    backendData.forEach((meta: any) => {
-      const existingFolder = folders.find(f => f.path === meta.folderPath);
-      if (existingFolder) {
-        updateFolder(existingFolder.id, {
-          metadata: {
-            ...existingFolder.metadata,
-            width: meta.width || existingFolder.metadata.width,
-            height: meta.height || existingFolder.metadata.height,
-            bands: meta.bands || existingFolder.metadata.bands,
-            sceneGroupsLoaded: meta.group_success || 0,
-            sceneGroupsSkipped: meta.group_fail || 0,
-          }
-        });
-      }
-    });
-    setInferredData(prev => ({ ...prev, ...newInferred }));
-
-    // 6. 自动填入已有 folder 的空 suffix
-    inferenceResult.results?.forEach((r: any) => {
-      if (r.folder_index !== allFolders.length - 1) {
-        const targetPath = allFolders[r.folder_index]?.path;
-        const existingFolder = folders.find(f => f.path === targetPath);
-        if (existingFolder && !existingFolder.suffix && r.suffix) {
-          updateFolder(existingFolder.id, {
-            suffix: r.suffix || '',
-            extension: r.extension || existingFolder.extension,
-          });
-        }
-      }
-    });
-
-    // 7. 更新 store 中的 stems 和 sceneGroups
-    if (result.commonStems && result.commonStems.length > 0) {
-      useStore.getState().setStems(result.commonStems);
-      useStore.getState().setCurrentStem(result.commonStems[0]);
-      useStore.getState().setSceneGroups(result.sceneGroups);
-    }
-
-    setPlaceholders(prev => prev.filter(p => p.id !== item.id));
-    savePathsToHistory([item.path]);
-  } catch (error) {
-    console.error("Auto analyze error:", error);
-    alert(t('dataPreload.alerts.backendFailed'));
-  } finally {
-    setIsConfirming(false);
-  }
-};
-
-const reAnalyzeFolder = async (folderId: string) => {
-  const folder = folders.find(f => f.id === folderId);
-  if (!folder?.path) return;
-
-  setIsConfirming(true);
-  try {
-    const allFolders = folders.map(f => ({ path: f.path, suffix: f.suffix || '' }));
-    
-    // 只用当前 folder 的 suffix 去分析，不推理覆盖
-    const result = await analyzeWorkspaceFolders(allFolders);
-    
-    // 🆕 更新所有 folder 的 metadata
-    result.data?.forEach((meta: any) => {
-      const existingFolder = folders.find(f => f.path === meta.folderPath);
-      if (existingFolder) {
-        updateFolder(existingFolder.id, {
-          metadata: {
-            ...existingFolder.metadata,
-            width: meta.width || existingFolder.metadata.width,
-            height: meta.height || existingFolder.metadata.height,
-            bands: meta.bands || existingFolder.metadata.bands,
-            sceneGroupsLoaded: meta.group_success || 0,
-            sceneGroupsSkipped: meta.group_fail || 0,
-          }
-        });
-      }
-    });
-
-    // 🆕 更新 stems
-    if (result.commonStems && result.commonStems.length > 0) {
-      useStore.getState().setStems(result.commonStems);
-      useStore.getState().setCurrentStem(result.commonStems[0]);
-      useStore.getState().setSceneGroups(result.sceneGroups);
-    }
-
-  } catch (error) {
-    console.error("Re-analyze error:", error);
-  } finally {
-    setIsConfirming(false);
-  }
-};
   // ==========================================
-  // 渲染内容
+  // 渲染
   // ==========================================
   const renderStepContent = () => {
     switch (activeStep) {
       case 'folders':
         return (
           <div className="space-y-5">
-            {/* 历史路径 */}
             {recentPaths.length > 0 && (
               <div className="flex flex-wrap items-center gap-2 p-3 bg-muted/20 rounded-lg border border-dashed">
                 <span className="text-xs text-muted-foreground flex items-center gap-1">
@@ -440,9 +409,7 @@ const reAnalyzeFolder = async (folderId: string) => {
                 </span>
                 {recentPaths.map((path) => {
                   const maxLen = 30;
-                  const displayPath = path.length > maxLen 
-                    ? '...' + path.slice(-maxLen) 
-                    : path;
+                  const displayPath = path.length > maxLen ? '...' + path.slice(-maxLen) : path;
                   return (
                     <button key={path} onClick={() => handleAddFromHistory(path)}
                       className="text-[10px] bg-secondary hover:bg-secondary/80 px-2 py-1 rounded border truncate max-w-[200px]"
@@ -452,7 +419,6 @@ const reAnalyzeFolder = async (folderId: string) => {
               </div>
             )}
 
-            {/* 🆕 常驻输入框 — 输入路径或选择文件夹 */}
             <div className="relative">
               <Input
                 value={newFolderPath}
@@ -463,10 +429,7 @@ const reAnalyzeFolder = async (folderId: string) => {
                 disabled={isConfirming}
               />
               <button
-                onClick={() => {
-                  setExplorerMode('dir');
-                  setExplorerOpen(true);
-                }}
+                onClick={() => { setExplorerMode('dir'); setExplorerOpen(true); }}
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 disabled={isConfirming}
               >
@@ -474,16 +437,13 @@ const reAnalyzeFolder = async (folderId: string) => {
               </button>
             </div>
 
-            {/* 已确认文件夹 */}
-            {folders.map((folder: any, idx: number) => {
+            {folders.map((folder: any) => {
               const inf = inferredData[folder.id] || { suffix: '', extension: '', sample: '' };
               const suffixChanged = folder.suffix !== inf.suffix;
               const extChanged = folder.extension !== inf.extension;
 
               return (
                 <div key={folder.id} className="p-4 border rounded-lg bg-muted/30 space-y-3">
-
-                  {/* 路径 */}
                   <div className="relative">
                     <Input
                       value={folder.path}
@@ -492,80 +452,58 @@ const reAnalyzeFolder = async (folderId: string) => {
                       className="font-mono text-xs h-8 pr-9"
                     />
                     <button
-                      onClick={() => {
-                        setActivePlaceholderId(folder.id);
-                        setExplorerMode('dir');
-                        setExplorerOpen(true);
-                      }}
+                      onClick={() => { setActivePlaceholderId(folder.id); setExplorerMode('dir'); setExplorerOpen(true); }}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                     >
                       <FolderOpen size={14} />
                     </button>
                   </div>
 
-                  {/* Suffix + Extension + 推理提示 */}
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <Label className="text-[10px] text-muted-foreground shrink-0">Suffix:</Label>
-                      <Input
-                        value={folder.suffix || ''}
+                      <Label className="text-[10px] text-muted-foreground shrink-0">{t('dataPreload.folders.suffix')}:</Label>
+                      <Input value={folder.suffix || ''}
                         onChange={(e) => updateFolder(folder.id, { suffix: e.target.value })}
                         onBlur={() => reAnalyzeFolder(folder.id)}
-                        className="h-7 text-[11px] font-mono w-24"
-                      />
+                        className="h-7 text-[11px] font-mono w-24" />
                       <span className="text-muted-foreground text-[10px]">.</span>
-                      <Label className="text-[10px] text-muted-foreground shrink-0">Ext:</Label>
-                      <Input
-                        value={folder.extension || ''}
+                      <Label className="text-[10px] text-muted-foreground shrink-0">{t('dataPreload.folders.ext')}:</Label>
+                      <Input value={folder.extension || ''}
                         onChange={(e) => updateFolder(folder.id, { extension: e.target.value })}
-                        onBlur={() => reAnalyzeFolder(folder.id)} 
-                        className="h-7 text-[11px] font-mono w-16"
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive h-7 w-7 shrink-0 ml-auto"
-                        onClick={() => removeFolder(folder.id)}
-                      >
+                        onBlur={() => reAnalyzeFolder(folder.id)}
+                        className="h-7 text-[11px] font-mono w-16" />
+                      <Button variant="ghost" size="icon" className="text-destructive h-7 w-7 shrink-0 ml-auto"
+                        onClick={() => removeFolder(folder.id)}>
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
                     </div>
 
-                    {/* 🆕 推理信息 */}
                     {inf.sample ? (
                       <div className="flex items-center gap-2 text-[9px]">
                         <Search size={10} className="text-muted-foreground shrink-0" />
                         <span className="text-muted-foreground">
-                          auto inferred
-                          {inf.suffix && <span> suffix: <span className="font-mono text-amber-500">{inf.suffix || '(empty)'}</span></span>}
-                          {inf.extension && <span>, ext: <span className="font-mono text-primary">{inf.extension}</span></span>}
-                          {' from '}
+                          {t('dataPreload.folders.autoInferred')}
+                          {inf.suffix && <span> {t('dataPreload.folders.inferredSuffix')}: <span className="font-mono text-amber-500">{inf.suffix || '(empty)'}</span></span>}
+                          {inf.extension && <span>{t('dataPreload.folders.inferredExt')}: <span className="font-mono text-primary">{inf.extension}</span></span>}
+                          {' '}{t('dataPreload.folders.inferredFrom')}{' '}
                           <span className="font-mono text-foreground/70">
                             {inf.sample.split('/').pop() || inf.sample.split('\\').pop()}
                           </span>
                         </span>
                         {(suffixChanged || extChanged) && (
                           <button
-                            onClick={() => {
-                              updateFolder(folder.id, {
-                                suffix: inf.suffix,
-                                extension: inf.extension,
-                              });
-                            }}
+                            onClick={() => updateFolder(folder.id, { suffix: inf.suffix, extension: inf.extension })}
                             className="text-primary hover:underline ml-1"
                           >
-                            restore auto
+                            {t('dataPreload.folders.restoreAuto')}
                           </button>
                         )}
                       </div>
                     ) : (
-                      <div className="text-[9px] text-muted-foreground/50">
-                        no inference data
-                      </div>
+                      <div className="text-[9px] text-muted-foreground/50">{t('dataPreload.folders.noInferenceData')}</div>
                     )}
                   </div>
 
-                  {/* 图像信息 */}
                   <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-muted-foreground border-t border-border pt-2">
                     <span>📐 {folder.metadata.width}×{folder.metadata.height}</span>
                     <span>🎨 {folder.metadata.bands} bands</span>
@@ -579,7 +517,6 @@ const reAnalyzeFolder = async (folderId: string) => {
               );
             })}
 
-            {/* 空状态 */}
             {folders.length === 0 && (
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground border-2 border-dashed rounded-lg">
                 <UploadCloud className="w-8 h-8 mb-2 opacity-50" />
@@ -588,7 +525,7 @@ const reAnalyzeFolder = async (folderId: string) => {
             )}
           </div>
         );
-        
+
       case 'views':
         return (
           <div className="space-y-4">
@@ -604,7 +541,6 @@ const reAnalyzeFolder = async (folderId: string) => {
 
                 return (
                   <div key={view.id} className="p-4 border rounded-xl space-y-3">
-                    {/* 标题行 */}
                     <div className="flex items-center justify-between">
                       <span className={`px-3 py-1 text-xs font-bold rounded-full ${view.isMain ? 'bg-primary text-white' : 'bg-background border'}`}>
                         {view.isMain ? t('dataPreload.views.mainView') : `${t('dataPreload.views.augView')} ${index}`}
@@ -615,25 +551,21 @@ const reAnalyzeFolder = async (folderId: string) => {
                       </Button>
                     </div>
 
-                    {/* Folder 选择 */}
                     <div className="flex items-center gap-3">
-                      <Label className="text-[10px] font-bold text-muted-foreground uppercase shrink-0">Source Folder</Label>
+                      <Label className="text-[10px] font-bold text-muted-foreground uppercase shrink-0">{t('dataPreload.views.sourceFolder')}</Label>
                       <Select value={view.folderId} onValueChange={(val) => {
                         const sf = folders.find(f => f.id === val);
                         const numBands = sf?.metadata?.bands || 3;
                         updateView(view.id, { folderId: val, bands: numBands >= 3 ? [1, 2, 3] : [1], colormap: 'gray' });
                       }}>
                         <SelectTrigger className="h-8 text-xs flex-1" title={selectedFolder?.path}>
-                          <SelectValue placeholder="Select folder">
+                          <SelectValue placeholder={t('dataPreload.views.selectFolder')}>
                             {(() => {
                               const sf = folders.find(f => f.id === view.folderId);
-                              if (!sf) return "Select folder";
+                              if (!sf) return t('dataPreload.views.selectFolder');
                               const path = sf.path;
                               const maxLen = 70;
-                              if (path.length > maxLen) {
-                                return '...' + path.slice(-maxLen);
-                              }
-                              return path;
+                              return path.length > maxLen ? '...' + path.slice(-maxLen) : path;
                             })()}
                           </SelectValue>
                         </SelectTrigger>
@@ -645,17 +577,16 @@ const reAnalyzeFolder = async (folderId: string) => {
                       </Select>
                     </div>
 
-                    {/* 波段选择 */}
                     {view.folderId && (
                       <div className="space-y-2">
                         {isNotUint8 && (
                           <Alert variant="warning" className="py-1.5 px-3 text-[10px]">
-                            <Info className="w-3 h-3" />Non-uint8 data: {selectedFolder?.metadata.fileType}
+                            <Info className="w-3 h-3" />{t('dataPreload.views.nonUint8')}: {selectedFolder?.metadata.fileType}
                           </Alert>
                         )}
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-1.5">
-                            <Label className="text-[10px] text-muted-foreground uppercase">Channels</Label>
+                            <Label className="text-[10px] text-muted-foreground uppercase">{t('dataPreload.views.channels')}</Label>
                             <div className="flex flex-wrap gap-1">
                               {Array.from({ length: totalBands }, (_, i) => i + 1).map(b => {
                                 const isSelected = view.bands.includes(b);
@@ -676,7 +607,7 @@ const reAnalyzeFolder = async (folderId: string) => {
                           <div>
                             {view.bands.length === 1 && (
                               <div className="space-y-1.5">
-                                <Label className="text-[10px] text-muted-foreground">Colormap</Label>
+                                <Label className="text-[10px] text-muted-foreground">{t('dataPreload.views.colormap')}</Label>
                                 <Select value={view.colormap || 'gray'} onValueChange={(val) => updateView(view.id, { colormap: val })}>
                                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                                   <SelectContent>
@@ -694,12 +625,11 @@ const reAnalyzeFolder = async (folderId: string) => {
                             )}
                             {view.bands.length === 3 && (
                               <div className="space-y-1.5">
-                                <Label className="text-[10px] text-muted-foreground">RGB Mapping</Label>
+                                <Label className="text-[10px] text-muted-foreground">{t('dataPreload.views.rgbMapping')}</Label>
                                 <div className="flex gap-1.5">
                                   {['R', 'G', 'B'].map((ch, idx) => (
                                     <React.Fragment key={ch}>
-                                      <Select 
-                                        value={view.bands[idx]?.toString()}
+                                      <Select value={view.bands[idx]?.toString()}
                                         onValueChange={(val) => {
                                           const newBands = [...view.bands];
                                           newBands[idx] = parseInt(val);
@@ -738,7 +668,10 @@ const reAnalyzeFolder = async (folderId: string) => {
 
             {workspaceHasJson && !isCheckingWorkspace ? (
               <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 rounded-lg space-y-2">
-                <div className="flex items-center gap-2 text-amber-700"><Info className="w-4 h-4" /><span className="text-xs font-medium">Workspace contains annotation files. Path is locked.</span></div>
+                <div className="flex items-center gap-2 text-amber-700">
+                  <Info className="w-4 h-4" />
+                  <span className="text-xs font-medium">{t('dataPreload.workspace.locked')}</span>
+                </div>
                 <div className="text-xs font-mono truncate">{workspacePath || mainViewFolder?.path}</div>
               </div>
             ) : (
@@ -754,27 +687,17 @@ const reAnalyzeFolder = async (folderId: string) => {
                   </button>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  Default: <span className="font-mono">{mainViewFolder?.path || 'Not set'}</span>
+                  {t('dataPreload.workspace.default')}: <span className="font-mono">{mainViewFolder?.path || t('dataPreload.workspace.notSet')}</span>
                 </div>
               </div>
             )}
           </div>
         );
+
       default:
         return null;
     }
   };
-  const originalPaths = useRef<Record<string, string>>({});
-
-// 在 addFolder 后记录原始路径
-useEffect(() => {
-  folders.forEach(f => {
-    if (!originalPaths.current[f.id]) {
-      originalPaths.current[f.id] = f.path;
-    }
-  });
-}, [folders]);
-
 
   // ==========================================
   // 主渲染
@@ -782,7 +705,6 @@ useEffect(() => {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex flex-1 min-h-0">
-        {/* 左侧导航 */}
         <div className="w-[200px] shrink-0 border-r border-border bg-muted/20 flex flex-col">
           <div className="flex-1 overflow-y-auto p-3">
             {steps.map((step) => {
@@ -798,10 +720,7 @@ useEffect(() => {
                   <div className={`flex-1 py-2.5 px-3 min-w-0 text-xs truncate transition-colors ${
                     status === 'current' ? 'text-primary font-semibold' : status === 'done' ? 'text-foreground font-medium' : 'text-muted-foreground'
                   }`}>
-                    <span className="flex items-center gap-2">
-                      {step.icon}
-                      {step.label}
-                    </span>
+                    <span className="flex items-center gap-2">{step.label}</span>
                   </div>
                   {status === 'current' && <ChevronRight className="w-3 h-3 text-primary shrink-0 my-auto mr-2" />}
                 </button>
@@ -809,40 +728,34 @@ useEffect(() => {
             })}
           </div>
           <div className="p-3 border-t border-border space-y-1.5">
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />Configured</div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0" />Current</div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/25 shrink-0" />Pending</div>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />{t('dataPreload.legend.configured')}</div>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0" />{t('dataPreload.legend.current')}</div>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/25 shrink-0" />{t('dataPreload.legend.pending')}</div>
           </div>
         </div>
 
-        {/* 右侧内容 */}
         <div className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
             <div className="max-w-2xl">
-              
-              {/* 步骤标题 + Add 按钮 */}
               <div className="flex items-center justify-between mb-5">
-  <h3 className="text-sm font-bold">{steps.find(s => s.id === activeStep)?.label}</h3>
-  <div className="flex items-center gap-2">
-    {/* 🆕 Add View 按钮 — 仅 views 步骤，在 Reset 左侧 */}
-    {activeStep === 'views' && (
-      <Button onClick={handleAddView} variant="outline" size="sm" disabled={views.length >= maxViews}>
-        <Plus className="w-3.5 h-3.5 mr-1.5" />
-        {t('dataPreload.views.addView')}
-      </Button>
-    )}
-    {/* Reset 按钮 */}
-    <Button variant="ghost" size="sm"
-      disabled={(activeStep === 'folders' && folders.length === 0) || (activeStep === 'views' && views.length === 0)}
-      onClick={() => {
-        if (activeStep === 'folders') { clearFolders(); setInferredData({}); }
-        else if (activeStep === 'views') clearViews();
-        else if (activeStep === 'workspace') handleWorkspaceReset(); 
-      }}>
-      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />{t('common.reset')}
-    </Button>
-  </div>
-</div>
+                <h3 className="text-sm font-bold">{steps.find(s => s.id === activeStep)?.label}</h3>
+                <div className="flex items-center gap-2">
+                  {activeStep === 'views' && (
+                    <Button onClick={handleAddView} variant="outline" size="sm" disabled={views.length >= maxViews}>
+                      <Plus className="w-3.5 h-3.5 mr-1.5" />{t('dataPreload.views.addView')}
+                    </Button>
+                  )}
+                                    <Button variant="ghost" size="sm"
+                    disabled={(activeStep === 'folders' && folders.length === 0) || (activeStep === 'views' && views.length === 0)}
+                    onClick={() => {
+                      if (activeStep === 'folders') { clearFolders(); setInferredData({}); }
+                      else if (activeStep === 'views') clearViews();
+                      else if (activeStep === 'workspace') handleWorkspaceReset();
+                    }}>
+                    <RotateCcw className="w-3.5 h-3.5 mr-1.5" />{t('common.reset')}
+                  </Button>
+                </div>
+              </div>
 
               <div key={activeStep}>
                 {renderStepContent()}
@@ -852,22 +765,19 @@ useEffect(() => {
         </div>
       </div>
 
-            {/* 底部全局按钮 */}
+      {/* 底部全局按钮 */}
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
         <div className="flex items-center gap-6 text-sm">
           <div className="flex items-center gap-1.5">
-            <FolderOpen className="w-4 h-4 text-muted-foreground" />
-            <span className="text-muted-foreground">Folders:</span>
+            <span className="text-muted-foreground">{t('dataPreload.status.folders')}:</span>
             <span className="font-semibold">{folders.length}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Eye className="w-4 h-4 text-muted-foreground" />
-            <span className="text-muted-foreground">Views:</span>
+            <span className="text-muted-foreground">{t('dataPreload.status.views')}:</span>
             <span className="font-semibold">{views.length}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Save className="w-4 h-4 text-muted-foreground" />
-            <span className="text-muted-foreground">Workspace:</span>
+            <span className="text-muted-foreground">{t('dataPreload.status.workspace')}:</span>
             <span className={`font-semibold ${
               workspaceStatus === 'default' 
                 ? 'text-gray-500 dark:text-gray-400' 
@@ -879,31 +789,21 @@ useEffect(() => {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleExit}
-            disabled={isGlobalConfirming}
-          >
-            <LogOut className="w-3.5 h-3.5 mr-1.5" />
-            {t('common.exit') || 'Exit'}
+          <Button variant="outline" size="sm" onClick={handleExit} disabled={isGlobalConfirming}>
+            {t('common.exit')}
           </Button>
-          <Button
-            size="sm"
-            className="text-white font-semibold"
+          <Button size="sm" className="text-white font-semibold"
             onClick={handleGlobalConfirm}
-            disabled={folders.length === 0 || isGlobalConfirming}
-          >
+            disabled={folders.length === 0 || isGlobalConfirming}>
             {isGlobalConfirming ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {t('common.processing') || 'Processing...'}</>
+              <>{t('common.processing')}</>
             ) : (
-              <><Check className="w-3.5 h-3.5 mr-1.5" /> {t('dataPreload.confirmAndAlign') || 'Confirm & Start Align'}</>
+              <>{t('dataPreload.confirmAndAlign')}</>
             )}
           </Button>
         </div>
       </div>
 
-      {/* 文件浏览器 */}
       <FileExplorerDialog 
         open={explorerOpen}
         initialPath={activePlaceholderId ? placeholders.find(p => p.id === activePlaceholderId)?.path || '' : ''}
