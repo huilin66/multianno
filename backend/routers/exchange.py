@@ -2,6 +2,7 @@
 import json
 import os
 import random
+import shutil
 import uuid
 import warnings
 from datetime import datetime
@@ -9,10 +10,8 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-import tifffile
 from fastapi import APIRouter, HTTPException
 from models import ExportRequest, ImportRequest
-from PIL import Image
 from skimage import io
 from utils.format_converters import (
     coco_ann_to_shape,
@@ -614,6 +613,7 @@ async def import_from_images_only(req: ImportRequest):
 
 
 async def export_dataset(req: ExportRequest):
+    print(req)
     reporter = ExportReporter(req.target_dir, req.generate_report)
 
     stems = req.stems if req.stems else _collect_all_stems(req.source_dirs)
@@ -633,6 +633,9 @@ async def export_dataset(req: ExportRequest):
     test_stems = shuffled[n_train + n_val :]
 
     # 2. 创建目录（平层，不分子文件夹）
+    if os.path.exists(req.target_dir):
+        shutil.rmtree(req.target_dir, ignore_errors=True)
+    os.makedirs(req.target_dir, exist_ok=True)
     anno_dir = os.path.join(req.target_dir, req.anno_subdir)
     os.makedirs(anno_dir, exist_ok=True)
 
@@ -685,69 +688,78 @@ def _copy_images_for_stem(stem, source_dirs, view_configs, target_dir):
         dst_dir = os.path.join(target_dir, vc.subdir)
         os.makedirs(dst_dir, exist_ok=True)
 
+        src_suffix = vc.source_suffix
+        src_ext = vc.source_extension
         folder_path = vc.folder_path
-        suffix = vc.suffix
-        bands = vc.bands
-        transform = vc.transform
-        target_ext = vc.extension
 
+        out_suffix = vc.suffix
+        out_ext = vc.extension
+
+        # 严格匹配
         img_path = None
+        search_dirs = [folder_path] if folder_path else []
+        search_dirs.extend([sd for sd in source_dirs if sd != folder_path])
 
-        for ext in [".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp"]:
-            candidate = os.path.join(folder_path, f"{stem}{suffix}{ext}")
+        for sd in search_dirs:
+            candidate = os.path.join(sd, f"{stem}{src_suffix}.{src_ext}")
             if os.path.exists(candidate):
                 img_path = candidate
                 break
 
         if not img_path:
-            print(f"⚠️ Image not found for {stem}{suffix}.* in {folder_path}")
+            print(f"⚠️ Image not found: {stem}{src_suffix}.{src_ext}")
             continue
 
         try:
-            # 2. 读取图像
-            if img_path.lower().endswith((".tif", ".tiff")):
-                img = tifffile.imread(img_path)
-            else:
-                img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
-
+            # 读取图像
+            img = io.imread(img_path)
             if img is None:
-                print(f"⚠️ Failed to read: {img_path}")
                 continue
 
-            # 3. 提取波段
+            # 提取波段（保持 RGB 顺序）
+            bands = vc.bands  # [R, G, B] 如 [1, 2, 3]
             if len(img.shape) == 3 and img.shape[-1] >= max(bands):
-                selected = [b - 1 for b in bands]
+                selected = [b - 1 for b in bands]  # 0-based
                 img = img[:, :, selected]
-            elif len(img.shape) == 2:
-                pass  # 单波段，保持原样
-            else:
-                print(f"⚠️ Band mismatch: shape={img.shape}, bands={bands}")
-                continue
 
-            # 4. 应用 transform
+            # 🆕 导出时忽略 offset（视图对齐偏移），只应用 scale
+            transform = vc.transform
             scale_x = transform.get("scaleX", 1.0)
             scale_y = transform.get("scaleY", 1.0)
-            offset_x = int(transform.get("offsetX", 0))
-            offset_y = int(transform.get("offsetY", 0))
 
             if scale_x != 1.0 or scale_y != 1.0:
+                from skimage.transform import resize
+
                 h, w = img.shape[:2]
-                img = cv2.resize(img, (int(w * scale_x), int(h * scale_y)))
+                new_h = int(h * scale_y)
+                new_w = int(w * scale_x)
+                img = resize(
+                    img, (new_h, new_w), preserve_range=True, anti_aliasing=True
+                ).astype(img.dtype)
 
-            if offset_x != 0 or offset_y != 0:
-                M = np.float32([[1, 0, offset_x], [0, 1, offset_y]])
-                img = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]))
-
-            # 5. 归一化并保存
+            # 归一化到 uint8
             if img.dtype != np.uint8:
-                img_min, img_max = img.min(), img.max()
-                if img_max > img_min:
-                    img = ((img - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+                if img.max() > img.min():
+                    img = ((img - img.min()) / (img.max() - img.min()) * 255).astype(
+                        np.uint8
+                    )
                 else:
                     img = img.astype(np.uint8)
 
-            dst = os.path.join(dst_dir, f"{stem}{suffix}.{target_ext.lstrip('.')}")
-            Image.fromarray(img).save(dst)
+            # 确保 RGB 顺序
+            if len(img.shape) == 3 and img.shape[2] == 3:
+                pass  # skimage 默认 RGB，保持不变
+            elif len(img.shape) == 3 and img.shape[2] == 1:
+                img = img[:, :, 0]  # 单波段
+            # 2 波段 → 取第一个
+            elif len(img.shape) == 3 and img.shape[2] == 2:
+                img = img[:, :, 0]
+
+            # 保存
+            dst = os.path.join(dst_dir, f"{stem}{out_suffix}{out_ext}")
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                io.imsave(dst, img, check_contrast=False)
 
         except Exception as e:
             print(f"❌ Error processing {img_path}: {e}")

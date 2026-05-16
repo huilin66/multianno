@@ -113,7 +113,6 @@ def convert_to_yolo(
     yolo_lines = []
     stats = {"native": 0, "converted": 0, "discarded": 0}
     img_w, img_h = max(1, img_w), max(1, img_h)
-    print(allowed_shapes)
     for shape in shapes:
         label = shape.get("label")
         raw_type = shape.get("shape_type", "unknown").lower()

@@ -294,19 +294,21 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       const total = stems.length;
       const CHUNK_SIZE = 10;
 
+      // handleExecute 中
       const view_configs = viewConfigs.map(vc => {
         const view = views.find((v: any) => v.id === vc.viewId);
         const folder = folders.find((f: any) => f.id === view?.folderId);
-        
         return {
-          suffix: vc.suffix,
+          source_suffix: folder?.suffix || '',
+          source_extension: folder?.extension || 'tif',
+
+          suffix: vc.suffix, 
           extension: vc.extension,
           subdir: vc.subdir,
           keep_original: vc.keepOriginal,
-          // 🆕 传 folder 的完整信息
           folder_path: folder?.path || '',
           bands: view?.bands || [1, 2, 3],
-          transform: view?.transform || { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 },
+          transform: view?.transform || {},
         };
       });
       if (exportMode === 'dataset') {
@@ -883,41 +885,22 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     setViewConfigs(prev => prev.map(c => c.viewId === viewId ? { ...c, ...updates } : c));
   }, []);
 
-  useEffect(() => {
-    if (views.length === 0) return;
-    const configs: ViewExportConfig[] = views.map((v: any, i: number) => {
-      const folder = folders.find((f: any) => f.id === v.folderId);
-      const rawSuffix = folder?.suffix || '';
-      
-      // 🆕 智能拆分：suffix 可能包含扩展名
-      let suffix = rawSuffix;
-      let ext = '';
-      
-      const knownExts = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'];
-      for (const e of knownExts) {
-        if (rawSuffix.toLowerCase().endsWith(e)) {
-          suffix = rawSuffix.slice(0, -e.length);
-          ext = e;
-          break;
-        }
-      }
-      
-      // 如果 suffix 没有扩展名，从 fileType 推断
-      if (!ext) {
-        ext = IMAGE_EXT_MAP[folder?.metadata?.fileType?.toUpperCase() || ''] || '.tif';
-      }
-      
-      return {
-        viewId: v.id,
-        viewName: v.isMain ? 'Main View' : `Aug View ${i}`,
-        suffix,
-        extension: ext,
-        subdir: v.isMain ? 'main' : `aug_${i}`,
-        keepOriginal: false,
-      };
-    });
-    setViewConfigs(configs);
-  }, [views, folders]);
+// Card 3: Image Output 初始化
+useEffect(() => {
+  if (views.length === 0) return;
+  const configs: ViewExportConfig[] = views.map((v: any, i: number) => {
+    const folder = folders.find((f: any) => f.id === v.folderId);
+    return {
+      viewId: v.id,
+      viewName: v.isMain ? 'Main View' : `Aug View ${i}`,
+      suffix: folder?.suffix || '',           // 🆕 从 store 读取
+      extension: folder?.extension || 'tif',  // 🆕 从 store 读取
+      subdir: v.isMain ? 'main' : `aug_${i}`,
+      keepOriginal: false,
+    };
+  });
+  setViewConfigs(configs);
+}, [views, folders]);
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* 主体：左右分栏 */}

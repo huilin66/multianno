@@ -118,72 +118,62 @@
     "loadingAnnotations": "加载标注: "
   },
   "dataPreload": {
+    "steps": {
+      "folders": "文件夹",
+      "views": "视图",
+      "workspace": "工作空间"
+    },
     "folders": {
-      "title": "数据源文件夹",
-      "add": "添加文件夹",
-      "recent": "最近使用:",
-      "size": "尺寸:",
-      "bands": "波段数:",
-      "loaded": "成功加载:",
-      "skipped": "跳过:",
-      "suffix": "后缀规则:",
-      "emptyHint": "点击“添加文件夹”开始配置数据源",
-      "pathPlaceholder": "输入绝对路径或点击图标浏览本地文件...",
-      "suffixPlaceholder": "过滤后缀 (如 _T)",
-      "pendingCount": "个文件夹待确认",
-      "cancelAll": "取消所有",
-      "analyzing": "分析中...",
-      "confirmUpload": "确认并读取",
-      "clickToAdd": "点击添加"
+      "recent": "最近",
+      "pathPlaceholder": "请输入或点击文件夹路径...",
+      "emptyHint": "请添加文件夹开始使用",
+      "suffix": "后缀名",
+      "ext": "扩展名",
+      "autoInferred": "自动推理",
+      "inferredSuffix": "后缀名:",
+      "inferredExt": ", 扩展名:",
+      "inferredFrom": "基于",
+      "restoreAuto": "恢复 auto",
+      "noInferenceData": "无推理数据"
     },
     "views": {
-      "title": "多视图同步配置",
       "addView": "添加视图",
-      "max9": "(最多 9 个)",
-      "emptyHint": "暂无视图配置。请添加视图以建立数据映射关系。",
+      "emptyHint": "请配置视图开始使用",
       "mainView": "主视图",
-      "augView": "辅助视图",
-      "sourceFolder": "数据来源",
-      "selectFolder": "请选择文件夹...",
-      "stretchTitle": "数据动态拉伸:",
-      "stretchDesc1": "原始数据格式为",
-      "stretchDesc2": "，系统已自动将显示预览拉伸至 8-bit 以便可视化操作。",
-      "selectChannels": "波段选择 (请选择 1 或 3 个)",
-      "displayBand": "显示波段",
-      "band": "波段",
-      "colorMap": "伪彩色映射",
-      "selectColormap": "选择色带",
-      "rgbMapping": "RGB 通道映射",
-      "select1or3": "请准确选择 1 个或 3 个波段。",
-      "configuredCount": "个视图已配置",
-      "reset": "重置",
-      "confirmMap": "确认并进入视图对齐",
-      "confirmStart": "确认并开始标注"
+      "augView": "增强视图",
+      "sourceFolder": "源文件夹",
+      "selectFolder": "选择文件夹",
+      "channels": "通道",
+      "colormap": "颜色映射",
+      "rgbMapping": "RGB 映射",
+      "nonUint8": "非 uint8 数据"
     },
     "workspace": {
-      "title": "标注工作区路径",
-      "description": "标注工作区路径，用于存储标注数据。",
+      "description": "标注保存路径",
+      "locked": "工作空间包含标注文件。路径已锁定。",
       "default": "默认",
-      "reset": "重置",
-      "placeholder": "请选择标注工作区路径...",
-      "browse": "浏览文件夹...",
-      "customPathHint": "自定义路径与主视图文件夹路径不同",
-      "emptyHint": "将默认使用主视图文件夹路径",
-      "confirm": "确认",
-      "saving": "保存..."
+      "notSet": "未设置"
     },
+    "status": {
+      "folders": "文件夹",
+      "views": "视图",
+      "workspace": "工作空间"
+    },
+    "legend": {
+      "configured": "已配置",
+      "current": "当前",
+      "pending": "待处理"
+    },
+    "confirmAndAlign": "确认 & 开始对齐",
     "alerts": {
-      "cancelFolders": "确定要取消所有未确认的路径吗？",
-      "resetViews": "确定要清空所有视图配置吗？",
-      "noImagesFound": "Python 未能在该路径下找到图片数据，请检查路径是否正确。",
-      "noCommonStems": "警告：您选择的文件夹中没有找到任何同名图像，无法建立协同视图！",
-      "backendFailed": "连接 Python 后端失败，请确认 FastAPI 正在运行。",
-      "confirmExtent": "确定要以当前的视图配置进入 View Extent Check (多图配准) 阶段吗？",
-      "confirmSingleView": "当前只配置了 1 个视图。确定要以此配置直接开始标注吗？\n(这将会跳过配准阶段，直接保存项目配置并进入工作区)",
-      "exportSuccess": "✅ 导出成功！\n\nproject_meta.json 已保存到本地。\n即将为您进入标注工作区...",
-      "exportCancelled": "导出已取消或失败。是否仍要强制进入标注工作区？"
-    },
-    "confirmAndAlign": "确认并开始标注"
+      "noImagesFound": "未找到图像",
+      "backendFailed": "后连接失败",
+      "noFoldersConfigured": "请配置至少一个文件夹",
+      "noMainView": "请设置主视图",
+      "resetViews": "重置所有视图？",
+      "confirmExit": "退出前是否保存配置？",
+      "saveFailed": "保存配置失败"
+    }
   },
   "viewExtent": {
     "errors": {
@@ -399,6 +389,7 @@
     "exit": "退出",
     "failed": "失败",
     "loading": "加载中...",
+    "processing": "处理中...",
     "reset": "重置",
     "running": "运行中...",
     "success": "成功",

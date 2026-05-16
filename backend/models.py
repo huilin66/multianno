@@ -102,6 +102,8 @@ class ViewExportConfig(BaseModel):
     folder_path: str = ""
     bands: list[int] = [1, 2, 3]
     transform: dict = {}
+    source_suffix: str = ""
+    source_extension: str = "tif"
 
 
 class ExportRequest(BaseModel):
