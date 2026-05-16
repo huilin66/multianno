@@ -388,6 +388,7 @@
       "reportHint": "Generate a report with export statistics after the export.",
       "targetRequired": "Target folder is required before export."
     },
+    "readyToExport": "Confirm Export scene groups:",
     "exporting": "Exporting..."
   },
   "common": {
@@ -396,6 +397,7 @@
     "edit": "Edit",
     "error": "Error",
     "exit": "Exit",
+    "failed": "Failed",
     "loading": "Loading...",
     "reset": "Reset",
     "running": "Running...",

@@ -91,6 +91,7 @@ export const IMAGE_EXT_MAP: Record<string, string> = {
   'JPG': '.jpg',
   'BMP': '.bmp',
 };
+export const SUPPORTED_IMAGE_EXTENSIONS = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp', '.TIF', '.TIFF', '.PNG', '.JPG', '.JPEG', '.BMP'];
 
 // ==========================================
 // 3. shape compatibility mapping

@@ -1,23 +1,25 @@
 # backend/routers/exchange.py
 import json
 import os
+import random
 import uuid
 import warnings
 from datetime import datetime
 from pathlib import Path
 
-import cv2  # 用于读取图片尺寸
+import cv2
+import numpy as np
+import tifffile
 from fastapi import APIRouter, HTTPException
-from models import ExportRequest, ImportRequest  # 🌟 引入拆分后的极简模型
+from models import ExportRequest, ImportRequest
+from PIL import Image
 from skimage import io
-
-# 🌟 从你完美的 format_converters 引入所有需要的纯函数
 from utils.format_converters import (
-    coco_ann_to_shape,  # <- 导入所需
+    coco_ann_to_shape,
     convert_to_coco_anns,
     convert_to_yolo,
     filter_multianno,
-    mask_to_shapes,  # <- 新增
+    mask_to_shapes,
     render_mask_array,
     yolo_to_shapes,
 )
@@ -81,13 +83,16 @@ async def handle_export(req: ExportRequest):
     if not os.path.exists(req.target_dir):
         os.makedirs(req.target_dir, exist_ok=True)
 
+    if req.export_mode == "dataset":
+        return await export_dataset(req)
+
     if req.format == "multianno":
         return await export_to_multianno(req)
     elif req.format == "yolo":
         return await export_to_yolo(req)
     elif req.format == "coco":
         return await export_to_coco(req)
-    elif req.format == "images_only":
+    elif req.format == "mask":
         return await export_to_images_only(req)
     else:
         raise HTTPException(status_code=400, detail="不支持的导出格式")
@@ -437,7 +442,6 @@ async def import_from_multianno(req: ImportRequest):
     if not os.path.exists(req.source_path):
         raise HTTPException(status_code=404, detail="源目录不存在")
 
-    print(f"import_from {req.source_path}")
     imported_count = 0
     processed_stems = set()
     for json_file in os.listdir(req.source_path):
@@ -465,8 +469,6 @@ async def import_from_multianno(req: ImportRequest):
 
         # 🌟 修正 3：目标路径必须是绝对纯净的 base_stem.json
         target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
-
-        print(f"try to load {target_json_path} base {json_file}")
 
         # 🌟 增加一道保险：防止用户把 source 和 target 选成同一个文件夹导致死循环追加
         if (
@@ -609,3 +611,227 @@ async def import_from_images_only(req: ImportRequest):
         "status": "success",
         "message": msg,
     }
+
+
+async def export_dataset(req: ExportRequest):
+    reporter = ExportReporter(req.target_dir, req.generate_report)
+
+    stems = req.stems if req.stems else _collect_all_stems(req.source_dirs)
+    if not stems:
+        raise HTTPException(status_code=400, detail="未找到任何场景")
+
+    # 1. 随机分割
+    random.seed(req.random_seed)
+    shuffled = sorted(stems)
+    random.shuffle(shuffled)
+
+    n_train = int(len(shuffled) * req.split.get("train", 80) / 100)
+    n_val = int(len(shuffled) * req.split.get("val", 15) / 100)
+
+    train_stems = shuffled[:n_train]
+    val_stems = shuffled[n_train : n_train + n_val]
+    test_stems = shuffled[n_train + n_val :]
+
+    # 2. 创建目录（平层，不分子文件夹）
+    anno_dir = os.path.join(req.target_dir, req.anno_subdir)
+    os.makedirs(anno_dir, exist_ok=True)
+
+    for vc in req.view_configs:
+        d = os.path.join(req.target_dir, vc.subdir)
+        os.makedirs(d, exist_ok=True)
+
+    # 3. 导出标注 + 复制图像
+    exported_count = 0
+    for j_path in get_native_jsons(req.source_dirs):
+        with open(j_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        stem = data.get("stem", Path(j_path).stem)
+        if stem not in shuffled:
+            continue  # 不在当前批次，跳过
+
+        # 导出标注
+        _export_annotation_for_stem(data, stem, anno_dir, req, reporter)
+        exported_count += 1
+
+        # 复制/转换图像
+        _copy_images_for_stem(stem, req.source_dirs, req.view_configs, req.target_dir)
+
+    # 4. 生成 split 文件
+    _write_split_files(
+        req.target_dir, req.split_files, train_stems, val_stems, test_stems
+    )
+
+    # 5. classes.txt
+    with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
+        f.write("\n".join(req.selected_classes))
+
+    reporter.save_report(req.task_type, req.format)
+
+    return {
+        "status": "success",
+        "message": f"Dataset: 导出 {exported_count} 个场景",
+        "split": {
+            "train": len(train_stems),
+            "val": len(val_stems),
+            "test": len(test_stems),
+        },
+    }
+
+
+def _copy_images_for_stem(stem, source_dirs, view_configs, target_dir):
+    """复制源图像到目标目录"""
+    for vc in view_configs:
+        dst_dir = os.path.join(target_dir, vc.subdir)
+        os.makedirs(dst_dir, exist_ok=True)
+
+        folder_path = vc.folder_path
+        suffix = vc.suffix
+        bands = vc.bands
+        transform = vc.transform
+        target_ext = vc.extension
+
+        img_path = None
+
+        for ext in [".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp"]:
+            candidate = os.path.join(folder_path, f"{stem}{suffix}{ext}")
+            if os.path.exists(candidate):
+                img_path = candidate
+                break
+
+        if not img_path:
+            print(f"⚠️ Image not found for {stem}{suffix}.* in {folder_path}")
+            continue
+
+        try:
+            # 2. 读取图像
+            if img_path.lower().endswith((".tif", ".tiff")):
+                img = tifffile.imread(img_path)
+            else:
+                img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+
+            if img is None:
+                print(f"⚠️ Failed to read: {img_path}")
+                continue
+
+            # 3. 提取波段
+            if len(img.shape) == 3 and img.shape[-1] >= max(bands):
+                selected = [b - 1 for b in bands]
+                img = img[:, :, selected]
+            elif len(img.shape) == 2:
+                pass  # 单波段，保持原样
+            else:
+                print(f"⚠️ Band mismatch: shape={img.shape}, bands={bands}")
+                continue
+
+            # 4. 应用 transform
+            scale_x = transform.get("scaleX", 1.0)
+            scale_y = transform.get("scaleY", 1.0)
+            offset_x = int(transform.get("offsetX", 0))
+            offset_y = int(transform.get("offsetY", 0))
+
+            if scale_x != 1.0 or scale_y != 1.0:
+                h, w = img.shape[:2]
+                img = cv2.resize(img, (int(w * scale_x), int(h * scale_y)))
+
+            if offset_x != 0 or offset_y != 0:
+                M = np.float32([[1, 0, offset_x], [0, 1, offset_y]])
+                img = cv2.warpAffine(img, M, (img.shape[1], img.shape[0]))
+
+            # 5. 归一化并保存
+            if img.dtype != np.uint8:
+                img_min, img_max = img.min(), img.max()
+                if img_max > img_min:
+                    img = ((img - img_min) / (img_max - img_min) * 255).astype(np.uint8)
+                else:
+                    img = img.astype(np.uint8)
+
+            dst = os.path.join(dst_dir, f"{stem}{suffix}.{target_ext.lstrip('.')}")
+            Image.fromarray(img).save(dst)
+
+        except Exception as e:
+            print(f"❌ Error processing {img_path}: {e}")
+            import traceback
+
+            traceback.print_exc()
+
+
+def _export_annotation_for_stem(data, stem, target_subdir, req, reporter):
+    """导出单个场景的标注文件"""
+    base_stem = stem
+    shapes = data.get("shapes", [])
+
+    if req.format == "yolo":
+        yolo_lines, stats = convert_to_yolo(
+            shapes,
+            data.get("imageWidth", 1),
+            data.get("imageHeight", 1),
+            req.selected_classes,
+            req.allowed_shapes,
+            req.task_type,
+        )
+        if yolo_lines:
+            out_path = os.path.join(
+                target_subdir, f"{base_stem}{req.custom_suffix}{req.extension}"
+            )
+            with open(out_path, "w") as f:
+                f.write("\n".join(yolo_lines))
+            reporter.log_scene(base_stem, stats)
+            return True
+
+    elif req.format == "coco":
+        # COCO 全量导出在最后
+        return True
+
+    elif req.format == "multianno":
+        filtered_shapes, stats = filter_multianno(
+            shapes, req.selected_classes, req.allowed_shapes
+        )
+        if filtered_shapes:
+            data["shapes"] = filtered_shapes
+            out_path = os.path.join(
+                target_subdir, f"{base_stem}{req.custom_suffix}{req.extension}"
+            )
+            with open(out_path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            reporter.log_scene(base_stem, stats)
+            return True
+
+    elif req.format == "mask":
+        img_w, img_h = data.get("imageWidth"), data.get("imageHeight")
+        if img_w and img_h:
+            mask, stats = render_mask_array(
+                shapes, img_w, img_h, req.selected_classes, req.allowed_shapes
+            )
+            out_path = os.path.join(
+                target_subdir, f"{base_stem}{req.custom_suffix}{req.extension}"
+            )
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                io.imsave(out_path, mask, check_contrast=False)
+            reporter.log_scene(base_stem, stats)
+            return True
+
+    return False
+
+
+def _write_split_files(target_dir, split_files, train, val, test):
+    """生成 train.txt, val.txt, test.txt"""
+    subsets = {
+        split_files.get("train", "train.txt"): train,
+        split_files.get("val", "val.txt"): val,
+        split_files.get("test", "test.txt"): test,
+    }
+    for filename, stems in subsets.items():
+        with open(os.path.join(target_dir, filename), "w") as f:
+            f.write("\n".join(stems))
+
+
+def _collect_all_stems(source_dirs):
+    """收集所有 stem"""
+    stems = []
+    for j_path in get_native_jsons(source_dirs):
+        with open(j_path, "r") as f:
+            data = json.load(f)
+        stems.append(data.get("stem", Path(j_path).stem))
+    return stems

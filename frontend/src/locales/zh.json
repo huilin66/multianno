@@ -388,6 +388,7 @@
       "reportHint": "导出后生成报告，包含导出统计信息。",
       "targetRequired": "导出前必须指定目标文件夹。"
     },
+    "readyToExport": "准备导出场景组:",
     "exporting": "导出中..."
   },
   "common": {
@@ -396,6 +397,7 @@
     "edit": "编辑",
     "error": "错误",
     "exit": "退出",
+    "failed": "失败",
     "loading": "加载中...",
     "reset": "重置",
     "running": "运行中...",

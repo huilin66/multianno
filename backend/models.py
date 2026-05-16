@@ -42,8 +42,8 @@ class BatchDeleteAttributeRequest(BaseModel):
 
 class SAMInitRequest(BaseModel):
     image_path: Optional[str] = None
-    image_data: Optional[str] = None  # 接收 base64 字符串
-    image_size: Optional[int] = None  # 🌟 修复：补上前端传来的 image_size 字段！
+    image_data: Optional[str] = None
+    image_size: Optional[int] = None
     crop_x: Optional[int] = 0
     crop_y: Optional[int] = 0
     crop_w: Optional[int] = 0
@@ -53,7 +53,7 @@ class SAMInitRequest(BaseModel):
 class SAMPoint(BaseModel):
     x: float
     y: float
-    label: int  # 1: 正样本(绿点), 0: 负样本(红点)
+    label: int
 
 
 class SAMInteractiveRequest(BaseModel):
@@ -61,14 +61,14 @@ class SAMInteractiveRequest(BaseModel):
     points: Optional[List[SAMPoint]] = None
     box: Optional[List[float]] = None
     conf: Optional[float] = 0.25
-    image_size: Optional[int] = 644  # 🌟 修复：让 predict 接口也能接收尺寸
+    image_size: Optional[int] = 644
 
 
 class SAMAutoRequest(BaseModel):
     image_path: str
     texts: List[str]
     conf: Optional[float] = 0.25
-    image_size: Optional[int] = 644  # 🌟 修复：加上图片尺寸
+    image_size: Optional[int] = 644
 
 
 class AIConfigRequest(BaseModel):
@@ -79,7 +79,7 @@ class AIConfigRequest(BaseModel):
 
 class StatRequest(BaseModel):
     save_dirs: List[str]
-    force_refresh: Optional[bool] = False  # 🌟 新增强制刷新参数
+    force_refresh: Optional[bool] = False
 
 
 class ApplyAttributeRequest(BaseModel):
@@ -94,16 +94,34 @@ class MkdirRequest(BaseModel):
     name: str
 
 
+class ViewExportConfig(BaseModel):
+    suffix: str = ""
+    extension: str = ".tif"
+    subdir: str = "images"
+    keep_original: bool = False
+    folder_path: str = ""
+    bands: list[int] = [1, 2, 3]
+    transform: dict = {}
+
+
 class ExportRequest(BaseModel):
-    source_dirs: List[str]
+    source_dirs: list[str]
     target_dir: str
-    format: str
     task_type: str
-    selected_classes: List[str]
-    allowed_shapes: List[str]
+    format: str
+    selected_classes: list[str] = []
+    allowed_shapes: list[str] = []
     custom_suffix: str = ""
-    extension: str = ""
+    extension: str = ".txt"
     generate_report: bool = True
+    stems: list[str] = []
+    export_mode: str = "annotation"
+
+    anno_subdir: str = "labels"
+    view_configs: list[ViewExportConfig] = []
+    split: dict = {}
+    random_seed: int = 42
+    split_files: dict = {}
 
 
 class ImportRequest(BaseModel):
@@ -139,7 +157,7 @@ class VisExportRequest(BaseModel):
     view_configs: Optional[List[Dict[str, Any]]] = None
     local_configs: Optional[List[Dict[str, Any]]] = None
     render_settings: Dict[str, Any]
-    export_config: Dict[str, Any]  # 必须提供导出配置
+    export_config: Dict[str, Any]
     anno_config: Optional[Dict[str, Any]] = None
     pred_configs: Optional[List[Dict[str, Any]]] = None
 

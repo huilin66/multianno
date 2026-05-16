@@ -294,6 +294,21 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       const total = stems.length;
       const CHUNK_SIZE = 10;
 
+      const view_configs = viewConfigs.map(vc => {
+        const view = views.find((v: any) => v.id === vc.viewId);
+        const folder = folders.find((f: any) => f.id === view?.folderId);
+        
+        return {
+          suffix: vc.suffix,
+          extension: vc.extension,
+          subdir: vc.subdir,
+          keep_original: vc.keepOriginal,
+          // 🆕 传 folder 的完整信息
+          folder_path: folder?.path || '',
+          bands: view?.bands || [1, 2, 3],
+          transform: view?.transform || { scaleX: 1, scaleY: 1, offsetX: 0, offsetY: 0 },
+        };
+      });
       if (exportMode === 'dataset') {
         for (let i = 0; i < total; i += CHUNK_SIZE) {
           const chunk = stems.slice(i, i + CHUNK_SIZE);
@@ -308,12 +323,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
             stems: chunk,
             export_mode: 'dataset',
             anno_subdir: annoSubdir,
-            view_configs: viewConfigs.map(vc => ({
-              suffix: vc.suffix,
-              extension: vc.extension,
-              subdir: vc.subdir,
-              keep_original: vc.keepOriginal,
-            })),
+            view_configs: view_configs,
             split: { train: splitTrain, val: splitVal, test: splitTest },
             random_seed: randomSeed,
             split_files: {
@@ -710,7 +720,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                   range
                   min={0}
                   max={100}
-                  step={0.1}
+                  step={1}W
                   onChange={([v1, v2]: number[]) => {
                     const train = Math.round(v1 * 10) / 10;
                     const val = Math.round((v2 - v1) * 10) / 10;
@@ -1039,15 +1049,15 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           </div>
         ) : exportStatus === 'done' ? (
           <div className="flex items-center gap-2 text-xs text-emerald-600">
-            {t('dataExport.success')}
+            {t('common.success')}
           </div>
         ) : exportStatus === 'error' ? (
           <div className="flex items-center gap-2 text-xs text-red-500">
-            {t('dataExport.failed')}
+            {t('common.failed')}
           </div>
         ) : (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{t('dataExport.readyToExport', { count: stems.length })}</span>
+            <span>{t('dataExport.readyToExport')} {stems.length}</span>
           </div>
         )}
 
