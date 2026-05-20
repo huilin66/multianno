@@ -456,7 +456,6 @@ async def infer_suffix(req: InferSuffixRequest):
         _, folder, image_files = match[0]
         first_stem = Path(image_files[0]).stem  # 'DJI_20260211154928_0008_T'
         ext = Path(image_files[0]).suffix  # '.JPG'
-        ext_clean = ext.lstrip(".")
 
         # 去掉公共前缀
         if common_prefix and first_stem.startswith(common_prefix):
@@ -470,7 +469,7 @@ async def infer_suffix(req: InferSuffixRequest):
             {
                 "folder_index": idx,
                 "suffix": suffix,  # 'T' / 'V'
-                "extension": ext_clean,  # 'jpg'
+                "extension": ext,  # 'jpg'
                 "sample_file": image_files[0],
                 "total_files": len(image_files),
             }

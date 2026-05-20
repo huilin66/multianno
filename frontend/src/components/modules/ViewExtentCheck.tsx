@@ -498,8 +498,8 @@ const getPreviewUrl = (view: typeof mainView) => {
       updateView(activeAugView.id, { 
         transform: { 
           ...tempTransformRef.current,
-          crop: { ...activeCrop } 
-        }
+        },
+        crop: { ...activeCrop }
       });
     };
 

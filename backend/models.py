@@ -104,6 +104,7 @@ class ViewExportConfig(BaseModel):
     transform: dict = {}
     source_suffix: str = ""
     source_extension: str = "tif"
+    crop: dict = {}
 
 
 class ExportRequest(BaseModel):

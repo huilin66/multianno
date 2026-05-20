@@ -1,5 +1,7 @@
 # backend/utils/format_converters.py
+import json
 import math
+import os
 import uuid
 
 import cv2
@@ -104,8 +106,10 @@ def filter_multianno(
 
 def ma_to_yolo(ma_path, yolo_path, selected_classes, allowed_shapes, task_type):
     """将 MultiAnno 格式的标注文件转换为 YOLO 格式"""
+    if not os.path.exists(yolo_path):
+        return False
     with open(ma_path, "r", encoding="utf-8") as f:
-        data = ma_path.load(f)
+        data = json.load(f)
     shapes = data.get("shapes", [])
     yolo_lines, stats = convert_to_yolo(
         shapes,

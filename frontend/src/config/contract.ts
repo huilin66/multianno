@@ -63,12 +63,12 @@ export interface ProjectMetaContract {
     renderMode: 'rgb' | ColormapNames;   
     isMain: boolean;             
     transform: {
-      crop: { t: number; r: number; b: number; l: number }; 
       scaleX: number;
       scaleY: number;
       offsetX: number;           
       offsetY: number;
     };
+    crop: { t: number; r: number; b: number; l: number }; 
     settings?: {
       brightness?: number;
       contrast?: number;

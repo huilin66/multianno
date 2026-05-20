@@ -622,6 +622,8 @@ async def export_dataset(req: ExportRequest):
     if not stems or len(stems) == 0:
         raise HTTPException(status_code=400, detail="未找到任何场景")
 
+    source_dir = req.source_dirs[0]
+
     # 1. 随机分割
     random.seed(req.random_seed)
     shuffled = sorted(stems)
@@ -651,7 +653,7 @@ async def export_dataset(req: ExportRequest):
         if stem not in shuffled:
             continue
         result_yolo = ma_to_yolo(
-            os.path.join(req.source_dirs, f"{stem}.json"),
+            os.path.join(source_dir, f"{stem}.json"),
             os.path.join(anno_dir, f"{stem}{req.custom_suffix}{req.extension}"),
             req.selected_classes,
             req.allowed_shapes,
@@ -659,7 +661,7 @@ async def export_dataset(req: ExportRequest):
         )
         exported_count += int(result_yolo)
 
-        _copy_images_for_stem(stem, req.source_dirs, req.view_configs, req.target_dir)
+        _copy_images_for_stem(stem, req.view_configs, req.target_dir)
 
     # 4. 生成 split 文件
     _write_split_files(
@@ -683,7 +685,7 @@ async def export_dataset(req: ExportRequest):
     }
 
 
-def _copy_images_for_stem(stem, source_dirs, view_configs, target_dir):
+def _copy_images_for_stem(stem, view_configs, target_dir):
     """复制源图像到目标目录"""
     for vc in view_configs:
         dst_dir = os.path.join(target_dir, vc.subdir)
@@ -710,14 +712,26 @@ def _copy_images_for_stem(stem, source_dirs, view_configs, target_dir):
                 continue
 
             bands = vc.bands
-            if len(img.shape) > 2 and len(img.shape[2]) != len(bands):
+            if len(img.shape) > 2 and img.shape[2] != len(bands):
                 selected = [b - 1 for b in bands]
                 img = img[:, :, selected]
 
+            crop = vc.crop
+            crop_t, crop_r, crop_b, crop_l = (
+                crop.get("t", 0),
+                crop.get("r", 0),
+                crop.get("b", 0),
+                crop.get("l", 0),
+            )
+            if sum([crop_t, crop_r, crop_b, crop_l]) != 0:
+                h, w = img.shape[:2]
+                img = img[crop_t : h - crop_b, crop_l : w - crop_r]
+
             transform = vc.transform
+            h, w = img.shape[:2]
+            img = img[crop_t : h - crop_b, crop_l : w - crop_r]
             scale_x = transform.get("scaleX", 1.0)
             scale_y = transform.get("scaleY", 1.0)
-
             if scale_x != 1.0 or scale_y != 1.0:
                 h, w = img.shape[:2]
                 new_h = int(h * scale_y)
@@ -726,85 +740,15 @@ def _copy_images_for_stem(stem, source_dirs, view_configs, target_dir):
                     img, (new_h, new_w), preserve_range=True, anti_aliasing=True
                 ).astype(img.dtype)
 
-            # 确保 RGB 顺序
-            if len(img.shape) == 3 and img.shape[2] == 3:
-                pass  # skimage 默认 RGB，保持不变
-            elif len(img.shape) == 3 and img.shape[2] == 1:
-                img = img[:, :, 0]  # 单波段
-            # 2 波段 → 取第一个
-            elif len(img.shape) == 3 and img.shape[2] == 2:
-                img = img[:, :, 0]
-
-            # 保存
-            dst = os.path.join(dst_dir, f"{stem}{out_suffix}{out_ext}")
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
-                io.imsave(dst, img, check_contrast=False)
+                io.imsave(out_img_path, img, check_contrast=False)
 
         except Exception as e:
             print(f"❌ Error processing {src_img_path}: {e}")
             import traceback
 
             traceback.print_exc()
-
-
-def _export_annotation_for_stem(data, stem, target_subdir, req, reporter):
-    """导出单个场景的标注文件"""
-    base_stem = stem
-    shapes = data.get("shapes", [])
-
-    if req.format == "yolo":
-        yolo_lines, stats = convert_to_yolo(
-            shapes,
-            data.get("imageWidth", 1),
-            data.get("imageHeight", 1),
-            req.selected_classes,
-            req.allowed_shapes,
-            req.task_type,
-        )
-        if yolo_lines:
-            out_path = os.path.join(
-                target_subdir, f"{base_stem}{req.custom_suffix}{req.extension}"
-            )
-            with open(out_path, "w") as f:
-                f.write("\n".join(yolo_lines))
-            reporter.log_scene(base_stem, stats)
-            return True
-
-    elif req.format == "coco":
-        # COCO 全量导出在最后
-        return True
-
-    elif req.format == "multianno":
-        filtered_shapes, stats = filter_multianno(
-            shapes, req.selected_classes, req.allowed_shapes
-        )
-        if filtered_shapes:
-            data["shapes"] = filtered_shapes
-            out_path = os.path.join(
-                target_subdir, f"{base_stem}{req.custom_suffix}{req.extension}"
-            )
-            with open(out_path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            reporter.log_scene(base_stem, stats)
-            return True
-
-    elif req.format == "mask":
-        img_w, img_h = data.get("imageWidth"), data.get("imageHeight")
-        if img_w and img_h:
-            mask, stats = render_mask_array(
-                shapes, img_w, img_h, req.selected_classes, req.allowed_shapes
-            )
-            out_path = os.path.join(
-                target_subdir, f"{base_stem}{req.custom_suffix}{req.extension}"
-            )
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore")
-                io.imsave(out_path, mask, check_contrast=False)
-            reporter.log_scene(base_stem, stats)
-            return True
-
-    return False
 
 
 def _write_split_files(target_dir, split_files, train, val, test):
@@ -817,13 +761,3 @@ def _write_split_files(target_dir, split_files, train, val, test):
     for filename, stems in subsets.items():
         with open(os.path.join(target_dir, filename), "w") as f:
             f.write("\n".join(stems))
-
-
-def _collect_all_stems(source_dirs):
-    """收集所有 stem"""
-    stems = []
-    for j_path in get_native_jsons(source_dirs):
-        with open(j_path, "r") as f:
-            data = json.load(f)
-        stems.append(data.get("stem", Path(j_path).stem))
-    return stems

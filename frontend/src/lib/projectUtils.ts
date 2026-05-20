@@ -56,12 +56,12 @@ export function generateProjectMetaConfig(state: AppState): ProjectMetaContract 
             renderMode: v.bands.length === 3 ? 'rgb' : (v.colormap || 'gray'),
             isMain: v.isMain,
             transform: {
-              crop: v.crop || { t: 0, r: 100, b: 100, l: 0 },
               scaleX: v.transform?.scaleX ?? 1,
               scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
               offsetX: v.transform?.offsetX ?? 0,
               offsetY: v.transform?.offsetY ?? 0
             },
+            crop: v.crop,
             settings: v.settings
           };
         })

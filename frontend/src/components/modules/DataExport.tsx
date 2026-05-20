@@ -152,16 +152,13 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   };
   useEffect(() => {
     if (views.length === 0) return;
-    const extMap: Record<string, string> = {
-      'TIFF': '.tif', 'TIF': '.tif', 'PNG': '.png', 'JPEG': '.jpg', 'JPG': '.jpg',
-    };
     const configs: ViewExportConfig[] = views.map((v: any, i: number) => {
       const folder = folders.find((f: any) => f.id === v.folderId);
       return {
         viewId: v.id,
         viewName: v.isMain ? 'Main View' : `Aug View ${i}`,
         suffix: folder?.suffix || '',
-        extension: extMap[folder?.metadata?.fileType?.toUpperCase() || ''] || '.tif',
+        extension: folder?.extension || '.png',
         subdir: `${v.isMain ? 'main' : `aug_${i}`}`,
         keepOriginal: false,
       };
@@ -312,6 +309,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           folder_path: folder?.path || '',
           bands: view?.bands || [1, 2, 3],
           transform: view?.transform || {},
+          crop: view?.crop || {},
         };
       });
 
@@ -674,7 +672,8 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           </div>
         );
         
-      case 'split': {
+      case 'split': 
+      {
         // 1. 动态计算滑块条的 3 色渐变背景
         const p1 = splitTrain;
         const p2 = splitTrain + splitVal;

@@ -79,6 +79,11 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
                     {t('projectMeta.folders.suffix')}: {folder.suffix}
                   </span>
                 )}
+                {folder.extension && (
+                  <span className="text-amber-600 dark:text-amber-500 font-mono font-bold bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-200 dark:border-amber-500/20 shrink-0">
+                    {t('projectMeta.folders.extension')}: {folder.extension}
+                  </span>
+                )}
               </div>
               
               <div className="grid grid-cols-3 gap-2">
@@ -170,7 +175,7 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
                     <div className="flex justify-between">
                       <span className="text-neutral-500">{t('projectMeta.views.crop')}:</span>
                       <span className="text-amber-600 dark:text-amber-400">
-                        {view.transform.crop.t.toFixed(1)}%, {view.transform.crop.r.toFixed(1)}%, {view.transform.crop.b.toFixed(1)}%, {view.transform.crop.l.toFixed(1)}%
+                        {view.crop.t.toFixed(1)}%, {view.crop.r.toFixed(1)}%, {view.crop.b.toFixed(1)}%, {view.crop.l.toFixed(1)}%
                       </span>
                     </div>
                     <div className="flex justify-between">
