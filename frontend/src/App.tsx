@@ -71,9 +71,6 @@ export default function App() {
               <DropdownMenuItem onClick={() => setActiveModule('extent')}>
                 <Folders className="w-4 h-4 mr-2" /> {t('menu.viewExtentCheck')}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('meta')}>
-                <Database className="w-4 h-4 mr-2" /> {t('menu.projectMeta')}
-              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('taxonomy')}>
                 <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
               </DropdownMenuItem>
@@ -85,6 +82,9 @@ export default function App() {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('local_visualization')}>
                 <Airplay className="w-4 h-4 mr-2" /> {t('menu.localVisualization')}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setActiveModule('meta')}>
+                <Database className="w-4 h-4 mr-2" /> {t('menu.projectMeta')}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -393,20 +393,6 @@ export default function App() {
       </Dialog>
 
       <Dialog
-        open={activeModule === 'meta'}
-        onOpenChange={(open) => !open && setActiveModule('workspace')}
-      >
-        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden">
-          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-            <DialogTitle>{t('menu.projectMeta')}</DialogTitle>
-          </DialogHeader>
-          <div className="flex-grow overflow-hidden relative">
-            <ProjectMetaDashboard onClose={() => setActiveModule('workspace')} />
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
         open={activeModule === 'taxonomy'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
@@ -458,6 +444,20 @@ export default function App() {
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <LocalVisualization onClose={() => setActiveModule('workspace')} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={activeModule === 'meta'}
+        onOpenChange={(open) => !open && setActiveModule('workspace')}
+      >
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden">
+          <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
+            <DialogTitle>{t('menu.projectMeta')}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-grow overflow-hidden relative">
+            <ProjectMetaDashboard onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>
