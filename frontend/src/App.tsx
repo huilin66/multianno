@@ -426,7 +426,7 @@ export default function App() {
       >
         <DialogContent className="max-w-4xl sm:max-w-4xl h-[90vh] flex flex-col p-0 border-border overflow-hidden">
           <DialogHeader className="p-4 border-b border-border shrink-0">
-            <DialogTitle>{t('menu.dataExport')}</DialogTitle>
+            <DialogTitle>{t('menu.exportData')}</DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-hidden relative">
             <DataExport onClose={() => setActiveModule('workspace')} />
