@@ -1,4 +1,5 @@
 # backend/routers/exchange.py
+import asyncio
 import json
 import os
 import random
@@ -11,6 +12,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from models import ExportRequest, ImportRequest
 from skimage import io
 from skimage.transform import resize
@@ -81,11 +83,15 @@ async def read_text_file(path: str):
 # ==========================================
 @router.post("/export")
 async def handle_export(req: ExportRequest):
+    print("-" * 50 + "Exporting dataset...")
+    print(req)
     if not os.path.exists(req.target_dir):
         os.makedirs(req.target_dir, exist_ok=True)
 
     if req.export_mode == "dataset":
-        return await export_dataset(req)
+        return StreamingResponse(
+            export_dataset_stream(req), media_type="application/x-ndjson"
+        )
 
     if req.format == "multianno":
         return await export_to_multianno(req)
@@ -97,6 +103,103 @@ async def handle_export(req: ExportRequest):
         return await export_to_images_only(req)
     else:
         raise HTTPException(status_code=400, detail="不支持的导出格式")
+
+
+async def export_dataset_stream(req: ExportRequest):
+    """流式导出，每处理一个 stem 回传进度"""
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        stems = req.stems
+        if not stems:
+            yield json.dumps({"type": "error", "message": "未找到任何场景"}) + "\n"
+            return
+
+        source_dir = req.source_dirs[0]
+        total = len(stems)
+
+        # 随机分割
+        random.seed(req.random_seed)
+        shuffled = sorted(stems)
+        random.shuffle(shuffled)
+        n_train = int(total * req.split.get("train", 80) / 100)
+        n_val = int(total * req.split.get("val", 15) / 100)
+        train_stems = shuffled[:n_train]
+        val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
+
+        # 创建目录
+        if os.path.exists(req.target_dir):
+            shutil.rmtree(req.target_dir, ignore_errors=True)
+        os.makedirs(req.target_dir, exist_ok=True)
+        anno_dir = os.path.join(req.target_dir, req.anno_subdir)
+        os.makedirs(anno_dir, exist_ok=True)
+        for vc in req.view_configs:
+            os.makedirs(os.path.join(req.target_dir, vc.subdir), exist_ok=True)
+
+        # 逐文件处理 + 进度
+        exported_count = 0
+        for idx, stem in enumerate(stems):
+            if stem not in shuffled:
+                continue
+
+            result_yolo = ma_to_yolo(
+                os.path.join(source_dir, f"{stem}.json"),
+                os.path.join(anno_dir, f"{stem}{req.custom_suffix}{req.extension}"),
+                req.selected_classes,
+                req.allowed_shapes,
+                req.task_type,
+            )
+            exported_count += int(result_yolo)
+
+            _copy_images_for_stem(stem, req.view_configs, req.target_dir)
+
+            # 🆕 进度回传
+            progress = int(((idx + 1) / total) * 100)
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "current": idx + 1,
+                        "total": total,
+                        "percent": progress,
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
+        # 生成 split 文件
+        _write_split_files(
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+        )
+
+        # classes.txt
+        with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
+            f.write("\n".join(req.selected_classes))
+
+        reporter.save_report(req.task_type, req.format)
+
+        # 🆕 完成
+        yield (
+            json.dumps(
+                {
+                    "type": "complete",
+                    "percent": 100,
+                    "exported": exported_count,
+                    "split": {
+                        "train": len(train_stems),
+                        "val": len(val_stems),
+                        "test": len(test_stems),
+                    },
+                }
+            )
+            + "\n"
+        )
+
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_to_multianno(req: ExportRequest):
@@ -615,7 +718,6 @@ async def import_from_images_only(req: ImportRequest):
 
 
 async def export_dataset(req: ExportRequest):
-    print(req)
     reporter = ExportReporter(req.target_dir, req.generate_report)
 
     stems = req.stems
@@ -710,7 +812,7 @@ def _copy_images_for_stem(stem, view_configs, target_dir):
             img = io.imread(src_img_path)
             if img is None:
                 continue
-
+            h, w = img.shape[:2]
             bands = vc.bands
             if len(img.shape) > 2 and img.shape[2] != len(bands):
                 selected = [b - 1 for b in bands]
@@ -724,24 +826,35 @@ def _copy_images_for_stem(stem, view_configs, target_dir):
                 crop.get("l", 0),
             )
             if sum([crop_t, crop_r, crop_b, crop_l]) != 0:
-                h, w = img.shape[:2]
-                img = img[crop_t : h - crop_b, crop_l : w - crop_r]
+                t = int(h * crop_t / 100)
+                b = int(h * crop_b / 100)
+                l = int(w * crop_l / 100)
+                r = int(w * crop_r / 100)
+
+                if t > 0 and r > 0 and b < h and l < w:
+                    img = img[t:b, l:r]
 
             transform = vc.transform
-            h, w = img.shape[:2]
-            img = img[crop_t : h - crop_b, crop_l : w - crop_r]
             scale_x = transform.get("scaleX", 1.0)
             scale_y = transform.get("scaleY", 1.0)
             if scale_x != 1.0 or scale_y != 1.0:
-                h, w = img.shape[:2]
-                new_h = int(h * scale_y)
-                new_w = int(w * scale_x)
-                img = resize(
-                    img, (new_h, new_w), preserve_range=True, anti_aliasing=True
-                ).astype(img.dtype)
+                if (
+                    scale_x > 0
+                    and scale_y > 0
+                    and not np.isnan(scale_x)
+                    and not np.isnan(scale_y)
+                ):
+                    h, w = img.shape[:2]
+                    new_h = int(h * scale_y)
+                    new_w = int(w * scale_x)
+                    if new_h > 0 and new_w > 0:
+                        img = resize(
+                            img, (new_h, new_w), preserve_range=True, anti_aliasing=True
+                        ).astype(img.dtype)
 
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
+                os.makedirs(os.path.dirname(out_img_path), exist_ok=True)
                 io.imsave(out_img_path, img, check_contrast=False)
 
         except Exception as e:

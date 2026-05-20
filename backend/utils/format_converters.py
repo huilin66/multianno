@@ -106,7 +106,7 @@ def filter_multianno(
 
 def ma_to_yolo(ma_path, yolo_path, selected_classes, allowed_shapes, task_type):
     """将 MultiAnno 格式的标注文件转换为 YOLO 格式"""
-    if not os.path.exists(yolo_path):
+    if not os.path.exists(ma_path):
         return False
     with open(ma_path, "r", encoding="utf-8") as f:
         data = json.load(f)

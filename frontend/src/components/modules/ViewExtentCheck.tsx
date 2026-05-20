@@ -359,8 +359,7 @@ const getPreviewUrl = (view: typeof mainView) => {
   };
 
 
-// --- 功能 1: 自动拉伸 Aug View 的高亮框以适配 Main View ---
-// --- 功能 1: 自动拉伸 Aug View 的高亮框以完美贴合 Main View ---
+
   const handleFitToMain = () => {
     if (!mainImgRef.current || !augImgRef.current || !activeAugView) return;
 
@@ -401,7 +400,7 @@ const getPreviewUrl = (view: typeof mainView) => {
       scaleX: nextScaleX,
       scaleY: nextScaleY
     };
-    
+    setCrops({ ...crops, [activeAugView.id]: { ...activeCrop } });
     updateAugDOMTransform();
     updateView(activeAugView.id, { 
       transform: { 

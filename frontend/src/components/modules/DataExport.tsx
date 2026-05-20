@@ -5,11 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Checkbox } from '../ui/checkbox';
 import Slider from 'rc-slider';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
-import { exportData, getFileContent } from '../../api/client';
+import { exportData, getFileContent, exportDatasetStream } from '../../api/client';
 import {
   SUPPORTED_TASKS,
   FORMAT_DETAILS,
@@ -20,9 +19,8 @@ import {
   type ShapeStatus,
 } from '../../config/supportedFormats';
 import {
-  Download, FolderSearch, FileText, RotateCcw, GripVertical,
-  Check, X, Loader2, Tag, Layers, FolderOpen, Image, CircleDot,
-  ChevronRight, AlertCircle
+  FolderSearch, FileText, RotateCcw, GripVertical,
+  Tag, Layers, FolderOpen, Image, AlertCircle
 } from 'lucide-react';
 import 'rc-slider/assets/index.css';
 
@@ -280,7 +278,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
 
   const handleExecute = async () => {
-    if (!targetDir) { return; }
+    if (!targetDir) return;
 
     const selectedClassNames = exportClasses.filter(c => c.selected).map(c => c.name);
     const allowedShapes = Object.entries(shapeSelection).filter(([, v]) => v).map(([s]) => s);
@@ -293,9 +291,6 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     const signal = abortControllerRef.current.signal;
 
     try {
-      const total = stems.length;
-      const CHUNK_SIZE = 10;
-
       const view_configs = viewConfigs.map(vc => {
         const view = views.find((v: any) => v.id === vc.viewId);
         const folder = folders.find((f: any) => f.id === view?.folderId);
@@ -314,55 +309,49 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       });
 
       if (exportMode === 'dataset') {
-        for (let i = 0; i < total; i += CHUNK_SIZE) {
-          if (signal.aborted) break;  // 🆕
-
-          const chunk = stems.slice(i, i + CHUNK_SIZE);
-          await exportData({
-            source_dirs: [workspacePath],
-            target_dir: targetDir,
-            task_type: taskType, format,
-            selected_classes: selectedClassNames,
-            custom_suffix: annoSuffix, extension: annoExtension,
-            allowed_shapes: allowedShapes,
-            generate_report: false,
-            stems: chunk,
-            export_mode: 'dataset',
-            anno_subdir: annoSubdir,
-            view_configs: view_configs,
-            split: { train: splitTrain, val: splitVal, test: splitTest },
-            random_seed: randomSeed,
-            split_files: { train: splitTrainFile, val: splitValFile, test: splitTestFile },
-          }, signal);  // 🆕
-          setExportProgress(Math.min(100, Math.round(((i + CHUNK_SIZE) / total) * 100)));
-        }
+        await exportDatasetStream({
+          source_dirs: [workspacePath],
+          target_dir: targetDir,
+          task_type: taskType,
+          format,
+          selected_classes: selectedClassNames,
+          custom_suffix: annoSuffix,
+          extension: annoExtension,
+          allowed_shapes: allowedShapes,
+          generate_report: false,
+          stems: stems,
+          export_mode: 'dataset',
+          anno_subdir: annoSubdir,
+          view_configs: view_configs,
+          split: { train: splitTrain, val: splitVal, test: splitTest },
+          random_seed: randomSeed,
+          split_files: { train: splitTrainFile, val: splitValFile, test: splitTestFile },
+        }, (current, total) => {
+          setExportProgress(Math.round((current / total) * 100));
+        }, signal);
       } else {
-        for (let i = 0; i < total; i += CHUNK_SIZE) {
-          if (signal.aborted) break;  // 🆕
-
-          const chunk = stems.slice(i, i + CHUNK_SIZE);
-          await exportData({
-            source_dirs: [workspacePath],
-            target_dir: targetDir,
-            task_type: taskType, format,
-            selected_classes: selectedClassNames,
-            custom_suffix: annoSuffix, extension: annoExtension,
-            allowed_shapes: allowedShapes,
-            generate_report: generateReport,
-            stems: chunk,
-            export_mode: 'annotation',
-          }, signal);  // 🆕
-          setExportProgress(Math.min(100, Math.round(((i + CHUNK_SIZE) / total) * 100)));
-        }
+        await exportData({
+          source_dirs: [workspacePath],
+          target_dir: targetDir,
+          task_type: taskType,
+          format,
+          selected_classes: selectedClassNames,
+          custom_suffix: annoSuffix,
+          extension: annoExtension,
+          allowed_shapes: allowedShapes,
+          generate_report: generateReport,
+          stems: stems,
+          export_mode: 'annotation',
+        }, signal);
+        setExportProgress(100);
       }
 
       if (!signal.aborted) {
-        setExportProgress(100);
         setExportStatus('done');
         onClose?.();
       }
     } catch (err: any) {
-      if (err.name === 'AbortError') return;  // 🆕 取消不算错误
+      if (err.name === 'AbortError') return;
       setExportStatus('error');
       setTimeout(() => setExportStatus('idle'), 3000);
     } finally {

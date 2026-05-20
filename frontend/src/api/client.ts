@@ -91,6 +91,47 @@ export const exportData = (payload: any, signal?: AbortSignal) =>
 export const importData = (payload: any) =>
   post(`${API_BASE_URL}/exchange/import`, payload);
 
+// client.ts 新增
+export const exportDatasetStream = async (
+  payload: any,
+  onProgress: (current: number, total: number) => void,
+  signal?: AbortSignal
+) => {
+  const response = await fetch(`${API_BASE_URL}/exchange/export`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  if (!response.ok) throw new Error('Export failed');
+  if (!response.body) throw new Error('No response body');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const lines = decoder.decode(value, { stream: true }).split('\n').filter(l => l.trim());
+      for (const line of lines) {
+        const data = JSON.parse(line);
+        if (data.type === 'progress') {
+          onProgress(data.current, data.total);
+        } else if (data.type === 'complete') {
+          return data;
+        } else if (data.type === 'error') {
+          throw new Error(data.message);
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+};
+
 export const exploreDirectory = async (path: string) => {
   const savedHistory = localStorage.getItem('multiAnno_recentPaths');
   let historyParams = '';
