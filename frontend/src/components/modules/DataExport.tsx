@@ -1,5 +1,5 @@
 // src/components/modules/DataExport.tsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useStore } from '../../store/useStore';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
@@ -105,6 +105,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const [splitTrainFile, setSplitTrainFile] = useState(DefaultSplitConfig.splitTrainFile);
   const [splitValFile, setSplitValFile] = useState(DefaultSplitConfig.splitValFile);
   const [splitTestFile, setSplitTestFile] = useState(DefaultSplitConfig.splitTestFile);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // --- Card 5: Shape Filter & Class Order ---
   const [shapeSelection, setShapeSelection] = useState<Record<string, boolean>>({});
@@ -280,6 +281,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     }
   };
 
+
   const handleExecute = async () => {
     if (!targetDir) { return; }
 
@@ -290,19 +292,20 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     setIsExporting(true);
     setExportProgress(0);
 
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+
     try {
       const total = stems.length;
       const CHUNK_SIZE = 10;
 
-      // handleExecute 中
       const view_configs = viewConfigs.map(vc => {
         const view = views.find((v: any) => v.id === vc.viewId);
         const folder = folders.find((f: any) => f.id === view?.folderId);
         return {
           source_suffix: folder?.suffix || '',
           source_extension: folder?.extension || 'tif',
-
-          suffix: vc.suffix, 
+          suffix: vc.suffix,
           extension: vc.extension,
           subdir: vc.subdir,
           keep_original: vc.keepOriginal,
@@ -311,8 +314,11 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           transform: view?.transform || {},
         };
       });
+
       if (exportMode === 'dataset') {
         for (let i = 0; i < total; i += CHUNK_SIZE) {
+          if (signal.aborted) break;  // 🆕
+
           const chunk = stems.slice(i, i + CHUNK_SIZE);
           await exportData({
             source_dirs: [workspacePath],
@@ -328,16 +334,14 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
             view_configs: view_configs,
             split: { train: splitTrain, val: splitVal, test: splitTest },
             random_seed: randomSeed,
-            split_files: {
-              train: splitTrainFile,
-              val: splitValFile,
-              test: splitTestFile,
-            },
-          });
+            split_files: { train: splitTrainFile, val: splitValFile, test: splitTestFile },
+          }, signal);  // 🆕
           setExportProgress(Math.min(100, Math.round(((i + CHUNK_SIZE) / total) * 100)));
         }
       } else {
         for (let i = 0; i < total; i += CHUNK_SIZE) {
+          if (signal.aborted) break;  // 🆕
+
           const chunk = stems.slice(i, i + CHUNK_SIZE);
           await exportData({
             source_dirs: [workspacePath],
@@ -349,22 +353,32 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
             generate_report: generateReport,
             stems: chunk,
             export_mode: 'annotation',
-          });
+          }, signal);  // 🆕
           setExportProgress(Math.min(100, Math.round(((i + CHUNK_SIZE) / total) * 100)));
         }
       }
-      
-      setExportProgress(100);
-      setExportStatus('done');
-      onClose?.();
+
+      if (!signal.aborted) {
+        setExportProgress(100);
+        setExportStatus('done');
+        onClose?.();
+      }
     } catch (err: any) {
+      if (err.name === 'AbortError') return;  // 🆕 取消不算错误
       setExportStatus('error');
       setTimeout(() => setExportStatus('idle'), 3000);
     } finally {
       setIsExporting(false);
+      abortControllerRef.current = null;
     }
   };
 
+  const handleCancelExport = () => {
+    abortControllerRef.current?.abort();
+    setIsExporting(false);
+    setExportStatus('idle');
+  };
+  
   const checkedNames = useMemo(() => exportClasses.filter(c => c.selected).map(c => c.name), [exportClasses]);
 
   // ==========================================
@@ -1045,14 +1059,18 @@ useEffect(() => {
         )}
 
         <div className="flex items-center gap-3 shrink-0">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isExporting}>
-            {t('common.cancel')}
+          <Button variant="outline" size="sm" onClick={isExporting ? handleCancelExport : onClose}>
+            {isExporting ? (
+              <>{t('common.stop')}</>
+            ) : (
+              <>{t('common.cancel')}</>
+            )}
           </Button>
           <Button size="sm" className="text-white" onClick={handleExecute}
             disabled={isExporting || !targetDir}
           >
             {isExporting ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> {t('dataExport.exporting')}</>
+              <>{t('dataExport.exporting')}</>
             ) : (
               <>{t('common.confirm')}</>
             )}

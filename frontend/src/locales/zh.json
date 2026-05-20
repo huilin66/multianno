@@ -395,6 +395,7 @@
     "success": "成功",
     "saved": "已保存",
     "saving": "保存中...",
+    "stop": "停止",
     "done": "完成",
     "suffix_example": "示例: _T, _V, _M"
   }

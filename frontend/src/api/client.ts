@@ -3,11 +3,12 @@
 export const API_BASE_URL = 'http://localhost:8080/api';
 const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
 
-const post = async (url: string, body: any) => {
+const post = async (url: string, body: any, signal?: AbortSignal) => {
   const response = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    signal,
   });
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
@@ -84,8 +85,8 @@ export const batchMergeClassWithAttribute = (params: {
 export const fetchProjectStatistics = (saveDirs: string[], forceRefresh = false) =>
   post(`${API_BASE_URL}/taxonomy/statistics`, { save_dirs: saveDirs, force_refresh: forceRefresh });
 
-export const exportData = (payload: any) =>
-  post(`${API_BASE_URL}/exchange/export`, payload);
+export const exportData = (payload: any, signal?: AbortSignal) =>
+  post(`${API_BASE_URL}/exchange/export`, payload, signal);
 
 export const importData = (payload: any) =>
   post(`${API_BASE_URL}/exchange/import`, payload);

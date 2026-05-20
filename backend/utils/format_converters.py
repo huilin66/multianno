@@ -102,6 +102,26 @@ def filter_multianno(
     return filtered_shapes, stats
 
 
+def ma_to_yolo(ma_path, yolo_path, selected_classes, allowed_shapes, task_type):
+    """将 MultiAnno 格式的标注文件转换为 YOLO 格式"""
+    with open(ma_path, "r", encoding="utf-8") as f:
+        data = ma_path.load(f)
+    shapes = data.get("shapes", [])
+    yolo_lines, stats = convert_to_yolo(
+        shapes,
+        data.get("imageWidth", 1),
+        data.get("imageHeight", 1),
+        selected_classes,
+        allowed_shapes,
+        task_type,
+    )
+    if yolo_lines:
+        with open(yolo_path, "w") as f:
+            f.write("\n".join(yolo_lines))
+        return True
+    return False
+
+
 def convert_to_yolo(
     shapes: list,
     img_w: int,
@@ -176,7 +196,6 @@ def convert_to_yolo(
                 stats["native"] += 1
             else:
                 stats["converted"] += 1
-        print(shape_type)
     return yolo_lines, stats
 
 

@@ -13,11 +13,13 @@ import numpy as np
 from fastapi import APIRouter, HTTPException
 from models import ExportRequest, ImportRequest
 from skimage import io
+from skimage.transform import resize
 from utils.format_converters import (
     coco_ann_to_shape,
     convert_to_coco_anns,
     convert_to_yolo,
     filter_multianno,
+    ma_to_yolo,
     mask_to_shapes,
     render_mask_array,
     yolo_to_shapes,
@@ -616,8 +618,8 @@ async def export_dataset(req: ExportRequest):
     print(req)
     reporter = ExportReporter(req.target_dir, req.generate_report)
 
-    stems = req.stems if req.stems else _collect_all_stems(req.source_dirs)
-    if not stems:
+    stems = req.stems
+    if not stems or len(stems) == 0:
         raise HTTPException(status_code=400, detail="未找到任何场景")
 
     # 1. 随机分割
@@ -636,28 +638,27 @@ async def export_dataset(req: ExportRequest):
     if os.path.exists(req.target_dir):
         shutil.rmtree(req.target_dir, ignore_errors=True)
     os.makedirs(req.target_dir, exist_ok=True)
+
     anno_dir = os.path.join(req.target_dir, req.anno_subdir)
     os.makedirs(anno_dir, exist_ok=True)
-
     for vc in req.view_configs:
         d = os.path.join(req.target_dir, vc.subdir)
         os.makedirs(d, exist_ok=True)
 
     # 3. 导出标注 + 复制图像
     exported_count = 0
-    for j_path in get_native_jsons(req.source_dirs):
-        with open(j_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        stem = data.get("stem", Path(j_path).stem)
+    for stem in stems:
         if stem not in shuffled:
-            continue  # 不在当前批次，跳过
+            continue
+        result_yolo = ma_to_yolo(
+            os.path.join(req.source_dirs, f"{stem}.json"),
+            os.path.join(anno_dir, f"{stem}{req.custom_suffix}{req.extension}"),
+            req.selected_classes,
+            req.allowed_shapes,
+            req.task_type,
+        )
+        exported_count += int(result_yolo)
 
-        # 导出标注
-        _export_annotation_for_stem(data, stem, anno_dir, req, reporter)
-        exported_count += 1
-
-        # 复制/转换图像
         _copy_images_for_stem(stem, req.source_dirs, req.view_configs, req.target_dir)
 
     # 4. 生成 split 文件
@@ -690,61 +691,40 @@ def _copy_images_for_stem(stem, source_dirs, view_configs, target_dir):
 
         src_suffix = vc.source_suffix
         src_ext = vc.source_extension
-        folder_path = vc.folder_path
+        src_dir = vc.folder_path
 
         out_suffix = vc.suffix
         out_ext = vc.extension
 
         # 严格匹配
-        img_path = None
-        search_dirs = [folder_path] if folder_path else []
-        search_dirs.extend([sd for sd in source_dirs if sd != folder_path])
+        src_img_path = os.path.join(src_dir, f"{stem}{src_suffix}{src_ext}")
+        out_img_path = os.path.join(dst_dir, f"{stem}{out_suffix}{out_ext}")
 
-        for sd in search_dirs:
-            candidate = os.path.join(sd, f"{stem}{src_suffix}.{src_ext}")
-            if os.path.exists(candidate):
-                img_path = candidate
-                break
-
-        if not img_path:
+        if not src_img_path:
             print(f"⚠️ Image not found: {stem}{src_suffix}.{src_ext}")
             continue
 
         try:
-            # 读取图像
-            img = io.imread(img_path)
+            img = io.imread(src_img_path)
             if img is None:
                 continue
 
-            # 提取波段（保持 RGB 顺序）
-            bands = vc.bands  # [R, G, B] 如 [1, 2, 3]
-            if len(img.shape) == 3 and img.shape[-1] >= max(bands):
-                selected = [b - 1 for b in bands]  # 0-based
+            bands = vc.bands
+            if len(img.shape) > 2 and len(img.shape[2]) != len(bands):
+                selected = [b - 1 for b in bands]
                 img = img[:, :, selected]
 
-            # 🆕 导出时忽略 offset（视图对齐偏移），只应用 scale
             transform = vc.transform
             scale_x = transform.get("scaleX", 1.0)
             scale_y = transform.get("scaleY", 1.0)
 
             if scale_x != 1.0 or scale_y != 1.0:
-                from skimage.transform import resize
-
                 h, w = img.shape[:2]
                 new_h = int(h * scale_y)
                 new_w = int(w * scale_x)
                 img = resize(
                     img, (new_h, new_w), preserve_range=True, anti_aliasing=True
                 ).astype(img.dtype)
-
-            # 归一化到 uint8
-            if img.dtype != np.uint8:
-                if img.max() > img.min():
-                    img = ((img - img.min()) / (img.max() - img.min()) * 255).astype(
-                        np.uint8
-                    )
-                else:
-                    img = img.astype(np.uint8)
 
             # 确保 RGB 顺序
             if len(img.shape) == 3 and img.shape[2] == 3:
@@ -762,7 +742,7 @@ def _copy_images_for_stem(stem, source_dirs, view_configs, target_dir):
                 io.imsave(dst, img, check_contrast=False)
 
         except Exception as e:
-            print(f"❌ Error processing {img_path}: {e}")
+            print(f"❌ Error processing {src_img_path}: {e}")
             import traceback
 
             traceback.print_exc()

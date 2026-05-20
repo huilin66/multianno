@@ -395,6 +395,7 @@
     "success": "Success",
     "saved": "Saved",
     "saving": "Saving...",
+    "stop": "Stop",
     "done": "Done",
     "suffix_example": "Example: _T, _V, _M"
   }
