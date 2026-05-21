@@ -164,19 +164,30 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     setViewConfigs(configs);
   }, [views, folders]);
 
+  const classOrder = useStore(s => s.classOrder);
+
   const resetClasses = useCallback(() => {
-    const mapped = taxonomyClasses.map((c: any) => ({
+    const orderedClasses = classOrder
+      .map(id => taxonomyClasses.find((c: any) => c.id === id))
+      .filter(Boolean) as any[];
+    
+    const unordered = taxonomyClasses.filter((c: any) => !classOrder.includes(c.id));
+    
+    const allClasses = [...orderedClasses, ...unordered];
+    const mapped = allClasses.map((c: any) => ({
       ...c, selected: c.name.toLowerCase() !== 'background'
     }));
+    
     mapped.sort((a: any, b: any) => {
       if (a.name.toLowerCase() === 'background') return -1;
       if (b.name.toLowerCase() === 'background') return 1;
       return 0;
     });
+    
     setExportClasses(mapped);
     setClassFilePath('');
     setClassSource('panel');
-  }, [taxonomyClasses]);
+  }, [taxonomyClasses, classOrder]);
 
   useEffect(() => { resetClasses(); }, [resetClasses]);
 
