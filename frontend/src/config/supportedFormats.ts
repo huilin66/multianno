@@ -84,18 +84,18 @@ export const FORMAT_DETAILS: Record<string, FormatInfo> = {
 };
 
 export const IMAGE_EXT_MAP: Record<string, string> = {
-  'TIFF': '.tif',
-  'tiff': '.tif',
-  'TIF': '.tif',
-  'tif': '.tif',
-  'PNG': '.png',
-  'png': '.png',
-  'JPEG': '.jpg',
-  'jpeg': '.jpg',
-  'JPG': '.jpg',
-  'jpg': '.jpg',
-  'BMP': '.bmp',
-  'bmp': '.bmp',
+  '.TIFF': '.tif',
+  '.tiff': '.tif',
+  '.TIF': '.tif',
+  '.tif': '.tif',
+  '.PNG': '.png',
+  '.png': '.png',
+  '.JPEG': '.jpg',
+  '.jpeg': '.jpg',
+  '.JPG': '.jpg',
+  '.jpg': '.jpg',
+  '.BMP': '.bmp',
+  '.bmp': '.bmp',
 };
 export const SUPPORTED_IMAGE_EXTENSIONS = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp', '.TIF', '.TIFF', '.PNG', '.JPG', '.JPEG', '.BMP'];
 

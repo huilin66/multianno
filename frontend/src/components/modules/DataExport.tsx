@@ -245,16 +245,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       const folder = folders.find((f: any) => f.id === v.folderId);
       const rawSuffix = folder?.suffix || '';
       let suffix = rawSuffix;
-      let ext = '';
-      const knownExts = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'];
-      for (const e of knownExts) {
-        if (rawSuffix.toLowerCase().endsWith(e)) {
-          suffix = rawSuffix.slice(0, -e.length);
-          ext = e;
-          break;
-        }
-      }
-      if (!ext) ext = IMAGE_EXT_MAP[folder?.metadata?.fileType?.toUpperCase() || ''] || '.tif';
+      const ext = folder?.extension || '.png';
       return {
         viewId: v.id,
         viewName: v.isMain ? 'Main View' : `Aug View ${i}`,
@@ -637,21 +628,19 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                       {t('dataExport.stepNaming.extension')}
                     </Label>
                     <div className="flex flex-wrap gap-1.5">
-                      {Object.entries(IMAGE_EXT_MAP)
-                        .filter(([key]) => ['PNG', 'JPG', 'TIFF', 'BMP'].includes(key))
-                        .map(([, ext]) => (
-                          <div
-                            key={ext}
-                            onClick={() => updateViewConfig(vc.viewId, { extension: ext })}
-                            className={`px-3 py-2 rounded-lg border-2 text-center cursor-pointer transition-all ${
-                              vc.extension === ext
-                                ? 'border-primary bg-primary/5 shadow-sm'
-                                : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
-                            }`}
-                          >
-                            <div className="text-[10px] font-mono font-bold">{ext}</div>
-                          </div>
-                        ))}
+                      {['.png', '.jpg', '.tif', '.bmp'].map(ext => (
+                        <div
+                          key={ext}
+                          onClick={() => updateViewConfig(vc.viewId, { extension: ext })}
+                          className={`px-3 py-2 rounded-lg border-2 text-center cursor-pointer transition-all ${
+                            vc.extension === ext
+                              ? 'border-primary bg-primary/5 shadow-sm'
+                              : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
+                          }`}
+                        >
+                          <div className="text-[10px] font-mono font-bold">{ext}</div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -907,7 +896,7 @@ useEffect(() => {
       viewId: v.id,
       viewName: v.isMain ? 'Main View' : `Aug View ${i}`,
       suffix: folder?.suffix || '',           // 🆕 从 store 读取
-      extension: folder?.extension || 'tif',  // 🆕 从 store 读取
+      extension: IMAGE_EXT_MAP[folder?.extension],  // 🆕 从 store 读取
       subdir: v.isMain ? 'main' : `aug_${i}`,
       keepOriginal: false,
     };

@@ -90,7 +90,7 @@ async def handle_export(req: ExportRequest):
 
     if req.export_mode == "dataset":
         return StreamingResponse(
-            export_dataset_stream(req), media_type="application/x-ndjson"
+            export_yolo_dataset_stream(req), media_type="application/x-ndjson"
         )
 
     if req.format == "multianno":
@@ -105,7 +105,7 @@ async def handle_export(req: ExportRequest):
         raise HTTPException(status_code=400, detail="不支持的导出格式")
 
 
-async def export_dataset_stream(req: ExportRequest):
+async def export_yolo_dataset_stream(req: ExportRequest):
     """流式导出，每处理一个 stem 回传进度"""
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
