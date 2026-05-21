@@ -89,9 +89,10 @@ async def handle_export(req: ExportRequest):
         os.makedirs(req.target_dir, exist_ok=True)
 
     if req.export_mode == "dataset":
-        return StreamingResponse(
-            export_yolo_dataset_stream(req), media_type="application/x-ndjson"
-        )
+        if req.format == "yolo":
+            return StreamingResponse(
+                export_yolo_dataset_stream(req), media_type="application/x-ndjson"
+            )
 
     if req.format == "multianno":
         return await export_to_multianno(req)
