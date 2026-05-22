@@ -432,7 +432,12 @@
     "importing": "Importing...",
     "success": "Import successful",
     "failed": "Import failed",
-    "ready": "Ready to import"
+    "ready": "Ready to import",
+    "result": {
+      "method": "Method: {{format}}",
+      "shapes": "Shapes imported: {{count}}",
+      "images": "Images modified: {{imported}}/{{total}}"
+    }
   },
   "common": {
     "confirm": "Confirm",

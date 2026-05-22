@@ -855,6 +855,7 @@ async def import_from_yolo(req: ImportRequest):
 
     imported_count = 0
     processed_stems = set()
+    total_shapes = 0
     for txt_file in os.listdir(req.source_path):
         if not txt_file.endswith(".txt") or txt_file == "classes.txt":
             continue
@@ -899,19 +900,18 @@ async def import_from_yolo(req: ImportRequest):
             with open(target_json, "w", encoding="utf-8") as f:
                 json.dump(existing_data, f, ensure_ascii=False, indent=2)
             imported_count += 1
+            total_shapes += len(new_shapes)
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
         cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
 
-    # 🌟 修改：返回信息中带上清理数量
-    msg = f"成功合并导入 {imported_count} 个 YOLO 场景。"
-    if req.merge_strategy == "mirror":
-        msg += f" 镜像清理了 {cleaned_count} 个场景。"
-
     return {
         "status": "success",
-        "message": msg,
+        "message": f"成功合并导入 {imported_count} 个 YOLO 场景。",
+        "format": "YOLO",
+        "imported_count": imported_count,
+        "shape_count": total_shapes,
     }
 
 
@@ -937,6 +937,7 @@ async def import_from_coco(req: ImportRequest):
 
     imported_count = 0
     processed_stems = set()
+    total_shapes = 0
     for img_id, anns in grouped_anns.items():
         if img_id not in img_info:
             continue
@@ -957,29 +958,30 @@ async def import_from_coco(req: ImportRequest):
             existing_data["shapes"] = []
         processed_stems.add(base_stem)
 
+        scene_shape_count = 0
         for ann in anns:
             shape = coco_ann_to_shape(ann, cat_map, req.coco_mode)
             if shape:
                 existing_data["shapes"].append(shape)
+                scene_shape_count += 1
 
         existing_data["stem"] = base_stem
         existing_data["imageWidth"], existing_data["imageHeight"] = info["w"], info["h"]
         with open(target_json, "w", encoding="utf-8") as f:
             json.dump(existing_data, f, ensure_ascii=False, indent=2)
         imported_count += 1
+        total_shapes += scene_shape_count
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
         cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
 
-    # 🌟 修改：返回信息中带上清理数量
-    msg = f"成功合并导入 {imported_count} 个 COCO 场景。"
-    if req.merge_strategy == "mirror":
-        msg += f" 镜像清理了 {cleaned_count} 个场景。"
-
     return {
         "status": "success",
-        "message": msg,
+        "message": f"成功合并导入 {imported_count} 个 COCO 场景。",
+        "format": "COCO",
+        "imported_count": imported_count,
+        "shape_count": total_shapes,
     }
 
 
@@ -994,6 +996,7 @@ async def import_from_multianno(req: ImportRequest):
         raise HTTPException(status_code=404, detail="源目录不存在")
 
     imported_count = 0
+    total_shapes = 0
     processed_stems = set()
     for json_file in os.listdir(req.source_path):
         if not json_file.endswith(".json"):
@@ -1070,6 +1073,7 @@ async def import_from_multianno(req: ImportRequest):
 
             with open(target_json_path, "w", encoding="utf-8") as f:
                 json.dump(existing_data, f, ensure_ascii=False, indent=2)
+                total_shapes += len(new_shapes)
             imported_count += 1
 
     cleaned_count = 0
@@ -1084,6 +1088,9 @@ async def import_from_multianno(req: ImportRequest):
     return {
         "status": "success",
         "message": msg,
+        "format": "MultiAnno",
+        "imported_count": imported_count,
+        "shape_count": total_shapes,
     }
 
 
@@ -1110,6 +1117,7 @@ async def import_from_images_only(req: ImportRequest):
 
     valid_exts = (".png", ".tif", ".bmp", ".jpg", ".jpeg")
     imported_count = 0
+    total_shapes = 0
     processed_stems = set()
     for mask_file in os.listdir(req.source_path):
         if not mask_file.lower().endswith(valid_exts):
@@ -1147,6 +1155,7 @@ async def import_from_images_only(req: ImportRequest):
 
             with open(target_json_path, "w", encoding="utf-8") as f:
                 json.dump(existing_data, f, ensure_ascii=False, indent=2)
+            total_shapes += len(new_shapes)
             imported_count += 1
 
     cleaned_count = 0
@@ -1161,6 +1170,9 @@ async def import_from_images_only(req: ImportRequest):
     return {
         "status": "success",
         "message": msg,
+        "format": "Mask",
+        "imported_count": imported_count,
+        "shape_count": total_shapes,
     }
 
 

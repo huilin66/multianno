@@ -188,10 +188,18 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       }
 
       setImportStatus('done');
-      const msg = res?.message || t('dataImport.success');
+      const fmt = res?.format || format.toUpperCase();
+      const shapeCount = res?.shape_count ?? 0;
+      const importedCount = res?.imported_count ?? 0;
+      const totalCount = stems.length || 0;
+      const desc = [
+        t('dataImport.result.method', { format: fmt }),
+        t('dataImport.result.shapes', { count: shapeCount }),
+        t('dataImport.result.images', { imported: importedCount, total: totalCount }),
+      ].join('\n');
       await showDialog({
         title: t('dataImport.success'),
-        description: msg,
+        description: desc,
         type: 'success',
       });
       onClose?.();

@@ -432,7 +432,12 @@
     "importing": "导入中...",
     "success": "导入成功",
     "failed": "导入失败",
-    "ready": "准备导入"
+    "ready": "准备导入",
+    "result": {
+      "method": "使用 {{format}} 方法",
+      "shapes": "导入 shape 总数: {{count}}",
+      "images": "修改涉及图像数: {{imported}}/{{total}}"
+    }
   },
   "common": {
     "confirm": "确认",
