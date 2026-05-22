@@ -381,6 +381,59 @@
     "readyToExport": "准备导出场景组:",
     "exporting": "导出中..."
   },
+  "dataImport": {
+    "steps": {
+      "task": "任务与格式",
+      "source": "源数据",
+      "target": "目标工作空间"
+    },
+    "task": {
+      "title": "任务与格式",
+      "task": "任务类型",
+      "format": "格式",
+      "suffix": "后缀名",
+      "extension": "扩展名",
+      "strategy": "合并策略",
+      "append": "追加",
+      "overwrite": "覆盖",
+      "skip": "跳过",
+      "mirror": "镜像同步"
+    },
+    "source": {
+      "title": "源数据选择",
+      "yoloFolder": "YOLO 标注文件夹",
+      "cocoFile": "COCO JSON 文件",
+      "multiannoFolder": "MultiAnno JSON 文件夹",
+      "maskFolder": "掩码图文件夹",
+      "select": "选择源数据...",
+      "placeholder": "请输入或选择源数据路径...",
+      "classFileRequired": "需要提供 classes.txt 文件",
+      "selectClassFile": "选择 classes.txt 文件",
+      "importZero": "导入背景 (class 0)",
+      "cocoMode": "导入模式",
+      "polygon": "多边形",
+      "bbox": "矩形框"
+    },
+    "target": {
+      "title": "目标工作空间",
+      "workspace": "目标工作空间路径",
+      "hint": "当前工作空间路径:"
+    },
+    "legend": {
+      "required": "必填",
+      "configured": "已配置",
+      "current": "当前",
+      "default": "默认"
+    },
+    "alerts": {
+      "needClassFile": "该格式需要提供 classes.txt 文件，请选择一个。",
+      "noWorkspace": "请设置目标工作空间路径。"
+    },
+    "importing": "导入中...",
+    "success": "导入成功",
+    "failed": "导入失败",
+    "ready": "准备导入"
+  },
   "common": {
     "confirm": "确认",
     "cancel": "取消",

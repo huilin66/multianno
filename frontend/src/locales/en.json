@@ -381,6 +381,59 @@
     "readyToExport": "Confirm Export scene groups:",
     "exporting": "Exporting..."
   },
+  "dataImport": {
+    "steps": {
+      "task": "Task & Format",
+      "source": "Source Data",
+      "target": "Target Workspace"
+    },
+    "task": {
+      "title": "Task & Format",
+      "task": "Task Type",
+      "format": "Format",
+      "suffix": "Suffix",
+      "extension": "Extension",
+      "strategy": "Merge Strategy",
+      "append": "Append",
+      "overwrite": "Overwrite",
+      "skip": "Skip",
+      "mirror": "Mirror"
+    },
+    "source": {
+      "title": "Source Selection",
+      "yoloFolder": "YOLO Annotation Folder",
+      "cocoFile": "COCO JSON File",
+      "multiannoFolder": "MultiAnno JSON Folder",
+      "maskFolder": "Mask Image Folder",
+      "select": "Select source...",
+      "placeholder": "Enter or select source path...",
+      "classFileRequired": "A classes.txt file is required",
+      "selectClassFile": "Select classes.txt file",
+      "importZero": "Import background (class 0)",
+      "cocoMode": "Import Mode",
+      "polygon": "Polygon",
+      "bbox": "BBox"
+    },
+    "target": {
+      "title": "Target Workspace",
+      "workspace": "Target Workspace Path",
+      "hint": "Current workspace path:"
+    },
+    "legend": {
+      "required": "Required",
+      "configured": "Configured",
+      "current": "Current",
+      "default": "Default"
+    },
+    "alerts": {
+      "needClassFile": "This format requires a classes.txt file. Please select one.",
+      "noWorkspace": "Please set a target workspace path."
+    },
+    "importing": "Importing...",
+    "success": "Import successful",
+    "failed": "Import failed",
+    "ready": "Ready to import"
+  },
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",

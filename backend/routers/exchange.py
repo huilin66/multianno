@@ -839,7 +839,7 @@ async def handle_import(req: ImportRequest):
     # 🌟 新增的两种格式分发
     elif req.format == "multianno":
         return await import_from_multianno(req)
-    elif req.format == "images_only":
+    elif req.format in ("images_only", "mask"):
         return await import_from_images_only(req)
     else:
         raise HTTPException(status_code=400, detail="不支持的导入格式")

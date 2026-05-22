@@ -12,7 +12,7 @@ import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from 
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
 import {
-  FolderOpen, Plus, Trash2, Info, Check, X, UploadCloud, Loader2, History,
+  FolderOpen, Plus, Trash2, Info, Check, UploadCloud, Loader2, History,
   Save, Eye, LogOut, ChevronRight, RotateCcw, Search
 } from 'lucide-react';
 
@@ -745,7 +745,12 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
                       <Plus className="w-3.5 h-3.5 mr-1.5" />{t('dataPreload.views.addView')}
                     </Button>
                   )}
-                                    <Button variant="ghost" size="sm"
+                                                  {activeStep === 'workspace' && workspaceHasJson && (
+                    <Button variant="ghost" size="sm" onClick={() => { setWorkspaceHasJson(false); handleWorkspaceReset(); }}>
+                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />Clear
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm"
                     disabled={(activeStep === 'folders' && folders.length === 0) || (activeStep === 'views' && views.length === 0)}
                     onClick={() => {
                       if (activeStep === 'folders') { clearFolders(); setInferredData({}); }

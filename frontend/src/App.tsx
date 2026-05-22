@@ -410,7 +410,7 @@ export default function App() {
         open={activeModule === 'exchange_import'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden shadow-2xl">
+        <DialogContent className="max-w-4xl sm:max-w-4xl h-[90vh] flex flex-col p-0 border-border overflow-hidden">
           <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
             <DialogTitle>{t('menu.importData')}</DialogTitle>
           </DialogHeader>

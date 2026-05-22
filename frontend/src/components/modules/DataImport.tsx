@@ -5,14 +5,13 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { importData, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, type TaskType } from '../../config/supportedFormats';
 import {
-  Upload, Folder, FileText, Image, Loader2, Check, X,
+  Folder, FileText, Image, Loader2, Check, X,
   ChevronRight, RotateCcw, FolderSearch, AlertCircle, Tag
 } from 'lucide-react';
 
@@ -212,64 +211,124 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       case 'task':
         return (
           <div className="space-y-5">
-            <div className="p-5 rounded-xl border bg-muted/20 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label={t('dataImport.task.task')}>
-                  <Select value={taskType} onValueChange={(v) => setTaskType(v as TaskType)}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(SUPPORTED_TASKS).map(([id, info]) => (
-                        <SelectItem key={id} value={id} className="text-xs">{info.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label={t('dataImport.task.format')}>
-                  <Select value={format} onValueChange={(v) => { setFormat(v); setSourceDataPath(''); }}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {SUPPORTED_TASKS[taskType]?.formats.map(fId => (
-                        <SelectItem key={fId} value={fId} className="text-xs">{FORMAT_DETAILS[fId].label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
+
+            {/* 1. Task */}
+            <div>
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 block">
+                {t('dataImport.task.task')}
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(SUPPORTED_TASKS).map(([id, info]) => (
+                  <div
+                    key={id}
+                    onClick={() => setTaskType(id as TaskType)}
+                    className={`p-3 rounded-xl border-2 cursor-pointer text-center transition-all ${
+                      taskType === id
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold ${taskType === id ? 'text-primary' : 'text-foreground'}`}>
+                      {info.label}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground mt-0.5">
+                      {info.description}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="p-5 rounded-xl border bg-muted/20 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <Field label={t('dataImport.task.suffix')}>
-                  <Input value={customSuffix} onChange={(e) => setCustomSuffix(e.target.value)}
-                    className="h-9 text-xs font-mono" placeholder="_RGB" />
-                </Field>
-                <Field label={t('dataImport.task.extension')}>
-                  <Select value={extension} onValueChange={setExtension}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {FORMAT_DETAILS[format]?.extensions.map(ext => (
-                        <SelectItem key={ext} value={ext} className="text-xs">{ext}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </Field>
+            <div className="h-px bg-border" />
+
+            {/* 2. Format */}
+            <div>
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 block">
+                {t('dataImport.task.format')}
+              </Label>
+              <div className="flex flex-wrap gap-2">
+                {SUPPORTED_TASKS[taskType]?.formats.map(fId => (
+                  <div
+                    key={fId}
+                    onClick={() => { setFormat(fId); setSourceDataPath(''); }}
+                    className={`p-3 rounded-xl border-2 cursor-pointer text-center transition-all min-w-[90px] ${
+                      format === fId
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold ${format === fId ? 'text-primary' : 'text-foreground'}`}>
+                      {FORMAT_DETAILS[fId].label}
+                    </div>
+                    <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
+                      {FORMAT_DETAILS[fId].defaultExtension}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="p-5 rounded-xl border bg-muted/20 space-y-3">
-              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+            <div className="h-px bg-border" />
+
+            {/* 3. Suffix + Extension */}
+            <div className="grid grid-cols-2 gap-4">
+              <Field label={t('dataImport.task.suffix')}>
+                <Input value={customSuffix} onChange={(e) => setCustomSuffix(e.target.value)}
+                  className="h-9 text-xs font-mono" placeholder="_RGB" />
+              </Field>
+              <Field label={t('dataImport.task.extension')}>
+                <div className="flex flex-wrap gap-2">
+                  {FORMAT_DETAILS[format]?.extensions.map(ext => {
+                    const isSingle = FORMAT_DETAILS[format].extensions.length === 1;
+                    return (
+                      <div
+                        key={ext}
+                        onClick={() => !isSingle && setExtension(ext)}
+                        className={`p-3 rounded-xl border-2 text-center min-w-[80px] transition-all ${
+                          extension === ext
+                            ? 'border-primary bg-primary/5 shadow-sm'
+                            : isSingle
+                              ? 'border-primary/30 bg-muted/50 cursor-default'
+                              : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30 cursor-pointer'
+                        }`}
+                      >
+                        <div className="text-xs font-mono font-bold">{ext}</div>
+                        <div className="text-[9px] text-muted-foreground mt-0.5">
+                          {FORMAT_DETAILS[format].label}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </Field>
+            </div>
+
+            <div className="h-px bg-border" />
+
+            {/* 4. Merge Strategy */}
+            <div>
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider mb-3 block">
                 {t('dataImport.task.strategy')}
               </Label>
-              <Select value={mergeStrategy} onValueChange={(v: any) => setMergeStrategy(v)}>
-                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="append" className="text-xs">{t('dataImport.task.append')}</SelectItem>
-                  <SelectItem value="overwrite" className="text-xs">{t('dataImport.task.overwrite')}</SelectItem>
-                  <SelectItem value="skip" className="text-xs">{t('dataImport.task.skip')}</SelectItem>
-                  <SelectItem value="mirror" className="text-xs">{t('dataImport.task.mirror')}</SelectItem>
-                </SelectContent>
-              </Select>
+              <div className="flex flex-wrap gap-2">
+                {(['append', 'overwrite', 'skip', 'mirror'] as const).map(strategy => (
+                  <div
+                    key={strategy}
+                    onClick={() => setMergeStrategy(strategy)}
+                    className={`p-3 rounded-xl border-2 cursor-pointer text-center min-w-[90px] transition-all ${
+                      mergeStrategy === strategy
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold ${mergeStrategy === strategy ? 'text-primary' : 'text-foreground'}`}>
+                      {t(`dataImport.task.${strategy}`)}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
+
           </div>
         );
 
@@ -335,13 +394,23 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
 
               {format === 'coco' && (
                 <Field label={t('dataImport.source.cocoMode')}>
-                  <Select value={cocoMode} onValueChange={(v: any) => setCocoMode(v)}>
-                    <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="polygon" className="text-xs">{t('dataImport.source.polygon')}</SelectItem>
-                      <SelectItem value="bbox" className="text-xs">{t('dataImport.source.bbox')}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-wrap gap-2">
+                    {(['polygon', 'bbox'] as const).map(mode => (
+                      <div
+                        key={mode}
+                        onClick={() => setCocoMode(mode)}
+                        className={`p-3 rounded-xl border-2 cursor-pointer text-center min-w-[80px] transition-all ${
+                          cocoMode === mode
+                            ? 'border-primary bg-primary/5 shadow-sm'
+                            : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
+                        }`}
+                      >
+                        <div className={`text-xs font-bold ${cocoMode === mode ? 'text-primary' : 'text-foreground'}`}>
+                          {mode === 'polygon' ? t('dataImport.source.polygon') : t('dataImport.source.bbox')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </Field>
               )}
             </div>
@@ -377,7 +446,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                 </div>
               </Field>
               <p className="text-[10px] text-muted-foreground">
-                {t('dataImport.target.hint')}: <span className="font-mono">{safeWorkspaceDir}</span>
+                {t('dataImport.target.hint')} <span className="font-mono">{safeWorkspaceDir}</span>
               </p>
             </div>
           </div>
@@ -498,16 +567,12 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         )}
 
         <div className="flex items-center gap-3 shrink-0">
-          <Button variant="outline" size="sm" onClick={onClose} disabled={isImporting}>
-            <X className="w-3.5 h-3.5 mr-1.5" />{t('common.cancel')}
+          <Button variant="outline" size="sm" onClick={isImporting ? () => {} : onClose}>
+            {isImporting ? <>{t('common.stop')}</> : <>{t('common.cancel')}</>}
           </Button>
           <Button size="sm" className="text-white" onClick={handleExecute}
             disabled={isImporting || !sourceDataPath || !targetWorkspaceDir}>
-            {isImporting ? (
-              <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />{t('dataImport.importing')}</>
-            ) : (
-              <><Upload className="w-3.5 h-3.5 mr-1.5" />{t('dataImport.execute')}</>
-            )}
+            {isImporting ? <>{t('dataImport.importing')}</> : <>{t('common.confirm')}</>}
           </Button>
         </div>
       </div>
