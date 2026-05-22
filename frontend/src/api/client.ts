@@ -121,6 +121,7 @@ export const exportDatasetStream = async (
         if (data.type === 'progress') {
           onProgress(data.current, data.total);
         } else if (data.type === 'complete') {
+          await reader.cancel();
           return data;
         } else if (data.type === 'error') {
           throw new Error(data.message);
