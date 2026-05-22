@@ -21,6 +21,7 @@ from utils.format_converters import (
     convert_to_coco_anns,
     convert_to_yolo,
     filter_multianno,
+    ma_to_voc,
     ma_to_yolo,
     mask_to_shapes,
     render_mask_array,
@@ -93,6 +94,23 @@ async def handle_export(req: ExportRequest):
             return StreamingResponse(
                 export_yolo_dataset_stream(req), media_type="application/x-ndjson"
             )
+        if req.format == "coco":
+            return StreamingResponse(
+                export_coco_dataset_stream(req), media_type="application/x-ndjson"
+            )
+        if req.format == "voc":
+            return StreamingResponse(
+                export_voc_dataset_stream(req), media_type="application/x-ndjson"
+            )
+        if req.format == "multianno":
+            return StreamingResponse(
+                export_multianno_dataset_stream(req), media_type="application/x-ndjson"
+            )
+        if req.format == "mask":
+            return StreamingResponse(
+                export_mask_dataset_stream(req), media_type="application/x-ndjson"
+            )
+        raise HTTPException(status_code=400, detail="不支持的导出格式")
 
     if req.format == "multianno":
         return await export_to_multianno(req)
@@ -140,9 +158,6 @@ async def export_yolo_dataset_stream(req: ExportRequest):
         # 逐文件处理 + 进度
         exported_count = 0
         for idx, stem in enumerate(stems):
-            if stem not in shuffled:
-                continue
-
             result_yolo = ma_to_yolo(
                 os.path.join(source_dir, f"{stem}.json"),
                 os.path.join(anno_dir, f"{stem}{req.custom_suffix}{req.extension}"),
@@ -197,6 +212,437 @@ async def export_yolo_dataset_stream(req: ExportRequest):
             + "\n"
         )
 
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+
+async def export_coco_dataset_stream(req: ExportRequest):
+    """COCO 数据集导出（流式）"""
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        stems = req.stems
+        if not stems:
+            yield json.dumps({"type": "error", "message": "未找到任何场景"}) + "\n"
+            return
+
+        source_dir = req.source_dirs[0]
+        total = len(stems)
+
+        random.seed(req.random_seed)
+        shuffled = sorted(stems)
+        random.shuffle(shuffled)
+        n_train = int(total * req.split.get("train", 80) / 100)
+        n_val = int(total * req.split.get("val", 15) / 100)
+        train_stems = shuffled[:n_train]
+        val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
+
+        if os.path.exists(req.target_dir):
+            shutil.rmtree(req.target_dir, ignore_errors=True)
+        os.makedirs(req.target_dir, exist_ok=True)
+        anno_dir = os.path.join(req.target_dir, req.anno_subdir)
+        os.makedirs(anno_dir, exist_ok=True)
+        for vc in req.view_configs:
+            os.makedirs(os.path.join(req.target_dir, vc.subdir), exist_ok=True)
+
+        coco_dict = {
+            "images": [],
+            "annotations": [],
+            "categories": [
+                {"id": i, "name": name} for i, name in enumerate(req.selected_classes)
+            ],
+        }
+        img_id, ann_id = 1, 1
+        exported_count = 0
+
+        for idx, stem in enumerate(stems):
+            if stem not in shuffled:
+                continue
+            j_path = os.path.join(source_dir, f"{stem}.json")
+            if not os.path.exists(j_path):
+                progress = int(((idx + 1) / total) * 100)
+                yield (
+                    json.dumps(
+                        {
+                            "type": "progress",
+                            "current": idx + 1,
+                            "total": total,
+                            "percent": progress,
+                        }
+                    )
+                    + "\n"
+                )
+                await asyncio.sleep(0)
+                continue
+
+            with open(j_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            base_stem = data.get("stem", Path(j_path).stem)
+            coco_dict["images"].append(
+                {
+                    "id": img_id,
+                    "file_name": f"{base_stem}.jpg",
+                    "width": data.get("imageWidth", 1),
+                    "height": data.get("imageHeight", 1),
+                }
+            )
+            anns, stats, ann_id = convert_to_coco_anns(
+                data.get("shapes", []),
+                img_id,
+                ann_id,
+                req.selected_classes,
+                req.allowed_shapes,
+            )
+            coco_dict["annotations"].extend(anns)
+            reporter.log_scene(base_stem, stats)
+            exported_count += 1
+            img_id += 1
+
+            _copy_images_for_stem(stem, req.view_configs, req.target_dir)
+
+            progress = int(((idx + 1) / total) * 100)
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "current": idx + 1,
+                        "total": total,
+                        "percent": progress,
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
+        with open(
+            os.path.join(
+                anno_dir, f"instances_default{req.custom_suffix}{req.extension}"
+            ),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(coco_dict, f, ensure_ascii=False)
+
+        _write_split_files(
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+        )
+        with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
+            f.write("\n".join(req.selected_classes))
+        reporter.save_report(req.task_type, req.format)
+
+        yield (
+            json.dumps(
+                {
+                    "type": "complete",
+                    "percent": 100,
+                    "exported": exported_count,
+                    "split": {
+                        "train": len(train_stems),
+                        "val": len(val_stems),
+                        "test": len(test_stems),
+                    },
+                }
+            )
+            + "\n"
+        )
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+
+async def export_voc_dataset_stream(req: ExportRequest):
+    """VOC 数据集导出（流式）"""
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        stems = req.stems
+        if not stems:
+            yield json.dumps({"type": "error", "message": "未找到任何场景"}) + "\n"
+            return
+
+        source_dir = req.source_dirs[0]
+        total = len(stems)
+
+        random.seed(req.random_seed)
+        shuffled = sorted(stems)
+        random.shuffle(shuffled)
+        n_train = int(total * req.split.get("train", 80) / 100)
+        n_val = int(total * req.split.get("val", 15) / 100)
+        train_stems = shuffled[:n_train]
+        val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
+
+        if os.path.exists(req.target_dir):
+            shutil.rmtree(req.target_dir, ignore_errors=True)
+        os.makedirs(req.target_dir, exist_ok=True)
+        anno_dir = os.path.join(req.target_dir, req.anno_subdir)
+        os.makedirs(anno_dir, exist_ok=True)
+        for vc in req.view_configs:
+            os.makedirs(os.path.join(req.target_dir, vc.subdir), exist_ok=True)
+
+        exported_count = 0
+        for idx, stem in enumerate(stems):
+            if stem not in shuffled:
+                continue
+
+            result_voc = ma_to_voc(
+                os.path.join(source_dir, f"{stem}.json"),
+                os.path.join(anno_dir, f"{stem}{req.custom_suffix}{req.extension}"),
+                req.selected_classes,
+                req.allowed_shapes,
+                req.task_type,
+            )
+            exported_count += int(result_voc)
+            reporter.log_scene(
+                stem,
+                {
+                    "native": int(result_voc),
+                    "converted": 0,
+                    "discarded": 0 if result_voc else 1,
+                },
+            )
+
+            _copy_images_for_stem(stem, req.view_configs, req.target_dir)
+
+            progress = int(((idx + 1) / total) * 100)
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "current": idx + 1,
+                        "total": total,
+                        "percent": progress,
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
+        _write_split_files(
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+        )
+        with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
+            f.write("\n".join(req.selected_classes))
+        reporter.save_report(req.task_type, req.format)
+
+        yield (
+            json.dumps(
+                {
+                    "type": "complete",
+                    "percent": 100,
+                    "exported": exported_count,
+                    "split": {
+                        "train": len(train_stems),
+                        "val": len(val_stems),
+                        "test": len(test_stems),
+                    },
+                }
+            )
+            + "\n"
+        )
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+
+async def export_multianno_dataset_stream(req: ExportRequest):
+    """MultiAnno 数据集导出（流式）"""
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        stems = req.stems
+        if not stems:
+            yield json.dumps({"type": "error", "message": "未找到任何场景"}) + "\n"
+            return
+
+        source_dir = req.source_dirs[0]
+        total = len(stems)
+
+        random.seed(req.random_seed)
+        shuffled = sorted(stems)
+        random.shuffle(shuffled)
+        n_train = int(total * req.split.get("train", 80) / 100)
+        n_val = int(total * req.split.get("val", 15) / 100)
+        train_stems = shuffled[:n_train]
+        val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
+
+        if os.path.exists(req.target_dir):
+            shutil.rmtree(req.target_dir, ignore_errors=True)
+        os.makedirs(req.target_dir, exist_ok=True)
+        anno_dir = os.path.join(req.target_dir, req.anno_subdir)
+        os.makedirs(anno_dir, exist_ok=True)
+        for vc in req.view_configs:
+            os.makedirs(os.path.join(req.target_dir, vc.subdir), exist_ok=True)
+
+        exported_count = 0
+        for idx, stem in enumerate(stems):
+            if stem not in shuffled:
+                continue
+            j_path = os.path.join(source_dir, f"{stem}.json")
+            if os.path.exists(j_path):
+                with open(j_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                base_stem = data.get("stem", Path(j_path).stem)
+                filtered_shapes, stats = filter_multianno(
+                    data.get("shapes", []), req.selected_classes, req.allowed_shapes
+                )
+                if filtered_shapes or len(data.get("shapes", [])) == 0:
+                    data["shapes"] = filtered_shapes
+                    with open(
+                        os.path.join(
+                            anno_dir, f"{base_stem}{req.custom_suffix}{req.extension}"
+                        ),
+                        "w",
+                        encoding="utf-8",
+                    ) as wf:
+                        json.dump(data, wf, ensure_ascii=False, indent=2)
+                    exported_count += 1
+                reporter.log_scene(base_stem, stats)
+
+            _copy_images_for_stem(stem, req.view_configs, req.target_dir)
+
+            progress = int(((idx + 1) / total) * 100)
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "current": idx + 1,
+                        "total": total,
+                        "percent": progress,
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
+        _write_split_files(
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+        )
+        with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
+            f.write("\n".join(req.selected_classes))
+        reporter.save_report(req.task_type, req.format)
+
+        yield (
+            json.dumps(
+                {
+                    "type": "complete",
+                    "percent": 100,
+                    "exported": exported_count,
+                    "split": {
+                        "train": len(train_stems),
+                        "val": len(val_stems),
+                        "test": len(test_stems),
+                    },
+                }
+            )
+            + "\n"
+        )
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+
+async def export_mask_dataset_stream(req: ExportRequest):
+    """Mask 数据集导出（流式）"""
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        stems = req.stems
+        if not stems:
+            yield json.dumps({"type": "error", "message": "未找到任何场景"}) + "\n"
+            return
+
+        source_dir = req.source_dirs[0]
+        total = len(stems)
+
+        random.seed(req.random_seed)
+        shuffled = sorted(stems)
+        random.shuffle(shuffled)
+        n_train = int(total * req.split.get("train", 80) / 100)
+        n_val = int(total * req.split.get("val", 15) / 100)
+        train_stems = shuffled[:n_train]
+        val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
+
+        if os.path.exists(req.target_dir):
+            shutil.rmtree(req.target_dir, ignore_errors=True)
+        os.makedirs(req.target_dir, exist_ok=True)
+        anno_dir = os.path.join(req.target_dir, req.anno_subdir)
+        os.makedirs(anno_dir, exist_ok=True)
+        for vc in req.view_configs:
+            os.makedirs(os.path.join(req.target_dir, vc.subdir), exist_ok=True)
+
+        exported_count = 0
+        for idx, stem in enumerate(stems):
+            if stem not in shuffled:
+                continue
+            j_path = os.path.join(source_dir, f"{stem}.json")
+            if os.path.exists(j_path):
+                with open(j_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                img_w, img_h = data.get("imageWidth"), data.get("imageHeight")
+                if img_w and img_h:
+                    mask, stats = render_mask_array(
+                        data.get("shapes", []),
+                        img_w,
+                        img_h,
+                        req.selected_classes,
+                        req.allowed_shapes,
+                    )
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        io.imsave(
+                            os.path.join(
+                                anno_dir, f"{stem}{req.custom_suffix}{req.extension}"
+                            ),
+                            mask,
+                            check_contrast=False,
+                        )
+                    exported_count += 1
+                    reporter.log_scene(stem, stats)
+
+            _copy_images_for_stem(stem, req.view_configs, req.target_dir)
+
+            progress = int(((idx + 1) / total) * 100)
+            yield (
+                json.dumps(
+                    {
+                        "type": "progress",
+                        "current": idx + 1,
+                        "total": total,
+                        "percent": progress,
+                    }
+                )
+                + "\n"
+            )
+            await asyncio.sleep(0)
+
+        _write_split_files(
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+        )
+        with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
+            f.write("\n".join(req.selected_classes))
+        reporter.save_report(req.task_type, req.format)
+
+        yield (
+            json.dumps(
+                {
+                    "type": "complete",
+                    "percent": 100,
+                    "exported": exported_count,
+                    "split": {
+                        "train": len(train_stems),
+                        "val": len(val_stems),
+                        "test": len(test_stems),
+                    },
+                }
+            )
+            + "\n"
+        )
     except asyncio.CancelledError:
         print("⚠️ Client disconnected, export cancelled")
     except Exception as e:
@@ -805,7 +1251,7 @@ def _copy_images_for_stem(stem, view_configs, target_dir):
         src_img_path = os.path.join(src_dir, f"{stem}{src_suffix}{src_ext}")
         out_img_path = os.path.join(dst_dir, f"{stem}{out_suffix}{out_ext}")
 
-        if not src_img_path:
+        if not os.path.exists(src_img_path):
             print(f"⚠️ Image not found: {stem}{src_suffix}.{src_ext}")
             continue
 

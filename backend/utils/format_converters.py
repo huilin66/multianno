@@ -3,6 +3,7 @@ import json
 import math
 import os
 import uuid
+import xml.etree.ElementTree as ET
 
 import cv2
 import numpy as np
@@ -124,6 +125,121 @@ def ma_to_yolo(ma_path, yolo_path, selected_classes, allowed_shapes, task_type):
             f.write("\n".join(yolo_lines))
         return True
     return False
+
+
+def ma_to_voc(ma_path, voc_path, selected_classes, allowed_shapes, task_type):
+    """将 MultiAnno 格式的标注文件转换为 Pascal VOC XML（检测框）"""
+    if not os.path.exists(ma_path):
+        return False
+
+    with open(ma_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    shapes = data.get("shapes", [])
+    img_w = max(1, int(data.get("imageWidth", 1)))
+    img_h = max(1, int(data.get("imageHeight", 1)))
+    img_d = max(1, int(data.get("imageDepth", 3)))
+    image_path = data.get("imagePath", "")
+    file_name = os.path.basename(image_path) if image_path else ""
+    allowed_shapes_lower = [s.lower() for s in allowed_shapes]
+
+    root = ET.Element("annotation")
+    ET.SubElement(root, "folder").text = os.path.basename(
+        os.path.dirname(image_path)
+    ) or "images"
+    ET.SubElement(root, "filename").text = file_name
+    ET.SubElement(root, "path").text = image_path
+
+    source = ET.SubElement(root, "source")
+    ET.SubElement(source, "database").text = "Unknown"
+
+    size = ET.SubElement(root, "size")
+    ET.SubElement(size, "width").text = str(img_w)
+    ET.SubElement(size, "height").text = str(img_h)
+    ET.SubElement(size, "depth").text = str(img_d)
+    ET.SubElement(root, "segmented").text = "0"
+
+    has_object = False
+    for shape in shapes:
+        label = shape.get("label")
+        raw_type = shape.get("shape_type", "unknown").lower()
+        if raw_type == "rectangle":
+            shape_type = "bbox"
+        elif raw_type == "linestrip":
+            shape_type = "line"
+        else:
+            shape_type = raw_type
+
+        if label not in selected_classes or shape_type not in allowed_shapes_lower:
+            continue
+
+        raw_points = shape.get("points", [])
+        bbox = get_bounding_box(shape_type, raw_points)
+        if not bbox:
+            continue
+
+        xmin, ymin, xmax, ymax = bbox
+        xmin = max(0, min(img_w - 1, int(round(xmin))))
+        ymin = max(0, min(img_h - 1, int(round(ymin))))
+        xmax = max(0, min(img_w - 1, int(round(xmax))))
+        ymax = max(0, min(img_h - 1, int(round(ymax))))
+        if xmax <= xmin or ymax <= ymin:
+            continue
+
+        obj = ET.SubElement(root, "object")
+        ET.SubElement(obj, "name").text = str(label)
+        ET.SubElement(obj, "pose").text = "Unspecified"
+        ET.SubElement(obj, "truncated").text = "0"
+        ET.SubElement(obj, "difficult").text = "0"
+
+        bndbox = ET.SubElement(obj, "bndbox")
+        ET.SubElement(bndbox, "xmin").text = str(xmin)
+        ET.SubElement(bndbox, "ymin").text = str(ymin)
+        ET.SubElement(bndbox, "xmax").text = str(xmax)
+        ET.SubElement(bndbox, "ymax").text = str(ymax)
+        has_object = True
+
+    if not has_object:
+        return False
+
+    ET.ElementTree(root).write(voc_path, encoding="utf-8", xml_declaration=True)
+    return True
+
+
+def ma_to_coco(ma_path, coco_path, selected_classes, allowed_shapes, task_type):
+    """将单个 MultiAnno 标注文件转换为 COCO JSON"""
+    if not os.path.exists(ma_path):
+        return False
+
+    with open(ma_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    image_path = data.get("imagePath", "")
+    file_name = os.path.basename(image_path) or f"{os.path.splitext(os.path.basename(ma_path))[0]}.jpg"
+    anns, _, _ = convert_to_coco_anns(
+        data.get("shapes", []), 1, 1, selected_classes, allowed_shapes
+    )
+
+    if not anns:
+        return False
+
+    coco_dict = {
+        "images": [
+            {
+                "id": 1,
+                "file_name": file_name,
+                "width": data.get("imageWidth", 1),
+                "height": data.get("imageHeight", 1),
+            }
+        ],
+        "annotations": anns,
+        "categories": [
+            {"id": i, "name": name} for i, name in enumerate(selected_classes)
+        ],
+    }
+    with open(coco_path, "w", encoding="utf-8") as f:
+        json.dump(coco_dict, f, ensure_ascii=False)
+    return True
 
 
 def convert_to_yolo(
@@ -333,7 +449,6 @@ def render_mask_array(
             stats["native"] += 1
         else:
             stats["converted"] += 1
-    print(np.unique(mask))
     return mask, stats
 
 
