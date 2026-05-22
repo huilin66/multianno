@@ -149,8 +149,10 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         merge_strategy: mergeStrategy,
         classes_file: externalClassFile,
         custom_suffix: customSuffix,
+        extension: extension,
         import_zero_class: importZeroClass,
         coco_mode: cocoMode,
+        stems: stems,
       });
 
       clearInterval(progressTimer);

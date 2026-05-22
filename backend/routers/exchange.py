@@ -856,13 +856,19 @@ async def import_from_yolo(req: ImportRequest):
     imported_count = 0
     processed_stems = set()
     total_shapes = 0
-    for txt_file in os.listdir(req.source_path):
-        if not txt_file.endswith(".txt") or txt_file == "classes.txt":
+    # 使用 stems 列表按 {stem}{custom_suffix}{extension} 规则定位文件
+    stems = req.stems or []
+    if not stems:
+        # 回退：扫描目录
+        stems = [Path(f).stem for f in os.listdir(req.source_path)
+                 if f.endswith(".txt") and f != "classes.txt"]
+
+    for stem in stems:
+        filename = f"{stem}{req.custom_suffix}{req.extension}" if req.extension else f"{stem}{req.custom_suffix}.txt"
+        txt_path = os.path.join(req.source_path, filename)
+        if not os.path.exists(txt_path):
             continue
-        stem = Path(txt_file).stem
         base_stem = stem
-        if req.custom_suffix and stem.endswith(req.custom_suffix):
-            base_stem = stem[: -len(req.custom_suffix)]
         target_json = os.path.join(req.target_dir, f"{base_stem}.json")
 
         img_w, img_h = 1024, 1024
@@ -889,7 +895,7 @@ async def import_from_yolo(req: ImportRequest):
             existing_data["shapes"] = []
         processed_stems.add(base_stem)
 
-        with open(os.path.join(req.source_path, txt_file), "r", encoding="utf-8") as f:
+        with open(txt_path, "r", encoding="utf-8") as f:
             lines = f.readlines()
         new_shapes, _ = yolo_to_shapes(lines, img_w, img_h, classes_map)
 
@@ -998,28 +1004,20 @@ async def import_from_multianno(req: ImportRequest):
     imported_count = 0
     total_shapes = 0
     processed_stems = set()
-    for json_file in os.listdir(req.source_path):
-        if not json_file.endswith(".json"):
+
+    # 使用 stems 列表按 {stem}{custom_suffix}.json 规则定位文件
+    stems = req.stems or []
+    if not stems:
+        stems = [Path(f).stem for f in os.listdir(req.source_path) if f.endswith(".json")]
+
+    for stem in stems:
+        ext = req.extension or ".json"
+        filename = f"{stem}{req.custom_suffix}{ext}"
+        source_json_path = os.path.join(req.source_path, filename)
+        if not os.path.exists(source_json_path):
             continue
 
-        file_stem = Path(json_file).stem
-
-        # ==========================================
-        # 🌟 修正 1：精准过滤源文件
-        # 如果前端传了 _src2，我们就只认 _src2 结尾的文件，其余一律无视！
-        # ==========================================
-        if req.custom_suffix and not file_stem.endswith(req.custom_suffix):
-            continue
-
-        # ==========================================
-        # 🌟 修正 2：拨乱反正！
-        # base_stem 必须是剥离了后缀的纯净 scene group 名字
-        # ==========================================
-        base_stem = file_stem
-        if req.custom_suffix:
-            base_stem = file_stem[: -len(req.custom_suffix)]
-
-        source_json_path = os.path.join(req.source_path, json_file)
+        base_stem = stem
 
         # 🌟 修正 3：目标路径必须是绝对纯净的 base_stem.json
         target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
@@ -1119,15 +1117,24 @@ async def import_from_images_only(req: ImportRequest):
     imported_count = 0
     total_shapes = 0
     processed_stems = set()
-    for mask_file in os.listdir(req.source_path):
-        if not mask_file.lower().endswith(valid_exts):
-            continue
 
-        stem = Path(mask_file).stem
-        mask_path = os.path.join(req.source_path, mask_file)
+    # 使用 stems 列表按 {stem}{custom_suffix}{ext} 规则定位文件
+    stems = req.stems or []
+    if not stems:
+        stems = [Path(f).stem for f in os.listdir(req.source_path)
+                 if f.lower().endswith(valid_exts)]
+
+    for stem in stems:
+        # 尝试所有有效扩展名
+        mask_path = None
         base_stem = stem
-        if req.custom_suffix and stem.endswith(req.custom_suffix):
-            base_stem = stem[: -len(req.custom_suffix)]
+        for ext in valid_exts:
+            candidate = os.path.join(req.source_path, f"{stem}{req.custom_suffix}{ext}")
+            if os.path.exists(candidate):
+                mask_path = candidate
+                break
+        if mask_path is None:
+            continue
         target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
 
         # 读取或初始化目标 JSON

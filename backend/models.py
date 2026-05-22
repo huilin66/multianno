@@ -134,8 +134,10 @@ class ImportRequest(BaseModel):
     merge_strategy: str = "append"
     classes_file: Optional[str] = None
     custom_suffix: str = ""
+    extension: str = ""
     import_zero_class: bool = False
     coco_mode: str = "polygon"
+    stems: list[str] = []
 
 
 class ProjectMetaPayload(BaseModel):
