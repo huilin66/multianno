@@ -10,8 +10,9 @@ import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { importData, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, type TaskType } from '../../config/supportedFormats';
+import { showDialog } from '../../store/useDialogStore';
 import {
-  Folder, FileText, Image, Loader2, Check, X,
+  Folder, FileText, Image, Check, X,
   ChevronRight, RotateCcw, FolderSearch, AlertCircle, Tag
 } from 'lucide-react';
 
@@ -44,6 +45,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const folders = useStore(s => s.folders);
   const views = useStore(s => s.views);
   const workspacePath = useStore(s => s.workspacePath);
+  const stems = useStore(s => s.stems);
 
   const mainViewFolder = folders?.find((f: any) =>
     f.id === views?.find((v: any) => v.isMain)?.folderId
@@ -72,6 +74,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   // --- 通用 ---
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
+  const [importProgress, setImportProgress] = useState(0);
 
   // --- 文件浏览器 ---
   const [explorerConfig, setExplorerConfig] = useState<{
@@ -131,6 +134,12 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
 
     setIsImporting(true);
     setImportStatus('importing');
+    setImportProgress(0);
+
+    // 模拟进度动画
+    const progressTimer = setInterval(() => {
+      setImportProgress(prev => Math.min(prev + 5, 90));
+    }, 300);
 
     try {
       const res = await importData({
@@ -143,6 +152,9 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         import_zero_class: importZeroClass,
         coco_mode: cocoMode,
       });
+
+      clearInterval(progressTimer);
+      setImportProgress(100);
 
       // 热重载
       const { projectMetaPath } = useStore.getState();
@@ -176,6 +188,12 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       }
 
       setImportStatus('done');
+      const msg = res?.message || t('dataImport.success');
+      await showDialog({
+        title: t('dataImport.success'),
+        description: msg,
+        type: 'success',
+      });
       onClose?.();
     } catch (err: any) {
       setImportStatus('error');
@@ -550,9 +568,17 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       {/* 底部按钮 */}
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
         {importStatus === 'importing' ? (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            {t('dataImport.importing')}
+          <div className="flex items-center gap-3 flex-1 mr-4">
+            <span className="text-xs text-muted-foreground whitespace-nowrap">
+              {t('dataImport.importing')}
+              <span className="font-mono font-bold text-foreground ml-1">
+                {Math.round(stems.length * importProgress / 100)}/{stems.length}
+              </span>
+            </span>
+            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${importProgress}%` }} />
+            </div>
           </div>
         ) : importStatus === 'done' ? (
           <div className="flex items-center gap-2 text-xs text-emerald-600">
