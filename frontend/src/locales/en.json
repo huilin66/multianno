@@ -379,7 +379,15 @@
       "targetRequired": "Target folder is required before export."
     },
     "readyToExport": "Confirm Export scene groups:",
-    "exporting": "Exporting..."
+    "exporting": "Exporting...",
+    "success": "Export successful",
+    "result": {
+      "method": "Method: {{format}}",
+      "mode": "Mode: {{mode}}",
+      "scenes": "Scenes: {{count}}/{{total}}",
+      "classes": "Classes: {{count}}",
+      "split": "Split: Train {{train}} / Val {{val}} / Test {{test}}"
+    }
   },
   "dataImport": {
     "steps": {

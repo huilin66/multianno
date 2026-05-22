@@ -379,7 +379,15 @@
       "targetRequired": "导出前必须指定目标文件夹。"
     },
     "readyToExport": "准备导出场景组:",
-    "exporting": "导出中..."
+    "exporting": "导出中...",
+    "success": "导出成功",
+    "result": {
+      "method": "导出方法: {{format}}",
+      "mode": "导出模式: {{mode}}",
+      "scenes": "导出场景数: {{count}}/{{total}}",
+      "classes": "类别数: {{count}}",
+      "split": "数据集分割: Train {{train}} / Val {{val}} / Test {{test}}"
+    }
   },
   "dataImport": {
     "steps": {

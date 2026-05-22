@@ -9,6 +9,7 @@ import { Checkbox } from '../ui/checkbox';
 import Slider from 'rc-slider';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { exportData, getFileContent, exportDatasetStream } from '../../api/client';
+import { showDialog } from '../../store/useDialogStore';
 import {
   SUPPORTED_TASKS,
   FORMAT_DETAILS,
@@ -311,7 +312,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       });
 
       if (exportMode === 'dataset') {
-        await exportDatasetStream({
+        const result = await exportDatasetStream({
           source_dirs: [workspacePath],
           target_dir: targetDir,
           task_type: taskType,
@@ -331,8 +332,30 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
         }, (current, total) => {
           setExportProgress(Math.round((current / total) * 100));
         }, signal);
+
+        setExportProgress(100);
+        if (!signal.aborted) {
+          setExportStatus('done');
+          const exported = result?.exported ?? stems.length;
+          const splitInfo = result?.split || {};
+          const lines = [
+            t('dataExport.result.method', { format: format.toUpperCase() }),
+            t('dataExport.result.mode', { mode: exportMode }),
+            t('dataExport.result.scenes', { count: exported, total: stems.length }),
+            t('dataExport.result.classes', { count: selectedClassNames.length }),
+          ];
+          if (splitInfo.train !== undefined) {
+            lines.push(t('dataExport.result.split', { train: splitInfo.train, val: splitInfo.val ?? 0, test: splitInfo.test ?? 0 }));
+          }
+          await showDialog({
+            type: 'success',
+            title: t('dataExport.success'),
+            description: lines.join('\n'),
+          });
+          onClose?.();
+        }
       } else {
-        await exportData({
+        const result = await exportData({
           source_dirs: [workspacePath],
           target_dir: targetDir,
           task_type: taskType,
@@ -345,12 +368,27 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           stems: stems,
           export_mode: 'annotation',
         }, signal);
-        setExportProgress(100);
-      }
 
-      if (!signal.aborted) {
-        setExportStatus('done');
-        onClose?.();
+        setExportProgress(100);
+        if (!signal.aborted) {
+          setExportStatus('done');
+          const lines = [
+            t('dataExport.result.method', { format: format.toUpperCase() }),
+            t('dataExport.result.mode', { mode: exportMode }),
+            t('dataExport.result.scenes', { count: stems.length, total: stems.length }),
+            t('dataExport.result.classes', { count: selectedClassNames.length }),
+          ];
+          const exported = result?.exported;
+          if (exported) {
+            lines[2] = t('dataExport.result.scenes', { count: exported, total: stems.length });
+          }
+          await showDialog({
+            type: 'success',
+            title: t('dataExport.success'),
+            description: lines.join('\n'),
+          });
+          onClose?.();
+        }
       }
     } catch (err: any) {
       if (err.name === 'AbortError') return;
