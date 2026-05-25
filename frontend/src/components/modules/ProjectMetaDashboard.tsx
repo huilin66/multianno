@@ -104,9 +104,9 @@ export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}
 
               {/* 🌟 4. 底部参数条：日间纯白字变深，夜间恢复 */}
               <div className="bg-white dark:bg-neutral-900 p-3 rounded border border-neutral-200 dark:border-neutral-800/50 text-xs font-mono text-neutral-700 dark:text-neutral-400 grid grid-cols-2 gap-y-2 shadow-sm dark:shadow-none transition-colors">
-                <div><span className="text-neutral-500 mr-2">{t('projectMeta.folders.size')}:</span>{folder["image meta"].width} x {folder["image meta"].height}</div>
-                <div><span className="text-neutral-500 mr-2">{t('projectMeta.folders.bands')}:</span>{folder["image meta"].bands}</div>
-                <div className="col-span-2"><span className="text-neutral-500 mr-2">{t('projectMeta.folders.type')}::</span>{folder["image meta"]["data type"]}</div>
+                <div><span className="text-neutral-500 mr-2">{t('projectMeta.folders.size')}:</span>{folder["image meta"]?.width ?? 'Unknown'} x {folder["image meta"]?.height ?? 'Unknown'}</div>
+                <div><span className="text-neutral-500 mr-2">{t('projectMeta.folders.bands')}:</span>{folder["image meta"]?.bands ?? 'Unknown'}</div>
+                <div className="col-span-2"><span className="text-neutral-500 mr-2">{t('projectMeta.folders.type')}::</span>{folder["image meta"]?.["data type"] ?? 'uint8'}</div>
               </div>
             </div>
             ))}

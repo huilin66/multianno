@@ -61,7 +61,7 @@ export function generateProjectMetaConfig(state: AppState): ProjectMetaContract 
               offsetX: v.transform?.offsetX ?? 0,
               offsetY: v.transform?.offsetY ?? 0
             },
-            crop: v.crop,
+            crop: v.crop ?? { t: 0, r: 0, b: 0, l: 0 },
             settings: v.settings
           };
         })
