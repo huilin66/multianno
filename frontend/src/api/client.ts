@@ -1,6 +1,6 @@
 // frontend/src/api/client.ts
 
-export const API_BASE_URL = 'http://localhost:8080/api';
+export const API_BASE_URL = 'http://localhost:8090/api';
 const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
 
 const post = async (url: string, body: any, signal?: AbortSignal) => {
