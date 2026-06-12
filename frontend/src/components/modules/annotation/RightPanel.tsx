@@ -92,6 +92,12 @@ export function RightPanel({
       });
     }
   }, [annotations, taxonomyClasses, addTaxonomyClass]);
+  React.useEffect(() => {
+    if (!currentStem || !sceneListRef.current) return;
+    const el = sceneListRef.current.querySelector(`[data-stem="${CSS.escape(currentStem)}"]`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, [currentStem]);
+
   const [openLayerId, setOpenLayerId] = React.useState<string | null>(null);
 
   // 控制各个板块的展开状态
@@ -106,6 +112,7 @@ export function RightPanel({
 
   const [confirmDeleteAll, setConfirmDeleteAll] = React.useState(false);
 
+  const sceneListRef = React.useRef<HTMLDivElement>(null);
   const [nmsPanelOpen, setNmsPanelOpen] = React.useState(false);
   const [nmsMode, setNmsMode] = React.useState<'iou' | 'ios'>('ios');
   const [nmsThreshold, setNmsThreshold] = React.useState(80);
@@ -1307,7 +1314,7 @@ export function RightPanel({
           badge={currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}
         />
         {expanded.scenes && (
-          <div className="max-h-[25vh] overflow-y-auto p-2 space-y-1 bg-neutral-100 dark:bg-black/20 custom-scrollbar shrink-0 max-h-[228px]">
+          <div ref={sceneListRef} className="max-h-[25vh] overflow-y-auto p-2 space-y-1 bg-neutral-100 dark:bg-black/20 custom-scrollbar shrink-0 max-h-[228px]">
             {stems.map((stem: string) => {
               // 🌟 核心：计算该场景下包含多少个标注对象
               const annoCount = annotations.filter((a: any) => a.stem === stem).length;
@@ -1315,6 +1322,7 @@ export function RightPanel({
               return (
                 <button
                   key={stem}
+                  data-stem={stem}
                   onClick={() => { setCurrentStem(stem); setActiveAnnotationId(null); }}
                   className={`w-full text-left px-3 py-1.5 text-[11px] rounded transition-all flex items-center justify-between group h-[40px] ${
                     currentStem === stem ? 'bg-blue-600 text-white shadow-md font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
