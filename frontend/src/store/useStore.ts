@@ -347,8 +347,14 @@ export const useStore = create<AppState>()(
         set({
           projectName: meta.projectName || 'Untitled Project',
           sceneGroups: meta.sceneGroups || {},
-          taxonomyClasses: meta.taxonomyClasses || [],
-          classOrder: (meta.taxonomyClasses || []).map((c: any) => c.id),
+          taxonomyClasses: (meta.taxonomyClasses || []).filter((c: any, i: number, arr: any[]) => {
+            const key = (c.name || '').trim().toLowerCase();
+            return arr.findIndex((x: any) => (x.name || '').trim().toLowerCase() === key) === i;
+          }),
+          classOrder: (meta.taxonomyClasses || []).filter((c: any, i: number, arr: any[]) => {
+            const key = (c.name || '').trim().toLowerCase();
+            return arr.findIndex((x: any) => (x.name || '').trim().toLowerCase() === key) === i;
+          }).map((c: any) => c.id),
           taxonomyAttributes: meta.taxonomyAttributes || [],
           attributeOrder: (meta.taxonomyAttributes || []).map((a: any) => a.id),
           

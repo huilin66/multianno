@@ -176,7 +176,13 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     const unordered = taxonomyClasses.filter((c: any) => !classOrder.includes(c.id));
     
     const allClasses = [...orderedClasses, ...unordered];
-    const mapped = allClasses.map((c: any) => ({
+    const seen = new Set<string>();
+    const deduped = allClasses.filter((c: any) => {
+      if (seen.has(c.name)) return false;
+      seen.add(c.name);
+      return true;
+    });
+    const mapped = deduped.map((c: any) => ({
       ...c, selected: c.name.toLowerCase() !== 'background'
     }));
     
