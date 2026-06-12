@@ -105,6 +105,7 @@ class ViewExportConfig(BaseModel):
     source_suffix: str = ""
     source_extension: str = "tif"
     crop: dict = {}
+    is_main: bool = False
 
 
 class ExportRequest(BaseModel):
@@ -125,6 +126,7 @@ class ExportRequest(BaseModel):
     split: dict = {}
     random_seed: int = 42
     split_files: dict = {}
+    split_content_mode: str = "stem"  # "stem" or "main_view"
 
 
 class ImportRequest(BaseModel):

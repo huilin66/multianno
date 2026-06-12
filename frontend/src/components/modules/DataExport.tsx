@@ -104,6 +104,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const [splitTrainFile, setSplitTrainFile] = useState(DefaultSplitConfig.splitTrainFile);
   const [splitValFile, setSplitValFile] = useState(DefaultSplitConfig.splitValFile);
   const [splitTestFile, setSplitTestFile] = useState(DefaultSplitConfig.splitTestFile);
+  const [splitContentMode, setSplitContentMode] = useState<'stem' | 'main_view'>('stem');
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // --- Card 5: Shape Filter & Class Order ---
@@ -308,6 +309,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           bands: view?.bands || [1, 2, 3],
           transform: view?.transform || {},
           crop: view?.crop || {},
+          is_main: view?.isMain || false,
         };
       });
 
@@ -329,6 +331,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           split: { train: splitTrain, val: splitVal, test: splitTest },
           random_seed: randomSeed,
           split_files: { train: splitTrainFile, val: splitValFile, test: splitTestFile },
+          split_content_mode: splitContentMode,
         }, (current, total) => {
           setExportProgress(Math.round((current / total) * 100));
         }, signal);
@@ -367,6 +370,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           generate_report: generateReport,
           stems: stems,
           export_mode: 'annotation',
+          split_content_mode: splitContentMode,
         }, signal);
 
         setExportProgress(100);
@@ -699,20 +703,48 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           </div>
         );
         
-      case 'split': 
+      case 'split':
       {
-        // 1. 动态计算滑块条的 3 色渐变背景
         const p1 = splitTrain;
         const p2 = splitTrain + splitVal;
-        const sliderGradient = `linear-gradient(to right, 
-          #3b82f6 0%, #3b82f6 ${p1}%, 
-          #f59e0b ${p1}%, #f59e0b ${p2}%, 
+        const sliderGradient = `linear-gradient(to right,
+          #3b82f6 0%, #3b82f6 ${p1}%,
+          #f59e0b ${p1}%, #f59e0b ${p2}%,
           #ef4444 ${p2}%, #ef4444 100%
         )`;
 
+        // Seeded shuffle preview — mirrors backend 0%-aware split logic
+        const seededRand = (seed: number) => { let s = seed | 0; return () => { s = (s * 1664525 + 1013904223) | 0; return (s >>> 0) / 4294967296; }; };
+        const rng = seededRand(randomSeed);
+        const previewShuffled = [...stems].sort();
+        for (let i = previewShuffled.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [previewShuffled[i], previewShuffled[j]] = [previewShuffled[j], previewShuffled[i]]; }
+        const totalN = stems.length;
+        let nTrain2 = splitTrain > 0 ? Math.floor(totalN * splitTrain / 100) : 0;
+        let nVal2 = splitVal > 0 ? Math.floor(totalN * splitVal / 100) : 0;
+        let nTest2 = splitTest > 0 ? Math.floor(totalN * splitTest / 100) : 0;
+        const rem = totalN - nTrain2 - nVal2 - nTest2;
+        if (rem > 0) {
+          const ranked = [{p: splitTrain, n: 'train'}, {p: splitVal, n: 'val'}, {p: splitTest, n: 'test'}].sort((a, b) => b.p - a.p);
+          const target = ranked.find(r => r.p > 0);
+          if (target) {
+            if (target.n === 'train') nTrain2 += rem;
+            else if (target.n === 'val') nVal2 += rem;
+            else nTest2 += rem;
+          }
+        }
+        const previewTrain = previewShuffled.slice(0, nTrain2);
+        const previewVal = previewShuffled.slice(nTrain2, nTrain2 + nVal2);
+        const previewTest = previewShuffled.slice(nTrain2 + nVal2, nTrain2 + nVal2 + nTest2);
+
+        const mainView = views.find((v: any) => v.isMain);
+        const mainVc = mainView ? viewConfigs.find(vc => vc.viewId === mainView.id) : viewConfigs[0];
+        const fmtStem = (s: string) => splitContentMode === 'main_view'
+          ? `${s}${mainVc?.suffix || ''}${mainVc?.extension || '.jpg'}`
+          : s;
+
         return (
           <div className="space-y-5">
-            {/* 预览 */}
+            {/* 预览: 文件结构 */}
             <div className="p-4 bg-muted/30 rounded-xl border space-y-2">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
                 {t('dataExport.stepSplit.preview')}
@@ -722,9 +754,44 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                 {viewConfigs.map(vc => (
                   <div key={vc.viewId} className="text-muted-foreground/60">{vc.subdir}/</div>
                 ))}
-                <div className="text-blue-500">{splitTrainFile}</div>
-                <div className="text-amber-500">{splitValFile}</div>
-                <div className="text-red-500">{splitTestFile}</div>
+                {splitTrain > 0 && <div className="text-blue-500">{splitTrainFile}</div>}
+                {splitVal > 0 && <div className="text-amber-500">{splitValFile}</div>}
+                {splitTest > 0 && <div className="text-red-500">{splitTestFile}</div>}
+              </div>
+            </div>
+
+            {/* 预览: 文件内容 */}
+            <div className="p-4 bg-muted/30 rounded-xl border space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
+                  Split File Entries
+                </div>
+                <span className="text-[9px] text-muted-foreground font-mono">
+                  {splitContentMode === 'main_view' ? 'Main View names' : 'Scene Group names'}
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  { label: splitTrainFile, color: 'text-blue-500', border: 'border-blue-200 dark:border-blue-900/30', bg: 'bg-blue-50/50 dark:bg-blue-950/20', stems: previewTrain },
+                  { label: splitValFile, color: 'text-amber-500', border: 'border-amber-200 dark:border-amber-900/30', bg: 'bg-amber-50/50 dark:bg-amber-950/20', stems: previewVal },
+                  { label: splitTestFile, color: 'text-red-500', border: 'border-red-200 dark:border-red-900/30', bg: 'bg-red-50/50 dark:bg-red-950/20', stems: previewTest },
+                ] as const).map(col => (
+                  <div key={col.label} className={`rounded border ${col.border} ${col.bg} p-2`}>
+                    <div className={`text-[9px] font-bold ${col.color} mb-1.5`}>{col.label}</div>
+                    <div className="text-[9px] font-mono text-muted-foreground leading-relaxed space-y-0.5">
+                      {col.stems.length === 0 ? (
+                        <span className="italic opacity-50">(empty)</span>
+                      ) : (
+                        col.stems.slice(0, 6).map(s => (
+                          <div key={s} className="truncate">{fmtStem(s)}</div>
+                        ))
+                      )}
+                      {col.stems.length > 6 && (
+                        <div className="text-muted-foreground/50">+{col.stems.length - 6} more</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -756,13 +823,13 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                 </div>
               </div>
 
-              {/* 🌟 Range Slider — 完美切分 蓝/橙/红 三色 */}
+              {/* 🌟 Range Slider */}
               <div className="px-1 pt-1 pb-4">
                 <Slider
                   range
                   min={0}
                   max={100}
-                  step={1}W
+                  step={1}
                   onChange={([v1, v2]: number[]) => {
                     const train = Math.round(v1 * 10) / 10;
                     const val = Math.round((v2 - v1) * 10) / 10;
@@ -772,19 +839,57 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                     setSplitTest(test);
                   }}
                   value={[splitTrain, splitTrain + splitVal]}
-                  // 1. 隐藏默认的 track 颜色，全部交给底色 rail 渲染
                   trackStyle={[
                     { background: 'transparent' },
                     { background: 'transparent' },
                   ]}
-                  // 2. 将滑块手柄（Handle）的边框颜色改为对应节点的衔接色
                   handleStyle={[
                     { borderColor: '#3b82f6', background: '#fff', width: 18, height: 18, marginTop: -5, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
                     { borderColor: '#f59e0b', background: '#fff', width: 18, height: 18, marginTop: -5, boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
                   ]}
-                  // 3. 核心：注入动态计算的三段式 CSS 线性渐变
                   railStyle={{ background: sliderGradient, height: 8, borderRadius: 4 }}
                 />
+              </div>
+
+              <div className="h-px bg-border" />
+
+              {/* Split File Content Mode */}
+              <div>
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block">
+                  Split File Content
+                </Label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div
+                    onClick={() => setSplitContentMode('stem')}
+                    className={`p-3 rounded-xl border-2 cursor-pointer text-center transition-all ${
+                      splitContentMode === 'stem'
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold ${splitContentMode === 'stem' ? 'text-primary' : 'text-foreground'}`}>
+                      Scene Group
+                    </div>
+                    <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
+                      e.g. DJI_0008
+                    </div>
+                  </div>
+                  <div
+                    onClick={() => setSplitContentMode('main_view')}
+                    className={`p-3 rounded-xl border-2 cursor-pointer text-center transition-all ${
+                      splitContentMode === 'main_view'
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
+                    }`}
+                  >
+                    <div className={`text-xs font-bold ${splitContentMode === 'main_view' ? 'text-primary' : 'text-foreground'}`}>
+                      Main View
+                    </div>
+                    <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
+                      e.g. DJI_0008.jpg
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1031,6 +1136,7 @@ useEffect(() => {
                         setSplitTrainFile(DefaultSplitConfig.splitTrainFile);
                         setSplitValFile(DefaultSplitConfig.splitValFile);
                         setSplitTestFile(DefaultSplitConfig.splitTestFile);
+                        setSplitContentMode('stem');
                       } else if (activeStep === 'shapes') {
                         const mapping = TASK_SHAPE_MAPPINGS[taskType];
                         const sel: Record<string, boolean> = {};

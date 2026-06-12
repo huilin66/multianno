@@ -140,8 +140,22 @@ async def export_yolo_dataset_stream(req: ExportRequest):
         random.seed(req.random_seed)
         shuffled = sorted(stems)
         random.shuffle(shuffled)
-        n_train = int(total * req.split.get("train", 80) / 100)
-        n_val = int(total * req.split.get("val", 15) / 100)
+        p_train = req.split.get("train", 80)
+        p_val = req.split.get("val", 15)
+        p_test = req.split.get("test", 5)
+        n_train = int(total * p_train / 100) if p_train > 0 else 0
+        n_val = int(total * p_val / 100) if p_val > 0 else 0
+        n_test = int(total * p_test / 100) if p_test > 0 else 0
+        # Distribute remainder from int() truncation to the largest non-zero split
+        remainder = total - n_train - n_val - n_test
+        if remainder > 0:
+            splits_ranked = sorted([(p_train, 'train'), (p_val, 'val'), (p_test, 'test')], key=lambda x: x[0], reverse=True)
+            for pct, name in splits_ranked:
+                if pct > 0:
+                    if name == 'train': n_train += remainder
+                    elif name == 'val': n_val += remainder
+                    else: n_test += remainder
+                    break
         train_stems = shuffled[:n_train]
         val_stems = shuffled[n_train : n_train + n_val]
         test_stems = shuffled[n_train + n_val :]
@@ -186,7 +200,8 @@ async def export_yolo_dataset_stream(req: ExportRequest):
 
         # 生成 split 文件
         _write_split_files(
-            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems,
+            req.split_content_mode, req.view_configs,
         )
 
         # classes.txt
@@ -233,10 +248,24 @@ async def export_coco_dataset_stream(req: ExportRequest):
         random.seed(req.random_seed)
         shuffled = sorted(stems)
         random.shuffle(shuffled)
-        n_train = int(total * req.split.get("train", 80) / 100)
-        n_val = int(total * req.split.get("val", 15) / 100)
+        p_train = req.split.get("train", 80)
+        p_val = req.split.get("val", 15)
+        p_test = req.split.get("test", 5)
+        n_train = int(total * p_train / 100) if p_train > 0 else 0
+        n_val = int(total * p_val / 100) if p_val > 0 else 0
+        n_test = int(total * p_test / 100) if p_test > 0 else 0
+        remainder = total - n_train - n_val - n_test
+        if remainder > 0:
+            splits_ranked = sorted([(p_train, 'train'), (p_val, 'val'), (p_test, 'test')], key=lambda x: x[0], reverse=True)
+            for pct, name in splits_ranked:
+                if pct > 0:
+                    if name == 'train': n_train += remainder
+                    elif name == 'val': n_val += remainder
+                    else: n_test += remainder
+                    break
         train_stems = shuffled[:n_train]
         val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
         test_stems = shuffled[n_train + n_val :]
 
         if os.path.exists(req.target_dir):
@@ -327,7 +356,8 @@ async def export_coco_dataset_stream(req: ExportRequest):
             json.dump(coco_dict, f, ensure_ascii=False)
 
         _write_split_files(
-            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems,
+            req.split_content_mode, req.view_configs,
         )
         with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
             f.write("\n".join(req.selected_classes))
@@ -369,10 +399,24 @@ async def export_voc_dataset_stream(req: ExportRequest):
         random.seed(req.random_seed)
         shuffled = sorted(stems)
         random.shuffle(shuffled)
-        n_train = int(total * req.split.get("train", 80) / 100)
-        n_val = int(total * req.split.get("val", 15) / 100)
+        p_train = req.split.get("train", 80)
+        p_val = req.split.get("val", 15)
+        p_test = req.split.get("test", 5)
+        n_train = int(total * p_train / 100) if p_train > 0 else 0
+        n_val = int(total * p_val / 100) if p_val > 0 else 0
+        n_test = int(total * p_test / 100) if p_test > 0 else 0
+        remainder = total - n_train - n_val - n_test
+        if remainder > 0:
+            splits_ranked = sorted([(p_train, 'train'), (p_val, 'val'), (p_test, 'test')], key=lambda x: x[0], reverse=True)
+            for pct, name in splits_ranked:
+                if pct > 0:
+                    if name == 'train': n_train += remainder
+                    elif name == 'val': n_val += remainder
+                    else: n_test += remainder
+                    break
         train_stems = shuffled[:n_train]
         val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
         test_stems = shuffled[n_train + n_val :]
 
         if os.path.exists(req.target_dir):
@@ -422,7 +466,8 @@ async def export_voc_dataset_stream(req: ExportRequest):
             await asyncio.sleep(0)
 
         _write_split_files(
-            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems,
+            req.split_content_mode, req.view_configs,
         )
         with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
             f.write("\n".join(req.selected_classes))
@@ -464,10 +509,24 @@ async def export_multianno_dataset_stream(req: ExportRequest):
         random.seed(req.random_seed)
         shuffled = sorted(stems)
         random.shuffle(shuffled)
-        n_train = int(total * req.split.get("train", 80) / 100)
-        n_val = int(total * req.split.get("val", 15) / 100)
+        p_train = req.split.get("train", 80)
+        p_val = req.split.get("val", 15)
+        p_test = req.split.get("test", 5)
+        n_train = int(total * p_train / 100) if p_train > 0 else 0
+        n_val = int(total * p_val / 100) if p_val > 0 else 0
+        n_test = int(total * p_test / 100) if p_test > 0 else 0
+        remainder = total - n_train - n_val - n_test
+        if remainder > 0:
+            splits_ranked = sorted([(p_train, 'train'), (p_val, 'val'), (p_test, 'test')], key=lambda x: x[0], reverse=True)
+            for pct, name in splits_ranked:
+                if pct > 0:
+                    if name == 'train': n_train += remainder
+                    elif name == 'val': n_val += remainder
+                    else: n_test += remainder
+                    break
         train_stems = shuffled[:n_train]
         val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
         test_stems = shuffled[n_train + n_val :]
 
         if os.path.exists(req.target_dir):
@@ -520,7 +579,8 @@ async def export_multianno_dataset_stream(req: ExportRequest):
             await asyncio.sleep(0)
 
         _write_split_files(
-            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems,
+            req.split_content_mode, req.view_configs,
         )
         with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
             f.write("\n".join(req.selected_classes))
@@ -562,10 +622,24 @@ async def export_mask_dataset_stream(req: ExportRequest):
         random.seed(req.random_seed)
         shuffled = sorted(stems)
         random.shuffle(shuffled)
-        n_train = int(total * req.split.get("train", 80) / 100)
-        n_val = int(total * req.split.get("val", 15) / 100)
+        p_train = req.split.get("train", 80)
+        p_val = req.split.get("val", 15)
+        p_test = req.split.get("test", 5)
+        n_train = int(total * p_train / 100) if p_train > 0 else 0
+        n_val = int(total * p_val / 100) if p_val > 0 else 0
+        n_test = int(total * p_test / 100) if p_test > 0 else 0
+        remainder = total - n_train - n_val - n_test
+        if remainder > 0:
+            splits_ranked = sorted([(p_train, 'train'), (p_val, 'val'), (p_test, 'test')], key=lambda x: x[0], reverse=True)
+            for pct, name in splits_ranked:
+                if pct > 0:
+                    if name == 'train': n_train += remainder
+                    elif name == 'val': n_val += remainder
+                    else: n_test += remainder
+                    break
         train_stems = shuffled[:n_train]
         val_stems = shuffled[n_train : n_train + n_val]
+        test_stems = shuffled[n_train + n_val :]
         test_stems = shuffled[n_train + n_val :]
 
         if os.path.exists(req.target_dir):
@@ -622,7 +696,8 @@ async def export_mask_dataset_stream(req: ExportRequest):
             await asyncio.sleep(0)
 
         _write_split_files(
-            req.target_dir, req.split_files, train_stems, val_stems, test_stems
+            req.target_dir, req.split_files, train_stems, val_stems, test_stems,
+            req.split_content_mode, req.view_configs,
         )
         with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
             f.write("\n".join(req.selected_classes))
@@ -1233,7 +1308,8 @@ async def export_dataset(req: ExportRequest):
 
     # 4. 生成 split 文件
     _write_split_files(
-        req.target_dir, req.split_files, train_stems, val_stems, test_stems
+        req.target_dir, req.split_files, train_stems, val_stems, test_stems,
+        req.split_content_mode, req.view_configs,
     )
 
     # 5. classes.txt
@@ -1330,13 +1406,23 @@ def _copy_images_for_stem(stem, view_configs, target_dir):
             traceback.print_exc()
 
 
-def _write_split_files(target_dir, split_files, train, val, test):
+def _write_split_files(target_dir, split_files, train, val, test, split_content_mode="stem", view_configs=None):
     """生成 train.txt, val.txt, test.txt"""
+    if split_content_mode == "main_view" and view_configs:
+        main_vc = next((vc for vc in view_configs if vc.is_main), view_configs[0])
+        main_suffix = getattr(main_vc, "suffix", "")
+        main_ext = getattr(main_vc, "extension", ".jpg")
+        train = [f"{s}{main_suffix}{main_ext}" for s in train]
+        val = [f"{s}{main_suffix}{main_ext}" for s in val]
+        test = [f"{s}{main_suffix}{main_ext}" for s in test]
+
     subsets = {
         split_files.get("train", "train.txt"): train,
         split_files.get("val", "val.txt"): val,
         split_files.get("test", "test.txt"): test,
     }
     for filename, stems in subsets.items():
+        if not stems:
+            continue
         with open(os.path.join(target_dir, filename), "w") as f:
             f.write("\n".join(stems))
