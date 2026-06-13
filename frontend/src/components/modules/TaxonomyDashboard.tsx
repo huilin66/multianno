@@ -447,9 +447,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       if (!value) {
         openDialog({
           type: 'warning',
-          title: 'Missing Value',
-          description: `Please select the "${mergeAttrName}" value for "${cls.name}".`,
-          confirmText: 'Got it',
+          title: t('taxonomyDashboard.missingValue'),
+          description: t('taxonomyDashboard.missingValueDesc', { attr: mergeAttrName, class: cls.name }),
+          confirmText: t('taxonomyDashboard.gotIt'),
           hideCancel: true,
         });
         return;
@@ -523,17 +523,17 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       
       openDialog({
         type: 'success',
-        title: 'Merge Complete',
-        description: `Merged ${merges.length} classes into "${targetClassName}" with attribute "${mergeAttrName}".`,
-        confirmText: 'Done',
+        title: t('taxonomyDashboard.mergeComplete'),
+        description: t('taxonomyDashboard.mergeCompleteDesc', { count: merges.length, target: targetClassName, attr: mergeAttrName }),
+        confirmText: t('taxonomyDashboard.done'),
         hideCancel: true,
       });
     } catch (err: any) {
       openDialog({
         type: 'danger',
-        title: 'Merge Failed',
+        title: t('taxonomyDashboard.mergeFailed'),
         description: err.message,
-        confirmText: 'OK',
+        confirmText: t('taxonomyDashboard.ok'),
         hideCancel: true,
       });
     } finally {
@@ -579,7 +579,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setRepairResult({ fixed: result.total_fixed, scanned: result.total_scanned });
       await refreshStatsIfNeeded();
     } catch (err: any) {
-      alert(`数据修复失败: ${err.message}`);
+      alert(t('taxonomyDashboard.repairFailed', { message: err.message }));
     } finally {
       setIsRepairing(false);
     }
@@ -703,8 +703,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             addedCount++;
           }
         });
-      } else { alert("Please upload a .yaml file for Attributes or .txt for Classes."); return; }
-      alert(`Imported ${addedCount} items!`);
+      } else { alert(t('taxonomyDashboard.importWrongFormat')); return; }
+      alert(t('taxonomyDashboard.importSuccess', { count: addedCount }));
       if (fileInputRef.current) fileInputRef.current.value = ''; 
     };
     reader.readAsText(file);
@@ -759,9 +759,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       useStore.getState().setStatsCacheValid?.(false);
       await refreshStatsIfNeeded();
       setMergeStage(0);
-      alert(`Merged successfully into ${targetClass.name}`);
+      alert(t('taxonomyDashboard.mergedSuccessfully', { target: targetClass.name }));
     } catch (err: any) {
-      alert(`Merge failed: ${err.message}`);
+      alert(t('taxonomyDashboard.mergeFailedMsg', { message: err.message }));
     } finally {
       setIsProcessing(false);
     }
@@ -795,7 +795,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
         useStore.getState().setStatsCacheValid?.(false);
       } catch (err: any) { 
-        alert(`Delete failed: ${err.message}`); 
+        alert(t('taxonomyDashboard.deleteFailed', { message: err.message }));
       } finally { 
         setIsProcessing(false); 
       }
@@ -827,9 +827,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       loadStatistics(true);
       setDeleteStage(0);
       useStore.getState().setStatsCacheValid?.(false);
-      alert('All background annotations have been cleaned successfully!');
+      alert(t('taxonomyDashboard.cleanSuccess'));
     } catch (err: any) { 
-      alert(`Clean failed: ${err.message}`); 
+      alert(t('taxonomyDashboard.cleanFailed', { message: err.message }));
     } finally { 
       setIsProcessing(false); 
     }
@@ -876,9 +876,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       useStore.getState().setStatsCacheValid?.(false);
       await refreshStatsIfNeeded();
       setAttrDraft(null); // 清空草稿，退出编辑状态
-      alert(`Attribute synchronized to all JSON files successfully!`);
+      alert(t('taxonomyDashboard.attributeSyncSuccess'));
     } catch (err: any) {
-      alert(`Sync failed: ${err.message}`);
+      alert(t('taxonomyDashboard.syncFailed', { message: err.message }));
     } finally {
       setIsProcessing(false);
     }
@@ -901,7 +901,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       useStore.getState().setStatsCacheValid?.(false);
       setShowAttrDeleteConfirm(false);
     } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+      alert(t('taxonomyDashboard.deleteFailed', { message: err.message }));
     } finally {
       setIsProcessing(false);
     }
@@ -935,7 +935,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             <Button variant={activeTab === 'overview' ? 'secondary' : 'ghost'} 
                     onClick={() => { setActiveTab('overview'); setSelectedClassId(null); setSelectedAttributeId(null); }} 
                     className={`w-full justify-start h-10 font-bold transition-all ${activeTab === 'overview' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800' : ''}`}>
-              <LayoutDashboard className="w-4 h-4 mr-2"/> Global Overview
+              <LayoutDashboard className="w-4 h-4 mr-2"/> {t('taxonomyDashboard.globalOverview')}
             </Button>
           </div>
 
@@ -944,7 +944,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             <div>
               <div className="flex items-center justify-between cursor-pointer p-1.5 group rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors" onClick={() => setExpanded(p => ({...p, classes: !p.classes}))}>
                 <span className="text-xs font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-wider flex items-center">
-                  <Tags className="w-3.5 h-3.5 mr-2"/> Classes 
+                  <Tags className="w-3.5 h-3.5 mr-2"/> {t('taxonomy.classes')}
                   <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyClasses.length}</span>
                 </span>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -964,7 +964,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       }
                     }}
                     className="w-5 h-5 flex items-center justify-center rounded hover:bg-neutral-200 dark:hover:bg-neutral-700 text-neutral-400"
-                    title={classSortDir === 'asc' ? 'A→Z' : classSortDir === 'desc' ? '手动' : 'Z→A'}
+                    title={classSortDir === 'asc' ? 'A→Z' : classSortDir === 'desc' ? 'Z→A' : t('common.manual')}
                   >
                     {classSortDir === 'asc' ? '↑' : classSortDir === 'desc' ? '↓' : '↕'}
                   </button>
@@ -1017,7 +1017,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             }
                             if (e.key === 'Escape') setIsAddingClass(false);
                           }}
-                          placeholder="Class name..."
+                          placeholder={t('taxonomyDashboard.classNamePlaceholder')}
                           className="h-7 text-xs flex-1"
                         />
                         <Button size="sm" className="h-7 px-2 text-[10px] shrink-0" onClick={() => {
@@ -1039,10 +1039,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     ) : (
                       <>
                         <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('classes')}>
-                          <Plus className="w-3 h-3 mr-1"/> Add
+                          <Plus className="w-3 h-3 mr-1"/> {t('common.add')}
                         </Button>
                         <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('classes'); fileInputRef.current?.click(); }}>
-                          <Upload className="w-3 h-3 mr-1"/> Import
+                          <Upload className="w-3 h-3 mr-1"/> {t('common.import')}
                         </Button>
                       </>
                     )}
@@ -1055,7 +1055,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             <div>
               <div className="flex items-center justify-between cursor-pointer p-1.5 group rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors" onClick={() => setExpanded(p => ({...p, attributes: !p.attributes}))}>
                 <span className="text-xs font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-wider flex items-center">
-                  <Settings className="w-3.5 h-3.5 mr-2"/> Attributes 
+                  <Settings className="w-3.5 h-3.5 mr-2"/> {t('taxonomy.attributes')}
                   <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyAttributes.length}</span>
                 </span>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -1105,8 +1105,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     </div>
                   ))}
                   <div className="flex gap-2 mt-3 mb-1 pr-1">
-                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('attributes')}><Plus className="w-3 h-3 mr-1"/> Add</Button>
-                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('attributes'); fileInputRef.current?.click(); }}><Upload className="w-3 h-3 mr-1"/> Import</Button>
+                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('attributes')}><Plus className="w-3 h-3 mr-1"/> {t('common.add')}</Button>
+                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('attributes'); fileInputRef.current?.click(); }}><Upload className="w-3 h-3 mr-1"/> {t('common.import')}</Button>
                   </div>
                 </div>
               )}
@@ -1122,8 +1122,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
             <div className="p-5 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex justify-between items-center shrink-0 z-10">
               <div>
-                <h2 className="text-xl font-black">Data Statistics Overview</h2>
-                <p className="text-xs text-neutral-500 mt-1">Global and shape-specific analytics across the entire dataset.</p>
+                <h2 className="text-xl font-black">{t('taxonomyDashboard.dataStatisticsOverview')}</h2>
+                <p className="text-xs text-neutral-500 mt-1">{t('taxonomyDashboard.globalAnalyticsDesc')}</p>
               </div>
               <div className="flex items-center gap-2">
                 {/* 🌟 数据修复按钮 */}
@@ -1138,12 +1138,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   ) : (
                     <Wrench className="w-4 h-4 mr-2" />
                   )}
-                  {repairResult ? `已修复 ${repairResult.fixed} 个文件` : '数据修复'}
+                  {repairResult ? t('taxonomyDashboard.repairFixed', { count: repairResult.fixed }) : t('taxonomyDashboard.dataRepair')}
                 </Button>
 
                 <Button onClick={() => loadStatistics(true)} disabled={statsStatus === 'loading'} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md font-bold">
                   {statsStatus === 'loading' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                  Refresh Statistics
+                  {t('taxonomyDashboard.refreshStatistics')}
                 </Button>
               </div>
             </div>
@@ -1153,7 +1153,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               {statsStatus === 'idle' && !statsData && (
                 <div className="flex flex-col items-center justify-center py-20 text-neutral-400 shrink-0">
                   <Activity className="w-12 h-12 mb-4 opacity-20" />
-                  <p>Click "Refresh Statistics" to generate the global report.</p>
+                  <p>{t('taxonomyDashboard.clickToGenerate')}</p>
                 </div>
               )}
 
@@ -1167,14 +1167,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     
                     {/* 1. 总量统计 (占 3 格) */}
                     <div className="xl:col-span-3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center">
-                      <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-4">Dataset Footprint</h4>
-                      <div className="text-5xl font-black text-blue-600 dark:text-blue-500 mb-2">{statsData.global.total_objects} <span className="text-base text-neutral-400 font-bold">Objects</span></div>
-                      <p className="text-sm text-neutral-500 flex items-center"><Layers className="w-4 h-4 mr-1.5"/> Across {statsData.global.total_images} Scanned Images</p>
+                      <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-4">{t('taxonomyDashboard.datasetFootprint')}</h4>
+                      <div className="text-5xl font-black text-blue-600 dark:text-blue-500 mb-2">{statsData.global.total_objects} <span className="text-base text-neutral-400 font-bold">{t('taxonomyDashboard.objects')}</span></div>
+                      <p className="text-sm text-neutral-500 flex items-center"><Layers className="w-4 h-4 mr-1.5"/> {t('taxonomyDashboard.acrossScanned', { count: statsData.global.total_images })}</p>
                     </div>
 
                     {/* 2. Shape 比例 (占 4 格) */}
                     <div className="xl:col-span-4 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-6 shadow-sm flex flex-col justify-center overflow-hidden">
-                      <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-2">Shape Type Distribution</h4>
+                      <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-2">{t('taxonomyDashboard.shapeTypeDistribution')}</h4>
                       <ShapeDistribution data={statsData.global.shape_types} />
                     </div>
 
@@ -1182,12 +1182,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <div className="xl:col-span-5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm flex flex-col overflow-hidden">
                       <div className="flex items-center gap-2 mb-2 shrink-0">
                         <div className="w-1.5 h-4 bg-indigo-500 rounded-full" />
-                        <h4 className="text-[10px] font-black uppercase tracking-wider text-neutral-400">Class Distribution</h4>
+                        <h4 className="text-[10px] font-black uppercase tracking-wider text-neutral-400">{t('taxonomyDashboard.classDistribution')}</h4>
                       </div>
                       <div className="flex-1 min-h-[120px]">
                          <AxisBarChart 
-                           xLabel="Class Name"
-                           yLabel="Count"
+                           xLabel={t('taxonomyDashboard.className')}
+                           yLabel={t('taxonomyDashboard.count')}
                            colorClass="bg-indigo-500"
                            data={Object.fromEntries(
                              // 🌟 核心逻辑变更：不依赖后端传来的离散数据，而是遍历前端 Taxonomy 系统里的所有类！
@@ -1207,7 +1207,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       <div className="flex items-center gap-2 px-1">
                         <div className="w-1.5 h-4 bg-purple-500 rounded-full" />
                         <h3 className="text-sm font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-400">
-                          Attributes Analytics
+                          {t('taxonomyDashboard.attributesAnalytics')}
                         </h3>
                       </div>
                       
@@ -1227,18 +1227,18 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     {/* 1. 左侧：Shape 垂直导航栏 */}
                     <div className="w-56 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex flex-col p-3 gap-1 shrink-0">
                       <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-3 px-2 flex items-center gap-2">
-                        <Layers className="w-3 h-3" /> Geometry Filter
+                        <Layers className="w-3 h-3" /> {t('taxonomyDashboard.geometryFilter')}
                       </h4>
                       
                       {/* 定义所有支持的几何类型及其状态 */}
                       {[
-                        { id: 'bbox', label: 'Bounding Box', implemented: true },
-                        { id: 'polygon', label: 'Polygon', implemented: true },
-                        { id: 'point', label: 'Point', implemented: false },
-                        { id: 'linestrip', label: 'Line / Strip', implemented: false },
-                        { id: 'ellipse', label: 'Ellipse / Circle', implemented: false },
-                        { id: 'rbbox', label: 'Rotated Box', implemented: false },
-                        { id: 'cuboid', label: '3D Cuboid', implemented: false },
+                        { id: 'bbox', label: t('taxonomyDashboard.boundingBox'), implemented: true },
+                        { id: 'polygon', label: t('taxonomyDashboard.polygon'), implemented: true },
+                        { id: 'point', label: t('taxonomyDashboard.point'), implemented: false },
+                        { id: 'linestrip', label: t('taxonomyDashboard.lineStrip'), implemented: false },
+                        { id: 'ellipse', label: t('taxonomyDashboard.ellipseCircle'), implemented: false },
+                        { id: 'rbbox', label: t('taxonomyDashboard.rotatedBox'), implemented: false },
+                        { id: 'cuboid', label: t('taxonomyDashboard.cuboid3d'), implemented: false },
                       ].map((item) => {
                         const count = statsData.global.shape_types[item.id] || 0;
                         const isActive = activeShapeTab === item.id;
@@ -1256,7 +1256,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             <span className="flex items-center gap-2">
                               {item.label}
                               {!item.implemented && (
-                                <span className="text-[8px] px-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-400 rounded-sm font-normal">WIP</span>
+                                <span className="text-[8px] px-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-400 rounded-sm font-normal">{t('taxonomyDashboard.wip')}</span>
                               )}
                             </span>
                             <div className="flex items-center gap-1.5">
@@ -1281,8 +1281,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             {/* 🌟 修复：每个图表外层套一个独立的卡片，增加 min-w-0 防止文字撑爆容器 */}
                             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                               <AxisBarChart 
-                                title={`Boxes Per Image (${activeShapeTab.toUpperCase()})`} 
-                                xLabel="Objects Count" yLabel="Images" 
+                                title={`${t('taxonomyDashboard.boxesPerImage')} (${activeShapeTab.toUpperCase()})`}
+                                xLabel={t('taxonomyDashboard.objectsCount')} yLabel={t('taxonomyDashboard.images')}
                                 colorClass="bg-purple-500/60"
                                 data={statsData.shapes[activeShapeTab].box_number_distribution} 
                               />
@@ -1290,8 +1290,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             
                             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                               <AxisBarChart 
-                                title={`Area % Distribution (${activeShapeTab.toUpperCase()})`} 
-                                xLabel="Relative Area (%)" yLabel="Objects" 
+                                title={`${t('taxonomyDashboard.areaDistribution')} (${activeShapeTab.toUpperCase()})`}
+                                xLabel={t('taxonomyDashboard.relativeArea')} yLabel={t('taxonomyDashboard.objects')}
                                 colorClass="bg-blue-500/60"
                                 data={statsData.shapes[activeShapeTab].area_distribution} 
                               />
@@ -1299,8 +1299,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             
                             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                               <AxisBarChart 
-                                title={`Shape Rate (W/H) (${activeShapeTab.toUpperCase()})`} 
-                                xLabel="Aspect Ratio" yLabel="Objects" 
+                                title={`${t('taxonomyDashboard.shapeRate')} (${activeShapeTab.toUpperCase()})`}
+                                xLabel={t('taxonomyDashboard.aspectRatio')} yLabel={t('taxonomyDashboard.objects')}
                                 colorClass="bg-teal-500/60"
                                 data={statsData.shapes[activeShapeTab].shape_rate_distribution} 
                               />
@@ -1308,7 +1308,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             
                             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden flex justify-center">
                               <JointPlotHeatmap 
-                                title={`Spatial Joint Distribution (${activeShapeTab.toUpperCase()})`} 
+                                title={`${t('taxonomyDashboard.spatialJointDist')} (${activeShapeTab.toUpperCase()})`}
                                 matrix={statsData.shapes[activeShapeTab].heatmap_center?.flat().reduce((rows:any, key:any, index:number) => (index % 10 == 0 ? rows.push([key]) : rows[rows.length-1].push(key)) && rows, [])} 
                               />
                             </div>
@@ -1316,7 +1316,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center text-neutral-400 opacity-50">
                             <Activity className="w-12 h-12 mb-4 animate-pulse" />
-                            <p>Calculating additional metrics for {activeShapeTab}...</p>
+                            <p>{t('taxonomyDashboard.calculatingMetrics', { shape: activeShapeTab })}</p>
                           </div>
                         )
                       ) : (
@@ -1326,11 +1326,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                              <Settings className="w-10 h-10 text-neutral-300 dark:text-neutral-600 animate-spin-slow" />
                           </div>
                           <div className="text-center">
-                            <h3 className="text-lg font-black text-neutral-700 dark:text-neutral-300 uppercase tracking-widest">Under Development</h3>
-                            <p className="text-xs text-neutral-500 mt-1 max-w-xs">Detailed statistical analysis for <span className="font-bold text-blue-500">{activeShapeTab.toUpperCase()}</span> is not yet implemented.</p>
+                            <h3 className="text-lg font-black text-neutral-700 dark:text-neutral-300 uppercase tracking-widest">{t('taxonomyDashboard.underDevelopment')}</h3>
+                            <p className="text-xs text-neutral-500 mt-1 max-w-xs">{t('taxonomyDashboard.underDevelopmentDesc', { shape: activeShapeTab.toUpperCase() })}</p>
                           </div>
                           <Button variant="outline" size="sm" className="h-8 text-[10px] uppercase font-bold tracking-widest" onClick={() => setActiveShapeTab('polygon')}>
-                            Back to Polygon
+                            {t('taxonomyDashboard.backToPolygon')}
                           </Button>
                         </div>
                       )}
@@ -1366,7 +1366,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     onKeyDown={e => { 
                         if (e.key === 'Enter') {
                           e.currentTarget.blur();
-                          alert("Please click the Check mark to apply and sync changes to disk.");
+                          alert(t('taxonomyDashboard.renameConfirmHint'));
                         } 
                       }}
                     disabled={activeClass.name.toLowerCase() === 'background'} 
@@ -1375,7 +1375,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         ? 'opacity-60 cursor-not-allowed' 
                         : 'hover:border-neutral-200 focus:border-blue-500'
                     }`} 
-                    placeholder="Class Name" 
+                    placeholder={t('workspace.class') || 'Class Name'}
                   />
                   {/* 当名字发生变化时，在右侧滑出胶囊样式的确认框 */}
                     {renameValue.trim() !== activeClass.name && (
@@ -1402,9 +1402,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               updateTaxonomyClass(activeClass.id, { name: newName });
                               await loadStatistics(true);
                               
-                              alert(`Successfully renamed!\nModified ${result.modified_files} annotation files on disk.`);
+                              alert(t('taxonomyDashboard.renameSuccess', { count: result.modified_files }));
                             } catch (err: any) {
-                              alert(`Rename failed: ${err.message}`);
+                              alert(t('taxonomyDashboard.renameFailed', { message: err.message }));
                               setRenameValue(oldName);
                             } finally {
                               setIsProcessing(false);
@@ -1412,9 +1412,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                           }}
                         >
                           {isProcessing ? (
-                            <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> SYNCING...</>
+                            <><Loader2 className="w-3 h-3 mr-1.5 animate-spin" /> {t('taxonomyDashboard.syncing')}</>
                           ) : (
-                            'CONFIRM RENAME'
+                            t('taxonomyDashboard.confirmRename')
                           )}
                         </Button>
                         
@@ -1435,11 +1435,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   <div className="flex items-center gap-2 mt-2 px-2">
                     {activeClass.name.toLowerCase() === 'background' && (
                       <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">
-                        System Class (Recycle Bin)
+                        {t('taxonomyDashboard.systemClassRecycleBin')}
                       </span>
                     )}
                     <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 font-black px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 shadow-sm">
-                      Total Objects: {statsData?.classes?.[activeClass.name]?.total_objects || 0}
+                      {t('taxonomyDashboard.totalObjects')}: {statsData?.classes?.[activeClass.name]?.total_objects || 0}
                     </span>
                 </div>
               </div>
@@ -1453,7 +1453,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <Select value={mergeTargetId} onValueChange={(v) => { setMergeTargetId(v); setMergeStage(0); }}>
                       <SelectTrigger className="h-7 w-32 text-xs border-none bg-transparent focus:ring-0 shadow-none">
                         {/* 🌟 修复：手动通过 ID 查找 Name 进行显示，确保选中后不显示 ID */}
-                        <SelectValue placeholder="Merge into...">
+                        <SelectValue placeholder={t('taxonomyDashboard.mergeInto')}>
                           {taxonomyClasses.find(c => c.id === mergeTargetId)?.name}
                         </SelectValue>
                       </SelectTrigger>
@@ -1470,7 +1470,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     
                     {mergeStage === 1 ? (
                         <div className="flex items-center gap-1 ml-2 animate-in zoom-in-95">
-                          <Button size="sm" className="h-7 px-2 text-[10px] bg-orange-600 text-white font-bold" onClick={executeMergeClass}>Confirm</Button>
+                          <Button size="sm" className="h-7 px-2 text-[10px] bg-orange-600 text-white font-bold" onClick={executeMergeClass}>{t('taxonomyDashboard.confirmMerge')}</Button>
                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setMergeStage(0)}><X className="w-3 h-3"/></Button>
                         </div>
                       ) : (
@@ -1480,7 +1480,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                           disabled={!mergeTargetId || isProcessing} 
                           onClick={() => setMergeStage(1)}
                         >
-                          <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge
+                          <GitMerge className="w-3.5 h-3.5 mr-1" /> {t('taxonomyDashboard.merge')}
                         </Button>
                       )}
                   </div>
@@ -1492,7 +1492,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       className="h-7 px-3 text-[10px] border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-400"
                       onClick={() => setShowMergeWithAttr(true)}
                     >
-                      <GitMerge className="w-3.5 h-3.5 mr-1" /> Merge with Attr
+                      <GitMerge className="w-3.5 h-3.5 mr-1" /> {t('taxonomyDashboard.mergeWithAttr')}
                     </Button>
                   )}
                   <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
@@ -1508,7 +1508,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             className="h-9 px-4 font-bold border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-900/50 dark:hover:bg-orange-900/20" 
                             onClick={() => setDeleteStage(1)}
                           >
-                            <Eraser className="w-4 h-4 mr-2" /> Clean
+                            <Eraser className="w-4 h-4 mr-2" /> {t('taxonomyDashboard.clean')}
                           </Button>
                         ) : (
                           <div className="flex items-center gap-1.5 bg-orange-50 dark:bg-orange-950/30 p-1.5 rounded-lg border border-orange-200 animate-in slide-in-from-right-2">
@@ -1518,7 +1518,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               onClick={executeCleanBackground}
                               disabled={isProcessing}
                             >
-                              {isProcessing ? 'CLEANING...' : 'CONFIRM CLEAN?'}
+                              {isProcessing ? t('taxonomyDashboard.cleaning') : t('taxonomyDashboard.confirmClean')}
                             </Button>
                             <Button
                               size="sm"
@@ -1535,7 +1535,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <div className="flex items-center">
                       {deleteStage === 0 ? (
                         <Button variant="destructive" size="sm" className="h-9 px-4 font-bold" onClick={() => setDeleteStage(1)}>
-                          <Trash2 className="w-4 h-4 mr-2" /> Delete
+                          <Trash2 className="w-4 h-4 mr-2" /> {t('taxonomyDashboard.delete')}
                         </Button>
                       ) : (
                         <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1.5 rounded-lg border border-red-200 animate-in slide-in-from-right-2">
@@ -1549,7 +1549,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             }`}
                             onClick={() => executeDeleteClass(true)}
                           >
-                            {deleteStage === 1 ? 'HARD DELETE?' : 'ARE YOU ABSOLUTELY SURE?'}
+                            {deleteStage === 1 ? t('taxonomyDashboard.hardDelete') : t('taxonomyDashboard.absolutelySure')}
                           </Button>
 
                           {/* 只有在第一级确认时才显示软删除，降低干扰 */}
@@ -1560,7 +1560,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               className="h-7 px-3 text-[10px] border-red-200 text-red-600 font-bold"
                               onClick={() => executeDeleteClass(false)}
                             >
-                              SOFT DELETE
+                              {t('taxonomyDashboard.softDelete')}
                             </Button>
                           )}
 
@@ -1595,11 +1595,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-blue-500" />
                 <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
-                  Scenes Involved
+                  {t('taxonomyDashboard.scenesInvolved')}
                 </h3>
               </div>
               <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500">
-                {statsData?.classes?.[activeClass.name]?.stems?.length || 0} files
+                {statsData?.classes?.[activeClass.name]?.stems?.length || 0} {t('taxonomyDashboard.files')}
               </span>
             </div>
 
@@ -1621,14 +1621,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       } else {
                         openDialog({
                           type: 'warning',
-                          title: 'Scene Not Found',
-                          description: `Cannot locate "${stem}" in the loaded workspace.\n\nThe scene group configuration may have changed. Please refresh statistics or reload the project.`,
-                          confirmText: 'Got it',
+                          title: t('taxonomyDashboard.sceneNotFound'),
+                          description: t('taxonomyDashboard.sceneNotFoundDesc', { stem }),
+                          confirmText: t('taxonomyDashboard.gotIt'),
                           hideCancel: true,
                         });
                       }
                     }}
-                    title="Double click to open in Workspace"
+                    title={t('taxonomyDashboard.tipDoubleClick')}
                     className="group flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-all border border-transparent hover:border-blue-100 dark:hover:border-blue-800"
                   >
                     <div className="flex items-center gap-2 overflow-hidden">
@@ -1643,14 +1643,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 
                 {(!statsData?.classes?.[activeClass.name]?.stems || statsData.classes[activeClass.name].stems.length === 0) && (
                   <div className="py-10 text-center text-neutral-400 text-xs italic">
-                    No scenes found for this class.
+                    {t('taxonomyDashboard.noScenesFound')}
                   </div>
                 )}
               </div>
             </div>
             
             <div className="p-2 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/30 text-[9px] text-center text-neutral-400 font-bold uppercase tracking-tighter">
-              Tip: Double-click a row to open scene
+              {t('taxonomyDashboard.tipDoubleClick')}
             </div>
           </div>
         </div>
@@ -1675,7 +1675,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               }`}
                             >
                               <Layers className="w-3.5 h-3.5" />
-                              {shapeId === 'bbox' ? 'Bounding Box' : 'Polygon'}
+                              {shapeId === 'bbox' ? t('taxonomyDashboard.boundingBox') : t('taxonomyDashboard.polygon')}
                               <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
                                 isActive 
                                   ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' 
@@ -1696,31 +1696,31 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4">
                               <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                                 <AxisBarChart 
-                                  title={`Boxes Per Image (${activeClassShapeTab.toUpperCase()})`} 
-                                  xLabel="Objects Count" yLabel="Images" 
+                                  title={`${t('taxonomyDashboard.boxesPerImage')} (${activeClassShapeTab.toUpperCase()})`}
+                                  xLabel={t('taxonomyDashboard.objectsCount')} yLabel={t('taxonomyDashboard.images')}
                                   colorClass="bg-purple-500/60"
                                   data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].box_number_distribution} 
                                 />
                               </div>
                               <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                                 <AxisBarChart 
-                                  title={`Area % Distribution (${activeClassShapeTab.toUpperCase()})`} 
-                                  xLabel="Relative Area (%)" yLabel="Objects" 
+                                  title={`${t('taxonomyDashboard.areaDistribution')} (${activeClassShapeTab.toUpperCase()})`}
+                                  xLabel={t('taxonomyDashboard.relativeArea')} yLabel={t('taxonomyDashboard.objects')}
                                   colorClass="bg-blue-500/60"
                                   data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].area_distribution} 
                                 />
                               </div>
                               <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                                 <AxisBarChart 
-                                  title={`Shape Rate (W/H) (${activeClassShapeTab.toUpperCase()})`} 
-                                  xLabel="Aspect Ratio" yLabel="Objects" 
+                                  title={`${t('taxonomyDashboard.shapeRate')} (${activeClassShapeTab.toUpperCase()})`}
+                                  xLabel={t('taxonomyDashboard.aspectRatio')} yLabel={t('taxonomyDashboard.objects')}
                                   colorClass="bg-teal-500/60"
                                   data={statsData.classes[activeClass.name].shapes[activeClassShapeTab].shape_rate_distribution} 
                                 />
                               </div>
                               <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden flex justify-center">
                                 <JointPlotHeatmap 
-                                  title={`Spatial Joint Distribution (${activeClassShapeTab.toUpperCase()})`} 
+                                  title={`${t('taxonomyDashboard.spatialJointDist')} (${activeClassShapeTab.toUpperCase()})`}
                                   matrix={statsData.classes[activeClass.name].shapes[activeClassShapeTab].heatmap_center?.flat().reduce((rows:any, key:any, index:number) => (index % 10 == 0 ? rows.push([key]) : rows[rows.length-1].push(key)) && rows, [])} 
                                 />
                               </div>
@@ -1732,7 +1732,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               <div className="animate-in fade-in slide-in-from-bottom-4">
                                 {/* 完美复用刚刚抽离出来的 Wrapper 卡片 */}
                                 <AttributeAnalysisCard 
-                                  title={`${activeClass.name} - ${activeClassShapeTab} Attributes`}
+                                  title={`${activeClass.name} - ${activeClassShapeTab} ${t('taxonomy.attributes')}`}
                                   icon={activeClass.color}
                                   variant="class"
                                   totalTags={Object.values(statsData.classes[activeClass.name].shapes[activeClassShapeTab].attribute_counts || {}).reduce((a:any, b:any) => a + b, 0)}
@@ -1747,7 +1747,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         ) : (
                           <div className="h-full flex flex-col items-center justify-center text-neutral-400 opacity-50">
                             <Activity className="w-12 h-12 mb-4 opacity-50" />
-                            <p>No `{activeClassShapeTab}` data found for class '{activeClass.name}'.</p>
+                            <p>{t('taxonomyDashboard.noDataForTitle', { title: `${activeClassShapeTab} ${activeClass.name}` })}</p>
                           </div>
                         )
                       ) : (
@@ -1760,7 +1760,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             <p className="text-xs text-neutral-500 mt-1 max-w-xs">Detailed statistical analysis for <span className="font-bold text-blue-500">{activeClassShapeTab.toUpperCase()}</span> is not yet implemented.</p>
                           </div>
                           <Button variant="outline" size="sm" className="h-8 text-[10px] uppercase font-bold tracking-widest" onClick={() => setActiveClassShapeTab('polygon')}>
-                            Back to Polygon
+                            {t('taxonomyDashboard.backToPolygon')}
                           </Button>
                         </div>
                       )}
@@ -1772,8 +1772,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-neutral-400">
                   <Activity className="w-12 h-12 mb-4 opacity-20" />
-                  <p>No specific statistics found for '{activeClass.name}'.</p>
-                  <p className="text-xs mt-2">Try adding some boxes or click "Refresh Statistics" in Overview.</p>
+                  <p>{t('workspace.noSpecificStats', 'No specific statistics found for "{{name}}".', { name: activeClass.name })}</p>
+                  <p className="text-xs mt-2">{t('workspace.tryRefreshStats', 'Try adding some boxes or click "Refresh Statistics" in Overview.')}</p>
                 </div>
               )}
             </div>
@@ -1796,18 +1796,18 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     value={activeAttribute.name}
                     onChange={e => updateTaxonomyAttribute(activeAttribute.id, { name: e.target.value })}
                     className="text-xl font-black border-transparent hover:border-neutral-200 focus:border-blue-500 bg-transparent px-1 h-8 w-64 shadow-none"
-                    placeholder="Attribute Name"
+                    placeholder={t('workspace.attributeName', 'Attribute Name')}
                   />
-                  <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest px-1">Global Semantic Attribute</span>
+                  <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest px-1">{t('workspace.globalSemanticAttribute', 'Global Semantic Attribute')}</span>
                 </div>
               </div>
 
               {/* 🌟 删除按钮：引入内联二次确认 */}
               {showAttrDeleteConfirm ? (
                 <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in slide-in-from-right-2">
-                  <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">Delete from all files?</span>
+                  <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">{t('workspace.deleteFromAllFiles', 'Delete from all files?')}</span>
                   <Button size="sm" className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold" onClick={executeDeleteAttribute} disabled={isProcessing}>
-                    Yes, Delete
+                    {t('common.confirm')}
                   </Button>
                   <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500" onClick={() => setShowAttrDeleteConfirm(false)} disabled={isProcessing}>
                     <X className="w-4 h-4" />
@@ -1815,7 +1815,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 </div>
               ) : (
                 <Button variant="destructive" size="sm" className="h-9 px-4 font-bold shadow-sm" onClick={() => setShowAttrDeleteConfirm(true)}>
-                  <Trash2 className="w-4 h-4 mr-2" /> Delete Attribute
+                  <Trash2 className="w-4 h-4 mr-2" /> {t('workspace.deleteAttribute', 'Delete Attribute')}
                 </Button>
               )}
             </div>
@@ -1840,7 +1840,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                           <div className="flex items-center gap-2">
                             <List className="w-4 h-4 text-purple-500" />
                             <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
-                              Dropdown Options
+                              {t('workspace.dropdownOptions', 'Dropdown Options')}
                             </h3>
                           </div>
                           <Button 
@@ -1850,7 +1850,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               setAttrDraft({ options: newOptions, defaultValue: currentDefault || newOptions[0] });
                             }}
                           >
-                            <Plus className="w-3 h-3 mr-1" /> Add
+                            <Plus className="w-3 h-3 mr-1" /> {t('common.add')}
                           </Button>
                         </div>
 
@@ -1875,7 +1875,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                                   
                                   {currentDefault === opt && (
                                     <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 text-[8px] font-black uppercase tracking-widest rounded-sm shrink-0 mr-2 shadow-sm select-none">
-                                      Default
+                                      {t('workspace.default', 'Default')}
                                     </span>
                                   )}
                                 </div>
@@ -1884,7 +1884,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                                   <Button variant="ghost" size="sm" className={`h-6 text-[9px] font-bold px-2 ${currentDefault === opt ? 'hidden' : 'text-neutral-500 hover:text-purple-600'}`} 
                                     onClick={() => setAttrDraft({ options: currentOptions, defaultValue: opt })}
                                   >
-                                    Set Default
+                                    {t('workspace.setDefault', 'Set Default')}
                                   </Button>
                                   <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30" 
                                     onClick={() => {
@@ -1899,7 +1899,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             ))}
                             {currentOptions.length === 0 && (
                               <div className="text-center py-6 text-neutral-400 border-2 border-dashed border-neutral-100 dark:border-neutral-800 rounded-xl">
-                                <p className="text-xs">No options defined.</p>
+                                <p className="text-xs">{t('workspace.noOptionsDefined', 'No options defined.')}</p>
                               </div>
                             )}
                           </div>
@@ -1909,22 +1909,22 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         {isDirty ? (
                           <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/40 border-t border-blue-200 dark:border-blue-900 flex justify-between items-center shrink-0 animate-in slide-in-from-bottom-2">
                             <span className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400 flex items-center">
-                              <AlertCircle className="w-3.5 h-3.5 mr-1" /> Unsaved Changes
+                              <AlertCircle className="w-3.5 h-3.5 mr-1" /> {t('workspace.unsavedChanges', 'Unsaved Changes')}
                             </span>
                             <div className="flex gap-2">
                               <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold" onClick={() => setAttrDraft(null)} disabled={isProcessing}>
-                                Cancel
+                                {t('common.cancel')}
                               </Button>
                               <Button size="sm" className="h-7 px-3 text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={executeApplyAttribute} disabled={isProcessing}>
                                 {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Check className="w-3 h-3 mr-1"/>}
-                                Sync to Files
+                                {t('workspace.syncToFiles', 'Sync to Files')}
                               </Button>
                             </div>
                           </div>
                         ) : (
                           /* 如果没草稿，展示默认的全局统计数据 */
                           <div className="px-5 py-3 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/30 flex justify-between items-center text-[10px] text-neutral-500 font-bold uppercase tracking-wider shrink-0">
-                            <span>Total Tags in Project:</span>
+                            <span>{t('workspace.totalTagsInProject', 'Total Tags in Project:')}</span>
                             <span className="text-purple-600 text-sm">{Object.values(statsData?.global?.attribute_details?.[activeAttribute.name] || {}).reduce((a:any, b:any) => a + b, 0) as number}</span>
                           </div>
                         )}
@@ -1937,7 +1937,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 {/* 🌟 极致精简：右上角全局大盘直接调用 Wrapper */}
                 <div className="w-full xl:w-2/3 flex flex-col h-fit">
                   <AttributeAnalysisCard 
-                    title="Global Distribution Overview"
+                    title={t('taxonomyDashboard.globalOverview')}
                     icon={Layers}
                     totalTags={Object.values(statsData?.global?.attribute_details?.[activeAttribute.name] || {}).reduce((a:any, b:any) => a + b, 0)}
                     densityData={{}} 
@@ -1973,8 +1973,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         }`}
                       >
                         <span className="flex items-center gap-2 capitalize">
-                          {shapeId === 'bbox' ? 'Bounding Box' : shapeId}
-                          {!isImplemented && <span className="text-[8px] px-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-400 rounded-sm font-normal">WIP</span>}
+                          {shapeId === 'bbox' ? t('taxonomyDashboard.boundingBox') : shapeId}
+                          {!isImplemented && <span className="text-[8px] px-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-400 rounded-sm font-normal">{t('taxonomyDashboard.wip')}</span>}
                         </span>
                         {isActive && <ChevronRight className="w-3.5 h-3.5" />}
                       </button>
@@ -1990,7 +1990,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       {/* 1. 当前 Shape 的全局大盘 */}
                       {statsData?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name] && (
                         <AttributeAnalysisCard 
-                          title={`Total in ${activeAttrShapeTab.toUpperCase()}`}
+                          title={`${t('workspace.totalIn', 'Total in')} ${activeAttrShapeTab.toUpperCase()}`}
                           icon={Layers}
                           variant="purple"
                           totalTags={Object.values(statsData.shapes[activeAttrShapeTab].attribute_details[activeAttribute.name]).reduce((a:any, b:any) => a + b, 0)}
@@ -2003,7 +2003,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       {sortedClasses.some((cls: any) => statsData?.classes?.[cls.name]?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name]) && (
                         <div className="flex items-center gap-3 opacity-50 py-2">
                            <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
-                           <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">Breakdown by Class</span>
+                           <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">{t('workspace.breakdownByClass', 'Breakdown by Class')}</span>
                            <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
                         </div>
                       )}
@@ -2016,7 +2016,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         return (
                           <AttributeAnalysisCard 
                             key={cls.id}
-                            title={`Class: ${cls.name}`}
+                            title={`${t('workspace.classLabel', 'Class')}: ${cls.name}`}
                             icon={cls.color} // 传颜色代码
                             variant="class"
                             totalTags={Object.values(clsData).reduce((a:any, b:any) => a + b, 0)}
@@ -2030,7 +2030,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       {(!statsData?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name]) && (
                         <div className="h-64 flex flex-col items-center justify-center text-neutral-400 opacity-50">
                           <Tags className="w-12 h-12 mb-4" />
-                          <p className="text-sm font-bold">No '{activeAttribute.name}' tags found in '{activeAttrShapeTab}'</p>
+                          <p className="text-sm font-bold">{t('workspace.noTagsFound', { attr: activeAttribute.name, shape: activeAttrShapeTab })}</p>
                         </div>
                       )}
                     </div>
@@ -2051,10 +2051,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       <div className="p-3 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex justify-between items-center shrink-0 z-20 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
         <span className="text-xs text-neutral-500 flex items-center gap-2 font-mono bg-neutral-50 dark:bg-neutral-800 px-3 py-1.5 rounded-full border border-neutral-200 dark:border-neutral-700">
           <Database className="w-3.5 h-3.5 text-blue-500"/> 
-          Project Analytics
+          {t('workspace.projectAnalytics', 'Project Analytics')}
           <span className="text-neutral-300 dark:text-neutral-600 mx-1">|</span>
           <Clock className="w-3.5 h-3.5 text-neutral-400" />
-          {statsData?.last_updated ? `Cached: ${statsData.last_updated}` : 'No local cache found'}
+          {statsData?.last_updated ? `${t('workspace.cached', 'Cached')}: ${statsData.last_updated}` : t('workspace.noLocalCache', 'No local cache found')}
         </span>
         <Button onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="px-8 font-bold shadow-md bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-black">
           {t('common.confirm', 'Confirm & Close')}
@@ -2067,7 +2067,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 w-[550px] max-h-[85vh] shadow-2xl border border-neutral-200 dark:border-neutral-800 flex flex-col">
       <div className="flex items-center gap-3 mb-4 shrink-0">
         <GitMerge className="w-6 h-6 text-purple-500" />
-        <h3 className="font-black text-lg">Merge Classes & Track Origin</h3>
+        <h3 className="font-black text-lg">{t('workspace.mergeClassesTrackOrigin', 'Merge Classes & Track Origin')}</h3>
       </div>
 
       <div className="flex-1 overflow-y-auto space-y-5 custom-scrollbar pr-1">
@@ -2075,14 +2075,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {/* ========== 1. 源类选择区 ========== */}
         <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800/50">
           <p className="text-[10px] font-black text-amber-700 dark:text-amber-500 uppercase mb-2">
-            Source Classes ({allSourceClasses.length} selected)
+            {t('workspace.sourceClasses', 'Source Classes')} ({allSourceClasses.length} selected)
           </p>
           <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
             {/* 当前 active class（固定参与） */}
             <div className="flex items-center gap-2 p-2 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">
               <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: activeClass.color }} />
               <span className="text-xs font-bold">{activeClass.name}</span>
-              <span className="ml-auto text-[9px] text-amber-600 font-bold uppercase">Selected</span>
+              <span className="ml-auto text-[9px] text-amber-600 font-bold uppercase">{t('workspace.selected', 'Selected')}</span>
             </div>
             {/* 其他可选类 */}
             {sortedClasses
@@ -2126,7 +2126,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {/* ========== 2. 新类名输入区 ========== */}
         <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-lg border border-green-200 dark:border-green-800/50">
           <p className="text-[10px] font-black text-green-700 dark:text-green-500 uppercase mb-2">
-            ✨ New Class Name
+            {t('workspace.newClassName', 'New Class Name')}
           </p>
           <Input
             value={newTargetClassName}
@@ -2136,7 +2136,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
           />
           {newTargetClassName.trim() && taxonomyClasses.some((c: any) => c.name.toLowerCase() === newTargetClassName.trim().toLowerCase()) && (
             <p className="text-[9px] text-amber-600 mt-1">
-              ⚠️ A class with this name already exists. All shapes will be merged into it.
+              {t('workspace.classNameExistsWarning', 'A class with this name already exists. All shapes will be merged into it.')}
             </p>
           )}
         </div>
@@ -2144,22 +2144,22 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {/* ========== 3. Attribute 选择区（只能选已有，值也只能选已有） ========== */}
         <div className="bg-purple-50 dark:bg-purple-950/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800/50">
           <p className="text-[10px] font-black text-purple-700 dark:text-purple-500 uppercase mb-2">
-            Track Origin With Attribute
+            {t('workspace.trackOriginWithAttribute', 'Track Origin With Attribute')}
           </p>
           <p className="text-[9px] text-neutral-500 mb-3">
-            Select an existing attribute to record which class each shape came from.
+            {t('workspace.trackOriginDesc', 'Select an existing attribute to record which class each shape came from.')}
           </p>
           
           {/* 🌟 Step 1: 选择 Attribute */}
           <div className="mb-4">
-            <Label className="text-[10px] font-bold text-neutral-500 uppercase">1. Select Attribute</Label>
+            <Label className="text-[10px] font-bold text-neutral-500 uppercase">{t('workspace.stepOneSelectAttribute', '1. Select Attribute')}</Label>
             <Select value={mergeAttrName} onValueChange={(v) => {
               setMergeAttrName(v);
               // 🌟 切换 attribute 时，清空之前的值
               setMergeAttrValues({});
             }}>
               <SelectTrigger className="h-9 text-sm mt-1">
-                <SelectValue placeholder="Choose an existing attribute..." />
+                <SelectValue placeholder={t('workspace.chooseAttribute', 'Choose an existing attribute...')} />
               </SelectTrigger>
               <SelectContent>
                 {taxonomyAttributes.map((a: any) => (
@@ -2174,7 +2174,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             </Select>
             {taxonomyAttributes.length === 0 && (
               <p className="text-[9px] text-amber-500 mt-1">
-                No attributes defined. Please create one in the Attributes tab first.
+                {t('workspace.noAttributesDefinedHint', 'No attributes defined. Please create one in the Attributes tab first.')}
               </p>
             )}
           </div>
@@ -2188,12 +2188,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             return (
               <div>
                 <Label className="text-[10px] font-bold text-neutral-500 uppercase mb-1">
-                  2. Set Values for Each Class ({allSourceClasses.length} classes)
+                  {t('workspace.setValuesForEachClass', '2. Set Values for Each Class')} ({allSourceClasses.length} classes)
                 </Label>
                 
                 {availableValues.length === 0 ? (
                   <p className="text-[9px] text-amber-500">
-                    Attribute "{mergeAttrName}" has no defined values. Please add options in the Attributes tab.
+                    {t('workspace.attributeNoValues', 'Attribute "{{name}}" has no defined values. Please add options in the Attributes tab.', { name: mergeAttrName })}
                   </p>
                 ) : (
                   <div className="space-y-1.5 mt-1 max-h-48 overflow-y-auto custom-scrollbar">
@@ -2220,7 +2220,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                           }
                         >
                           <SelectTrigger className="flex-1 h-7 text-xs">
-                            <SelectValue placeholder="Select value..." />
+                            <SelectValue placeholder={t('workspace.selectValue', 'Select value...')} />
                           </SelectTrigger>
                           <SelectContent>
                             {availableValues.map((val: string) => (
@@ -2253,7 +2253,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             setNewTargetClassName('');
           }}
         >
-          Cancel
+          {t('common.cancel')}
         </Button>
         <Button
           size="sm"
@@ -2268,7 +2268,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
           }
         >
           {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-          Merge into "{newTargetClassName || '...'}"
+          {t('workspace.mergeIntoClass', 'Merge into "{{name}}"', { name: newTargetClassName || '...' })}
         </Button>
       </div>
     </div>

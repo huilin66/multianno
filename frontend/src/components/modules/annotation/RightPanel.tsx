@@ -344,7 +344,7 @@ export function RightPanel({
         
         {/* 2. View Layers */}
         {/* 2. View Layers */}
-        <SectionHeader title={t('workspace.viewLayers', 'View Layers')} icon={Layers} isExpanded={expanded.layers} onToggle={() => toggleSection('layers')} />
+        <SectionHeader title={t('rightPanel.viewLayers')} icon={Layers} isExpanded={expanded.layers} onToggle={() => toggleSection('layers')} />
         
         {expanded.layers && (
           <div className="p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30 max-h-[228px]">
@@ -378,7 +378,7 @@ export function RightPanel({
                           setLayerOrder(newOrder); // 触发 Z-Index 重排
                         }
                       }}
-                      title="Drag to reorder"
+                      title={t('rightPanel.dragToReorder')}
                     >
                       <Frame className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
 
@@ -390,7 +390,7 @@ export function RightPanel({
                            checked={!!visibleLayers[v.id]}
                            onChange={(e) => setVisibleLayers(p => ({ ...p, [v.id]: e.target.checked }))}
                            onClick={(e) => e.stopPropagation()} // 🌟 防止点击复选框时干扰外层
-                           title="Show as Overlay"
+                           title={t('rightPanel.showAsOverlay')}
                          />
                       )}
                       
@@ -398,7 +398,7 @@ export function RightPanel({
                       <div className="flex items-center gap-2 flex-1 truncate pointer-events-none">
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${v.isMain ? 'bg-blue-500' : 'bg-emerald-500'}`} />
                         <span className={v.isMain ? "text-blue-500 font-bold text-[10px]" : "text-neutral-500 dark:text-neutral-300 text-[10px]"}>
-                          {v.isMain ? 'Main View' : `Aug View ${originalIndex}`}
+                          {v.isMain ? t('rightPanel.mainView') : `${t('rightPanel.augView')} ${originalIndex}`}
                         </span>
                       </div>
                     </div>
@@ -416,7 +416,7 @@ export function RightPanel({
                             ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 font-bold shadow-inner' 
                             : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700'
                         }`}
-                        title="Adjust Color Settings"
+                        title={t('rightPanel.adjustColorSettings')}
                       >
                         {v.bands?.length === 3 ? (
                           <div className="flex items-center gap-1.5 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded shadow-sm">
@@ -442,7 +442,7 @@ export function RightPanel({
                       <button 
                         onClick={(e) => { e.stopPropagation(); setFocusedViewId(focusedViewId === v.id ? null : v.id); }} 
                         className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${focusedViewId === v.id ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
-                        title={focusedViewId === v.id ? t('workspace.exitSingleView', 'Exit Single View') : t('workspace.isolateView', 'Isolate View')}
+                        title={focusedViewId === v.id ? t('rightPanel.exitSingleView') : t('rightPanel.isolateView')}
                       >
                         {focusedViewId === v.id ? <Minimize className="w-3 h-3" /> : <Maximize className="w-3 h-3" />}
                       </button>
@@ -451,7 +451,7 @@ export function RightPanel({
                         <button 
                           onClick={(e) => { e.stopPropagation(); toggleFullExtent(v.id); }} 
                           className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${showFullExtent[v.id] ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
-                          title={showFullExtent[v.id] ? t('workspace.showCrop', 'Show Crop') : t('workspace.fullExtent', 'Show Full Extent')}
+                          title={showFullExtent[v.id] ? t('rightPanel.showCrop') : t('rightPanel.showFullExtent')}
                         >
                           <Crop className={`w-3.5 h-3.5 ${!showFullExtent[v.id] && 'opacity-50'}`} />
                         </button>
@@ -478,7 +478,7 @@ export function RightPanel({
                               <div className="space-y-3">
                                 {/* 🌟 0. 现有的 Colormap 选择器 (二值化时自动置灰) */}
                                 <div className={`flex justify-between items-center bg-white dark:bg-neutral-900/40 px-2 py-1.5 rounded border border-neutral-200 dark:border-neutral-700/50 transition-opacity ${settings.binarize?.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                                  <span className="text-[9px] text-neutral-500 font-bold uppercase">Color Map</span>
+                                  <span className="text-[9px] text-neutral-500 font-bold uppercase">{t('rightPanel.colorMap')}</span>
                                   <Select 
                                       value={v.colormap || 'gray'} 
                                       onValueChange={(val: any) => updateView(v.id, { colormap: val })}
@@ -507,7 +507,7 @@ export function RightPanel({
                                 {/* 🌟 1. 现有的 Stretch Range (非 manual 模式时置灰锁定) */}
                                 <div className={`space-y-1 pt-1 transition-opacity ${settings.enhancementMode && settings.enhancementMode !== 'manual' ? 'opacity-40 pointer-events-none' : ''}`}>
                                   <div className="flex justify-between text-[9px] text-neutral-500 font-bold uppercase">
-                                    <span>Stretch Range</span>
+                                    <span>{t('rightPanel.stretchRange')}</span>
                                     <span className="font-mono">{settings.minMax?.[0] ?? 0}% - {settings.minMax?.[1] ?? 100}%</span>
                                   </div>
                                   <Slider 
@@ -523,9 +523,9 @@ export function RightPanel({
 
                                 {/* 🌟 2. 现有的 B/C/S 三剑客 */}
                                 {[
-                                  { label: 'Brightness', key: 'brightness', default: 1, min: 0.5, max: 2 },
-                                  { label: 'Contrast', key: 'contrast', default: 1, min: 0.5, max: 2 },
-                                  { label: 'Saturation', key: 'saturation', default: 1, min: 0, max: 2 }
+                                  { label: t('rightPanel.brightness'), key: 'brightness', default: 1, min: 0.5, max: 2 },
+                                  { label: t('rightPanel.contrast'), key: 'contrast', default: 1, min: 0.5, max: 2 },
+                                  { label: t('rightPanel.saturation'), key: 'saturation', default: 1, min: 0, max: 2 }
                                 ].map((item) => {
                                   const val = (settings as any)[item.key] ?? item.default;
                                   return (
@@ -551,7 +551,7 @@ export function RightPanel({
                                 {/* 🌟 新增行 1：Gamma Correction (二值化时置灰) */}
                                 <div className={`space-y-1 transition-opacity ${settings.binarize?.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
                                   <div className="flex justify-between text-[9px] text-blue-500 font-bold uppercase">
-                                    <span>Gamma Correction</span>
+                                    <span>{t('rightPanel.gammaCorrection')}</span>
                                     <span className="font-mono">{(settings.gamma ?? 1.0).toFixed(1)}</span>
                                   </div>
                                   <Slider 
@@ -573,30 +573,30 @@ export function RightPanel({
                                       e.stopPropagation();
                                       if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, spatialFilter: settings.spatialFilter === 'sharpen' ? 'none' : 'sharpen' });
                                     }}
-                                  >Sharpen</Button>
-                                  <Button 
+                                  >{t('rightPanel.sharpen')}</Button>
+                                  <Button
                                     variant={settings.invert ? 'default' : 'outline'}
                                     className={`h-6 text-[9px] flex-1 px-1 font-bold ${settings.invert ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, invert: !settings.invert });
                                     }}
-                                  >Invert</Button>
-                                  <Button 
+                                  >{t('rightPanel.invert')}</Button>
+                                  <Button
                                     variant={settings.binarize?.enabled ? 'default' : 'outline'}
                                     className={`h-6 text-[9px] flex-1 px-1 font-bold ${settings.binarize?.enabled ? 'bg-red-500 hover:bg-red-600 text-white border-transparent' : ''}`}
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (setTempViewSettings) setTempViewSettings(currentStem, v.id, { ...settings, binarize: { threshold: 128, ...settings.binarize, enabled: !settings.binarize?.enabled } });
                                     }}
-                                  >Binarize</Button>
+                                  >{t('rightPanel.binarize')}</Button>
                                 </div>
 
                                 {/* 🎯 隐藏福利：如果开启了二值化，自动弹出阈值调节滑块 */}
                                 {settings.binarize?.enabled && (
                                    <div className="space-y-1 pt-1 animate-in fade-in zoom-in-95 duration-200">
                                      <div className="flex justify-between text-[9px] text-red-500 font-bold uppercase">
-                                       <span>Threshold (Binarize)</span>
+                                       <span>{t('rightPanel.thresholdBinarize')}</span>
                                        <span className="font-mono">{settings.binarize.threshold}</span>
                                      </div>
                                      <Slider
@@ -613,7 +613,7 @@ export function RightPanel({
 
                                 {/* 🌟 新增行 3：对比度映射单选框 (二值化时置灰) */}
                                 <div className={`pt-2 transition-opacity ${settings.binarize?.enabled ? 'opacity-40 pointer-events-none' : ''}`}>
-                                  <div className="text-[9px] text-blue-500 uppercase font-bold mb-1.5">Contrast Mapping Mode</div>
+                                  <div className="text-[9px] text-blue-500 uppercase font-bold mb-1.5">{t('rightPanel.contrastMappingMode')}</div>
                                   <div className="grid grid-cols-3 gap-1 bg-white dark:bg-neutral-900/50 p-1.5 rounded border border-neutral-200 dark:border-neutral-700/50">
                                     {['manual', 'he', 'clahe'].map((mode) => (
                                       <label key={mode} className="flex flex-col items-center justify-center gap-1 cursor-pointer py-1 hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded transition-colors">
@@ -626,7 +626,7 @@ export function RightPanel({
                                           className="accent-blue-500 w-3 h-3"
                                         />
                                         <span className="text-[9px] uppercase font-bold text-center leading-tight">
-                                          {mode === 'manual' ? 'Manual\nStretch' : mode === 'he' ? 'Global\nHE' : 'Auto\nCLAHE'}
+                                          {mode === 'manual' ? t('rightPanel.manualStretch') : mode === 'he' ? t('rightPanel.globalHE') : t('rightPanel.autoCLAHE')}
                                         </span>
                                       </label>
                                     ))}
@@ -636,9 +636,9 @@ export function RightPanel({
                             ) : (
                               <div className="space-y-3">
                                 {[
-                                  { label: 'Brightness', key: 'brightness', default: 1, min: 0.5, max: 2 },
-                                  { label: 'Contrast', key: 'contrast', default: 1, min: 0.5, max: 2 },
-                                  { label: 'Saturation', key: 'saturation', default: 1, min: 0, max: 2 }
+                                  { label: t('rightPanel.brightness'), key: 'brightness', default: 1, min: 0.5, max: 2 },
+                                  { label: t('rightPanel.contrast'), key: 'contrast', default: 1, min: 0.5, max: 2 },
+                                  { label: t('rightPanel.saturation'), key: 'saturation', default: 1, min: 0, max: 2 }
                                 ].map((item) => {
                                   const val = (settings as any)[item.key] ?? item.default;
                                   return (
@@ -671,7 +671,7 @@ export function RightPanel({
                             {/* 🌟 底部操作区：Reset & Apply to All */}
                             <div className="pt-3 mt-3 border-t border-neutral-200 dark:border-neutral-700/50 flex justify-between items-center animate-in fade-in">
                               <span className="text-[9px] text-neutral-400">
-                                {hasLocalChanges ? '* Current image only' : 'Saved to Project Meta'}
+                                {hasLocalChanges ? t('rightPanel.currentImageOnly') : t('rightPanel.savedToProjectMeta')}
                               </span>
                               
                               <div className="flex items-center gap-1.5">
@@ -692,9 +692,9 @@ export function RightPanel({
                                     if (setTempViewSettings) setTempViewSettings(currentStem, v.id, defaultSettings);
                                   }}
                                   className="text-[9px] font-bold px-2 py-1.5 rounded transition-all bg-neutral-100 hover:bg-neutral-200 dark:bg-neutral-800 dark:hover:bg-neutral-700 text-neutral-500 dark:text-neutral-300"
-                                  title="Reset to default settings (current image only)"
+                                  title={t('rightPanel.resetToDefaults')}
                                 >
-                                  Reset
+                                  {t('rightPanel.layerReset')}
                                 </button>
 
                                 {/* 🌟 2. Apply to All 按钮 */}
@@ -739,9 +739,9 @@ export function RightPanel({
                                       : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-400 cursor-not-allowed'
                                   }`}
                                   disabled={!hasLocalChanges}
-                                  title="Apply current settings to all images and save"
+                                  title={t('rightPanel.applyToAllImages')}
                                 >
-                                  Apply to All
+                                  {t('rightPanel.applyToAll')}
                                 </button>
                               </div>
                             </div>
@@ -760,7 +760,7 @@ export function RightPanel({
 
         {/* === 🌟 Taxonomy Manager === */}
         <SectionHeader 
-          title={t('workspace.taxonomy', 'Taxonomy')} 
+          title={t('rightPanel.taxonomy')}
           icon={Tag} 
           isExpanded={expanded.taxonomy} 
           onToggle={() => toggleSection('taxonomy')} 
@@ -779,7 +779,7 @@ export function RightPanel({
                     : 'text-neutral-500 hover:text-neutral-700'
                 }`}
               >
-                Classes ({taxonomyClasses?.length || 0})
+                {t('rightPanel.classes')} ({taxonomyClasses?.length || 0})
               </button>
               <button
                 onClick={() => setTaxonomyTab('attributes')}
@@ -789,7 +789,7 @@ export function RightPanel({
                     : 'text-neutral-500 hover:text-neutral-700'
                 }`}
               >
-                Attributes ({taxonomyAttributes?.length || 0})
+                {t('rightPanel.attributes')} ({taxonomyAttributes?.length || 0})
               </button>
             </div>
 
@@ -802,13 +802,13 @@ export function RightPanel({
                     onClick={() => setHiddenClasses([])}
                     className="flex-1 text-[9px] font-bold px-2 py-1 rounded bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors h-[40px]"
                   >
-                    Show All
+                    {t('rightPanel.showAll')}
                   </button>
                   <button
                     onClick={() => setHiddenClasses(taxonomyClasses?.map((c: any) => c.name) || [])}
                     className="flex-1 text-[9px] font-bold px-2 py-1 rounded bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/40 transition-colors"
                   >
-                    Hide All
+                    {t('rightPanel.hideAll')}
                   </button>
                 </div>
 
@@ -866,7 +866,7 @@ export function RightPanel({
                             ? 'text-neutral-300 dark:text-neutral-600 hover:text-neutral-500'
                             : 'text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20'
                         }`}
-                        title={isHidden ? 'Show class' : 'Hide class'}
+                        title={isHidden ? t('rightPanel.showObject') : t('rightPanel.hideObject')}
                       >
                         {isHidden ? (
                           <EyeOff className="w-3.5 h-3.5" />
@@ -881,7 +881,7 @@ export function RightPanel({
                 {(!taxonomyClasses || taxonomyClasses.length === 0) && (
                   <div className="text-center py-6 text-[11px] text-neutral-400">
                     <Tag className="w-5 h-5 mx-auto mb-2 opacity-50" />
-                    No classes defined yet
+                    {t('rightPanel.noClassesDefined')}
                   </div>
                 )}
               </div>
@@ -912,11 +912,11 @@ export function RightPanel({
                           </div>
                           <div className="text-[9px] text-neutral-400 uppercase">
                             {attr.type}
-                            {attr.applyToAll && ' · Apply to All'}
+                            {attr.applyToAll && ` · ${t('rightPanel.applyToAll')}`}
                           </div>
                         </div>
                         <span className="text-[9px] font-mono text-neutral-400">
-                          {Object.keys(valueCounts).length} values
+                          {Object.keys(valueCounts).length} {t('rightPanel.values')}
                         </span>
                       </div>
 
@@ -949,7 +949,7 @@ export function RightPanel({
 
                       {Object.keys(valueCounts).length === 0 && (
                         <div className="text-center py-3 text-[10px] text-neutral-400">
-                          No instances in current scene
+                          {t('rightPanel.noInstancesInScene')}
                         </div>
                       )}
                     </div>
@@ -959,7 +959,7 @@ export function RightPanel({
                 {(!taxonomyAttributes || taxonomyAttributes.length === 0) && (
                   <div className="text-center py-6 text-[11px] text-neutral-400">
                     <Hash className="w-5 h-5 mx-auto mb-2 opacity-50" />
-                    No attributes defined yet
+                    {t('rightPanel.noAttributesDefined')}
                   </div>
                 )}
               </div>
@@ -970,21 +970,21 @@ export function RightPanel({
         {currentStem && (
           <>
             <SectionHeader 
-              title="Image Annotation" icon={Database} 
+              title={t('rightPanel.imageAnnotation')} icon={Database}
               isExpanded={expanded.vlm} onToggle={() => toggleSection('vlm')} 
             />
             {expanded.vlm && (
               <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30">
                 <textarea 
                   className="w-full h-16 text-xs p-2 rounded-md border border-neutral-200 dark:border-neutral-700 bg-neutral-50 dark:bg-neutral-950 focus:ring-1 focus:ring-primary resize-none custom-scrollbar"
-                  placeholder="Describe the entire scene for Vision-Language Models..."
+                  placeholder={t('rightPanel.describeScene')}
                   value={currentMeta?.text || ''}
                   onChange={(e) => updateStemMetadata(currentStem, { text: e.target.value })}
                 />
                 <div className="mt-2">
-                  <Label className="text-[10px] text-neutral-400 mb-1 block">Image Tags</Label>
-                  <Input 
-                    className="h-7 text-xs" placeholder="city, sunny, crowded..."
+                  <Label className="text-[10px] text-neutral-400 mb-1 block">{t('rightPanel.imageTags')}</Label>
+                  <Input
+                    className="h-7 text-xs" placeholder={t('rightPanel.tagsPlaceholder')}
                     value={currentMeta?.tags?.join(', ') || ''}
                     onChange={(e) => updateStemMetadata(currentStem, { tags: e.target.value.split(',').map(t => t.trim()).filter(t => t) })}
                   />
@@ -1011,7 +1011,7 @@ export function RightPanel({
                     return (
                       <div className="text-center py-4 text-[11px] text-neutral-400">
                         <Edit3 className="w-5 h-5 mx-auto mb-2 opacity-50" />
-                        {t('workspace.selectObjectHint', 'Select an object to edit')}
+                        {t('rightPanel.selectObjectHint')}
                       </div>
                     );
                   }
@@ -1059,14 +1059,14 @@ export function RightPanel({
                     ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40' 
                     : 'text-neutral-400 hover:text-amber-500'
                 }`}
-                title={showHiddenObjects ? "Hide hidden objects" : "Show hidden objects"}
+                title={showHiddenObjects ? t('rightPanel.hideHiddenObjects') : t('rightPanel.showHiddenObjects')}
               >
                 {showHiddenObjects ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
               </button>
               <button
                   onClick={(e) => { e.stopPropagation(); setNmsPanelOpen(!nmsPanelOpen); }}
                   className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${nmsPanelOpen || hasScanned ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40' : 'text-neutral-400 hover:text-blue-500'}`}
-                  title="Find Overlapping Objects"
+                  title={t('rightPanel.findOverlapping')}
                 >
                   <Copy className="w-3.5 h-3.5" /> {/* 🌟 修改为交叠矩形图标 */}
                 </button>
@@ -1074,7 +1074,7 @@ export function RightPanel({
                 {confirmDeleteAll ? (
                   // 🛡️ 点击后展开的原地确认菜单
                   <div className="flex items-center gap-1 bg-red-100 dark:bg-red-900/40 rounded px-1 animate-in fade-in zoom-in-95">
-                    <span className="text-[9px] text-red-600 font-bold px-1 uppercase tracking-wider">Sure?</span>
+                    <span className="text-[9px] text-red-600 font-bold px-1 uppercase tracking-wider">{t('rightPanel.sureConfirm')}</span>
                     <button
                       type="button"
                       onClick={(e) => {
@@ -1108,7 +1108,7 @@ export function RightPanel({
                       setConfirmDeleteAll(true);
                     }}
                     className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-all"
-                    title="Delete All Objects in Current Image"
+                    title={t('rightPanel.deleteAllObjects')}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -1126,25 +1126,25 @@ export function RightPanel({
             <div className="mx-2 mt-2 mb-1 p-3 bg-white dark:bg-neutral-900 rounded-md border border-blue-200 dark:border-blue-900/50 shadow-sm animate-in slide-in-from-top-2">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[10px] font-bold uppercase text-blue-600 flex items-center gap-1.5">
-                  <Copy className="w-3 h-3" /> Overlap Cleaner
+                  <Copy className="w-3 h-3" /> {t('rightPanel.overlapCleaner')}
                 </span>
                 <button onClick={() => setNmsPanelOpen(false)}><X className="w-3 h-3 text-neutral-400" /></button>
               </div>
 
               <div className="grid grid-cols-2 gap-3 mb-3">
                 <div className="space-y-1">
-                  <label className="text-[9px] text-neutral-500 font-bold uppercase">Metric</label>
+                  <label className="text-[9px] text-neutral-500 font-bold uppercase">{t('rightPanel.metric')}</label>
                   <Select value={nmsMode} onValueChange={(v: any) => setNmsMode(v)}>
                     <SelectTrigger className="h-7 text-[10px] font-bold"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ios" className="text-[10px]">IoS (Nested)</SelectItem>
-                      <SelectItem value="iou" className="text-[10px]">IoU (Standard)</SelectItem>
+                      <SelectItem value="ios" className="text-[10px]">{t('rightPanel.iosNested')}</SelectItem>
+                      <SelectItem value="iou" className="text-[10px]">{t('rightPanel.iouStandard')}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="space-y-1">
                   <div className="flex justify-between text-[9px] text-neutral-500 font-bold uppercase">
-                    <span>Threshold</span>
+                    <span>{t('rightPanel.threshold')}</span>
                     <span className="text-blue-600 font-mono">{nmsThreshold}%</span>
                   </div>
                   <Slider value={[nmsThreshold]} min={10} max={100} step={1} onValueChange={(v) => setNmsThreshold(v[0])} />
@@ -1154,21 +1154,21 @@ export function RightPanel({
               {/* 🌟 动态按钮区域 */}
               {!hasScanned ? (
                 <Button className="w-full h-8 text-[11px] font-bold bg-blue-600 hover:bg-blue-700" onClick={handleScanOverlaps}>
-                  Scan Overlapping Objects
+                  {t('rightPanel.scanOverlapping')}
                 </Button>
               ) : (
                 <div className="flex gap-2">
                   {Object.values(nmsGroups).filter((g: any) => !g.isMaster).length > 0 ? (
                     <Button className="flex-1 h-8 text-[11px] font-bold bg-red-600 hover:bg-red-700" onClick={handleDeleteOverlaps}>
-                      Delete {Object.values(nmsGroups).filter((g: any) => !g.isMaster).length} Masks
+                      {t('rightPanel.deleteMasks', { count: Object.values(nmsGroups).filter((g: any) => !g.isMaster).length })}
                     </Button>
                   ) : (
                     <Button disabled className="flex-1 h-8 text-[11px] font-bold bg-neutral-100 text-neutral-400 border border-neutral-200 dark:bg-neutral-800 dark:border-neutral-700">
-                      Found 0 Overlaps
+                      {t('rightPanel.foundOverlaps')}
                     </Button>
                   )}
                   <Button variant="outline" className="h-8 px-3 text-[11px] font-bold" onClick={handleResetNms}>
-                    Reset
+                    {t('rightPanel.nmsReset')}
                   </Button>
                 </div>
               )}
@@ -1231,7 +1231,7 @@ export function RightPanel({
                     <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
                     <ShapeIcon 
                       className={`w-3.5 h-3.5 shrink-0 ml-0.5 ${isActive ? 'text-blue-500 dark:text-blue-400' : 'text-neutral-400'}`} 
-                      title={`Type: ${ann.type}`}
+                      title={`Type: ${ann.type}`} // Keep type as-is — it's a data field
                     />
                     {ann.difficult && <AlertTriangle className="w-3.5 h-3.5 inline text-orange-500 shrink-0 ml-0.5" title="Difficult"/>}
                     
@@ -1256,7 +1256,7 @@ export function RightPanel({
                       e.stopPropagation();
                       zoomToAnnotation(ann);
                     }}
-                    title="Zoom to object"
+                    title={t('rightPanel.zoomToObject')}
                   >
                     <MapPin className="w-3.5 h-3.5" />
                   </Button>
@@ -1272,7 +1272,7 @@ export function RightPanel({
                       e.stopPropagation(); 
                       toggleAnnotationVisibility(ann.id); 
                     }}
-                    title={isHidden ? "Show object" : "Hide object"}
+                    title={isHidden ? t('rightPanel.showObject') : t('rightPanel.hideObject')}
                     // title={hiddenAnnotations.includes(ann.id) ? "Show object" : "Hide object"}
                   >
                     {hiddenAnnotations.includes(ann.id) ? (
@@ -1301,7 +1301,7 @@ export function RightPanel({
               );
             })}
             {currentAnnotations.length === 0 && (
-               <div className="text-center py-4 text-[10px] text-neutral-400">No objects found</div>
+               <div className="text-center py-4 text-[10px] text-neutral-400">{t('rightPanel.noObjectsFound')}</div>
             )}
           </div>
           </div>

@@ -54,8 +54,8 @@ export function AIToolPanel({
 
   const getSelectedViewName = () => {
     const v = views.find((v:any) => v.id === selectedViewId);
-    if (!v) return "Select a view";
-    return v.isMain ? 'Main View' : `Aug View ${views.indexOf(v)}`;
+    if (!v) return t('aiTool.selectView');
+    return v.isMain ? t('rightPanel.mainView') : `${t('rightPanel.augView')} ${views.indexOf(v)}`;
   };
 
 // 🌟 动态计算底部状态栏
@@ -64,14 +64,14 @@ export function AIToolPanel({
   let showSpinner = false;
 
   if (!aiSettings?.isConfigured) {
-    statusText = 'AI Model Not Loaded';
+    statusText = t('aiTool.modelNotLoaded');
     statusColor = 'bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-400';
   } else if (isInitializing) {
-    statusText = 'Image Data Loading...';
+    statusText = t('aiTool.imageDataLoading');
     statusColor = 'bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400';
     showSpinner = true;
   } else if (isPredicting) {
-    statusText = 'AI Inferring...';
+    statusText = t('aiTool.aiInferring');
     statusColor = 'bg-purple-50 text-purple-600 dark:bg-purple-950/20 dark:text-purple-400';
     showSpinner = true;
   } else if (autoResultMsg) {
@@ -79,10 +79,10 @@ export function AIToolPanel({
     statusText = autoResultMsg;
     statusColor = 'bg-teal-50 text-teal-600 dark:bg-teal-950/20 dark:text-teal-400 border-teal-200 dark:border-teal-800';
   } else if (!isAIReady) {
-    statusText = 'Image Data Not Loaded';
+    statusText = t('aiTool.imageDataNotLoaded');
     statusColor = 'bg-amber-50 text-amber-600 dark:bg-amber-950/20 dark:text-amber-400';
   } else {
-    statusText = 'AI Engine Ready';
+    statusText = t('aiTool.aiEngineReady');
     statusColor = 'bg-green-50 text-green-600 dark:bg-green-950/20 dark:text-green-400';
   }
 
@@ -98,7 +98,7 @@ return (
       }`}>
         <div className={`w-2 h-2 rounded-full mr-1.5 shrink-0 ${aiSettings.isConfigured ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
         <span className="truncate" title={aiSettings.isConfigured ? `ACTIVE: ${aiSettings.modelPath.split(/[\\/]/).pop()}` : 'MODEL NOT LOADED'}>
-          {aiSettings.isConfigured ? `ACTIVE: ${aiSettings.modelPath.split(/[\\/]/).pop()}` : 'MODEL NOT LOADED'}
+          {aiSettings.isConfigured ? `${t('aiTool.activeModel')}: ${aiSettings.modelPath.split(/[\\/]/).pop()}` : t('aiTool.modelNotLoadedShort')}
         </span>
       </div>
 
@@ -106,17 +106,17 @@ return (
       <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-neutral-50/30 dark:bg-neutral-800/10 space-y-3 shrink-0">
         <div className="flex items-end gap-2">
           <div className="flex-1">
-            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">Target View</label>
+            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">{t('aiTool.targetView')}</label>
             <Select value={selectedViewId} onValueChange={onViewChange}>
               <SelectTrigger className="h-8 text-[11px] font-bold px-2 bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 shadow-sm focus:ring-1 focus:ring-blue-500">
-                <SelectValue placeholder="Select view">
-                  {views.find((v:any) => v.id === selectedViewId)?.isMain ? 'Main View' : `Aug View`}
+                <SelectValue placeholder={t('aiTool.selectViewPlaceholder')}>
+                  {views.find((v:any) => v.id === selectedViewId)?.isMain ? t('rightPanel.mainView') : t('rightPanel.augView')}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {views.map((v:any, i:number) => (
                   <SelectItem key={v.id} value={v.id} className="text-xs">
-                    {v.isMain ? 'Main View' : `Aug View ${i}`}
+                    {v.isMain ? t('rightPanel.mainView') : `${t('rightPanel.augView')} ${i}`}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -124,9 +124,9 @@ return (
           </div>
           
           <div className="w-16 shrink-0"> 
-            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider block mb-1 text-center">Size</label>
-            <input 
-              type="number" step={14} title="Inference Size"
+            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider block mb-1 text-center">{t('aiTool.size')}</label>
+            <input
+              type="number" step={14} title={t('aiTool.size')}
               className="w-full h-8 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded text-[11px] font-mono text-center font-bold text-blue-600 dark:text-blue-400 shadow-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               value={aiSettings.inferenceSize || 644}
               onChange={(e) => setAISettings({ inferenceSize: parseInt(e.target.value) || 644 })}
@@ -137,7 +137,7 @@ return (
         {/* --- Confidence --- */}
         <div className="space-y-1.5">
           <div className="flex justify-between items-center">
-            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Confidence</label>
+            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">{t('aiTool.confidence')}</label>
             <input 
               type="number" step={0.05} min={0.01} max={1.0}
               className="w-10 h-4 bg-transparent border-b border-neutral-300 dark:border-neutral-700 text-right font-mono text-[10px] outline-none focus:border-blue-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
@@ -151,10 +151,10 @@ return (
           </div>
 
         <div>
-          <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">Image Source</label>
+          <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider block mb-1">{t('aiTool.imageSource')}</label>
           <div className="flex bg-neutral-200/50 dark:bg-neutral-950/50 rounded p-0.5 border border-neutral-200 dark:border-neutral-800">
-            <button className={`flex-1 py-1 text-[10px] rounded transition-all ${sourceMode === 'raw' ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`} onClick={() => setSourceMode('raw')}>Raw</button>
-            <button className={`flex-1 py-1 text-[10px] rounded transition-all ${sourceMode === 'view' ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`} onClick={() => setSourceMode('view')}>Transformed</button>
+            <button className={`flex-1 py-1 text-[10px] rounded transition-all ${sourceMode === 'raw' ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`} onClick={() => setSourceMode('raw')}>{t('aiTool.raw')}</button>
+            <button className={`flex-1 py-1 text-[10px] rounded transition-all ${sourceMode === 'view' ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`} onClick={() => setSourceMode('view')}>{t('aiTool.transformed')}</button>
           </div>
         </div>
 
@@ -162,10 +162,10 @@ return (
         <div className="flex gap-2 pt-1">
           <Button variant="default" className="flex-1 h-8 text-[11px] font-bold bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={onConfirmInit} disabled={isInitializing || isPredicting}>
             {isInitializing ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : null}
-            {isInitializing ? 'Loading' : 'Confirm'}
+            {isInitializing ? t('aiTool.loading') : t('aiTool.confirm')}
           </Button>
           <Button variant="outline" className="flex-1 h-8 text-[11px] font-bold bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700" onClick={onResetInit} disabled={isInitializing || isPredicting}>
-            Reset
+            {t('aiTool.reset')}
           </Button>
         </div>
 
@@ -176,13 +176,13 @@ return (
               className={`flex-1 py-1 text-[10px] rounded transition-all ${aiSettings.outputType === 'polygon' || !aiSettings.outputType ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`} 
               onClick={() => setAISettings({ outputType: 'polygon' })}
             >
-              Polygon
+              {t('aiTool.polygon')}
             </button>
-            <button 
-              className={`flex-1 py-1 text-[10px] rounded transition-all ${aiSettings.outputType === 'bbox' ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`} 
+            <button
+              className={`flex-1 py-1 text-[10px] rounded transition-all ${aiSettings.outputType === 'bbox' ? 'bg-white dark:bg-neutral-800 shadow-sm font-bold text-neutral-900 dark:text-white' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
               onClick={() => setAISettings({ outputType: 'bbox' })}
             >
-              BBox
+              {t('aiTool.bbox')}
             </button>
           </div>
         </div>
@@ -211,7 +211,7 @@ return (
             {/* --- Size Filter --- */}
         <div className="space-y-1.5 p-2 bg-neutral-50 dark:bg-black/20 rounded-md border border-neutral-200 dark:border-neutral-800">
           <div className="flex justify-between items-center mb-1">
-            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Size Filter (Min %)</label>
+            <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">{t('aiTool.sizeFilter')}</label>
             <div className="flex items-center text-blue-600 bg-blue-100 dark:bg-blue-900/40 px-1 rounded">
               <input 
                 type="number" step={0.1} min={0} max={100}
@@ -225,15 +225,15 @@ return (
               <span className="text-[9px] ml-0.5">%</span>
             </div>
           </div>
-          <p className="text-[8px] text-neutral-400 leading-tight italic">* {t('ai.filterDesc', 'Ignore objects where BOTH width and height < this % of original image.')}</p>
+          <p className="text-[8px] text-neutral-400 leading-tight italic">* {t('aiTool.ignoreFilterDesc')}</p>
         </div>
 
             {/* 1. 快捷添加下拉框 */}
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Quick Add Class</label>
+              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">{t('aiTool.quickAddClass')}</label>
               <Select onValueChange={(val) => { if (!autoTags.includes(val)) setAutoTags([...autoTags, val]); }}>
                 <SelectTrigger className="h-8 text-[11px] bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 shadow-sm focus:ring-1 focus:ring-blue-500">
-                  <SelectValue placeholder="Select Class..." />
+                  <SelectValue placeholder={t('aiTool.selectClass')} />
                 </SelectTrigger>
                 <SelectContent>
                   {taxonomyClasses.map((c: any) => (<SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>))}
@@ -243,12 +243,12 @@ return (
 
             {/* 🌟 2. 核心重构：输入与列表分离 */}
             <div className="space-y-2">
-              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Text Prompts</label>
+              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">{t('aiTool.textPrompts')}</label>
               
               {/* 独立干净的输入框 */}
               <input 
                 className="w-full h-8 px-2.5 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded text-[11px] shadow-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" 
-                placeholder="Type prompt and press Enter..." 
+                placeholder={t('aiTool.typePromptPlaceholder')}
                 value={autoText}
                 onChange={e => setAutoText(e.target.value)} 
                 onKeyDown={e => { 
@@ -275,7 +275,7 @@ return (
                     ))}
                   </div>
                 ) : (
-                  <span className="text-[9px] text-neutral-400 font-medium">No prompts added yet.</span>
+                  <span className="text-[9px] text-neutral-400 font-medium">{t('aiTool.noPromptsAdded')}</span>
                 )}
               </div>
             </div>
@@ -312,7 +312,7 @@ return (
                 disabled={!isAIReady || isPredicting || (autoTags.length === 0 && autoText.trim() === '')}
               >
                 {isPredicting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} 
-                {isPredicting ? 'Inferring...' : 'Infer Current'}
+                {isPredicting ? t('aiTool.inferring') : t('aiTool.inferCurrent')}
               </Button>
             </div>
 
@@ -321,7 +321,7 @@ return (
               <div className="absolute inset-x-2 bottom-10 z-50 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 shadow-2xl rounded-lg p-3 flex flex-col animate-in slide-in-from-bottom-4">
                 <div className="flex items-center gap-2 mb-3 border-b border-neutral-100 dark:border-neutral-800 pb-2">
                   <AlertTriangle className="w-4 h-4 text-amber-500" />
-                  <h4 className="text-[11px] font-bold">Unrecognized Prompts</h4>
+                  <h4 className="text-[11px] font-bold">{t('aiTool.unrecognizedPrompts')}</h4>
                 </div>
                 
                 <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar max-h-48 pr-1">
@@ -333,10 +333,10 @@ return (
                       
                       <div className="flex gap-1 mb-1.5">
                         <button className={`flex-1 text-[9px] py-1 rounded transition-colors ${tagMappings[tag].mode === 'new' ? 'bg-green-100 text-green-700 font-bold border border-green-200' : 'bg-white border border-neutral-200 text-neutral-500'}`} onClick={() => setTagMappings(p => ({...p, [tag]: { mode: 'new', target: tag }}))}>
-                          Add New
+                          {t('aiTool.addNew')}
                         </button>
                         <button className={`flex-1 text-[9px] py-1 rounded transition-colors ${tagMappings[tag].mode === 'existing' ? 'bg-blue-100 text-blue-700 font-bold border border-blue-200' : 'bg-white border border-neutral-200 text-neutral-500'}`} onClick={() => setTagMappings(p => ({...p, [tag]: { mode: 'existing', target: taxonomyClasses[0]?.name || '' }}))}>
-                          Map To...
+                          {t('aiTool.mapTo')}
                         </button>
                       </div>
 
@@ -350,7 +350,7 @@ return (
                           </SelectTrigger>
                           <SelectContent>
                             {taxonomyClasses.map((c: any) => <SelectItem key={c.id} value={c.name} className="text-[10px]">{c.name}</SelectItem>)}
-                            <SelectItem value="Uncategorized" className="text-[10px] text-amber-600 font-bold">Uncategorized (Skip)</SelectItem>
+                            <SelectItem value="Uncategorized" className="text-[10px] text-amber-600 font-bold">{t('aiTool.uncategorizedSkip')}</SelectItem>
                           </SelectContent>
                         </Select>
                       )}
@@ -359,7 +359,7 @@ return (
                 </div>
 
                 <div className="flex gap-2 mt-3 pt-2 border-t border-neutral-100 dark:border-neutral-800">
-                  <Button variant="outline" className="flex-1 h-7 text-[10px]" onClick={() => setMappingModalOpen(false)}>Cancel</Button>
+                  <Button variant="outline" className="flex-1 h-7 text-[10px]" onClick={() => setMappingModalOpen(false)}>{t('aiTool.cancel')}</Button>
                   <Button className="flex-1 h-7 text-[10px] bg-blue-600 hover:bg-blue-700" onClick={() => {
                     // 1. 生成最终字典并入库新分类
                     const finalDict: Record<string, string> = {};
@@ -381,7 +381,7 @@ return (
                     setMappingModalOpen(false);
                     onAutoPredict(autoTags, finalDict); 
                   }}>
-                    Confirm & Run
+                    {t('aiTool.confirmAndRun')}
                   </Button>
                 </div>
               </div>
@@ -396,7 +396,7 @@ return (
 
             {/* 🌟 新增：Semi 专属类别选择器 */}
             <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">Assign Class</label>
+              <label className="text-[9px] font-bold text-neutral-500 uppercase tracking-wider">{t('aiTool.assignClass')}</label>
               <Select 
                 value={aiSettings.semiClass || 'None'} 
                 onValueChange={(val) => setAISettings({ semiClass: val })}
@@ -406,7 +406,7 @@ return (
                 </SelectTrigger>
                 <SelectContent>
                   {/* 默认项：如果不选，就 fallback 到外层画图工具选中的类别 */}
-                  <SelectItem value="None" className="text-xs text-neutral-400 italic">None (Use Global)</SelectItem>
+                  <SelectItem value="None" className="text-xs text-neutral-400 italic">{t('aiTool.noneUseGlobal')}</SelectItem>
                   {taxonomyClasses.map((c: any) => (
                     <SelectItem key={c.id} value={c.name} className="text-xs">{c.name}</SelectItem>
                   ))}
@@ -415,13 +415,13 @@ return (
             </div>
             <div className="grid grid-cols-1 gap-1.5">
               <Button variant={promptMode === 'positive' ? 'default' : 'outline'} className={`h-9 justify-start px-3 gap-2 ${promptMode === 'positive' ? 'bg-green-600 hover:bg-green-700' : ''}`} onClick={() => setPromptMode('positive')}>
-                <PlusCircle className="w-4 h-4" /> <span className="text-xs">Positive Pt</span>
+                <PlusCircle className="w-4 h-4" /> <span className="text-xs">{t('aiTool.positivePt')}</span>
               </Button>
               <Button variant={promptMode === 'negative' ? 'default' : 'outline'} className={`h-9 justify-start px-3 gap-2 ${promptMode === 'negative' ? 'bg-red-600 hover:bg-red-700' : ''}`} onClick={() => setPromptMode('negative')}>
-                <MinusCircle className="w-4 h-4" /> <span className="text-xs">Negative Pt</span>
+                <MinusCircle className="w-4 h-4" /> <span className="text-xs">{t('aiTool.negativePt')}</span>
               </Button>
               <Button variant={promptMode === 'box' ? 'default' : 'outline'} className={`h-9 justify-start px-3 gap-2 ${promptMode === 'box' ? 'bg-blue-600 hover:bg-blue-700' : ''}`} onClick={() => setPromptMode('box')}>
-                <SquareDashed className="w-4 h-4" /> <span className="text-xs">Box Prompt</span>
+                <SquareDashed className="w-4 h-4" /> <span className="text-xs">{t('aiTool.boxPrompt')}</span>
               </Button>
             </div>
 
@@ -429,10 +429,10 @@ return (
             <div className="pt-4 border-t border-neutral-100 dark:border-neutral-800 space-y-2">
               {/* 🌟 修复：把 onClick 里的 setAiPrompts([]) 换成 onResetPrompts */}
               <Button variant="outline" size="sm" className="w-full text-[10px] h-8" onClick={onResetPrompts}>
-                <Trash2 className="w-3 h-3 mr-2" /> Reset Prompts
+                <Trash2 className="w-3 h-3 mr-2" /> {t('aiTool.resetPrompts')}
               </Button>
               <Button size="sm" className="w-full bg-blue-600 h-8 text-[10px]" onClick={onConfirmPreview} disabled={isPredicting || aiPrompts.length === 0}>
-                <Check className="w-3 h-3 mr-2" /> Confirm Add
+                <Check className="w-3 h-3 mr-2" /> {t('aiTool.confirmAdd')}
               </Button>
             </div>
           </div>
@@ -442,10 +442,10 @@ return (
         {activeTab === 'vqa' && (
           <div className="flex flex-col items-center justify-center h-full text-center space-y-2 opacity-60">
              <MessageSquare className="w-8 h-8 text-neutral-400 mb-2" />
-             <span className="text-[11px] font-bold text-neutral-500">VQA Not Supported</span>
+             <span className="text-[11px] font-bold text-neutral-500">{t('aiTool.vqaNotSupported')}</span>
              <p className="text-[9px] text-neutral-400 leading-relaxed px-4">
-               SAM3 is a Vision-Language Segmentation model.<br/>
-               Text generation is not available.
+               {t('aiTool.vqaDescription')}<br/>
+               {t('aiTool.vqaUnavailable')}
              </p>
           </div>
         )}

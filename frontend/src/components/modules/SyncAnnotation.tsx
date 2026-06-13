@@ -695,8 +695,8 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       const activeAnno = annotations.find((a: any) => a.id === activeAnnotationId);
       // 检查：1. 是否选中了对象 2. 选中的对象是否是多边形
       if (!activeAnno || activeAnno.type !== 'polygon') {
-        const actionName = tool === 'cut' ? "切割" : "擦除";
-        alert(`请先在右侧列表或画布中选中一个多边形，再执行${actionName}操作。`);
+        alert(t('annotation.selectPolygonFirst'));
+        return; // 直接返回，不执行后续的 setIsDrawing(true)
         return; // 直接返回，不执行后续的 setIsDrawing(true)
       }
     }
@@ -1068,14 +1068,14 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       // 🌟 新增：如果是 Cut 或 Cutout，执行几何修改逻辑
       if (tool === 'cut' || tool === 'cutout') {
         if (!activeAnnotationId) {
-          alert(t('Please select a polygon first (Shortcut: V)'));
+          alert(t('annotation.selectPolygonFirst'));
           setCurrentPoints([]); setIsDrawing(false);
           return;
         }
         
         const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
         if (!activeAnno || activeAnno.type !== 'polygon') {
-          alert(t('Cut/Cutout tools only work on Polygons.'));
+          alert(t('annotation.cutCutoutOnlyPolygons'));
           setCurrentPoints([]); setIsDrawing(false);
           return;
         }
@@ -1360,7 +1360,7 @@ const handleToolChange = async (newTool: string) => {
     
     if (!status.is_loaded) {
       setAISettings({ isConfigured: false });
-      alert("Vision Engine 处于离线状态。请在设置中配置并装载模型！");
+      alert(t('annotation.visionOffline'));
       setSettingsOpen?.(true);
       return;
     } else {
@@ -1380,8 +1380,7 @@ const handleToolChange = async (newTool: string) => {
   if (newTool === 'cut' || newTool === 'cutout') {
     const activeAnno = currentAnnotations.find((a: any) => a.id === activeAnnotationId);
     if (!activeAnno || activeAnno.type !== 'polygon') {
-      const actionName = newTool === 'cut' ? "切割" : "擦除";
-      alert(`请先选中一个多边形，然后再使用${actionName}工具。`);
+      alert(t('annotation.selectPolygonFirst'));
       setTool('select'); 
       setCursorStyle('default');
       return; 
@@ -1435,9 +1434,9 @@ const handleAIInit = async () => {
     if (err.message && err.message.includes("模型尚未装载")) {
       // 强制把前端状态改回未配置
       setAISettings({ isConfigured: false });
-      alert("检测到后端服务重启，模型显存已清空。请点击右上角【设置 -> AI Engine Settings】重新装载模型！");
+      alert(t('annotation.backendRestarted'));
     } else {
-      alert(`初始化失败: ${err.message}`);
+      alert(t('annotation.initFailed', { message: err.message }));
     }
   } finally {
     setIsInitializing(false); 
@@ -1520,14 +1519,14 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           });
         });
         
-        setAutoResultMsg(`Found ${totalFound} Objects!`);
+        setAutoResultMsg(t('annotation.foundObjects', { count: totalFound }));
       } else {
-        setAutoResultMsg(`Found 0 Objects.`);
+        setAutoResultMsg(t('annotation.foundObjects', { count: 0 }));
       }
 
     } catch (e: any) {
       console.error(e);
-      alert(`推理失败: ${e.message}`);
+      alert(t('annotation.inferenceFailed', { message: e.message }));
     } finally {
       setIsPredicting(false); 
     }
@@ -1637,7 +1636,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           <button
             onClick={() => setLeftPanelOpen(true)}
             className="h-full w-6 bg-neutral-100 dark:bg-neutral-900 border-r border-neutral-200 dark:border-neutral-800 flex items-center justify-center hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
-            title="Expand Left Panel"
+            title={t('annotation.expandLeftPanel')}
           >
             <ChevronRight className="w-4 h-4 text-neutral-500" />
           </button>
@@ -1648,7 +1647,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           <button
             onClick={() => setLeftPanelOpen(false)}
             className="absolute top-2 -right-3 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors z-20 shadow-sm"
-            title="Collapse Left Panel"
+            title={t('annotation.collapseLeftPanel')}
           >
             <ChevronLeft className="w-3.5 h-3.5 text-neutral-500" />
           </button>
@@ -1702,7 +1701,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             onWheel={(e) => e.stopPropagation()}
           >
             <div className="px-2 py-1 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-full uppercase tracking-wider">
-              Single View
+              {t('annotation.singleView')}
             </div>
             <div className="w-px h-5 bg-neutral-300 dark:bg-neutral-700 mx-1" />
 
@@ -1712,25 +1711,25 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                 <SelectValue>
                   {/* 强制要求它渲染我们手写的逻辑，再也不会出现乱码或 ID 暴露 */}
                   {(!activeControlLayer || activeControlLayer === 'none') ? (
-                    <span className="text-neutral-500">None (Disable FX)</span>
+                    <span className="text-neutral-500">{t('annotation.noneDisableFx')}</span>
                   ) : (
                     (() => {
                       const v = views.find((v:any) => v.id === activeControlLayer);
-                      if (!v) return "None (Disable FX)";
-                      return `${activeControlLayer === focusedViewId ? '✨' : ''}${v.isMain ? 'Main View' : `Aug View ${views.indexOf(v)}`}`;
+                      if (!v) return t('annotation.noneDisableFx');
+                      return `${activeControlLayer === focusedViewId ? '✨' : ''}${v.isMain ? t('annotation.mainView') : `${t('annotation.augView')} ${views.indexOf(v)}`}`;
                     })()
                   )}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none" className="text-xs text-neutral-500">None (Disable FX)</SelectItem>
+                <SelectItem value="none" className="text-xs text-neutral-500">{t('annotation.noneDisableFx')}</SelectItem>
                 {operableLayers.map((layerId) => {
                   const v = views.find((v:any) => v.id === layerId);
                   if (!v) return null;
                   return (
                     <SelectItem key={layerId} value={layerId} className="text-xs">
                       {layerId === focusedViewId ? '✨ ' : ''}
-                      {v.isMain ? 'Main View' : `Aug View ${views.indexOf(v)}`}
+                      {v.isMain ? t('annotation.mainView') : `${t('annotation.augView')} ${views.indexOf(v)}`}
                     </SelectItem>
                   )
                 })}
@@ -1748,15 +1747,15 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   <SelectTrigger className="h-7 w-24 text-xs bg-transparent border-none focus:ring-0">
                     {/* 🌟 终极修复：放弃自动匹配，直接根据状态写死屏幕上该显示的文字 */}
                     <SelectValue>
-                      {activeConfig.mode === 'opacity' && 'Opacity'}
-                      {activeConfig.mode === 'swipeX' && 'H-Swipe'}
-                      {activeConfig.mode === 'swipeY' && 'V-Swipe'}
+                      {activeConfig.mode === 'opacity' && t('annotation.opacity')}
+                      {activeConfig.mode === 'swipeX' && t('annotation.hSwipe')}
+                      {activeConfig.mode === 'swipeY' && t('annotation.vSwipe')}
                     </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="opacity" className="text-xs">Opacity</SelectItem>
-                    <SelectItem value="swipeX" className="text-xs">H-Swipe</SelectItem>
-                    <SelectItem value="swipeY" className="text-xs">V-Swipe</SelectItem>
+                    <SelectItem value="opacity" className="text-xs">{t('annotation.opacity')}</SelectItem>
+                    <SelectItem value="swipeX" className="text-xs">{t('annotation.hSwipe')}</SelectItem>
+                    <SelectItem value="swipeY" className="text-xs">{t('annotation.vSwipe')}</SelectItem>
                   </SelectContent>
                 </Select>
                 
@@ -1893,7 +1892,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           <button
             onClick={() => setRightPanelOpen(true)}
             className="h-full w-6 bg-neutral-100 dark:bg-neutral-900 border-l border-neutral-200 dark:border-neutral-800 flex items-center justify-center hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors"
-            title="Expand Right Panel"
+            title={t('annotation.expandRightPanel')}
           >
             <ChevronLeft className="w-4 h-4 text-neutral-500" />
           </button>
@@ -1904,7 +1903,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           <button
             onClick={() => setRightPanelOpen(false)}
             className="absolute top-2 -left-3 w-6 h-6 rounded-full bg-white dark:bg-neutral-800 border border-neutral-200 dark:border-neutral-700 flex items-center justify-center hover:bg-neutral-100 dark:hover:bg-neutral-700 transition-colors z-20 shadow-sm"
-            title="Collapse Right Panel"
+            title={t('annotation.collapseRightPanel')}
           >
             <ChevronRight className="w-3.5 h-3.5 text-neutral-500" />
           </button>

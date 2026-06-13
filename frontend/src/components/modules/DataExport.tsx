@@ -156,7 +156,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       const folder = folders.find((f: any) => f.id === v.folderId);
       return {
         viewId: v.id,
-        viewName: v.isMain ? 'Main View' : `Aug View ${i}`,
+        viewName: v.isMain ? t('dataExport.mainView') : `${t('annotation.augView')} ${i}`,
         suffix: folder?.suffix || '',
         extension: folder?.extension || '.png',
         subdir: `${v.isMain ? 'main' : `aug_${i}`}`,
@@ -256,7 +256,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       const ext = folder?.extension || '.png';
       return {
         viewId: v.id,
-        viewName: v.isMain ? 'Main View' : `Aug View ${i}`,
+        viewName: v.isMain ? t('dataExport.mainView') : `${t('annotation.augView')} ${i}`,
         suffix,
         extension: ext,
         subdir: v.isMain ? 'main' : `aug_${i}`,
@@ -700,7 +700,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                       value={vc.subdir}
                       onChange={(e) => updateViewConfig(vc.viewId, { subdir: e.target.value })}
                       className="h-9 text-xs font-mono"
-                      placeholder={vc.viewName === 'Main View' ? 'main' : 'aug'}
+                      placeholder={vc.viewName.startsWith(t('dataExport.mainView')) ? 'main' : 'aug'}
                     />
                   </Field>
                 )}
@@ -773,7 +773,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                   Split File Entries
                 </div>
                 <span className="text-[9px] text-muted-foreground font-mono">
-                  {splitContentMode === 'main_view' ? 'Main View names' : 'Scene Group names'}
+                  {splitContentMode === 'main_view' ? t('dataExport.stepSplit.mainViewNames') : t('dataExport.stepSplit.sceneGroupNames')}
                 </span>
               </div>
               <div className="grid grid-cols-3 gap-3">
@@ -786,7 +786,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                     <div className={`text-[9px] font-bold ${col.color} mb-1.5`}>{col.label}</div>
                     <div className="text-[9px] font-mono text-muted-foreground leading-relaxed space-y-0.5">
                       {col.stems.length === 0 ? (
-                        <span className="italic opacity-50">(empty)</span>
+                        <span className="italic opacity-50">{t('dataExport.stepSplit.empty')}</span>
                       ) : (
                         col.stems.slice(0, 6).map(s => (
                           <div key={s} className="truncate">{fmtStem(s)}</div>
@@ -808,23 +808,23 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div className="space-y-0.5">
                   <div className="text-2xl font-bold text-blue-500">{splitTrain}%</div>
-                  <div className="text-[10px] text-muted-foreground">Train</div>
+                  <div className="text-[10px] text-muted-foreground">{t('dataExport.stepSplit.train')}</div>
                   <div className="text-[10px] font-mono text-blue-500">
-                    {Math.round(stems.length * splitTrain / 100)} files
+                    {Math.round(stems.length * splitTrain / 100)} {t('dataExport.stepSplit.files')}
                   </div>
                 </div>
                 <div className="space-y-0.5">
                   <div className="text-2xl font-bold text-amber-500">{splitVal}%</div>
-                  <div className="text-[10px] text-muted-foreground">Val</div>
+                  <div className="text-[10px] text-muted-foreground">{t('dataExport.stepSplit.val')}</div>
                   <div className="text-[10px] font-mono text-amber-500">
-                    {Math.round(stems.length * splitVal / 100)} files
+                    {Math.round(stems.length * splitVal / 100)} {t('dataExport.stepSplit.files')}
                   </div>
                 </div>
                 <div className="space-y-0.5">
                   <div className="text-2xl font-bold text-red-500">{splitTest}%</div>
-                  <div className="text-[10px] text-muted-foreground">Test</div>
+                  <div className="text-[10px] text-muted-foreground">{t('dataExport.stepSplit.test')}</div>
                   <div className="text-[10px] font-mono text-red-500">
-                    {Math.round(stems.length * splitTest / 100)} files
+                    {Math.round(stems.length * splitTest / 100)} {t('dataExport.stepSplit.files')}
                   </div>
                 </div>
               </div>
@@ -862,7 +862,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
               {/* Split File Content Mode */}
               <div>
                 <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block">
-                  Split File Content
+                  {t('dataExport.stepSplit.splitContent')}
                 </Label>
                 <div className="grid grid-cols-2 gap-3">
                   <div
@@ -874,7 +874,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                     }`}
                   >
                     <div className={`text-xs font-bold ${splitContentMode === 'stem' ? 'text-primary' : 'text-foreground'}`}>
-                      Scene Group
+                      {t('dataExport.stepSplit.sceneGroup')}
                     </div>
                     <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
                       e.g. DJI_0008
@@ -889,7 +889,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                     }`}
                   >
                     <div className={`text-xs font-bold ${splitContentMode === 'main_view' ? 'text-primary' : 'text-foreground'}`}>
-                      Main View
+                      {t('dataExport.stepSplit.mainView')}
                     </div>
                     <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
                       e.g. DJI_0008.jpg
@@ -928,7 +928,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                           <span className="font-medium capitalize">{shape.replace('_', ' ')}</span>
                         </div>
                         {status === 'convertible' && !disabled && (
-                          <span className="text-[9px] text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded font-bold">Convert</span>
+                          <span className="text-[9px] text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded font-bold">{t('dataExport.stepShapes.convert')}</span>
                         )}
                       </div>
                     );
@@ -981,7 +981,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                         <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: cls.color }} />
                         <span className="flex-1 truncate font-medium">{cls.name}</span>
                         <span className={`text-[10px] w-8 text-right ${cls.selected ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
-                          ID:{displayId}
+                          {t('dataExport.stepShapes.classId')}{displayId}
                         </span>
                       </div>
                     );
@@ -1043,7 +1043,7 @@ useEffect(() => {
     const folder = folders.find((f: any) => f.id === v.folderId);
     return {
       viewId: v.id,
-      viewName: v.isMain ? 'Main View' : `Aug View ${i}`,
+      viewName: v.isMain ? t('dataExport.mainView') : `${t('annotation.augView')} ${i}`,
       suffix: folder?.suffix || '',           // 🆕 从 store 读取
       extension: IMAGE_EXT_MAP[folder?.extension],  // 🆕 从 store 读取
       subdir: v.isMain ? 'main' : `aug_${i}`,
@@ -1097,19 +1097,19 @@ useEffect(() => {
           <div className="p-3 border-t border-border space-y-1.5">
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               <div className="w-2.5 h-2.5 rounded-full bg-red-400 shrink-0" />
-              Required
+              {t('dataExport.legend.required')}
             </div>
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
-              Configured
+              {t('dataExport.legend.configured')}
             </div>
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               <div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0" />
-              Current
+              {t('dataExport.legend.current')}
             </div>
             <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/25 shrink-0" />
-              Default
+              {t('dataExport.legend.default')}
             </div>
           </div>
         </div>

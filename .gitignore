@@ -6,3 +6,5 @@ runs/
 
 *.pyc
 .env
+
+task.md

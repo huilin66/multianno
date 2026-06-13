@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
 import { Switch } from '../../ui/switch';
@@ -26,12 +27,13 @@ export function ObjectEditorForm({
   truncated, onTruncatedChange,
   attributes, onAttributesChange, taxonomyClasses, taxonomyAttributes, activeColor
 }: ObjectEditorFormProps) {
+  const { t } = useTranslation();
 
   return (
     <div className="space-y-2.5">
       {/* Class */}
       <div className="flex items-center gap-2">
-        <Label className="text-[11px] text-neutral-500 w-14 shrink-0">Class</Label>
+        <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.class')}</Label>
         <Select value={label} onValueChange={onLabelChange}>
           <SelectTrigger className="h-7 text-xs flex-1 bg-neutral-50 dark:bg-black border-neutral-200 dark:border-neutral-800">
             <div className="flex items-center gap-1.5">
@@ -55,14 +57,14 @@ export function ObjectEditorForm({
       {/* Group ID + Track ID 同行 */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 flex-1">
-          <Label className="text-[11px] text-neutral-500 shrink-0">Group ID</Label>
+          <Label className="text-[11px] text-neutral-500 shrink-0">{t('objectEditor.groupID')}</Label>
           <Input
             type="number" value={groupId || ''} onChange={(e) => onGroupIdChange(e.target.value)}
             placeholder="-" className="h-7 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
           />
         </div>
         <div className="flex items-center gap-2 flex-1">
-          <Label className="text-[11px] text-neutral-500 shrink-0">Track ID</Label>
+          <Label className="text-[11px] text-neutral-500 shrink-0">{t('objectEditor.trackID')}</Label>
           <Input
             type="number" value={trackId || ''} onChange={(e) => onTrackIdChange(e.target.value)}
             placeholder="-" className="h-7 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
@@ -72,17 +74,17 @@ export function ObjectEditorForm({
 
       {/* Text */}
       <div className="flex items-center gap-2">
-        <Label className="text-[11px] text-neutral-500 w-14 shrink-0">Text</Label>
+        <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.text')}</Label>
         <Input
           value={text} onChange={(e) => onTextChange(e.target.value)}
-          placeholder="Description..."
+          placeholder={t('objectEditor.description')}
           className="h-7 text-xs flex-1 bg-neutral-50 dark:bg-black border-neutral-200 dark:border-neutral-800"
         />
       </div>
 
       {/* Attributes */}
       <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
-        <Label className="text-[10px] text-neutral-400 mb-2 block uppercase tracking-wider">Attributes</Label>
+        <Label className="text-[10px] text-neutral-400 mb-2 block uppercase tracking-wider">{t('objectEditor.attributes')}</Label>
           {taxonomyAttributes && taxonomyAttributes.length > 0 ? (
             <div className="space-y-1.5 max-h-[100px] overflow-y-auto custom-scrollbar pr-1">
               {taxonomyAttributes.map((attr: any) => (
@@ -90,7 +92,7 @@ export function ObjectEditorForm({
                   <span className="text-[11px] text-neutral-500 truncate w-16 shrink-0">{attr.name}</span>
                   {attr.options ? (
                     <Select value={attributes[attr.name] || ''} onValueChange={(val) => onAttributesChange({ ...attributes, [attr.name]: val })}>
-                      <SelectTrigger className="h-6 text-[10px] flex-1 bg-white dark:bg-neutral-900"><SelectValue placeholder="Select..." /></SelectTrigger>
+                      <SelectTrigger className="h-6 text-[10px] flex-1 bg-white dark:bg-neutral-900"><SelectValue placeholder={t('common.select', 'Select...')} /></SelectTrigger>
                       <SelectContent>
                         {attr.options.map((opt: string) => <SelectItem key={opt} value={opt} className="text-[10px]">{opt}</SelectItem>)}
                       </SelectContent>
@@ -103,7 +105,7 @@ export function ObjectEditorForm({
           </div>
           ) : (
           <div className="text-center py-2 text-[10px] text-neutral-400 border border-dashed border-neutral-200 dark:border-neutral-700 rounded">
-            No attributes defined
+            {t('objectEditor.noAttributesDefined')}
           </div>
         )}
       </div>
@@ -111,15 +113,15 @@ export function ObjectEditorForm({
       {/* 状态开关 */}
       <div className="flex items-center justify-between pt-2 mt-2 border-t border-neutral-100 dark:border-neutral-800">
         <div className="flex items-center gap-1 cursor-pointer" onClick={() => onDifficultChange(!difficult)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">Difficult</Label>
+          <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.difficult')}</Label>
           <Switch checked={difficult} onCheckedChange={onDifficultChange} className="scale-[0.7] origin-left m-0 shadow-none" />
         </div>
         <div className="flex items-center gap-1 cursor-pointer" onClick={() => onOccludedChange(!occluded)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">Occluded</Label>
+          <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.occluded')}</Label>
           <Switch checked={occluded} onCheckedChange={onOccludedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
         </div>
         <div className="flex items-center gap-1 cursor-pointer" onClick={() => onTruncatedChange(!truncated)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">Truncated</Label>
+          <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.truncated')}</Label>
           <Switch checked={truncated} onCheckedChange={onTruncatedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
         </div>
       </div>
