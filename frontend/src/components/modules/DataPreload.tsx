@@ -6,14 +6,14 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Alert, AlertDescription } from '../ui/alert';
+import { Alert } from '../ui/alert';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
-import { COLOR_MAPS, BAND_COLORS, BAND_BASE_STYLE, BAND_UNSELECTED_STYLE } from '../../config/colors';
+import { COLOR_MAPS, BAND_COLORS, BAND_UNSELECTED_STYLE } from '../../config/colors';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
 import {
-  FolderOpen, Plus, Trash2, Info, Check, UploadCloud, Loader2, History,
-  Save, Eye, LogOut, ChevronRight, RotateCcw, Search
+  FolderOpen, Plus, Trash2, Info, UploadCloud, History,
+  ChevronRight, RotateCcw, Search
 } from 'lucide-react';
 
 export function DataPreload({ onClose }: { onClose: () => void }) {

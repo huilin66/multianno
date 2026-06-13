@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Button } from '../../ui/button';
-import { Check, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { ObjectEditorForm } from './ObjectEditorForm'; // 🌟 引入刚封装的组件
 

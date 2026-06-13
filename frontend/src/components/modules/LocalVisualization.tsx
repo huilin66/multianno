@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
-import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Loader2, Download, Info, Trash2, FolderOpen,

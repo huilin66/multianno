@@ -218,8 +218,8 @@ export const requestVisExportStream = async (payload: any, onProgress: (p: numbe
           const data = JSON.parse(line);
           if (data.type === 'progress' || data.type === 'complete') onProgress(data.percent);
           if (data.type === 'error') throw new Error(data.message);
-        } catch {
-
+        } catch (e) {
+          console.error('Failed to parse stream line:', line, e);
         }
       }
     }
@@ -244,7 +244,8 @@ export const getPreviewImageUrl = (
 export const prefetchImages = async (paths: string[]) => {
   try {
     await post(`${API_BASE_URL}/project/prefetch`, { paths });
-  } catch {
+  } catch (e) {
+    console.error('Image prefetch failed:', e);
   }
 };
 

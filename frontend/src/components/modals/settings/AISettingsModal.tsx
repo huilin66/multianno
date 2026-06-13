@@ -7,7 +7,7 @@ import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { Slider } from '../../ui/slider';
-import { Loader2, FolderSearch, History, Check, X } from 'lucide-react';
+import { FolderSearch, History } from 'lucide-react';
 import { updateAIConfig } from '../../../api/client';
 import { FileExplorerDialog } from '../FileExplorerDialog'; 
 import { useTranslation } from 'react-i18next';

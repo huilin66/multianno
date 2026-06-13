@@ -5,7 +5,6 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Folder, ChevronRight, CheckSquare, Square, FolderUp, File, Info, FolderPlus, Home, Check, X, Redo2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { API_BASE_URL } from '../../api/client';
 import { exploreDirectory, createFolder } from '../../api/client';
 
 interface ExplorerItem {

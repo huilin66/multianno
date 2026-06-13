@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialo
 import { Button } from '../../ui/button';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
-import { Grid3X3, Rows, Columns } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface ViewLayoutSettingsModalProps {

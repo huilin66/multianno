@@ -119,13 +119,11 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   type RenderState = 'loading' | 'ready';
   const [renderState, setRenderState] = useState<RenderState>('ready');
   useEffect(() => {
-      console.log('🔴 currentStem changed, set renderState=loading');
       setRenderState('loading');
   }, [currentStem]);
 
   // CanvasView 图片加载完成
   const handleImageLoaded = () => {
-      console.log('🟢 handleImageLoaded, set renderState=ready');
       setRenderState('ready');
   };
 // 🌟 2. 新增：原生纯 JS 多边形折线切割算法
@@ -275,7 +273,6 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     
     // 🌟 偏移量：每次粘贴累加，避免重叠
     const offset = 30 + pasteOffset * 20;
-    console.log(offset, pasteOffset);
     const offsetPoints = clipboard.points.map((p: { x: number; y: number }) => ({
         x: p.x + offset,
         y: p.y + offset,
@@ -331,8 +328,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   // 🌟 1. 核心修复：建立 AI 状态同步监听器
   useEffect(() => {
     // 只要图片路径(currentStem) 或者 推理的目标视图(selectedAIViewId) 发生任何变化
-    // 必须立刻“降级”AI 状态，直到用户再次点击 Confirm
-    console.log("[AI Context] View or Image changed, resetting AI state...");
+    // 必须立刻”降级”AI 状态，直到用户再次点击 Confirm
     
     setIsAIReady(false); // 状态栏会立即变回“Image Data Not Loaded”
     setAiPrompts([]);    // 清空当前的点选提示
@@ -1252,13 +1248,10 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       setRenderState('loading');
       setCurrentStem(newStem);
       setActiveAnnotationId(null);
-    } else {
-      console.log('Already at first stem');
     }
   };
 
   const handleNextStem = () => {
-    console.log('🟡 handleNextStem START');
     const state = useStore.getState();
     const { stems, currentStem, setCurrentStem } = state;
     const idx = stems.indexOf(currentStem);
@@ -1267,9 +1260,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       setRenderState('loading');
       setCurrentStem(newStem);
       setActiveAnnotationId(null);
-      console.log('🟡 setCurrentStem done, newStem:', newStem);
     } else {
-      console.log('Already at last stem');
     }
   };
 

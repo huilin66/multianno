@@ -137,7 +137,6 @@ const CanvasViewInner=({
       img.src = url;
 
       img.onload = () => {
-          console.log('🟢 CanvasView img.onload for stem:', currentStem);
           setRawImage(img);
           onImageLoaded?.();
       };
@@ -325,7 +324,6 @@ const CanvasViewInner=({
 
     // 🌟 1. 拦截保护：不让底层引擎处理 ai_preview，防止数据格式不兼容报错
     const safePendingAnnotation = pendingAnnotation?.id === 'ai_preview' ? null : pendingAnnotation;
-    console.log('🎨 CanvasView render - rawImage:', !!rawImage, 'stem:', currentStem);
     // 调用外部渲染引擎
     renderCanvasScene({
       canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 

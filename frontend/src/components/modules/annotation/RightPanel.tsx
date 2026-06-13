@@ -3,14 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { useStore } from '../../../store/useStore';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
-import { Switch } from '../../ui/switch';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { 
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, Route, EyeOff, Check, X, Scan, MapPin, Copy
+  Tag, Type, Hash, EyeOff, Check, X, MapPin, Copy
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';

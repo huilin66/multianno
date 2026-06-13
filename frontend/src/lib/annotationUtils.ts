@@ -36,8 +36,6 @@ export const loadAllProjectAnnotations = async (
   const separator = mainFolderPath.includes('\\') ? '\\' : '/';
   const cleanPath = mainFolderPath.endsWith(separator) ? mainFolderPath : mainFolderPath + separator;
 
-  console.log(`🚀 开始全量加载 ${stems.length} 个场景的标注数据...`);
-
   for (let i = 0; i < stems.length; i += CHUNK_SIZE) {
     const chunk = stems.slice(i, i + CHUNK_SIZE);
     
@@ -79,7 +77,7 @@ export const loadAllProjectAnnotations = async (
     onProgress?.(completed, stems.length);
   }
 
-  console.log(`✅ 全量加载完成！共读取到 ${allLoadedAnnotations.length} 个标注对象。`);
+
 };
 
 /**

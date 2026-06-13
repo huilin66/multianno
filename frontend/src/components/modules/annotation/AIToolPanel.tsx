@@ -2,11 +2,10 @@
 import React, { useState } from 'react';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
-import { Slider } from '../../ui/slider'; 
 import { useTranslation } from 'react-i18next';
 import { 
-  MousePointerClick, Sparkles, MessageSquare, PlusCircle, 
-  MinusCircle, SquareDashed, Trash2, Check, X, Layers, Send, Loader2, 
+  MousePointerClick, Sparkles, MessageSquare, PlusCircle,
+  MinusCircle, SquareDashed, Trash2, Check, X, Loader2,
   AlertTriangle, Tags
 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
@@ -48,15 +47,8 @@ export function AIToolPanel({
 
   const [autoTags, setAutoTags] = useState<string[]>([]);
   const [autoText, setAutoText] = useState('');
-  const [chatHistory, setChatHistory] = useState<{role: 'user' | 'ai', text: string}[]>([]);
 
   if (!isOpen) return null;
-
-  const getSelectedViewName = () => {
-    const v = views.find((v:any) => v.id === selectedViewId);
-    if (!v) return t('aiTool.selectView');
-    return v.isMain ? t('view.mainView') : `${t('view.augView')} ${views.indexOf(v)}`;
-  };
 
 // 🌟 动态计算底部状态栏
   let statusText = '';

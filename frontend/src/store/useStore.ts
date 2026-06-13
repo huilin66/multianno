@@ -464,7 +464,6 @@ export const useStore = create<AppState>()(
       // annotation function
       // setCurrentStem: (stem) => set({ currentStem: stem }),
       setCurrentStem: (stem) => {
-        console.trace('🔴 setCurrentStem called with:', stem);
         set({ currentStem: stem });
       },
       addTaxonomyClass: (cls) => set((state) => {

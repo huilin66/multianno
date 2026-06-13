@@ -17,7 +17,6 @@ import {
   TASK_SHAPE_MAPPINGS,
   IMAGE_EXT_MAP,
   type TaskType,
-  type ShapeStatus,
 } from '../../config/supportedFormats';
 import {
   FolderSearch, FileText, RotateCcw, GripVertical,
