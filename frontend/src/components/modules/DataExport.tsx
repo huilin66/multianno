@@ -156,7 +156,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       const folder = folders.find((f: any) => f.id === v.folderId);
       return {
         viewId: v.id,
-        viewName: v.isMain ? t('dataExport.mainView') : `${t('annotation.augView')} ${i}`,
+        viewName: v.isMain ? t('view.mainView') : `${t('view.augView')} ${i}`,
         suffix: folder?.suffix || '',
         extension: folder?.extension || '.png',
         subdir: `${v.isMain ? 'main' : `aug_${i}`}`,
@@ -256,7 +256,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       const ext = folder?.extension || '.png';
       return {
         viewId: v.id,
-        viewName: v.isMain ? t('dataExport.mainView') : `${t('annotation.augView')} ${i}`,
+        viewName: v.isMain ? t('view.mainView') : `${t('view.augView')} ${i}`,
         suffix,
         extension: ext,
         subdir: v.isMain ? 'main' : `aug_${i}`,
@@ -581,7 +581,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                   value={annoSuffix}
                   onChange={(e) => setAnnoSuffix(e.target.value)}
                   className="h-9 text-xs font-mono"
-                  placeholder={t('common.suffix_example')}
+                  placeholder={t('dataExport.stepNaming.suffixExample')}
                 />
               </Field>
 
@@ -667,7 +667,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                       value={vc.suffix}
                       onChange={(e) => updateViewConfig(vc.viewId, { suffix: e.target.value })}
                       className="h-9 text-xs font-mono"
-                      placeholder={t('common.suffix_example')}
+                      placeholder={t('dataExport.stepNaming.suffixExample')}
                     />
                   </Field>
 
@@ -700,7 +700,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                       value={vc.subdir}
                       onChange={(e) => updateViewConfig(vc.viewId, { subdir: e.target.value })}
                       className="h-9 text-xs font-mono"
-                      placeholder={vc.viewName.startsWith(t('dataExport.mainView')) ? 'main' : 'aug'}
+                      placeholder={vc.viewName.startsWith(t('view.mainView')) ? 'main' : 'aug'}
                     />
                   </Field>
                 )}
@@ -889,7 +889,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                     }`}
                   >
                     <div className={`text-xs font-bold ${splitContentMode === 'main_view' ? 'text-primary' : 'text-foreground'}`}>
-                      {t('dataExport.stepSplit.mainView')}
+                      {t('view.mainView')}
                     </div>
                     <div className="text-[9px] text-muted-foreground mt-0.5 font-mono">
                       e.g. DJI_0008.jpg
@@ -981,7 +981,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                         <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: cls.color }} />
                         <span className="flex-1 truncate font-medium">{cls.name}</span>
                         <span className={`text-[10px] w-8 text-right ${cls.selected ? 'text-primary font-bold' : 'text-muted-foreground'}`}>
-                          {t('dataExport.stepShapes.classId')}{displayId}
+                          {t('dataExport.stepShapes.classId')}: {displayId}
                         </span>
                       </div>
                     );
@@ -1043,7 +1043,7 @@ useEffect(() => {
     const folder = folders.find((f: any) => f.id === v.folderId);
     return {
       viewId: v.id,
-      viewName: v.isMain ? t('dataExport.mainView') : `${t('annotation.augView')} ${i}`,
+      viewName: v.isMain ? t('view.mainView') : `${t('view.augView')} ${i}`,
       suffix: folder?.suffix || '',           // 🆕 从 store 读取
       extension: IMAGE_EXT_MAP[folder?.extension],  // 🆕 从 store 读取
       subdir: v.isMain ? 'main' : `aug_${i}`,

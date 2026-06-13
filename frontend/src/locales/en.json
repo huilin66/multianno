@@ -40,6 +40,11 @@
     "aiSetting": "AI Settings",
     "viewLayout": "View Layout"
   },
+  "view": {
+    "mainView": "Main View",
+    "augView": "Aug View",
+    "augViews": "Aug Views"
+  },
   "viewLayout":{
     "title": "View Layout",
     "views": "Views",
@@ -52,8 +57,6 @@
     "columns": "Columns",
     "cells": "Cells",
     "livePreview": "Live Preview",
-    "mainView": "Main View",
-    "augViews": "Aug Views",
     "empty": "Empty"
   },
   "shortcuts":{
@@ -96,9 +99,9 @@
     "modelPath": "Model Path",
     "confidence": "Confidence",
     "loadModel": "Load Model",
-    "alsertSetAI": "Please set AI model path!",
-    "alsertSetAIDone": "Successfully load AI model!",
-    "alsertSetAIFail": "Load AI model failed!",
+    "alertSetAI": "Please set AI model path!",
+    "alertSetAIDone": "Successfully load AI model!",
+    "alertSetAIFail": "Load AI model failed!",
     "infoModelPath": "Please select or input model path",
     "infoHistoricalModelPath": "historical model path",
     "infoLoadingModelPath": "Loading model..."
@@ -139,8 +142,6 @@
     "views": {
       "addView": "Add View",
       "emptyHint": "No views configured",
-      "mainView": "Main View",
-      "augView": "Aug View",
       "sourceFolder": "Source Folder",
       "selectFolder": "Select folder",
       "channels": "Channels",
@@ -153,11 +154,6 @@
       "locked": "Workspace contains annotation files. Path is locked.",
       "default": "Default",
       "notSet": "Not set"
-    },
-    "status": {
-      "folders": "Folders",
-      "views": "Views",
-      "workspace": "Workspace"
     },
     "legend": {
       "configured": "Configured",
@@ -217,7 +213,6 @@
       "apply": "Apply",
       "metaAugView": "Meta: Aug View",
       "activeAugViews": "Active Aug Views",
-      "augView": "Aug View",
       "currentParams": "Current Parameters",
       "crop": "CROP (%)",
       "scale": "SCALE",
@@ -328,8 +323,6 @@
     "objects": "Object List",
     "scenes": "Scenes",
     "scenegroup": "Scene Group",
-    "mainView": "Main View",
-    "augView": "Aug View",
     "noObjects": "No objects in this scene",
     "noViews": "No views configured. Please go to Data Preload to set up your project.",
     "folders": "FOLDERS",
@@ -354,7 +347,8 @@
       "suffix": "Suffix",
       "extension": "Extension",
       "subdir": "Subdirectory Name",
-      "andMore": "files more"
+      "andMore": "files more",
+      "suffixExample": "e.g. _T, _V, _M"
     },
     "stepImages": {
       "title": "Image Format",
@@ -365,7 +359,6 @@
       "preview": "Preview",
       "splitContent": "Split File Content",
       "sceneGroup": "Scene Group",
-      "mainView": "Main View",
       "mainViewNames": "Main View names",
       "sceneGroupNames": "Scene Group names",
       "empty": "(empty)",
@@ -382,7 +375,7 @@
       "panel": "Panel",
       "file": "File",
       "convert": "Convert",
-      "classId": "ID:"
+      "classId": "ID"
     },
     "legend": {
       "required": "Required",
@@ -390,7 +383,6 @@
       "current": "Current",
       "default": "Default"
     },
-    "mainView": "Main View",
     "selectClassFile": "Select class file...",
     "classMismatch": "Class mismatch, some imported classes not found in taxonomy",
     "readFailed": "Failed to read file",
@@ -521,7 +513,7 @@
       "classFile": "Required classes.txt",
       "classPlaceholder": "Select prediction classes.txt...",
       "verified": "Verified",
-      "matched": "Matched: {count} / {total} scenes",
+      "matched": "Matched: {{count}} / {{total}} scenes",
       "scanVerify": "Scan {{name}}",
       "modelDefault": "Model {{idx}}",
       "addModel": "Add Model"
@@ -581,8 +573,6 @@
     "describeScene": "Describe the entire scene for Vision-Language Models...",
     "imageTags": "Image Tags",
     "tagsPlaceholder": "city, sunny, crowded...",
-    "mainView": "Main View",
-    "augView": "Aug View",
     "dragToReorder": "Drag to reorder",
     "showAsOverlay": "Show as Overlay",
     "adjustColorSettings": "Adjust Color Settings",
@@ -823,9 +813,8 @@
     "saving": "Saving...",
     "stop": "Stop",
     "done": "Done",
-    "suffix_example": "Example: _T, _V, _M",
     "add": "Add",
     "import": "Import",
-    "manual": "Manual",
+    "manual": "Manual"
   }
 }

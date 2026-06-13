@@ -1716,7 +1716,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                     (() => {
                       const v = views.find((v:any) => v.id === activeControlLayer);
                       if (!v) return t('annotation.noneDisableFx');
-                      return `${activeControlLayer === focusedViewId ? '✨' : ''}${v.isMain ? t('annotation.mainView') : `${t('annotation.augView')} ${views.indexOf(v)}`}`;
+                      return `${activeControlLayer === focusedViewId ? '✨' : ''}${v.isMain ? t('view.mainView') : `${t('view.augView')} ${views.indexOf(v)}`}`;
                     })()
                   )}
                 </SelectValue>
@@ -1729,7 +1729,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   return (
                     <SelectItem key={layerId} value={layerId} className="text-xs">
                       {layerId === focusedViewId ? '✨ ' : ''}
-                      {v.isMain ? t('annotation.mainView') : `${t('annotation.augView')} ${views.indexOf(v)}`}
+                      {v.isMain ? t('view.mainView') : `${t('view.augView')} ${views.indexOf(v)}`}
                     </SelectItem>
                   )
                 })}
@@ -1804,7 +1804,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             {displayViews.map((view: any, index: number) => (
               <div key={view.id} className="relative border border-neutral-200 dark:border-neutral-800 bg-neutral-200 dark:bg-black rounded-lg overflow-hidden transition-colors duration-300">
                 <div className={`absolute z-40 px-2 py-1 bg-black/70 text-xs rounded text-neutral-300 transition-all duration-300 ${mouseQuad[view.id]?.tl ? 'top-2 right-2' : 'top-2 left-2'}`}>
-                  {view.isMain ? t('workspace.mainView') : `${t('workspace.augView')} ${index}`}
+                  {view.isMain ? t('view.mainView') : `${t('view.augView')} ${index}`}
                 </div>
                 
                 <CanvasView 

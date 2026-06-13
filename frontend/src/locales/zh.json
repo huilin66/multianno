@@ -40,6 +40,11 @@
     "aiSetting": "AI 设置",
     "viewLayout": "视图布局"
   },
+  "view": {
+    "mainView": "主视图",
+    "augView": "辅助视图",
+    "augViews": "辅助视图"
+  },
   "viewLayout":{
     "title": "视图布局",
     "views": "视图数",
@@ -52,8 +57,6 @@
     "columns": "列",
     "cells": "单元格",
     "livePreview": "实时预览",
-    "mainView": "主视图",
-    "augViews": "增强视图",
     "empty": "空"
   },
   "shortcuts":{
@@ -96,9 +99,9 @@
     "modelPath": "模型路径",
     "confidence": "置信度",
     "loadModel": "加载模型",
-    "alsertSetAI": "请设置 AI 模型路径！",
-    "alsertSetAIDone": "成功加载 AI 模型！",
-    "alsertSetAIFail": "加载 AI 模型失败！",
+    "alertSetAI": "请设置 AI 模型路径！",
+    "alertSetAIDone": "成功加载 AI 模型！",
+    "alertSetAIFail": "加载 AI 模型失败！",
     "infoModelPath": "请选择或输入模型路径",
     "infoHistoricalModelPath": "历史模型路径",
     "infoLoadingModelPath": "加载模型中..."
@@ -139,8 +142,6 @@
     "views": {
       "addView": "添加视图",
       "emptyHint": "请配置视图开始使用",
-      "mainView": "主视图",
-      "augView": "增强视图",
       "sourceFolder": "源文件夹",
       "selectFolder": "选择文件夹",
       "channels": "通道",
@@ -154,11 +155,6 @@
       "default": "默认",
       "notSet": "未设置"
     },
-    "status": {
-      "folders": "文件夹",
-      "views": "视图",
-      "workspace": "工作空间"
-    },
     "legend": {
       "configured": "已配置",
       "current": "当前",
@@ -167,7 +163,7 @@
     "confirmAndAlign": "确认 & 开始对齐",
     "alerts": {
       "noImagesFound": "未找到图像",
-      "backendFailed": "后连接失败",
+      "backendFailed": "后端连接失败",
       "noFoldersConfigured": "请配置至少一个文件夹",
       "noMainView": "请设置主视图",
       "resetViews": "重置所有视图？",
@@ -217,7 +213,6 @@
       "apply": "应用",
       "metaAugView": "元数据: 辅助视图",
       "activeAugViews": "当前待处理视图",
-      "augView": "辅助视图",
       "currentParams": "当前实时参数",
       "crop": "裁剪 CROP (%)",
       "scale": "缩放 SCALE",
@@ -328,8 +323,6 @@
     "objects": "对象列表",
     "scenes": "切片场景",
     "scenegroup": "场景组",
-    "mainView": "主视图",
-    "augView": "辅助视图",
     "noObjects": "当前场景暂无对象",
     "noViews": "未配置视图。请前往数据预处理模块设置项目。",
     "folders": "文件夹",
@@ -350,22 +343,22 @@
 
     "stepNaming": {
       "title": "标注格式",
-      "preview": "Preview",
-      "suffix": "Suffix",
+      "preview": "预览",
+      "suffix": "后缀",
       "extension": "扩展名",
       "subdir": "子目录名称",
-      "andMore": "更多文件"
+      "andMore": "更多文件",
+      "suffixExample": "例如: _T, _V, _M"
     },
     "stepImages": {
       "title": "图像格式",
-      "preview": "Preview"
+      "preview": "预览"
     },
     "stepSplit": {
       "title": "数据集分割",
       "preview": "预览",
       "splitContent": "分割文件内容",
       "sceneGroup": "场景组",
-      "mainView": "主视图",
       "mainViewNames": "主视图名称",
       "sceneGroupNames": "场景组名称",
       "empty": "（空）",
@@ -382,7 +375,7 @@
       "panel": "面板",
       "file": "文件",
       "convert": "转换",
-      "classId": "ID:"
+      "classId": "ID"
     },
     "legend": {
       "required": "必需",
@@ -390,7 +383,6 @@
       "current": "当前",
       "default": "默认"
     },
-    "mainView": "主视图",
     "selectClassFile": "选择类别文件...",
     "classMismatch": "类别不匹配，部分导入的类别在分类系统中未找到",
     "readFailed": "读取文件失败",
@@ -479,7 +471,7 @@
       "metaPath": "项目元数据路径",
       "metaPlaceholder": "/path/to/project_meta.json",
       "parse": "解析",
-      "locked": "✓ 项目约束已锁定 (不可修改)",
+      "locked": "项目约束已锁定 (不可修改)",
       "suffix": "后缀:",
       "quickModeInfo": "快速可视化模式：每个图像目录对应一个 View。图像必须为 3波段、Int8 格式。同一组 Scene Group 中所有图像的 Shape 应保持一致。",
       "folderList": "待绑定文件夹列表",
@@ -521,7 +513,7 @@
       "classFile": "必需的 classes.txt",
       "classPlaceholder": "预测结果的 classes.txt...",
       "verified": "验证完成",
-      "matched": "已匹配: {count} / {total} 场景",
+      "matched": "已匹配: {{count}} / {{total}} 场景",
       "scanVerify": "扫描验证 {{name}}",
       "modelDefault": "模型 {{idx}}",
       "addModel": "添加对比模型"
@@ -581,8 +573,6 @@
     "describeScene": "为视觉语言模型描述整个场景...",
     "imageTags": "图像标签",
     "tagsPlaceholder": "城市, 晴天, 拥挤...",
-    "mainView": "主视图",
-    "augView": "增强视图",
     "dragToReorder": "拖拽排序",
     "showAsOverlay": "显示为叠加层",
     "adjustColorSettings": "调整颜色设置",
@@ -689,7 +679,7 @@
     "selectPolygonFirst": "请先选中一个多边形",
     "cutCutoutOnlyPolygons": "切割/擦除工具仅适用于多边形。",
     "visionOffline": "Vision Engine 处于离线状态。请在设置中配置并装载模型！",
-    "backendRestarted": "检测到后端服务重启，模型显存已清空。请点击右上角【设置 -> AI Engine Settings】重新装载模型！",
+    "backendRestarted": "检测到后端服务重启，模型显存已清空。请前往 AI 设置重新装载模型。",
     "initFailed": "初始化失败: {{message}}",
     "inferenceFailed": "推理失败: {{message}}",
     "expandLeftPanel": "展开左侧面板",
@@ -823,9 +813,8 @@
     "saving": "保存中...",
     "stop": "停止",
     "done": "完成",
-    "suffix_example": "示例: _T, _V, _M",
     "add": "添加",
     "import": "导入",
-    "manual": "手动",
+    "manual": "手动"
   }
 }

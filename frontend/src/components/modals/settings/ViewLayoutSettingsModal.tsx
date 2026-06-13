@@ -205,11 +205,11 @@ export function ViewLayoutSettingsModal({ open, onClose }: ViewLayoutSettingsMod
             <div className="flex items-center gap-4 justify-center">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded bg-primary/40 border border-primary" />
-                <span className="text-[9px] text-muted-foreground">{t('viewLayout.mainView')}</span>
+                <span className="text-[9px] text-muted-foreground">{t('view.mainView')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded bg-emerald-400/40 border border-emerald-500/50" />
-                <span className="text-[9px] text-muted-foreground">{t('viewLayout.augViews')}</span>
+                <span className="text-[9px] text-muted-foreground">{t('view.augViews')}</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded border border-border bg-transparent" />

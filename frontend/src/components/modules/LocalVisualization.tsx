@@ -611,7 +611,7 @@ export function LocalVisualization() {
                 {isMetaLoaded && (
                   <div className="mt-2 space-y-2 border-t border-border pt-3">
                     <Label className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">
-                      {t('localVis.dataSource.locked')}
+                      ✓ {t('localVis.dataSource.locked')}
                     </Label>
                     <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar pr-1">
                       {viewMetas.map((view, idx) => (

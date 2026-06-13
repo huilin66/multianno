@@ -55,7 +55,7 @@ export function AIToolPanel({
   const getSelectedViewName = () => {
     const v = views.find((v:any) => v.id === selectedViewId);
     if (!v) return t('aiTool.selectView');
-    return v.isMain ? t('rightPanel.mainView') : `${t('rightPanel.augView')} ${views.indexOf(v)}`;
+    return v.isMain ? t('view.mainView') : `${t('view.augView')} ${views.indexOf(v)}`;
   };
 
 // 🌟 动态计算底部状态栏
@@ -110,13 +110,13 @@ return (
             <Select value={selectedViewId} onValueChange={onViewChange}>
               <SelectTrigger className="h-8 text-[11px] font-bold px-2 bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 shadow-sm focus:ring-1 focus:ring-blue-500">
                 <SelectValue placeholder={t('aiTool.selectViewPlaceholder')}>
-                  {views.find((v:any) => v.id === selectedViewId)?.isMain ? t('rightPanel.mainView') : t('rightPanel.augView')}
+                  {views.find((v:any) => v.id === selectedViewId)?.isMain ? t('view.mainView') : t('view.augView')}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {views.map((v:any, i:number) => (
                   <SelectItem key={v.id} value={v.id} className="text-xs">
-                    {v.isMain ? t('rightPanel.mainView') : `${t('rightPanel.augView')} ${i}`}
+                    {v.isMain ? t('view.mainView') : `${t('view.augView')} ${i}`}
                   </SelectItem>
                 ))}
               </SelectContent>

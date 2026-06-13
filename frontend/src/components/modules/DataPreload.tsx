@@ -543,7 +543,7 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
                   <div key={view.id} className="p-4 border rounded-xl space-y-3">
                     <div className="flex items-center justify-between">
                       <span className={`px-3 py-1 text-xs font-bold rounded-full ${view.isMain ? 'bg-primary text-white' : 'bg-background border'}`}>
-                        {view.isMain ? t('dataPreload.views.mainView') : `${t('dataPreload.views.augView')} ${index}`}
+                        {view.isMain ? t('view.mainView') : `${t('view.augView')} ${index}`}
                       </span>
                       <Button variant="ghost" size="icon" className="h-7 w-7"
                         onClick={() => removeView(view.id)} disabled={view.isMain && views.length > 1}>
@@ -774,15 +774,15 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
         <div className="flex items-center gap-6 text-sm">
           <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">{t('dataPreload.status.folders')}:</span>
+            <span className="text-muted-foreground">{t('dataPreload.steps.folders')}:</span>
             <span className="font-semibold">{folders.length}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">{t('dataPreload.status.views')}:</span>
+            <span className="text-muted-foreground">{t('dataPreload.steps.views')}:</span>
             <span className="font-semibold">{views.length}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">{t('dataPreload.status.workspace')}:</span>
+            <span className="text-muted-foreground">{t('dataPreload.steps.workspace')}:</span>
             <span className={`font-semibold ${
               workspaceStatus === 'default' 
                 ? 'text-gray-500 dark:text-gray-400' 

@@ -1002,7 +1002,7 @@ const getPreviewUrl = (view: typeof mainView) => {
                        ${isActive ? 'bg-primary border-primary shadow-sm text-primary-foreground font-bold' : 'bg-transparent border-transparent hover:bg-muted text-muted-foreground hover:text-foreground'}
                      `}
                    >
-                     <span className="font-medium">{t('viewExtent.panel.augView')} {i + 1}</span>
+                     <span className="font-medium">{t('view.augView')} {i + 1}</span>
                      {isCompleted && <CheckCircle2 className={`w-3.5 h-3.5 ${isActive ? 'text-primary-foreground' : 'text-green-500'}`} />}
                    </button>
                  );

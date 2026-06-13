@@ -398,7 +398,7 @@ export function RightPanel({
                       <div className="flex items-center gap-2 flex-1 truncate pointer-events-none">
                         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${v.isMain ? 'bg-blue-500' : 'bg-emerald-500'}`} />
                         <span className={v.isMain ? "text-blue-500 font-bold text-[10px]" : "text-neutral-500 dark:text-neutral-300 text-[10px]"}>
-                          {v.isMain ? t('rightPanel.mainView') : `${t('rightPanel.augView')} ${originalIndex}`}
+                          {v.isMain ? t('view.mainView') : `${t('view.augView')} ${originalIndex}`}
                         </span>
                       </div>
                     </div>
