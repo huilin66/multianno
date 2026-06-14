@@ -1,6 +1,4 @@
-<div align="center"><img src="frontend/public/favicon.svg" width="96" alt="MultiAnno logo" /></div>
-
-# MultiAnno
+# <img src="frontend/public/favicon.svg" width="28" alt="logo" /> MultiAnno
 [English](README.md) | [简体中文](README_zh-CN.md)
 
 **MultiAnno：一个面向多视图任务的 AI 辅助图像标注工具。**
