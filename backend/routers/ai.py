@@ -10,17 +10,47 @@ from models import (
     SAMInitRequest,
     SAMInteractiveRequest,
 )
-from utils.ai_engine import InteractiveVisionEngine
+
+try:
+    from utils.ai_engine import InteractiveVisionEngine
+except (ImportError, OSError) as exc:
+    InteractiveVisionEngine = None
+    AI_IMPORT_ERROR = exc
+else:
+    AI_IMPORT_ERROR = None
 
 router = APIRouter(prefix="/api/ai/vision", tags=["Vision AI"])
 
 
-vision_engine = InteractiveVisionEngine()
+vision_engine = InteractiveVisionEngine() if InteractiveVisionEngine else None
+
+
+def _ai_unavailable_detail() -> str:
+    detail = "Vision AI dependencies are not installed. Install backend AI/GPU requirements to enable this feature."
+    if AI_IMPORT_ERROR:
+        detail += f" Missing dependency: {AI_IMPORT_ERROR}"
+    return detail
+
+
+def _require_vision_engine():
+    if vision_engine is None:
+        raise HTTPException(status_code=503, detail=_ai_unavailable_detail())
+    return vision_engine
 
 
 @router.get("/status")
 async def get_engine_status():
+    if vision_engine is None:
+        return {
+            "is_available": False,
+            "is_loaded": False,
+            "model_path": "",
+            "model_type": "",
+            "detail": _ai_unavailable_detail(),
+        }
+
     return {
+        "is_available": True,
         "is_loaded": vision_engine.is_loaded,
         "model_path": vision_engine.model_path,
         "model_type": vision_engine.model_type,
@@ -29,8 +59,9 @@ async def get_engine_status():
 
 @router.post("/config")
 async def update_ai_config(req: AIConfigRequest):
+    engine = _require_vision_engine()
     try:
-        vision_engine.load_model(req.model_path, req.model_type, req.confidence)
+        engine.load_model(req.model_path, req.model_type, req.confidence)
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -42,14 +73,15 @@ async def init_image(req: SAMInitRequest):
     🌟 阶段 2：提取特征 (前端点击 Confirm)
     只做一次 set_image，显存只在这里增加。
     """
-    if not vision_engine.is_loaded:
+    engine = _require_vision_engine()
+    if not engine.is_loaded:
         raise HTTPException(status_code=400, detail="Vision AI 尚未装载")
     if not req.image_path and not req.image_data:
         raise HTTPException(status_code=400, detail="必须提供 image_path 或 image_data")
 
     try:
         cache_key = req.image_path or "base64_temp_image"
-        if vision_engine.current_image_key == cache_key:
+        if engine.current_image_key == cache_key:
             return {"status": "success", "msg": "Features already cached"}
 
         # 1. 读取图像 (无论是 Base64 还是本地路径，此时都是未经裁剪的全尺寸大图)
@@ -87,8 +119,8 @@ async def init_image(req: SAMInitRequest):
             img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
         # 3. 动态更新 predictor 的内部参数以匹配前端尺寸
-        vision_engine.predictor.set_image(img)
-        vision_engine.current_image_key = cache_key
+        engine.predictor.set_image(img)
+        engine.current_image_key = cache_key
         return {"status": "success"}
     except Exception as e:
         import traceback
@@ -103,17 +135,18 @@ async def predict_interactive(req: SAMInteractiveRequest):
     🌟 阶段 3A：交互式推理 (Semi 工具: 点 / 框)
     直接调用已缓存特征的 predictor，极速响应。
     """
-    if not vision_engine.is_loaded:
+    engine = _require_vision_engine()
+    if not engine.is_loaded:
         raise HTTPException(status_code=400, detail="Vision AI 尚未装载")
 
     # 兜底：如果前端忘记点 Confirm，这里自动补救
-    if vision_engine.current_image_key != req.image_path:
-        vision_engine.predictor.set_image(req.image_path)
-        vision_engine.current_image_key = req.image_path
-    if hasattr(vision_engine.predictor, "reset_prompts"):
-        vision_engine.predictor.reset_prompts()  # 1. 调用官方方法清空 Embedding 缓存
-    if hasattr(vision_engine.predictor, "args"):
-        vision_engine.predictor.args.text = None  # 2. 强行抹除配置项中的文本记忆
+    if engine.current_image_key != req.image_path:
+        engine.predictor.set_image(req.image_path)
+        engine.current_image_key = req.image_path
+    if hasattr(engine.predictor, "reset_prompts"):
+        engine.predictor.reset_prompts()  # 1. 调用官方方法清空 Embedding 缓存
+    if hasattr(engine.predictor, "args"):
+        engine.predictor.args.text = None  # 2. 强行抹除配置项中的文本记忆
 
     pts = [[[p.x, p.y] for p in req.points]] if req.points else None
     labels = [[p.label for p in req.points]] if req.points else None
@@ -121,7 +154,7 @@ async def predict_interactive(req: SAMInteractiveRequest):
     print(f"--> [AI Predict] Points: {pts}, Labels: {labels}, Box: {req.box}")
     try:
         # 直接推理，由于 set_image 已执行，这里耗时只有几十毫秒
-        results = vision_engine.predictor(
+        results = engine.predictor(
             points=pts,
             labels=labels,
             bboxes=req.box,
@@ -144,7 +177,7 @@ async def predict_interactive(req: SAMInteractiveRequest):
             # 遍历 SAM 给出的所有候选 Mask
             for i in range(len(result.masks.data)):
                 mask_np = result.masks.data[i].cpu().numpy()
-                bbox = vision_engine.mask_to_bbox(mask_np)
+                bbox = engine.mask_to_bbox(mask_np)
 
                 if bbox:
                     w = bbox[2] - bbox[0]
@@ -164,9 +197,9 @@ async def predict_interactive(req: SAMInteractiveRequest):
 
             # 解析多边形并返回
             response_data["polygons"].extend(
-                vision_engine.mask_to_polygons(best_mask_np)
+                engine.mask_to_polygons(best_mask_np)
             )
-            bbox = vision_engine.mask_to_bbox(best_mask_np)
+            bbox = engine.mask_to_bbox(best_mask_np)
             if bbox:
                 response_data["bboxes"].append(bbox)
         print(f"--> [AI Predict] Result: {response_data}")
@@ -184,22 +217,23 @@ async def predict_auto(req: SAMAutoRequest):
     🌟 阶段 3B：文本推理 (Auto 工具: Text Prompt)
     重构版：返回结构已改为 {"results": [{"prompt": "window", "polygons": [...]}, ...]}
     """
-    if not vision_engine.is_loaded:
+    engine = _require_vision_engine()
+    if not engine.is_loaded:
         raise HTTPException(status_code=400, detail="Vision AI 尚未装载")
 
     # 兜底：如果特征图没缓存，自动补救
-    if vision_engine.current_image_key != req.image_path:
-        vision_engine.predictor.set_image(req.image_path)
-        vision_engine.current_image_key = req.image_path
+    if engine.current_image_key != req.image_path:
+        engine.predictor.set_image(req.image_path)
+        engine.current_image_key = req.image_path
     # 🌟🌟🌟 双保险强杀：清理上一次 Semi 任务的残留
-    if hasattr(vision_engine.predictor, "reset_prompts"):
-        vision_engine.predictor.reset_prompts()  # 1. 清空特征与 Prompt 缓存
-    if hasattr(vision_engine.predictor, "args"):
-        vision_engine.predictor.args.points = None  # 2. 强行抹除几何坐标记忆
-        vision_engine.predictor.args.labels = None
-        vision_engine.predictor.args.bboxes = None
+    if hasattr(engine.predictor, "reset_prompts"):
+        engine.predictor.reset_prompts()  # 1. 清空特征与 Prompt 缓存
+    if hasattr(engine.predictor, "args"):
+        engine.predictor.args.points = None  # 2. 强行抹除几何坐标记忆
+        engine.predictor.args.labels = None
+        engine.predictor.args.bboxes = None
     try:
-        results = vision_engine.predictor(text=req.texts, conf=req.conf)
+        results = engine.predictor(text=req.texts, conf=req.conf)
 
         # 🌟 1. 初始化一个字典，用来按 prompt 收集多边形
         grouped_polygons = {text: [] for text in req.texts}
@@ -227,7 +261,7 @@ async def predict_auto(req: SAMAutoRequest):
 
                     # 3. 提取并转换坐标
                     mask_np = result.masks.data[i].cpu().numpy()
-                    polys = vision_engine.mask_to_polygons(mask_np)
+                    polys = engine.mask_to_polygons(mask_np)
 
                     if polys:
                         if prompt_text not in grouped_polygons:
