@@ -9,17 +9,23 @@ import cv2
 import numpy as np
 
 
+def normalize_shape_type(shape_type) -> str:
+    """Normalize legacy/external shape names to MultiAnno canonical names."""
+    normalized = str(shape_type or "bbox").lower()
+    if normalized == "rectangle":
+        return "bbox"
+    if normalized == "linestrip":
+        return "line"
+    return normalized
+
+
 def get_bounding_box(shape_type: str, points: list) -> list:
     """将任何形状转换为 [xmin, ymin, xmax, ymax] 的绝对边界框"""
     if not points:
         return []
 
     # 🌟 统一名称映射防御
-    shape_type = shape_type.lower()
-    if shape_type == "rectangle":
-        shape_type = "bbox"
-    if shape_type == "linestrip":
-        shape_type = "line"
+    shape_type = normalize_shape_type(shape_type)
 
     if shape_type == "circle" and len(points) == 2:
         cx, cy = points[0]
@@ -38,11 +44,7 @@ def get_polygon_points(shape_type: str, points: list, num_segments: int = 16) ->
         return []
 
     # 🌟 统一名称映射防御
-    shape_type = shape_type.lower()
-    if shape_type == "rectangle":
-        shape_type = "bbox"
-    if shape_type == "linestrip":
-        shape_type = "line"
+    shape_type = normalize_shape_type(shape_type)
 
     if shape_type == "polygon":
         return points
@@ -91,16 +93,21 @@ def filter_multianno(
     """
     filtered_shapes = []
     stats = {"native": 0, "converted": 0, "discarded": 0}
+    allowed_shapes_normalized = {normalize_shape_type(s) for s in allowed_shapes}
 
     for shape in shapes:
         label = shape.get("label")
-        shape_type = shape.get("shape_type", "bbox")
+        shape_type = normalize_shape_type(shape.get("shape_type", "bbox"))
 
-        if label not in selected_classes or shape_type not in allowed_shapes:
+        if label not in selected_classes or shape_type not in allowed_shapes_normalized:
             stats["discarded"] += 1
         else:
             stats["native"] += 1  # MultiAnno 原生支持所有合法形状
-            filtered_shapes.append(shape)
+            normalized_shape = dict(shape)
+            normalized_shape["shape_type"] = shape_type
+            if "type" in normalized_shape:
+                normalized_shape["type"] = normalize_shape_type(normalized_shape.get("type"))
+            filtered_shapes.append(normalized_shape)
 
     return filtered_shapes, stats
 
@@ -162,13 +169,7 @@ def ma_to_voc(ma_path, voc_path, selected_classes, allowed_shapes, task_type):
     has_object = False
     for shape in shapes:
         label = shape.get("label")
-        raw_type = shape.get("shape_type", "unknown").lower()
-        if raw_type == "rectangle":
-            shape_type = "bbox"
-        elif raw_type == "linestrip":
-            shape_type = "line"
-        else:
-            shape_type = raw_type
+        shape_type = normalize_shape_type(shape.get("shape_type", "unknown"))
 
         if label not in selected_classes or shape_type not in allowed_shapes_lower:
             continue
@@ -255,13 +256,7 @@ def convert_to_yolo(
     img_w, img_h = max(1, img_w), max(1, img_h)
     for shape in shapes:
         label = shape.get("label")
-        raw_type = shape.get("shape_type", "unknown").lower()
-        if raw_type == "rectangle":
-            shape_type = "bbox"
-        elif raw_type == "linestrip":
-            shape_type = "line"
-        else:
-            shape_type = raw_type
+        shape_type = normalize_shape_type(shape.get("shape_type", "unknown"))
         if label not in selected_classes or shape_type not in [
             s.lower() for s in allowed_shapes
         ]:
@@ -341,13 +336,7 @@ def convert_to_coco_anns(
         label = shape.get("label")
 
         # 🌟 修复 1：兼容读取字段，并将 LabelMe 的 rectangle 映射回系统的 bbox
-        raw_type = shape.get("shape_type", shape.get("type", "bbox")).lower()
-        if raw_type == "rectangle":
-            shape_type = "bbox"
-        elif raw_type == "linestrip":
-            shape_type = "line"
-        else:
-            shape_type = raw_type
+        shape_type = normalize_shape_type(shape.get("shape_type", shape.get("type", "bbox")))
 
         # 拦截不合法的类别和形状
         if label not in selected_classes or shape_type not in allowed_shapes_lower:
@@ -417,13 +406,7 @@ def render_mask_array(
         label = shape.get("label")
 
         # 兼容读取并映射 shape_type
-        raw_type = shape.get("shape_type", shape.get("type", "bbox")).lower()
-        if raw_type == "rectangle":
-            shape_type = "bbox"
-        elif raw_type == "linestrip":
-            shape_type = "line"
-        else:
-            shape_type = raw_type
+        shape_type = normalize_shape_type(shape.get("shape_type", shape.get("type", "bbox")))
 
         # 拦截不合规的数据
         if label not in selected_classes or shape_type not in allowed_shapes_lower:
@@ -499,7 +482,7 @@ def yolo_to_shapes(
                     "class_id": class_id,
                     "type": "bbox",
                     "score": score,
-                    "shape_type": "rectangle",
+                    "shape_type": "bbox",
                     "points": [[xmin, ymin], [xmax, ymax]],
                     "attributes": {},
                 }
@@ -590,7 +573,7 @@ def coco_ann_to_shape(ann: dict, classes_map: dict, coco_mode: str = "polygon") 
                 "label": label,
                 "type": "bbox",
                 "score": score,
-                "shape_type": "rectangle",
+                "shape_type": "bbox",
                 "points": points,
                 "attributes": {},
             }

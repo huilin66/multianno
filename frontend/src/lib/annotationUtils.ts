@@ -7,13 +7,16 @@ import { getFileContent } from '../api/client';
  * 1. 核心工具：前后端 Shape Type 双向映射
  * ==========================================
  */
-const mapDiskTypeToFrontend = (diskType: string) => {
-  return diskType === 'rectangle' ? 'bbox' : diskType;
+const mapDiskTypeToFrontend = (diskType?: string) => {
+  const normalized = diskType || 'bbox';
+  if (normalized === 'rectangle') return 'bbox';
+  if (normalized === 'linestrip') return 'line';
+  return normalized;
 };
 
 const mapFrontendTypeToDiskType = (frontendType: string) => {
   const typeMap: Record<string, string> = {
-    'bbox': 'rectangle',
+    'bbox': 'bbox',
     'point': 'point',
     'line': 'linestrip',
     'ellipse': 'ellipse',
@@ -50,7 +53,7 @@ export const loadAllProjectAnnotations = async (
           stem: stem,
           label: shape.label,
           text: shape.text || '',
-          type: shape.shape_type === 'rectangle' ? 'bbox' : shape.shape_type,
+          type: mapDiskTypeToFrontend(shape.shape_type ?? shape.type),
           points: shape.points.map((p: any) => ({ x: p[0] ?? p.x, y: p[1] ?? p.y })),
           attributes: shape.attributes || {},
           difficult: shape.difficult || false,
