@@ -111,7 +111,9 @@
     "projectName": "Project Name",
     "namePlaceholder": "Enter project name...",
     "projectMetaPath": "Project Metadata Path",
-    "projectMetaPlaceholder": "Enter or click to set project metadata path ..."
+    "projectMetaPlaceholder": "Enter or click to set project metadata path ...",
+    "fillAllFields": "Please fill in all fields",
+    "saveFailed": "Failed to save project"
   },
   "loadProject": {
     "projectMetaPath": "Project Metadata Path",
@@ -675,7 +677,11 @@
     "vqaUnavailable": "Text generation is not available.",
     "selectView": "Select a view",
     "selectViewPlaceholder": "Select view",
-    "ignoreFilterDesc": "Ignore objects where BOTH width and height < this % of original image."
+    "ignoreFilterDesc": "Ignore objects where BOTH width and height < this % of original image.",
+    "tabAuto": "Auto",
+    "tabSemi": "Semi",
+    "tabVqa": "VQA",
+    "sourceNone": "Auto (None)"
   },
   "annotation": {
     "selectPolygonFirst": "Please select a polygon first",

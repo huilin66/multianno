@@ -111,7 +111,9 @@
     "projectName": "项目名称",
     "namePlaceholder": "请输入项目名称...",
     "projectMetaPath": "项目元数据路径",
-    "projectMetaPlaceholder": "请输入或点击项目元数据路径..."
+    "projectMetaPlaceholder": "请输入或点击项目元数据路径...",
+    "fillAllFields": "请填写所有字段",
+    "saveFailed": "保存项目失败"
   },
   "loadProject": {
     "projectMetaPath": "项目元数据路径",
@@ -675,7 +677,11 @@
     "vqaUnavailable": "文本生成不可用。",
     "selectView": "选择视图",
     "selectViewPlaceholder": "选择视图",
-    "ignoreFilterDesc": "忽略宽度和高度均小于原始图像此百分比的物体。"
+    "ignoreFilterDesc": "忽略宽度和高度均小于原始图像此百分比的物体。",
+    "tabAuto": "全自动",
+    "tabSemi": "半自动",
+    "tabVqa": "VQA",
+    "sourceNone": "自动 (无)"
   },
   "annotation": {
     "selectPolygonFirst": "请先选中一个多边形",

@@ -89,7 +89,7 @@ return (
           : 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-100 dark:border-red-800'
       }`}>
         <div className={`w-2 h-2 rounded-full mr-1.5 shrink-0 ${aiSettings.isConfigured ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`} />
-        <span className="truncate" title={aiSettings.isConfigured ? `ACTIVE: ${aiSettings.modelPath.split(/[\\/]/).pop()}` : 'MODEL NOT LOADED'}>
+        <span className="truncate" title={aiSettings.isConfigured ? `${t('aiTool.activeModel')}: ${aiSettings.modelPath.split(/[\\/]/).pop()}` : t('aiTool.modelNotLoadedShort')}>
           {aiSettings.isConfigured ? `${t('aiTool.activeModel')}: ${aiSettings.modelPath.split(/[\\/]/).pop()}` : t('aiTool.modelNotLoadedShort')}
         </span>
       </div>
@@ -189,7 +189,7 @@ return (
             {tab === 'auto' && <Sparkles className="w-3 h-3" />}
             {tab === 'semi' && <MousePointerClick className="w-3 h-3" />}
             {tab === 'vqa' && <MessageSquare className="w-3 h-3" />}
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {t(`aiTool.tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`)}
           </Button>
         ))}
       </div>
@@ -394,7 +394,7 @@ return (
                 onValueChange={(val) => setAISettings({ semiClass: val })}
               >
                 <SelectTrigger className="h-8 text-[11px] bg-white dark:bg-neutral-900 border-neutral-200 dark:border-neutral-700 shadow-sm focus:ring-1 focus:ring-blue-500">
-                  <SelectValue placeholder="Auto (None)" />
+                  <SelectValue placeholder={t('aiTool.sourceNone')} />
                 </SelectTrigger>
                 <SelectContent>
                   {/* 默认项：如果不选，就 fallback 到外层画图工具选中的类别 */}
