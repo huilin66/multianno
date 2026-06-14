@@ -1,4 +1,8 @@
+import importlib
 import os
+import shutil
+import signal
+import socket
 import subprocess
 import sys
 import time
@@ -7,74 +11,245 @@ import webbrowser
 from urllib.error import URLError
 
 
-def wait_for_server_and_open_browser(url, timeout=15):
-    """
-    不断尝试连接指定的 URL，直到成功响应（HTTP 200）后，自动打开浏览器。
-    """
-    print(f"⏳ 等待前端服务启动 ({url})...")
+BACKEND_HOST = "127.0.0.1"
+BACKEND_PORT = 8090
+FRONTEND_HOST = "127.0.0.1"
+FRONTEND_PORT = 5173
+
+BACKEND_HEALTH_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}/api/health"
+FRONTEND_URL = f"http://{FRONTEND_HOST}:{FRONTEND_PORT}"
+
+BACKEND_IMPORTS = [
+    ("fastapi", "fastapi"),
+    ("uvicorn", "uvicorn"),
+    ("pydantic", "pydantic"),
+    ("cv2", "opencv-python"),
+    ("skimage", "scikit-image"),
+    ("imagecodecs", "imagecodecs"),
+    ("numpy", "numpy"),
+    ("pandas", "pandas"),
+]
+
+
+class StartupError(RuntimeError):
+    pass
+
+
+def print_box(title, lines):
+    print(f"\n{title}")
+    print("-" * len(title))
+    for line in lines:
+        print(line)
+    print()
+
+
+def ensure_path_exists(path, description):
+    if not os.path.exists(path):
+        raise StartupError(f"{description} not found: {path}")
+
+
+def check_backend_dependencies():
+    missing = []
+    for module_name, package_name in BACKEND_IMPORTS:
+        try:
+            importlib.import_module(module_name)
+        except (ImportError, OSError) as exc:
+            missing.append(f"- {package_name} ({module_name}): {exc}")
+
+    if missing:
+        raise StartupError(
+            "Backend basic dependencies are missing or broken.\n"
+            + "\n".join(missing)
+            + "\n\nInstall them with:\n"
+            + "  cd backend\n"
+            + "  pip install -r requirements.txt\n\n"
+            + "AI dependencies are optional and are not checked by this launcher."
+        )
+
+
+def find_npm():
+    candidates = ["npm.cmd", "npm"] if os.name == "nt" else ["npm"]
+    for candidate in candidates:
+        path = shutil.which(candidate)
+        if path:
+            return path
+    return None
+
+
+def check_frontend_dependencies(frontend_dir):
+    npm_cmd = find_npm()
+    if not npm_cmd:
+        raise StartupError(
+            "npm was not found. Please install Node.js and make sure npm is available in PATH."
+        )
+
+    node_modules = os.path.join(frontend_dir, "node_modules")
+    if not os.path.isdir(node_modules):
+        raise StartupError(
+            "Frontend dependencies are not installed.\n\n"
+            "Install them with:\n"
+            "  cd frontend\n"
+            "  npm install"
+        )
+
+    return npm_cmd
+
+
+def ensure_port_free(host, port, service_name):
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind((host, port))
+        except OSError:
+            raise StartupError(
+                f"{service_name} port {host}:{port} is already in use.\n"
+                "Stop the existing process or change the configured port before starting MultiAnno."
+            )
+
+
+def start_process(command, cwd, name):
+    print(f"-> Starting {name}...")
+    kwargs = {"cwd": cwd}
+    if os.name == "nt":
+        kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        kwargs["preexec_fn"] = os.setsid
+    return subprocess.Popen(command, **kwargs)
+
+
+def wait_for_http(url, process, name, timeout=30):
+    print(f"-> Waiting for {name} ({url})...")
     start_time = time.time()
 
     while time.time() - start_time < timeout:
+        if process.poll() is not None:
+            raise StartupError(f"{name} exited early with code {process.returncode}.")
+
         try:
-            # 尝试请求页面
-            response = urllib.request.urlopen(url)
-            if response.getcode() == 200:
-                print("✅ 前端服务已就绪！正在打开浏览器...")
-                webbrowser.open(url)
-                return True
+            with urllib.request.urlopen(url, timeout=2) as response:
+                if 200 <= response.getcode() < 500:
+                    print(f"-> {name} is ready.")
+                    return
         except URLError:
-            # 还没启动好，忽略错误，等一秒后再试
             pass
+        except TimeoutError:
+            pass
+
         time.sleep(1)
 
-    print(f"⚠️ 等待超时，服务可能仍在启动，请稍后手动访问: {url}")
-    return False
+    raise StartupError(f"{name} did not become ready within {timeout} seconds: {url}")
+
+
+def terminate_process_tree(process, name):
+    if not process or process.poll() is not None:
+        return
+
+    print(f"-> Stopping {name}...")
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return
+
+    try:
+        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        process.wait(timeout=5)
+    except Exception:
+        try:
+            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except Exception:
+            process.kill()
+
+
+def run_preflight_checks(root_dir, backend_dir, frontend_dir):
+    ensure_path_exists(os.path.join(backend_dir, "main.py"), "Backend entry")
+    ensure_path_exists(os.path.join(frontend_dir, "package.json"), "Frontend package")
+
+    check_backend_dependencies()
+    npm_cmd = check_frontend_dependencies(frontend_dir)
+
+    ensure_port_free(BACKEND_HOST, BACKEND_PORT, "Backend")
+    ensure_port_free(FRONTEND_HOST, FRONTEND_PORT, "Frontend")
+
+    return npm_cmd
 
 
 def run_app():
-    print("🚀 Starting MultiAnno...")
+    print("Starting MultiAnno...")
 
-    # 获取各个模块的绝对路径
     root_dir = os.path.dirname(os.path.abspath(__file__))
     backend_dir = os.path.join(root_dir, "backend")
     frontend_dir = os.path.join(root_dir, "frontend")
 
     backend_process = None
     frontend_process = None
+    exit_code = 0
 
     try:
-        # 1. 启动后端
-        print("-> Starting Backend (FastAPI)...")
-        # 使用 sys.executable 确保使用当前运行 app.py 的同一个 Python 环境
-        backend_process = subprocess.Popen([sys.executable, "main.py"], cwd=backend_dir)
+        npm_cmd = run_preflight_checks(root_dir, backend_dir, frontend_dir)
 
-        # 2. 启动前端
-        print("-> Starting Frontend (Vite)...")
-        # 跨平台处理：Windows 下的 npm 实际是 npm.cmd
-        npm_cmd = "npm.cmd" if os.name == "nt" else "npm"
-        frontend_process = subprocess.Popen([npm_cmd, "run", "dev"], cwd=frontend_dir)
+        backend_process = start_process(
+            [
+                sys.executable,
+                "-m",
+                "uvicorn",
+                "main:app",
+                "--host",
+                BACKEND_HOST,
+                "--port",
+                str(BACKEND_PORT),
+            ],
+            backend_dir,
+            "Backend (FastAPI)",
+        )
+        wait_for_http(BACKEND_HEALTH_URL, backend_process, "Backend")
 
-        # 3. 智能等待并自动打开浏览器
-        # 默认 Vite 跑在 5173 端口，如果你的改了请对应修改
-        frontend_url = "http://localhost:5173"
-        wait_for_server_and_open_browser(frontend_url)
+        frontend_process = start_process(
+            [
+                npm_cmd,
+                "run",
+                "dev",
+                "--",
+                "--host",
+                FRONTEND_HOST,
+                "--port",
+                str(FRONTEND_PORT),
+                "--strictPort",
+            ],
+            frontend_dir,
+            "Frontend (Vite)",
+        )
+        wait_for_http(FRONTEND_URL, frontend_process, "Frontend")
 
-        print("\n✨ MultiAnno is running! Press Ctrl+C in this terminal to stop.\n")
+        print(f"Opening browser: {FRONTEND_URL}")
+        webbrowser.open(FRONTEND_URL)
 
-        # 保持主进程运行，防止退出
-        backend_process.wait()
-        frontend_process.wait()
+        print("\nMultiAnno is running. Press Ctrl+C in this terminal to stop.\n")
+
+        while True:
+            if backend_process.poll() is not None:
+                raise StartupError(
+                    f"Backend stopped unexpectedly with code {backend_process.returncode}."
+                )
+            if frontend_process.poll() is not None:
+                raise StartupError(
+                    f"Frontend stopped unexpectedly with code {frontend_process.returncode}."
+                )
+            time.sleep(1)
 
     except KeyboardInterrupt:
-        print("\n🛑 Stopping MultiAnno services...")
+        print("\nStopping MultiAnno services...")
+    except StartupError as exc:
+        exit_code = 1
+        print_box("Startup failed", str(exc).splitlines())
     finally:
-        # 4. 优雅退出：当你按下 Ctrl+C 时，确保前后端进程都被杀掉，不留僵尸进程
-        if backend_process:
-            backend_process.terminate()
-        if frontend_process:
-            frontend_process.terminate()
+        terminate_process_tree(frontend_process, "Frontend")
+        terminate_process_tree(backend_process, "Backend")
         print("Goodbye!")
-        sys.exit(0)
+        sys.exit(exit_code)
 
 
 if __name__ == "__main__":

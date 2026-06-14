@@ -8,6 +8,11 @@ from routers import ai, annotation, exchange, filesystem, project, taxonomy, vis
 app = FastAPI(title="MultiAnno Backend")
 
 
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
+
+
 # 🌟 把这个无敌显微镜加在这里（紧跟在 app = FastAPI() 之后）
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
@@ -42,4 +47,4 @@ app.include_router(exchange.router)
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8090, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8090, reload=False)
