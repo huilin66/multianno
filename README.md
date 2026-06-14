@@ -1,3 +1,5 @@
+<div align="center"><img src="frontend/public/favicon.svg" width="96" alt="MultiAnno logo" /></div>
+
 # MultiAnno
 [English](README.md) | [简体中文](README_zh-CN.md)
 
