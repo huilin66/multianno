@@ -20,6 +20,15 @@ Integrated with the Segment Anything Model (SAM 3). It supports generating polyg
 Built with React, MultiAnno provides a clean and modular user interface. It includes Dark/Light theme switching and a consolidated right panel for tools and properties, designed to keep the main workspace clear for annotation tasks.
 ---
 
+## Documentation
+
+- [System Guide](./SYSTEM_GUIDE.md)
+- [系统说明（简体中文）](./SYSTEM_GUIDE_zh-CN.md)
+
+The system guide explains the architecture, data contracts, module boundaries, development invariants, and PR workflow for contributors and AI coding assistants.
+
+---
+
 ## Installation
 
 ### 1. Clone the Repository
