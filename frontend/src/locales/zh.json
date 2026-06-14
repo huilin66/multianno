@@ -326,7 +326,8 @@
     "noObjects": "当前场景暂无对象",
     "noViews": "未配置视图。请前往数据预处理模块设置项目。",
     "folders": "文件夹",
-    "views": "视图"
+    "views": "视图",
+    "switchingImage": "正在切换图像..."
   },
     "dataExport": {
     "steps": "步骤",

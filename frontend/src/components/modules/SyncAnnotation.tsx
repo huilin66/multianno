@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
 import { AIToolPanel } from './annotation/AIToolPanel';
 import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM } from '../../api/client'
-import { X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { createPortal } from 'react-dom';
 import { CURSOR_FOCUS, CURSOR_DRAG } from '../../lib/cursors';
 
@@ -1841,6 +1841,14 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   cursorStyle={cursorStyle}
                   aiPrompts={aiPrompts}
                 />
+                {renderState === 'loading' && (
+                  <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="w-8 h-8 text-white animate-spin" />
+                      <span className="text-xs text-white/80">{t('workspace.switchingImage')}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>

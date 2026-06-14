@@ -140,6 +140,9 @@ const CanvasViewInner=({
           setRawImage(img);
           onImageLoaded?.();
       };
+      img.onerror = () => {
+          onImageLoaded?.();
+      };
 
       // ========== 预加载前后各 3 张 ==========
       const idx = stems.indexOf(currentStem);

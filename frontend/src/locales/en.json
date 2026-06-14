@@ -326,7 +326,8 @@
     "noObjects": "No objects in this scene",
     "noViews": "No views configured. Please go to Data Preload to set up your project.",
     "folders": "FOLDERS",
-    "views": "VIEWS"
+    "views": "VIEWS",
+    "switchingImage": "Switching image..."
   },
   "dataExport": {
     "steps": "Steps",

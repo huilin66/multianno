@@ -8,7 +8,7 @@ import { Slider } from '../ui/slider';
 import { 
   Layers, FolderOpen, Check,  CheckCircle2,
   Eye, EyeOff, Maximize, Move, MousePointer2, Square, RotateCcw,Zap,
-  Hand,  AlertCircle, Database, Trash2
+  Hand,  AlertCircle, Database, Trash2, Loader2
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next'; // 🌟 引入
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
@@ -64,6 +64,7 @@ export function ViewExtentCheck({onClose }: {onClose: () => void }) {
 
   // 用于强制刷新右侧参数显示面板的 Tick
   const [renderTick, setRenderTick] = useState(0);
+  const [imagesLoaded, setImagesLoaded] = useState(false);
   
   // --- 【高性能重构】专用 Refs ---
   const isDraggingRef = useRef(false);
@@ -797,8 +798,16 @@ const getPreviewUrl = (view: typeof mainView) => {
           onPointerUp={handlePointerUp}
           onPointerLeave={handlePointerUp}
           onWheel={handleWheel}
-          style={{ touchAction: 'none' }} 
+          style={{ touchAction: 'none' }}
         >
+          {!imagesLoaded && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-neutral-100 dark:bg-neutral-900">
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                <span className="text-xs text-muted-foreground">{t('workspace.switchingImage')}</span>
+              </div>
+            </div>
+          )}
           <div style={{ transform: `translate3d(${viewport.x}px, ${viewport.y}px, 0) scale(${viewport.scale})`, transformOrigin: 'center center' }} className="relative">
             
             {/* 🌟 核心修复：日间模式阴影透明度降为 0.15，夜间模式保持 0.7 */}
@@ -806,7 +815,7 @@ const getPreviewUrl = (view: typeof mainView) => {
 
               {mode === 'pan' && <span className="absolute -top-6 left-0 text-[10px] text-red-500 font-mono bg-black/50 px-1">{t('viewExtent.canvas.mainBorder')}</span>}
               
-              <img ref={mainImgRef} src={getPreviewUrl(mainView!)} alt={t('viewExtent.canvas.mainViewBase')} className="pointer-events-none block max-w-none" />
+              <img ref={mainImgRef} src={getPreviewUrl(mainView!)} alt={t('viewExtent.canvas.mainViewBase')} className="pointer-events-none block max-w-none" onLoad={() => setImagesLoaded(true)} />
 
               {activeAugView && (
                 <div className={`absolute top-0 left-0 w-full h-full ${mode === 'align' ? 'z-30' : 'z-20 pointer-events-none'}`}>
