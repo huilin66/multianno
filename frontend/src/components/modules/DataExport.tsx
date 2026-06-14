@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Checkbox } from '../ui/checkbox';
+import { Legend } from '../ui/legend';
 import Slider from 'rc-slider';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { exportData, getFileContent, exportDatasetStream } from '../../api/client';
@@ -1093,24 +1094,12 @@ useEffect(() => {
           </div>
 
           {/* 底部图例 */}
-          <div className="p-3 border-t border-border space-y-1.5">
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-400 shrink-0" />
-              {t('dataExport.legend.required')}
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />
-              {t('dataExport.legend.configured')}
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0" />
-              {t('dataExport.legend.current')}
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/25 shrink-0" />
-              {t('dataExport.legend.default')}
-            </div>
-          </div>
+          <Legend items={[
+            { color: 'bg-red-400', label: t('dataExport.legend.required') },
+            { color: 'bg-emerald-400', label: t('dataExport.legend.configured') },
+            { color: 'bg-primary', label: t('dataExport.legend.current') },
+            { color: 'bg-muted-foreground/25', label: t('dataExport.legend.default') },
+          ]} />
         </div>
 
         {/* 右侧内容 */}

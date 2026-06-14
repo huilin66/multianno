@@ -8,6 +8,7 @@ import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { importData, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
+import { Legend } from '../ui/legend';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, type TaskType } from '../../config/supportedFormats';
 import { showDialog } from '../../store/useDialogStore';
@@ -525,20 +526,12 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
               );
             })}
           </div>
-          <div className="p-3 border-t border-border space-y-1.5">
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-400 shrink-0" />{t('dataImport.legend.required')}
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />{t('dataImport.legend.configured')}
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0" />{t('dataImport.legend.current')}
-            </div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-              <div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/25 shrink-0" />{t('dataImport.legend.default')}
-            </div>
-          </div>
+          <Legend items={[
+            { color: 'bg-red-400', label: t('dataImport.legend.required') },
+            { color: 'bg-emerald-400', label: t('dataImport.legend.configured') },
+            { color: 'bg-primary', label: t('dataImport.legend.current') },
+            { color: 'bg-muted-foreground/25', label: t('dataImport.legend.default') },
+          ]} />
         </div>
 
         {/* 右侧内容 */}

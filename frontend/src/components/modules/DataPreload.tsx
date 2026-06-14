@@ -7,6 +7,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Alert } from '../ui/alert';
+import { Legend } from '../ui/legend';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { COLOR_MAPS, BAND_COLORS, BAND_UNSELECTED_STYLE } from '../../config/colors';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
@@ -727,11 +728,11 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
               );
             })}
           </div>
-          <div className="p-3 border-t border-border space-y-1.5">
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shrink-0" />{t('dataPreload.legend.configured')}</div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-primary shrink-0" />{t('dataPreload.legend.current')}</div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground"><div className="w-2.5 h-2.5 rounded-full bg-muted-foreground/25 shrink-0" />{t('dataPreload.legend.pending')}</div>
-          </div>
+          <Legend items={[
+            { color: 'bg-emerald-400', label: t('dataPreload.legend.configured') },
+            { color: 'bg-primary', label: t('dataPreload.legend.current') },
+            { color: 'bg-muted-foreground/25', label: t('dataPreload.legend.pending') },
+          ]} />
         </div>
 
         <div className="flex-1 flex flex-col min-w-0">
