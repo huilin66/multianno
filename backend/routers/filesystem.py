@@ -9,6 +9,56 @@ from models import MkdirRequest
 router = APIRouter(prefix="/api/fs", tags=["FileSystem"])
 
 
+@router.get("/dir_status")
+def get_directory_status(path: str = Query("")):
+    """Return lightweight safety info for a user-selected output directory."""
+    if not path:
+        raise HTTPException(status_code=400, detail="路径不能为空")
+
+    abs_path = os.path.abspath(path)
+    if not os.path.exists(abs_path):
+        return {
+            "exists": False,
+            "is_dir": False,
+            "is_empty": True,
+            "entry_count": 0,
+            "sample_entries": [],
+            "path": abs_path.replace("\\", "/"),
+        }
+
+    if not os.path.isdir(abs_path):
+        return {
+            "exists": True,
+            "is_dir": False,
+            "is_empty": False,
+            "entry_count": 1,
+            "sample_entries": [os.path.basename(abs_path)],
+            "path": abs_path.replace("\\", "/"),
+        }
+
+    try:
+        sample_entries = []
+        entry_count = 0
+        with os.scandir(abs_path) as it:
+            for entry in it:
+                entry_count += 1
+                if len(sample_entries) < 5:
+                    sample_entries.append(entry.name)
+
+        return {
+            "exists": True,
+            "is_dir": True,
+            "is_empty": entry_count == 0,
+            "entry_count": entry_count,
+            "sample_entries": sample_entries,
+            "path": abs_path.replace("\\", "/"),
+        }
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="没有权限访问该文件夹")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @router.get("/explore")
 def explore_file_system(
     path: str = Query(""),

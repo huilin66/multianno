@@ -399,6 +399,13 @@
     "readyToExport": "Confirm Export scene groups:",
     "exporting": "Exporting...",
     "success": "Export successful",
+    "overwrite": {
+      "title": "Target Folder Has Existing Contents",
+      "description": "The target folder will be cleared before exporting:\n{{path}}\n\nIt currently contains {{count}} item(s). Examples: {{sample}}\n\nOverwrite it?",
+      "confirm": "Overwrite",
+      "notDirectoryTitle": "Target Path Is Not a Folder",
+      "notDirectoryDesc": "Please choose a folder as the export target:\n{{path}}"
+    },
     "result": {
       "method": "Method: {{format}}",
       "mode": "Mode: {{mode}}",

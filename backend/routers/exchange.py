@@ -71,6 +71,32 @@ def get_native_jsons(source_dirs):
     return jsons
 
 
+def _target_dir_has_contents(target_dir: str) -> bool:
+    if not os.path.exists(target_dir):
+        return False
+    if not os.path.isdir(target_dir):
+        raise HTTPException(status_code=400, detail="目标路径已存在但不是文件夹")
+
+    with os.scandir(target_dir) as entries:
+        return any(True for _ in entries)
+
+
+def _ensure_dataset_target_safe(req: ExportRequest):
+    if _target_dir_has_contents(req.target_dir) and not req.overwrite_target:
+        raise HTTPException(
+            status_code=409,
+            detail="目标文件夹已存在内容。请确认覆盖后再导出。",
+        )
+
+
+def _prepare_dataset_target_dir(req: ExportRequest):
+    _ensure_dataset_target_safe(req)
+    if os.path.exists(req.target_dir):
+        if req.overwrite_target:
+            shutil.rmtree(req.target_dir, ignore_errors=True)
+    os.makedirs(req.target_dir, exist_ok=True)
+
+
 @router.get("/read_text")
 async def read_text_file(path: str):
     if not os.path.exists(path):
@@ -90,6 +116,7 @@ async def handle_export(req: ExportRequest):
         os.makedirs(req.target_dir, exist_ok=True)
 
     if req.export_mode == "dataset":
+        _ensure_dataset_target_safe(req)
         if req.format == "yolo":
             return StreamingResponse(
                 export_yolo_dataset_stream(req), media_type="application/x-ndjson"
@@ -161,9 +188,7 @@ async def export_yolo_dataset_stream(req: ExportRequest):
         test_stems = shuffled[n_train + n_val :]
 
         # 创建目录
-        if os.path.exists(req.target_dir):
-            shutil.rmtree(req.target_dir, ignore_errors=True)
-        os.makedirs(req.target_dir, exist_ok=True)
+        _prepare_dataset_target_dir(req)
         anno_dir = os.path.join(req.target_dir, req.anno_subdir)
         os.makedirs(anno_dir, exist_ok=True)
         for vc in req.view_configs:
@@ -268,9 +293,7 @@ async def export_coco_dataset_stream(req: ExportRequest):
         test_stems = shuffled[n_train + n_val :]
         test_stems = shuffled[n_train + n_val :]
 
-        if os.path.exists(req.target_dir):
-            shutil.rmtree(req.target_dir, ignore_errors=True)
-        os.makedirs(req.target_dir, exist_ok=True)
+        _prepare_dataset_target_dir(req)
         anno_dir = os.path.join(req.target_dir, req.anno_subdir)
         os.makedirs(anno_dir, exist_ok=True)
         for vc in req.view_configs:
@@ -419,9 +442,7 @@ async def export_voc_dataset_stream(req: ExportRequest):
         test_stems = shuffled[n_train + n_val :]
         test_stems = shuffled[n_train + n_val :]
 
-        if os.path.exists(req.target_dir):
-            shutil.rmtree(req.target_dir, ignore_errors=True)
-        os.makedirs(req.target_dir, exist_ok=True)
+        _prepare_dataset_target_dir(req)
         anno_dir = os.path.join(req.target_dir, req.anno_subdir)
         os.makedirs(anno_dir, exist_ok=True)
         for vc in req.view_configs:
@@ -529,9 +550,7 @@ async def export_multianno_dataset_stream(req: ExportRequest):
         test_stems = shuffled[n_train + n_val :]
         test_stems = shuffled[n_train + n_val :]
 
-        if os.path.exists(req.target_dir):
-            shutil.rmtree(req.target_dir, ignore_errors=True)
-        os.makedirs(req.target_dir, exist_ok=True)
+        _prepare_dataset_target_dir(req)
         anno_dir = os.path.join(req.target_dir, req.anno_subdir)
         os.makedirs(anno_dir, exist_ok=True)
         for vc in req.view_configs:
@@ -642,9 +661,7 @@ async def export_mask_dataset_stream(req: ExportRequest):
         test_stems = shuffled[n_train + n_val :]
         test_stems = shuffled[n_train + n_val :]
 
-        if os.path.exists(req.target_dir):
-            shutil.rmtree(req.target_dir, ignore_errors=True)
-        os.makedirs(req.target_dir, exist_ok=True)
+        _prepare_dataset_target_dir(req)
         anno_dir = os.path.join(req.target_dir, req.anno_subdir)
         os.makedirs(anno_dir, exist_ok=True)
         for vc in req.view_configs:
@@ -1280,9 +1297,7 @@ async def export_dataset(req: ExportRequest):
     test_stems = shuffled[n_train + n_val :]
 
     # 2. 创建目录（平层，不分子文件夹）
-    if os.path.exists(req.target_dir):
-        shutil.rmtree(req.target_dir, ignore_errors=True)
-    os.makedirs(req.target_dir, exist_ok=True)
+    _prepare_dataset_target_dir(req)
 
     anno_dir = os.path.join(req.target_dir, req.anno_subdir)
     os.makedirs(anno_dir, exist_ok=True)

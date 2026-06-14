@@ -9,7 +9,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Legend } from '../ui/legend';
 import Slider from 'rc-slider';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
-import { exportData, getFileContent, exportDatasetStream } from '../../api/client';
+import { exportData, getFileContent, exportDatasetStream, checkDirectoryStatus } from '../../api/client';
 import { showDialog } from '../../store/useDialogStore';
 import {
   SUPPORTED_TASKS,
@@ -293,14 +293,46 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     const selectedClassNames = exportClasses.filter(c => c.selected).map(c => c.name);
     const allowedShapes = Object.entries(shapeSelection).filter(([, v]) => v).map(([s]) => s);
 
-    setExportStatus('exporting');
-    setIsExporting(true);
-    setExportProgress(0);
-
-    abortControllerRef.current = new AbortController();
-    const signal = abortControllerRef.current.signal;
-
     try {
+      let overwriteTarget = false;
+      if (exportMode === 'dataset') {
+        const dirStatus = await checkDirectoryStatus(targetDir);
+        if (dirStatus.exists && !dirStatus.is_dir) {
+          await showDialog({
+            type: 'danger',
+            title: t('dataExport.overwrite.notDirectoryTitle'),
+            description: t('dataExport.overwrite.notDirectoryDesc', { path: dirStatus.path || targetDir }),
+            confirmText: t('common.confirm'),
+            hideCancel: true,
+          });
+          return;
+        }
+
+        if (dirStatus.exists && !dirStatus.is_empty) {
+          const sample = (dirStatus.sample_entries || []).join(', ');
+          const confirmed = await showDialog({
+            type: 'danger',
+            title: t('dataExport.overwrite.title'),
+            description: t('dataExport.overwrite.description', {
+              path: dirStatus.path || targetDir,
+              count: dirStatus.entry_count,
+              sample: sample || '-',
+            }),
+            confirmText: t('dataExport.overwrite.confirm'),
+            cancelText: t('common.cancel'),
+          });
+          if (!confirmed) return;
+          overwriteTarget = true;
+        }
+      }
+
+      setExportStatus('exporting');
+      setIsExporting(true);
+      setExportProgress(0);
+
+      abortControllerRef.current = new AbortController();
+      const signal = abortControllerRef.current.signal;
+
       const view_configs = viewConfigs.map(vc => {
         const view = views.find((v: any) => v.id === vc.viewId);
         const folder = folders.find((f: any) => f.id === view?.folderId);
@@ -338,6 +370,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           random_seed: randomSeed,
           split_files: { train: splitTrainFile, val: splitValFile, test: splitTestFile },
           split_content_mode: splitContentMode,
+          overwrite_target: overwriteTarget,
         }, (current, total) => {
           setExportProgress(Math.round((current / total) * 100));
         }, signal);
@@ -403,6 +436,13 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     } catch (err: any) {
       if (err.name === 'AbortError') return;
       setExportStatus('error');
+      await showDialog({
+        type: 'danger',
+        title: t('common.failed'),
+        description: err.message || t('common.failed'),
+        confirmText: t('common.confirm'),
+        hideCancel: true,
+      });
       setTimeout(() => setExportStatus('idle'), 3000);
     } finally {
       setIsExporting(false);

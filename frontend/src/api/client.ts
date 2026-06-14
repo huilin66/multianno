@@ -102,6 +102,9 @@ export const exportData = (payload: any, signal?: AbortSignal) =>
 export const importData = (payload: any) =>
   post(`${API_BASE_URL}/exchange/import`, payload);
 
+export const checkDirectoryStatus = (path: string) =>
+  get(`${API_BASE_URL}/fs/dir_status?path=${encodeURIComponent(path)}`);
+
 // client.ts 新增
 export const exportDatasetStream = async (
   payload: any,
@@ -115,7 +118,10 @@ export const exportDatasetStream = async (
     signal,
   });
 
-  if (!response.ok) throw new Error('Export failed');
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || err.error || `Export failed (${response.status})`);
+  }
   if (!response.body) throw new Error('No response body');
 
   const reader = response.body.getReader();

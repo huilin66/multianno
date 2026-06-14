@@ -127,6 +127,7 @@ class ExportRequest(BaseModel):
     random_seed: int = 42
     split_files: dict = {}
     split_content_mode: str = "stem"  # "stem" or "main_view"
+    overwrite_target: bool = False
 
 
 class ImportRequest(BaseModel):
