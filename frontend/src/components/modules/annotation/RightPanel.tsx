@@ -1230,9 +1230,9 @@ export function RightPanel({
                     <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
                     <ShapeIcon 
                       className={`w-3.5 h-3.5 shrink-0 ml-0.5 ${isActive ? 'text-blue-500 dark:text-blue-400' : 'text-neutral-400'}`} 
-                      title={`Type: ${ann.type}`} // Keep type as-is — it's a data field
+                      title={`${t('rightPanel.shapeType')}: ${ann.type}`}
                     />
-                    {ann.difficult && <AlertTriangle className="w-3.5 h-3.5 inline text-orange-500 shrink-0 ml-0.5" title="Difficult"/>}
+                    {ann.difficult && <AlertTriangle className="w-3.5 h-3.5 inline text-orange-500 shrink-0 ml-0.5" title={t('objectEditor.difficult')}/>}
                     
                     {/* 🌟 渲染组标签 */}
                     {groupInfo && (

@@ -626,7 +626,8 @@
     "nmsReset": "Reset",
     "findOverlapping": "Find Overlapping Objects",
     "iosNested": "IoS (Nested)",
-    "iouStandard": "IoU (Standard)"
+    "iouStandard": "IoU (Standard)",
+    "shapeType": "Type"
   },
   "aiTool": {
     "modelNotLoaded": "AI Model Not Loaded",

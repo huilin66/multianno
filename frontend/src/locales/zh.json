@@ -626,7 +626,8 @@
     "nmsReset": "重置",
     "findOverlapping": "查找重叠对象",
     "iosNested": "IoS (嵌套)",
-    "iouStandard": "IoU (标准)"
+    "iouStandard": "IoU (标准)",
+    "shapeType": "类型"
   },
   "aiTool": {
     "modelNotLoaded": "AI 模型未加载",
