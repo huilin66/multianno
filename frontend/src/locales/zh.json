@@ -224,7 +224,7 @@
     },
     "alerts": {
       "saveAllFirst": "请在继续之前保存并确认所有辅助视图 (Aug Views) 的对齐参数。",
-      "exportSuccess": "✅ 导出成功！\n\nproject_meta.json 已保存到本地。\n系统已为您生成当前对齐参数的快照，即将进入工作区...",
+      "exportSuccess": "导出成功！\n\nproject_meta.json 已保存到本地。\n系统已为您生成当前对齐参数的快照，即将进入工作区...",
       "saveCancelled": "导出已取消。是否仍要强制进入下一步（工作区）？",
       "notAligned": "当前裁剪框与主视图（Main View）未完全对齐。\n\n是否需要系统自动对齐 (适配主视图) 并保存？",
       "underDevAI": "AI 自动对齐功能正在开发中...",

@@ -7,7 +7,7 @@ import { Switch } from '../ui/switch';
 import { Label } from '../ui/label';
 import { Input } from '../ui/input';
 import { Loader2, Download, Info, Trash2, FolderOpen,
-    FileText, AlertCircle, LayoutGrid, Columns3, Rows3
+    FileText, AlertCircle, LayoutGrid, Columns3, Rows3, Check
 } from 'lucide-react';
 import { requestVisPreview, requestVisExportStream, getFileContent, analyzeWorkspaceFolders} from '../../api/client';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
@@ -610,7 +610,7 @@ export function LocalVisualization() {
                 {isMetaLoaded && (
                   <div className="mt-2 space-y-2 border-t border-border pt-3">
                     <Label className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase flex items-center gap-1">
-                      ✓ {t('localVis.dataSource.locked')}
+                      <Check className="w-3 h-3" /> {t('localVis.dataSource.locked')}
                     </Label>
                     <div className="max-h-40 overflow-y-auto space-y-2 custom-scrollbar pr-1">
                       {viewMetas.map((view, idx) => (

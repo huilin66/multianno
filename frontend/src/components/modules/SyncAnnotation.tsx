@@ -1707,7 +1707,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                     (() => {
                       const v = views.find((v:any) => v.id === activeControlLayer);
                       if (!v) return t('annotation.noneDisableFx');
-                      return `${activeControlLayer === focusedViewId ? '✨' : ''}${v.isMain ? t('view.mainView') : `${t('view.augView')} ${views.indexOf(v)}`}`;
+                      return `${activeControlLayer === focusedViewId ? '● ' : ''}${v.isMain ? t('view.mainView') : `${t('view.augView')} ${views.indexOf(v)}`}`;
                     })()
                   )}
                 </SelectValue>
@@ -1719,7 +1719,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   if (!v) return null;
                   return (
                     <SelectItem key={layerId} value={layerId} className="text-xs">
-                      {layerId === focusedViewId ? '✨ ' : ''}
+                      {layerId === focusedViewId ? '● ' : ''}
                       {v.isMain ? t('view.mainView') : `${t('view.augView')} ${views.indexOf(v)}`}
                     </SelectItem>
                   )

@@ -224,7 +224,7 @@
     },
     "alerts": {
       "saveAllFirst": "Please save and confirm alignment for ALL Aug Views before proceeding.",
-      "exportSuccess": "✅ Export Successful!\n\nproject_meta.json has been saved locally.\nA snapshot of the current alignment parameters has been generated. Entering workspace...",
+      "exportSuccess": "Export Successful!\n\nproject_meta.json has been saved locally.\nA snapshot of the current alignment parameters has been generated. Entering workspace...",
       "saveCancelled": "Save cancelled. Do you still want to proceed to the next step?",
       "notAligned": "Current crop box is NOT perfectly aligned with the Main View.\n\nDo you want the system to Auto-Align (Fit to Main) and save?",
       "underDevAI": "AI Auto Alignment feature is under development...",
