@@ -1,12 +1,9 @@
 # MultiAnno
-[English](README.md) | [简体中文](README_zh-CN.md)
 
-[![React](https://img.shields.io/badge/Frontend-React_18-61dafb?logo=react)]([https://reactjs.org/](https://reactjs.org/))
-[![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 
 **MultiAnno: An AI-assisted image annotation tool for multi-view tasks.**
 
-> **A Special Note:** The core architecture and codebase of this project were developed with the pair-programming assistance of **Google Gemini 3.1 Pro**. 
+> **A Special Note:** The core architecture and codebase of this project were developed with the pair-programming assistance of **Google Gemini 3.1 Pro**, **DeepSeek v4 Pro**, and **Claude Code**. 
 
 ---
 ![功能演示](./doc/pic/feature2.gif)
@@ -21,19 +18,6 @@ Integrated with the Segment Anything Model (SAM 3). It supports generating polyg
 
 ### Modular User Interface
 Built with React, MultiAnno provides a clean and modular user interface. It includes Dark/Light theme switching and a consolidated right panel for tools and properties, designed to keep the main workspace clear for annotation tasks.
-
----
-
-## Functions
-
-For advanced features and detailed configurations, please refer to the specific module documentation:
-
-* **[Project & Data Management](docs/project_management.md)**
-* **[Taxonomy Dashboard](docs/taxonomy.md)**
-* **[Annotation Tool](docs/annotation_tool.md)**
-* **[Data Format Exchange](docs/data_format.md)**
-* **[Local Visualization Engine](docs/visualization.md)**
-
 ---
 
 ## Installation
