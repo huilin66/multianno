@@ -1,7 +1,11 @@
+<div align="center">
+
 # <img src="frontend/public/favicon.svg" width="28" alt="logo" /> MultiAnno
 [English](README.md) | [简体中文](README_zh-CN.md)
 
 **MultiAnno: An AI-assisted image annotation tool for multi-view tasks.**
+
+</div>
 
 > **A Special Note:** The core architecture and codebase of this project were developed with the pair-programming assistance of **Google Gemini 3.1 Pro**, **DeepSeek v4 Pro**, and **Claude Code**. 
 

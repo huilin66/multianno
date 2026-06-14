@@ -1,7 +1,11 @@
+<div align="center">
+
 # <img src="frontend/public/favicon.svg" width="28" alt="logo" /> MultiAnno
 [English](README.md) | [简体中文](README_zh-CN.md)
 
 **MultiAnno：一个面向多视图任务的 AI 辅助图像标注工具。**
+
+</div>
 
 > **特别说明：** 本项目的核心架构和代码库是在 **Google Gemini 3.1 Pro**、**DeepSeek v4 Pro** 和 **Claude Code** 的结对编程辅助下完成的。
 
