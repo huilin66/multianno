@@ -443,7 +443,7 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
               const extChanged = folder.extension !== inf.extension;
 
               return (
-                <div key={folder.id} className="p-4 border rounded-lg bg-muted/30 space-y-3">
+                <div key={folder.id} className="p-4 border rounded-lg bg-muted/20 space-y-3">
                   <div className="relative">
                     <Input
                       value={folder.path}

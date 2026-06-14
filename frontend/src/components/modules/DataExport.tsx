@@ -535,7 +535,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           <div className="space-y-5">
 
             {/* 预览信息 */}
-            <div className="p-4 bg-muted/30 rounded-xl border space-y-2">
+            <div className="p-4 bg-muted/20 rounded-xl border space-y-2">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
                 {t('dataExport.stepNaming.preview')}
               </div>
@@ -621,7 +621,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           <div className="space-y-5">
 
             {/* 预览信息 — 所有 View 合并展示 */}
-            <div className="p-4 bg-muted/30 rounded-xl border space-y-3">
+            <div className="p-4 bg-muted/20 rounded-xl border space-y-3">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
                 {t('dataExport.stepNaming.preview')}
               </div>
@@ -750,7 +750,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
         return (
           <div className="space-y-5">
             {/* 预览: 文件结构 */}
-            <div className="p-4 bg-muted/30 rounded-xl border space-y-2">
+            <div className="p-4 bg-muted/20 rounded-xl border space-y-2">
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
                 {t('dataExport.stepSplit.preview')}
               </div>
@@ -766,7 +766,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
             </div>
 
             {/* 预览: 文件内容 */}
-            <div className="p-4 bg-muted/30 rounded-xl border space-y-3">
+            <div className="p-4 bg-muted/20 rounded-xl border space-y-3">
               <div className="flex items-center justify-between">
                 <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">
                   Split File Entries
