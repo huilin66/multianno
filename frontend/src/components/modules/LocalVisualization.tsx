@@ -20,6 +20,7 @@ interface ViewMeta {
   bands: number[];
   render_type: string;
   transform: any;
+  crop?: { t: number; r: number; b: number; l: number };
 }
 
 const CardButton: React.FC<{
@@ -256,7 +257,8 @@ export function LocalVisualization() {
           suffix: matchedFolder ? (matchedFolder.suffix || "") : "",
           bands: view.bands || [],
           render_type: view.renderMode || "unknown",
-          transform: view.transform || {}
+          transform: view.transform || {},
+          crop: view.crop || view.transform?.crop || { t: 0, r: 100, b: 100, l: 0 }
         };
       });
 

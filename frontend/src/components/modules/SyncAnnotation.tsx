@@ -1282,8 +1282,8 @@ const getFullImagePath = (view: any) => {
     const rawWidth = folder?.metadata?.width || 1024;
     const rawHeight = folder?.metadata?.height || 1024;
     
-    // 🌟 核心修复：正确读取 transform 中的百分比 Crop 参数
-    const crop = view.transform?.crop;
+    // Crop lives on the view contract; transform.crop is kept only as a legacy fallback.
+    const crop = view.crop || (view.transform as any)?.crop;
 
     if (!crop) {
       // 如果没有裁剪，返回整图尺寸

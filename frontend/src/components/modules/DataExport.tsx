@@ -314,7 +314,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           folder_path: folder?.path || '',
           bands: view?.bands || [1, 2, 3],
           transform: view?.transform || {},
-          crop: view?.crop || {},
+          crop: view?.crop || (view?.transform as any)?.crop || { t: 0, r: 100, b: 100, l: 0 },
           is_main: view?.isMain || false,
         };
       });

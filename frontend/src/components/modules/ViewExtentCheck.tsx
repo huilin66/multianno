@@ -15,6 +15,9 @@ import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { getPreviewImageUrl } from '../../api/client';
 import { saveProjectMeta } from '../../api/client';
 
+type CropRect = { t: number; r: number; b: number; l: number };
+const DEFAULT_CROP: CropRect = { t: 0, r: 100, b: 100, l: 0 };
+
 export function ViewExtentCheck({onClose }: {onClose: () => void }) {
   const { t } = useTranslation();
   const {projectName, stems, sceneGroups, views, folders, updateView, setActiveModule, savedAlignments, addSavedAlignment, removeSavedAlignment, completedViews, setCompletedViews } = useStore();
@@ -54,8 +57,14 @@ export function ViewExtentCheck({onClose }: {onClose: () => void }) {
     showOutsideCrop: true 
   });
   // 操作A：裁剪范围状态
-  const [crops, setCrops] = useState<Record<string, { t: number, r: number, b: number, l: number }>>({});
-  const activeCrop = activeAugView ? (crops[activeAugView.id] || { t: 0, r: 100, b: 100, l: 0 }) : { t: 0, r: 100, b: 100, l: 0 };
+  const [crops, setCrops] = useState<Record<string, CropRect>>(() => {
+    const initial: Record<string, CropRect> = {};
+    augViews.forEach(v => {
+      initial[v.id] = v.crop || (v.transform as any)?.crop || DEFAULT_CROP;
+    });
+    return initial;
+  });
+  const activeCrop = activeAugView ? (crops[activeAugView.id] || activeAugView.crop || (activeAugView.transform as any)?.crop || DEFAULT_CROP) : DEFAULT_CROP;
   const [draggingEdge, setDraggingEdge] = useState<'t' | 'r' | 'b' | 'l' | null>(null);
 
   // 操作B：拉伸控制状态
@@ -87,6 +96,20 @@ export function ViewExtentCheck({onClose }: {onClose: () => void }) {
       };
     }
   }, [activeAugId]);
+
+  useEffect(() => {
+    setCrops(prev => {
+      let changed = false;
+      const next = { ...prev };
+      augViews.forEach(v => {
+        if (!next[v.id]) {
+          next[v.id] = v.crop || (v.transform as any)?.crop || DEFAULT_CROP;
+          changed = true;
+        }
+      });
+      return changed ? next : prev;
+    });
+  }, [views]);
 
 
 const getPreviewUrl = (view: typeof mainView) => {
@@ -409,7 +432,8 @@ const getPreviewUrl = (view: typeof mainView) => {
         offsetY: nextOffsetY, 
         scaleX: nextScaleX, 
         scaleY: nextScaleY 
-      } 
+      },
+      crop: { ...activeCrop }
     });
   };
 
@@ -422,16 +446,24 @@ const getPreviewUrl = (view: typeof mainView) => {
 
   const handleResetCrop = () => {
     setCrops({ ...crops, [activeAugView.id]: { t: 0, r: 100, b: 100, l: 0 } });
+    updateView(activeAugView.id, { crop: { ...DEFAULT_CROP } });
   };
 // --- 预设、手动控制与验证逻辑 ---
 
   // 应用某个对齐参数到当前视图
   const applyAlignmentPreset = (crop: any, transform: any) => {
     if (!activeAugView) return;
+    const scaleX = transform?.scaleX ?? 1;
+    const cleanTransform = {
+      offsetX: transform?.offsetX ?? 0,
+      offsetY: transform?.offsetY ?? 0,
+      scaleX,
+      scaleY: transform?.scaleY ?? scaleX,
+    };
     setCrops({ ...crops, [activeAugView.id]: crop });
-    tempTransformRef.current = { ...transform };
+    tempTransformRef.current = { ...cleanTransform };
     updateAugDOMTransform();
-    updateView(activeAugView.id, { transform });
+    updateView(activeAugView.id, { transform: cleanTransform, crop });
     setRenderTick(p => p + 1);
   };
 
@@ -524,10 +556,17 @@ const getPreviewUrl = (view: typeof mainView) => {
       return;
     }
 
-    const projectMeta = generateProjectMetaConfig(useStore.getState());
-    const metaPath = useStore.getState().projectMetaPath;
-
     try {
+      if (activeAugView) {
+        updateView(activeAugView.id, {
+          transform: { ...tempTransformRef.current },
+          crop: { ...activeCrop },
+        });
+      }
+
+      const projectMeta = generateProjectMetaConfig(useStore.getState());
+      const metaPath = useStore.getState().projectMetaPath;
+
       // 🌟 静默写入硬盘
       if (metaPath) {
         await saveProjectMeta({ file_path: metaPath, content: projectMeta });
@@ -936,10 +975,11 @@ const getPreviewUrl = (view: typeof mainView) => {
               {augViews.map((v, i) => {
                 const tf = v.transform;
                 if (!tf) return null;
-                const crop = (tf as any).crop || { t: 0, r: 100, b: 100, l: 0 };
+                const crop = v.crop || (tf as any).crop || DEFAULT_CROP;
                 
                 // 只有被勾选过 (completed) 或者参数不是默认值的才显示
-                const isDefault = tf.offsetX === 0 && tf.offsetY === 0 && tf.scaleX === 1 && crop.t === 0;
+                const isDefault = tf.offsetX === 0 && tf.offsetY === 0 && tf.scaleX === 1 &&
+                  crop.t === 0 && crop.r === 100 && crop.b === 100 && crop.l === 0;
                 if (isDefault && !completedViews.includes(v.id)) return null;
 
                 return (

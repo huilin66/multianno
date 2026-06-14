@@ -52,6 +52,11 @@ export interface ViewConfig {
     contrast?: number;   // 0.5 - 2.0 (默认 1)
     saturation?: number; // 0 - 2 (默认 1)
     minMax?: [number, number]; // [min, max] 百分比拉伸，如 [0, 100]
+    gamma?: number;
+    enhancementMode?: 'manual' | 'he' | 'clahe';
+    spatialFilter?: 'none' | 'sharpen';
+    invert?: boolean;
+    binarize?: { enabled: boolean; threshold: number };
   };
 }
 
@@ -86,6 +91,27 @@ export interface SavedAlignment {
   crop: { t: number; r: number; b: number; l: number };
   transform: { offsetX: number; offsetY: number; scaleX: number; scaleY: number };
 }
+
+const DEFAULT_VIEW_CROP = { t: 0, r: 100, b: 100, l: 0 };
+
+const normalizeViewCrop = (view: ViewConfig): ViewConfig => {
+  const rawTransform = (view.transform || {}) as ViewConfig['transform'] & {
+    crop?: ViewConfig['crop'];
+  };
+  const { crop: legacyCrop, ...transform } = rawTransform;
+  const scaleX = transform.scaleX ?? 1;
+
+  return {
+    ...view,
+    transform: {
+      offsetX: transform.offsetX ?? 0,
+      offsetY: transform.offsetY ?? 0,
+      scaleX,
+      scaleY: transform.scaleY ?? scaleX,
+    },
+    crop: view.crop ?? legacyCrop ?? { ...DEFAULT_VIEW_CROP },
+  };
+};
 
 export interface TaxonomyClass {
   id: string;          
@@ -375,7 +401,7 @@ export const useStore = create<AppState>()(
             }
           })),
           
-          views: meta.views.map(v => ({
+          views: meta.views.map(v => normalizeViewCrop({
             id: v.id,
             folderId: String(v["folder id"]),
             bands: v.bands,
@@ -383,6 +409,7 @@ export const useStore = create<AppState>()(
             opacity: 1,
             colormap: (v.bands.length === 1 && v.renderMode !== 'rgb' ? (v.renderMode || 'gray') : 'gray') as any,
             transform: v.transform,
+            crop: v.crop ?? (v.transform as any)?.crop,
             settings: v.settings || { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100],
               gamma: 1.0, enhancementMode: 'manual', spatialFilter: 'none', invert: false,
               binarize: { enabled: false, threshold: 128 }
@@ -429,20 +456,20 @@ export const useStore = create<AppState>()(
         }
 
         return {
-          views: [...state.views, { 
+          views: [...state.views, normalizeViewCrop({ 
             ...newView, 
             settings: { brightness: 1, contrast: 1, saturation: 1, minMax: [0, 100] } 
-          }]
+          })]
         };
       }),
       setViews: (importedViews) => set((state) => {
         if (importedViews.length > 9) {
           console.warn("Imported project has too many views, truncating to 9.");
-          return { views: importedViews.slice(0, 9) }; // 强行截断只保留前 9 个
+          return { views: importedViews.slice(0, 9).map(normalizeViewCrop) }; // 强行截断只保留前 9 个
         }
-        return { views: importedViews };
+        return { views: importedViews.map(normalizeViewCrop) };
       }),
-      updateView: (id, data) => set((state) => ({views: state.views.map(v => v.id === id ? { ...v, ...data } : v)})),
+      updateView: (id, data) => set((state) => ({views: state.views.map(v => v.id === id ? normalizeViewCrop({ ...v, ...data }) : v)})),
       removeView: (id) => set((state) => ({ views: state.views.filter(v => v.id !== id) })),
       clearViews: () => set({ views: [] }),
       setWorkspacePath: (path: string | null) => set({ workspacePath: path }),

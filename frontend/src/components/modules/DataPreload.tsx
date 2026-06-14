@@ -358,6 +358,7 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
       bands: [1, 2, 3],
       isMain: views.length === 0,
       opacity: 1,
+      crop: { t: 0, r: 100, b: 100, l: 0 },
       transform: { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 }
     });
   };

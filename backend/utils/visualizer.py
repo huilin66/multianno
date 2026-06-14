@@ -157,7 +157,7 @@ class LocalVisualizer:
         return img_data
 
     def _apply_transform_and_align(
-        self, img: np.ndarray, transform: dict, target_shape: tuple
+        self, img: np.ndarray, transform: dict, target_shape: tuple, crop: dict = None
     ) -> np.ndarray:
         """核心步骤 2：🌟 严格执行用户的【先裁剪，后 Resize】逻辑"""
         target_h, target_w = target_shape
@@ -167,7 +167,7 @@ class LocalVisualizer:
         h, w = img.shape[:2]
 
         # 1. Base Crop (处理基础的 t, b, l, r 边界裁剪)
-        crop = transform.get("crop", {})
+        crop = crop or transform.get("crop", {})
         y1 = max(0, int(float(crop.get("t", 0)) / 100.0 * h))
         y2 = min(h, int(float(crop.get("b", 100)) / 100.0 * h))
         x1 = max(0, int(float(crop.get("l", 0)) / 100.0 * w))
@@ -242,7 +242,7 @@ class LocalVisualizer:
 
             # 严格计算 Main View 的原始像素画布大小
             transform = main_conf.get("transform", {})
-            crop = transform.get("crop", {})
+            crop = main_conf.get("crop") or transform.get("crop", {})
             mh, mw = main_processed.shape[:2]
 
             t = max(0, int(float(crop.get("t", 0)) / 100.0 * mh))
@@ -256,7 +256,7 @@ class LocalVisualizer:
 
             # Main View 同样走一遍安全管线
             main_aligned = self._apply_transform_and_align(
-                main_processed, transform, target_shape
+                main_processed, transform, target_shape, crop
             )
 
         frames.append(main_aligned)
@@ -267,7 +267,10 @@ class LocalVisualizer:
             if raw_img is not None:
                 processed = self._process_bands_and_render(raw_img, v_conf)
                 aligned = self._apply_transform_and_align(
-                    processed, v_conf.get("transform", {}), target_shape
+                    processed,
+                    v_conf.get("transform", {}),
+                    target_shape,
+                    v_conf.get("crop"),
                 )
                 frames.append(aligned)
             else:

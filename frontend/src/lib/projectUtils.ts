@@ -25,6 +25,7 @@ export const readProjectJsonFile = (file: File): Promise<ProjectMetaContract> =>
 
 export function generateProjectMetaConfig(state: AppState): ProjectMetaContract {
   const { folders, views, taxonomyClasses, taxonomyAttributes, sceneGroups } = state;
+  const defaultCrop = { t: 0, r: 100, b: 100, l: 0 };
 
   return {
         projectName: state.projectName || "Untitled Project",
@@ -49,6 +50,9 @@ export function generateProjectMetaConfig(state: AppState): ProjectMetaContract 
         })),
         views: views.map((v, i) => {
           const fIndex = folders.findIndex(f => f.id === v.folderId);
+          const rawTransform = (v.transform || {}) as typeof v.transform & { crop?: typeof v.crop };
+          const { crop: legacyCrop, ...transform } = rawTransform;
+          const scaleX = transform.scaleX ?? 1;
           return {
             id: v.isMain ? 'main view' : `aug view ${i}`, 
             "folder id": fIndex >= 0 ? fIndex + 1 : 'Unknown',
@@ -56,12 +60,12 @@ export function generateProjectMetaConfig(state: AppState): ProjectMetaContract 
             renderMode: v.bands.length === 3 ? 'rgb' : (v.colormap || 'gray'),
             isMain: v.isMain,
             transform: {
-              scaleX: v.transform?.scaleX ?? 1,
-              scaleY: v.transform?.scaleY ?? (v.transform?.scaleX ?? 1),
-              offsetX: v.transform?.offsetX ?? 0,
-              offsetY: v.transform?.offsetY ?? 0
+              scaleX,
+              scaleY: transform.scaleY ?? scaleX,
+              offsetX: transform.offsetX ?? 0,
+              offsetY: transform.offsetY ?? 0
             },
-            crop: v.crop ?? { t: 0, r: 0, b: 0, l: 0 },
+            crop: v.crop ?? legacyCrop ?? defaultCrop,
             settings: v.settings
           };
         })

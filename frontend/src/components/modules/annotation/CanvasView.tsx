@@ -476,7 +476,7 @@ return (
          if (layerId === view.id) {
            // 🌟 核心修复 1：放弃复杂的屏幕 px 计算，统一使用百分比 (%) 处理裁剪和卷帘！
            const isBaseFullExtent = !!(showFullExtent && showFullExtent[view.id]);
-           const baseCrop = view.transform?.crop || { t: 0, r: 100, b: 100, l: 0 };
+           const baseCrop = view.crop || (view.transform as any)?.crop || { t: 0, r: 100, b: 100, l: 0 };
            const boundL = isBaseFullExtent ? 0 : baseCrop.l;
            const boundR = isBaseFullExtent ? 100 : baseCrop.r;
            const boundT = isBaseFullExtent ? 0 : baseCrop.t;
@@ -541,7 +541,7 @@ return (
             if (!oView) return null;
             
             const isLayerFullExtent = !!(showFullExtent && showFullExtent[layerId]);
-            const crop = oView.transform?.crop || { t: 0, r: 100, b: 100, l: 0 };
+            const crop = oView.crop || (oView.transform as any)?.crop || { t: 0, r: 100, b: 100, l: 0 };
             
             const boundL = isLayerFullExtent ? 0 : crop.l;
             const boundR = isLayerFullExtent ? 100 : crop.r;
