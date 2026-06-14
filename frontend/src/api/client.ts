@@ -4,24 +4,35 @@ export const API_BASE_URL = 'http://localhost:8090/api';
 const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
 
 const post = async (url: string, body: any, signal?: AbortSignal) => {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal,
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } catch (e: any) {
+    if (e?.name === 'AbortError') throw e;
+    throw new Error('Backend unreachable. Please check if the server is running.');
+  }
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || err.error || 'Request failed');
+    throw new Error(err.detail || err.error || `Request failed (${response.status})`);
   }
   return response.json();
 };
 
 const get = async (url: string) => {
-  const response = await fetch(url);
+  let response: Response;
+  try {
+    response = await fetch(url);
+  } catch {
+    throw new Error('Backend unreachable. Please check if the server is running.');
+  }
   if (!response.ok) {
     const err = await response.json().catch(() => ({}));
-    throw new Error(err.detail || err.error || 'Request failed');
+    throw new Error(err.detail || err.error || `Request failed (${response.status})`);
   }
   return response.json();
 };

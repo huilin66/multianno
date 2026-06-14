@@ -27,6 +27,8 @@ import { useMetaAutoSave } from './hooks/useMetaAutoSave';
 import { LocalVisualization } from './components/modules/LocalVisualization';
 import { GlobalConfirmDialog } from './components/modals/GlobalConfirmDialog';
 import { ViewLayoutSettingsModal } from './components/modals/settings/ViewLayoutSettingsModal';
+import { ToastContainer } from './components/ui/toast';
+import { useBackendHealth } from './hooks/useBackendHealth';
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -35,6 +37,7 @@ export default function App() {
   const { annotationSaveStatus, autoSave } = useAnnotationAutoSave();
   const { metaSaveStatus, metaLastSavedTime, isDirty: isMetaDirty } = useMetaAutoSave();
   
+  useBackendHealth();
   const [viewLayoutModalOpen, setViewLayoutModalOpen] = useState(false);
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
@@ -475,6 +478,7 @@ export default function App() {
         onClose={() => setAiSettingsModalOpen(false)}
       />
       <GlobalConfirmDialog />
+      <ToastContainer />
 
     </div>
   );
