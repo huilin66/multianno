@@ -1,12 +1,12 @@
 # MultiAnno
-
+[English](README.md) | [简体中文](README_zh-CN.md)
 
 **MultiAnno: An AI-assisted image annotation tool for multi-view tasks.**
 
 > **A Special Note:** The core architecture and codebase of this project were developed with the pair-programming assistance of **Google Gemini 3.1 Pro**, **DeepSeek v4 Pro**, and **Claude Code**. 
 
 ---
-![功能演示](./doc/pic/feature2.gif)
+![Feature Demo](./doc/pic/feature2.gif)
 
 ## Key Features
 
@@ -79,6 +79,15 @@ python app.py
 3. **Annotate:** Draw your annotations on the synchronized image views.
 4. **Export:** Export your annotations to standard formats.
 5. **Visualize:** Visualize your annotations and multi-view results locally.
+
+---
+
+## Roadmap
+
+- [ ] Layout & Theme Unification
+- [ ] Raw Image Data Processing
+- [ ] LocateAnything — Assisted Segmentation
+- [ ] Documentation
 
 ---
 
