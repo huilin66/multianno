@@ -24,9 +24,7 @@ MultiAnno 支持多波段、多模态影像（如 RGB、红外、深度图）的
 ## 文档
 
 - [标注项目快速开始（简体中文）](./QUICK_START_zh-CN.md)
-- [Annotation Quick Start](./QUICK_START.md)
 - [系统说明（简体中文）](./SYSTEM_GUIDE_zh-CN.md)
-- [System Guide](./SYSTEM_GUIDE.md)
 
 标注项目快速开始面向需要开始标注项目的用户。系统说明文档介绍了架构、数据契约、模块边界、开发约束和 PR 流程，适合贡献者和 AI 编程助手阅读。
 

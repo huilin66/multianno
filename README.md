@@ -24,9 +24,7 @@ Built with React, MultiAnno provides a clean and modular user interface. It incl
 ## Documentation
 
 - [Annotation Quick Start](./QUICK_START.md)
-- [标注项目快速开始（简体中文）](./QUICK_START_zh-CN.md)
 - [System Guide](./SYSTEM_GUIDE.md)
-- [系统说明（简体中文）](./SYSTEM_GUIDE_zh-CN.md)
 
 The annotation quick start is for users who want to start an annotation project. The system guide explains the architecture, data contracts, module boundaries, development invariants, and PR workflow for contributors and AI coding assistants.
 
