@@ -79,7 +79,12 @@ export function ViewExtentCheck({onClose }: {onClose: () => void }) {
   const isDraggingRef = useRef(false);
   const lastPosRef = useRef({ x: 0, y: 0 });
   const tempTransformRef = useRef({ offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 });
-  
+  // 吸附迟滞状态：记录每条边当前是否处于吸附锁定中
+  const snappedTRef = useRef(false);
+  const snappedBRef = useRef(false);
+  const snappedLRef = useRef(false);
+  const snappedRRef = useRef(false);
+
   const canvasRef = useRef<HTMLDivElement>(null);
   const mainImgRef = useRef<HTMLImageElement>(null);
   const augImgRef = useRef<HTMLImageElement>(null);
@@ -87,14 +92,19 @@ export function ViewExtentCheck({onClose }: {onClose: () => void }) {
 
   useEffect(() => {
     if (activeAugView) {
-      tempTransformRef.current = { 
-        offsetX: activeAugView.transform.offsetX, 
+      tempTransformRef.current = {
+        offsetX: activeAugView.transform.offsetX,
         offsetY: activeAugView.transform.offsetY,
         scaleX: activeAugView.transform.scaleX,
         // 兼容老数据，如果没有 scaleY，默认等于 scaleX
         scaleY: activeAugView.transform.scaleY || activeAugView.transform.scaleX
       };
     }
+    // 切换视图时重置吸附迟滞状态
+    snappedTRef.current = false;
+    snappedBRef.current = false;
+    snappedLRef.current = false;
+    snappedRRef.current = false;
   }, [activeAugId]);
 
   useEffect(() => {
@@ -139,6 +149,11 @@ const getPreviewUrl = (view: typeof mainView) => {
     e.stopPropagation();
     setDraggingEdge(edge);
     lastPosRef.current = { x: e.clientX, y: e.clientY };
+    // 每次开始新拖拽时重置迟滞状态
+    snappedTRef.current = false;
+    snappedBRef.current = false;
+    snappedLRef.current = false;
+    snappedRRef.current = false;
   };
 // 确保这里的参数类型包含了 't' 和 'l'
   const startTransformDrag = (e: React.PointerEvent, handle: 't' | 'l' | 'r' | 'b' | 'br') => {
@@ -268,29 +283,58 @@ const getPreviewUrl = (view: typeof mainView) => {
       if (draggingEdge === 'l') newCrop.l = Math.max(0, Math.min(newCrop.r - 0.5, newCrop.l + dxPct));
       if (draggingEdge === 'r') newCrop.r = Math.min(100, Math.max(newCrop.l + 0.5, newCrop.r + dxPct));
 
-      // --- 重新设计的吸附逻辑 ---
+      // --- 带迟滞的吸附逻辑 ---
       const mainRect = mainImgRef.current.getBoundingClientRect();
-      const snapThresholdPx = 8; // 稍微调大一点点提高易用性
-      
+      const snapThresholdPx = 5;  // 进入吸附的阈值（较小，避免”太粘”）
+      const breakFreePx = 12;     // 必须拖出这么远才能脱离吸附
+
       // 计算当前裁剪边在屏幕上的真实物理坐标
       const currentPhysicalT = rect.top + (newCrop.t / 100) * rect.height;
       const currentPhysicalB = rect.top + (newCrop.b / 100) * rect.height;
       const currentPhysicalL = rect.left + (newCrop.l / 100) * rect.width;
       const currentPhysicalR = rect.left + (newCrop.r / 100) * rect.width;
 
-      // 吸附：当物理坐标靠近 Main View 边界时，强制对齐
-      // 解决“吸附后难移动”：只有当鼠标移动带来的位置改变超过阈值时才强制跳出
-      if (draggingEdge === 't' && Math.abs(currentPhysicalT - mainRect.top) < snapThresholdPx) 
-        newCrop.t = ((mainRect.top - rect.top) / rect.height) * 100;
-      
-      if (draggingEdge === 'b' && Math.abs(currentPhysicalB - mainRect.bottom) < snapThresholdPx) 
-        newCrop.b = ((mainRect.bottom - rect.top) / rect.height) * 100;
-      
-      if (draggingEdge === 'l' && Math.abs(currentPhysicalL - mainRect.left) < snapThresholdPx) 
-        newCrop.l = ((mainRect.left - rect.left) / rect.width) * 100;
-      
-      if (draggingEdge === 'r' && Math.abs(currentPhysicalR - mainRect.right) < snapThresholdPx) 
-        newCrop.r = ((mainRect.right - rect.left) / rect.width) * 100;
+      const checkSnap = (
+        currentPhysical: number,
+        targetPhysical: number,
+        snapRef: React.MutableRefObject<boolean>,
+      ): number | null => {
+        const dist = currentPhysical - targetPhysical;
+        const absDist = Math.abs(dist);
+
+        if (snapRef.current) {
+          // 已吸附：需要较大幅度拖动才能脱离
+          if (absDist > breakFreePx) {
+            snapRef.current = false;
+            return null;
+          }
+          // 保持吸附
+          return targetPhysical;
+        } else {
+          // 未吸附：靠近时自动吸附
+          if (absDist < snapThresholdPx) {
+            snapRef.current = true;
+            return targetPhysical;
+          }
+          return null;
+        }
+      };
+
+      const snappedT = checkSnap(currentPhysicalT, mainRect.top, snappedTRef);
+      if (draggingEdge === 't' && snappedT !== null)
+        newCrop.t = ((snappedT - rect.top) / rect.height) * 100;
+
+      const snappedB = checkSnap(currentPhysicalB, mainRect.bottom, snappedBRef);
+      if (draggingEdge === 'b' && snappedB !== null)
+        newCrop.b = ((snappedB - rect.top) / rect.height) * 100;
+
+      const snappedL = checkSnap(currentPhysicalL, mainRect.left, snappedLRef);
+      if (draggingEdge === 'l' && snappedL !== null)
+        newCrop.l = ((snappedL - rect.left) / rect.width) * 100;
+
+      const snappedR = checkSnap(currentPhysicalR, mainRect.right, snappedRRef);
+      if (draggingEdge === 'r' && snappedR !== null)
+        newCrop.r = ((snappedR - rect.left) / rect.width) * 100;
 
       // 最后的安全检查，确保百分比不越界
       newCrop.t = Math.max(0, newCrop.t);
