@@ -10,6 +10,7 @@ import { Alert } from '../ui/alert';
 import { Legend } from '../ui/legend';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { COLOR_MAPS, BAND_COLORS, BAND_UNSELECTED_STYLE } from '../../config/colors';
+import { SUPPORTED_IMAGE_EXTENSIONS } from '../../config/supportedFormats';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
 import {
@@ -179,11 +180,11 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
 
       let cleanSuffix = item.suffix || infNew.suffix || '';
       let detectedExt = infNew.extension || '';
-      const KNOWN_EXTS = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp'];
+      const KNOWN_EXTS = [...SUPPORTED_IMAGE_EXTENSIONS].sort((a, b) => b.length - a.length);
       for (const ext of KNOWN_EXTS) {
         if (cleanSuffix.toLowerCase().endsWith(ext.toLowerCase())) {
           cleanSuffix = cleanSuffix.slice(0, -ext.length);
-          detectedExt = ext.replace('.', '');
+          detectedExt = ext;
           break;
         }
       }

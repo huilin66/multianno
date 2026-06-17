@@ -45,6 +45,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const {
     views, folders, annotations, addAnnotation, removeAnnotation,
     viewport, setViewport, currentStem,  theme,
+    sceneGroups,
     setCurrentStem,
     taxonomyClasses = [{ id: 'default', name: 'object', color: '#3B82F6' }],
     taxonomyAttributes = [],
@@ -1269,8 +1270,10 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 const getFullImagePath = (view: any) => {
   const folder = folders.find((f: any) => f.id === view.folderId);
   if (!folder) return null;
-  // 按照你的 filesystem 逻辑拼接
-  const fileName = `${currentStem}${folder.suffix || '.tif'}`;
+  const exactFileName = currentStem ? sceneGroups?.[currentStem]?.[folder.path] : '';
+  const ext = folder.extension || '.tif';
+  const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
+  const fileName = exactFileName || `${currentStem}${folder.suffix || normalizedExt}`;
   return `${folder.path}/${fileName}`;
 };
 

@@ -1,11 +1,8 @@
 import asyncio
 import json
 import os
-from functools import lru_cache
 from pathlib import Path
 
-import cv2
-import numpy as np
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
 from models import (
@@ -15,15 +12,31 @@ from models import (
     ProjectMetaPayload,
     StatsRequest,
 )
-from skimage import io
+from utils.image_io import (
+    RawDependencyError,
+    SUPPORTED_IMAGE_EXTS,
+    clear_image_cache,
+    encode_jpeg_rgb,
+    find_image_path,
+    is_raw_image,
+    is_supported_image,
+    read_image_cached,
+    read_metadata,
+    render_preview_rgb,
+    sample_pixel,
+)
 
 router = APIRouter(prefix="/api", tags=["Project"])
 
 
-@lru_cache(maxsize=20)
-def _read_image_cached(image_path: str):
-    """缓存原始图像 numpy 数组，避免重复磁盘 IO + 解码"""
-    return io.imread(image_path)
+def _parse_json_query(value: str | None) -> dict:
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
 
 
 def calculate_list_stats(*lists):
@@ -160,7 +173,7 @@ async def analyze_project(request: AnalyzeRequest):
         # 如果用户在界面上输入了带有扩展名的后缀 (比如 "_V.JPG" 或 "_T.tif")
         # 我们必须把扩展名剥离掉，只保留纯后缀 (变成 "_V" 或 "_T")
         clean_suffix = raw_suffix
-        for ext in [".tif", ".tiff", ".png", ".jpg", ".jpeg"]:
+        for ext in SUPPORTED_IMAGE_EXTS:
             # 忽略大小写进行匹配
             if clean_suffix.lower().endswith(ext):
                 clean_suffix = clean_suffix[: -len(ext)]
@@ -174,7 +187,7 @@ async def analyze_project(request: AnalyzeRequest):
         first_file_path = None
 
         for f in os.listdir(folder_path):
-            if f.lower().endswith((".tif", ".tiff", ".png", ".jpg", ".jpeg")):
+            if is_supported_image(f):
                 raw_stem = Path(f).stem
 
                 # 🌟 剥离干净的后缀，得到真正的 stem
@@ -195,14 +208,26 @@ async def analyze_project(request: AnalyzeRequest):
         stem_list.append(valid_stems)
         folder_files_map[folder_path] = stem_to_file
 
-        # 读取元数据
-        img = io.imread(first_file_path)
+        raw_profile = getattr(item, "rawProfile", None)
+        try:
+            image_meta = read_metadata(first_file_path, raw_profile=raw_profile)
+        except Exception as e:
+            print(f"Failed to read image metadata: {first_file_path}: {e}")
+            image_meta = {
+                "width": 0,
+                "height": 0,
+                "bands": 1,
+                "dtype": "RAW unavailable" if is_raw_image(first_file_path) else "unknown",
+                "isRaw": False,
+            }
         meta = {
             "folderPath": folder_path,
-            "width": img.shape[1],
-            "height": img.shape[0],
-            "bands": img.shape[2] if len(img.shape) > 2 else 1,
-            "dtype": str(img.dtype),
+            "width": image_meta["width"],
+            "height": image_meta["height"],
+            "bands": image_meta["bands"],
+            "dtype": image_meta["dtype"],
+            "isRaw": image_meta.get("isRaw", False),
+            "raw": image_meta.get("raw", {}),
             "fileCount": len(valid_stems),
         }
         analysis_results.append(meta)
@@ -235,103 +260,38 @@ async def analyze_project(request: AnalyzeRequest):
 
 
 @router.get("/project/preview")
-async def get_preview(folderPath: str, fileName: str = "", bands: str = ""):
+async def get_preview(
+    folderPath: str,
+    fileName: str = "",
+    bands: str = "",
+    colormap: str = "",
+    settings: str = "",
+    rawProfile: str = "",
+):
     """
     根据前端传来的文件夹绝对路径、文件名(智能忽略扩展名差异)和波段索引，读取并返回渲染用的 JPEG
     """
     if not os.path.exists(folderPath):
         return Response(status_code=404)
 
-    valid_extensions = (".tif", ".tiff", ".png", ".jpg", ".jpeg")
-    image_path = None
-
-    # 🌟 核心修复：智能扩展名匹配！
-    if fileName:
-        # 1. 提取前端传来的纯文件名 (如传 DJI_0001.tif -> 提取出 DJI_0001)
-        target_stem = Path(fileName).stem
-
-        # 2. 遍历真实文件夹，寻找名字匹配的文件（无视扩展名差异）
-        for f in os.listdir(folderPath):
-            if f.lower().endswith(valid_extensions):
-                if Path(f).stem == target_stem:
-                    image_path = os.path.join(folderPath, f)
-                    break
-
-        # 3. 兜底尝试直接拼接
-        if not image_path:
-            direct_path = os.path.join(folderPath, fileName)
-            if os.path.exists(direct_path):
-                image_path = direct_path
-    else:
-        # 如果没传 fileName，才 fallback 到第一张图
-        valid_files = [
-            f for f in os.listdir(folderPath) if f.lower().endswith(valid_extensions)
-        ]
-        if valid_files:
-            image_path = os.path.join(folderPath, valid_files[0])
+    image_path = find_image_path(folderPath, fileName)
 
     if not image_path or not os.path.exists(image_path):
         print(f"Error: Image not found for folder: {folderPath}, fileName: {fileName}")
         return Response(status_code=404)
 
     try:
-        img = _read_image_cached(image_path)
-    except Exception as e:
-        print(f"Failed to read image: {e}")
-        return Response(status_code=500)
-
-    # 🌟 波段解析
-    band_indices = []
-    if bands:
-        for b in bands.split(","):
-            b = b.strip()
-            if b.isdigit() and int(b) > 0:
-                band_indices.append(int(b) - 1)
-
-    try:
-        if len(band_indices) == 1:
-            idx = band_indices[0]
-            if len(img.shape) == 2:
-                out_img = img
-            else:
-                out_img = img[:, :, idx] if idx < img.shape[2] else img[:, :, 0]
-            out_img = np.stack([out_img] * 3, axis=-1)
-
-        elif len(band_indices) == 3:
-            if len(img.shape) == 2:
-                out_img = np.stack([img] * 3, axis=-1)
-            else:
-                chs = []
-                for idx in band_indices:
-                    chs.append(
-                        img[:, :, idx]
-                        if idx < img.shape[2]
-                        else np.zeros_like(img[:, :, 0])
-                    )
-                out_img = np.stack(chs, axis=-1)
-        else:
-            out_img = img
-
-        # 🌟 智能直方图拉伸 (兼容 8-bit 与 16-bit)
-        if img.dtype == np.uint16 or img.dtype == np.int16 or out_img.max() > 255.0:
-            out_img = out_img.astype(np.float32)
-            p2, p98 = np.percentile(out_img, (2, 98))
-            out_img = np.clip((out_img - p2) / (p98 - p2 + 1e-5) * 255.0, 0, 255)
-
-        out_img = out_img.astype(np.uint8)
-
-        # 🌟 颜色通道转换
-        if len(out_img.shape) == 3 and out_img.shape[2] >= 3:
-            out_img = cv2.cvtColor(out_img[:, :, :3], cv2.COLOR_RGB2BGR)
-        elif len(out_img.shape) == 2:
-            out_img = cv2.cvtColor(out_img, cv2.COLOR_GRAY2BGR)
-
-        success, encoded_image = cv2.imencode(".jpg", out_img)
-        if not success:
-            return Response(status_code=500)
-
-        return Response(content=encoded_image.tobytes(), media_type="image/jpeg")
-
+        preview = render_preview_rgb(
+            image_path,
+            bands=bands,
+            settings=_parse_json_query(settings),
+            raw_profile=_parse_json_query(rawProfile),
+        )
+        encoded_image = encode_jpeg_rgb(preview)
+        return Response(content=encoded_image, media_type="image/jpeg")
+    except RawDependencyError as e:
+        print(f"RAW dependency unavailable: {e}")
+        return Response(content=str(e).encode("utf-8"), status_code=503)
     except Exception as e:
         print(f"Preview Gen Error: {e}")
         import traceback
@@ -350,15 +310,49 @@ async def prefetch_images(request: dict):
     for path in paths:
         if os.path.exists(path):
             try:
-                _read_image_cached(path)
+                read_image_cached(path)
             except Exception:
                 pass
     return {"status": "ok", "cached": len(paths)}
 
 
+@router.get("/project/sample_pixel")
+async def get_pixel_sample(
+    folderPath: str,
+    fileName: str = "",
+    x: int = 0,
+    y: int = 0,
+    mode: str = "render",
+    displayWidth: int = 0,
+    displayHeight: int = 0,
+    settings: str = "",
+    rawProfile: str = "",
+):
+    if not os.path.exists(folderPath):
+        return Response(status_code=404)
+    image_path = find_image_path(folderPath, fileName)
+    if not image_path or not os.path.exists(image_path):
+        return Response(status_code=404)
+    try:
+        return sample_pixel(
+            image_path,
+            x=x,
+            y=y,
+            mode=mode,
+            display_width=displayWidth or None,
+            display_height=displayHeight or None,
+            settings=_parse_json_query(settings),
+            raw_profile=_parse_json_query(rawProfile),
+        )
+    except RawDependencyError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/project/clear_cache")
 async def clear_cache():
-    _read_image_cached.cache_clear()
+    clear_image_cache()
     return {"status": "ok"}
 
 
@@ -422,9 +416,7 @@ async def infer_suffix(req: InferSuffixRequest):
             [
                 f
                 for f in os.listdir(folder.path)
-                if f.lower().endswith(
-                    (".tif", ".tiff", ".png", ".jpg", ".jpeg", ".bmp")
-                )
+                if is_supported_image(f)
             ]
         )
         if image_files:

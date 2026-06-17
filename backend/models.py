@@ -6,6 +6,7 @@ from pydantic import BaseModel
 class FolderPayload(BaseModel):
     path: str
     suffix: Optional[str] = ""
+    rawProfile: Optional[Dict[str, Any]] = None
 
 
 class AnalyzeRequest(BaseModel):
@@ -104,6 +105,7 @@ class ViewExportConfig(BaseModel):
     transform: dict = {}
     source_suffix: str = ""
     source_extension: str = "tif"
+    raw_profile: Optional[Dict[str, Any]] = None
     crop: dict = {}
     is_main: bool = False
 

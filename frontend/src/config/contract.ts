@@ -49,6 +49,16 @@ export interface ProjectMetaContract {
     "files in sceneGroups": number;
     "files Skipped": number;
     "files total": number;
+    rawProfile?: {
+      kind?: 'camera_raw' | 'dng' | 'plain_raw';
+      width?: number;
+      height?: number;
+      bit?: number;
+      bitDepth?: number;
+      pattern?: 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG';
+      bayer?: 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG';
+      packing?: 'u16' | 'u8' | 'mipi10' | 'mipi12';
+    };
     "image meta": {
       width: number | string;
       height: number | string;
@@ -79,6 +89,15 @@ export interface ProjectMetaContract {
       spatialFilter?: 'none' | 'sharpen';
       invert?: boolean;
       binarize?: { enabled: boolean; threshold: number };
+      rawChannel?: 'ALL' | 'R' | 'G1' | 'G2' | 'B';
+      displayBit?: number;
+      blackLevel?: number;
+      whiteLevel?: number;
+      exposureGain?: number;
+      wbEnabled?: boolean;
+      wbR?: number;
+      wbG?: number;
+      wbB?: number;
     };
   }[];
   taxonomyClasses?: {

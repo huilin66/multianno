@@ -4,6 +4,7 @@ import os
 
 import cv2
 import numpy as np
+from utils.image_io import find_image_path, is_raw_image, render_preview_rgb
 
 
 class LocalVisualizer:
@@ -62,18 +63,46 @@ class LocalVisualizer:
         )
         return img
 
-    def _load_and_transform_view(self, view_conf: dict, stem: str) -> np.ndarray:
-        folder_path = view_conf.get("path") or view_conf.get("folder_path", "")
+    def _resolve_view_image_path(self, stem: str, view_conf: dict) -> str | None:
+        folder = view_conf.get("path") or view_conf.get("folder_path", "")
         suffix = view_conf.get("suffix", "")
-        img_path = os.path.join(folder_path, f"{stem}{suffix}")
+        ext = view_conf.get("extension") or view_conf.get("source_extension") or ""
+        if not folder:
+            return None
 
-        if not os.path.exists(img_path):
-            return self._create_error_placeholder(f"File Missing: {stem}{suffix}")
+        candidates = []
+        if suffix:
+            candidates.append(os.path.join(folder, f"{stem}{suffix}"))
+        if ext:
+            normalized_ext = ext if str(ext).startswith(".") else f".{ext}"
+            candidates.append(os.path.join(folder, f"{stem}{suffix}{normalized_ext}"))
+        for candidate in candidates:
+            if os.path.exists(candidate):
+                return candidate
+        return find_image_path(folder, f"{stem}{suffix}")
+
+    def _read_view_image(self, path: str, view_conf: dict) -> np.ndarray:
+        img = None if is_raw_image(path) else cv2.imread(path, cv2.IMREAD_UNCHANGED)
+        if img is not None:
+            return img
+        rgb = render_preview_rgb(
+            path,
+            bands=view_conf.get("bands", [1, 2, 3]),
+            settings=view_conf.get("settings") or view_conf.get("render_settings"),
+            raw_profile=view_conf.get("rawProfile") or view_conf.get("raw_profile"),
+        )
+        return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+
+    def _load_and_transform_view(self, view_conf: dict, stem: str) -> np.ndarray:
+        img_path = self._resolve_view_image_path(stem, view_conf)
+
+        if not img_path or not os.path.exists(img_path):
+            return self._create_error_placeholder(f"File Missing: {stem}")
 
         # 1. 强制保留原始位深读取 (IMREAD_UNCHANGED)
-        raw_img = cv2.imread(img_path, cv2.IMREAD_UNCHANGED)
+        raw_img = self._read_view_image(img_path, view_conf)
         if raw_img is None:
-            return self._create_error_placeholder(f"Read Error: {stem}{suffix}")
+            return self._create_error_placeholder(f"Read Error: {stem}")
 
         # 2. 波段提取 (默认取前3个波段)
         bands = view_conf.get("bands", [1, 2, 3])
@@ -101,16 +130,9 @@ class LocalVisualizer:
 
     def _read_image_raw(self, stem: str, v_conf: dict) -> np.ndarray:
         """底层方法：仅读取原始矩阵，支持 16-bit 和多光谱"""
-        folder = v_conf.get("folder_path")
-        suffix = v_conf.get("suffix", "")
-        if not folder:
-            return None
-
-        path = os.path.join(folder, f"{stem}{suffix}")
-        if os.path.exists(path):
-            # 使用 IMREAD_UNCHANGED 确保能读出 16位图或单通道图
-            img = cv2.imread(path, cv2.IMREAD_UNCHANGED)
-            return img
+        path = self._resolve_view_image_path(stem, v_conf)
+        if path and os.path.exists(path):
+            return self._read_view_image(path, v_conf)
         return None
 
     def _process_bands_and_render(

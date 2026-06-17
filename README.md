@@ -75,6 +75,14 @@ conda activate multianno
     cd ..
     ```
 
+* **Optional RAW/DNG Support**
+    Install this in addition to the basic backend dependencies when you need DNG/camera RAW/plain RAW preview and rendering:
+    ```bash
+    cd backend
+    pip install -r requirements-raw.txt
+    cd ..
+    ```
+
 ---
 
 ## Quick Start

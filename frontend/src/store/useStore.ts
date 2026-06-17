@@ -8,6 +8,16 @@ export interface FolderData {
   path: string;
   suffix: string;
   extension: string;
+  rawProfile?: {
+    kind?: 'camera_raw' | 'dng' | 'plain_raw';
+    width?: number;
+    height?: number;
+    bit?: number;
+    bitDepth?: number;
+    pattern?: 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG';
+    bayer?: 'RGGB' | 'BGGR' | 'GRBG' | 'GBRG';
+    packing?: 'u16' | 'u8' | 'mipi10' | 'mipi12';
+  };
   files: File[];
   metadata: {
     height: number;
@@ -57,6 +67,15 @@ export interface ViewConfig {
     spatialFilter?: 'none' | 'sharpen';
     invert?: boolean;
     binarize?: { enabled: boolean; threshold: number };
+    rawChannel?: 'ALL' | 'R' | 'G1' | 'G2' | 'B';
+    displayBit?: number;
+    blackLevel?: number;
+    whiteLevel?: number;
+    exposureGain?: number;
+    wbEnabled?: boolean;
+    wbR?: number;
+    wbG?: number;
+    wbB?: number;
   };
 }
 
@@ -389,6 +408,7 @@ export const useStore = create<AppState>()(
             path: f.path,
             suffix: f.suffix || '',
             extension: f.extension || '',
+            rawProfile: (f as any).rawProfile,
             files: [], 
             metadata: {
               height: f["image meta"].height === 'Unknown' ? 0 : Number(f["image meta"].height),

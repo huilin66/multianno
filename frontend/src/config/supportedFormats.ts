@@ -96,8 +96,43 @@ export const IMAGE_EXT_MAP: Record<string, string> = {
   '.jpg': '.jpg',
   '.BMP': '.bmp',
   '.bmp': '.bmp',
+  '.WEBP': '.jpg',
+  '.webp': '.jpg',
+  '.DNG': '.jpg',
+  '.dng': '.jpg',
+  '.RAW': '.jpg',
+  '.raw': '.jpg',
+  '.ARW': '.jpg',
+  '.arw': '.jpg',
+  '.CR2': '.jpg',
+  '.cr2': '.jpg',
+  '.CR3': '.jpg',
+  '.cr3': '.jpg',
+  '.NEF': '.jpg',
+  '.nef': '.jpg',
+  '.NRW': '.jpg',
+  '.nrw': '.jpg',
+  '.ORF': '.jpg',
+  '.orf': '.jpg',
+  '.RAF': '.jpg',
+  '.raf': '.jpg',
+  '.RW2': '.jpg',
+  '.rw2': '.jpg',
+  '.PEF': '.jpg',
+  '.pef': '.jpg',
 };
-export const SUPPORTED_IMAGE_EXTENSIONS = ['.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp', '.TIF', '.TIFF', '.PNG', '.JPG', '.JPEG', '.BMP'];
+export const RAW_IMAGE_EXTENSIONS = [
+  '.3fr', '.arw', '.srf', '.sr2', '.bay', '.crw', '.cr2', '.cr3', '.cap', '.iiq', '.eip',
+  '.dcs', '.dcr', '.drf', '.k25', '.kdc', '.dng', '.erf', '.fff', '.mef', '.mos', '.mrw',
+  '.nef', '.nrw', '.orf', '.ptx', '.pef', '.pxn', '.r3d', '.raf', '.raw', '.rw2', '.rwl',
+  '.rwz', '.x3f', '.srw',
+];
+export const SUPPORTED_IMAGE_EXTENSIONS = [
+  '.tif', '.tiff', '.png', '.jpg', '.jpeg', '.bmp', '.webp',
+  ...RAW_IMAGE_EXTENSIONS,
+  '.TIF', '.TIFF', '.PNG', '.JPG', '.JPEG', '.BMP', '.WEBP',
+  ...RAW_IMAGE_EXTENSIONS.map(ext => ext.toUpperCase()),
+];
 
 // ==========================================
 // 3. shape compatibility mapping

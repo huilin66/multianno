@@ -37,6 +37,14 @@ const get = async (url: string) => {
   return response.json();
 };
 
+const compactQueryObject = (value?: Record<string, any>) => {
+  if (!value) return undefined;
+  const compacted = Object.fromEntries(
+    Object.entries(value).filter(([, item]) => item !== undefined && item !== null && item !== '')
+  );
+  return Object.keys(compacted).length > 0 ? compacted : undefined;
+};
+
 export const saveProjectMeta = (payload: { file_path: string; content: any }) =>
   post(`${API_BASE_URL}/project/save_meta`, payload);
 
@@ -251,10 +259,16 @@ export const getPreviewImageUrl = (
   folderPath: string,
   fileName: string | undefined,
   bands: number[],
-  colormap = 'gray'
+  colormap = 'gray',
+  settings?: Record<string, any>,
+  rawProfile?: Record<string, any>
 ) => {
   const params = new URLSearchParams({ folderPath, bands: bands.join(','), colormap });
   if (fileName) params.append('fileName', fileName);
+  const compactSettings = compactQueryObject(settings);
+  const compactRawProfile = compactQueryObject(rawProfile);
+  if (compactSettings) params.append('settings', JSON.stringify(compactSettings));
+  if (compactRawProfile) params.append('rawProfile', JSON.stringify(compactRawProfile));
   return `${API_BASE_URL}/project/preview?${params.toString()}`;
 };
 
@@ -264,6 +278,33 @@ export const prefetchImages = async (paths: string[]) => {
   } catch (e) {
     console.error('Image prefetch failed:', e);
   }
+};
+
+export const sampleProjectPixel = (params: {
+  folderPath: string;
+  fileName?: string;
+  x: number;
+  y: number;
+  mode?: 'render' | 'raw';
+  displayWidth?: number;
+  displayHeight?: number;
+  settings?: Record<string, any>;
+  rawProfile?: Record<string, any>;
+}) => {
+  const query = new URLSearchParams({
+    folderPath: params.folderPath,
+    x: String(params.x),
+    y: String(params.y),
+    mode: params.mode || 'render',
+  });
+  if (params.fileName) query.append('fileName', params.fileName);
+  if (params.displayWidth) query.append('displayWidth', String(params.displayWidth));
+  if (params.displayHeight) query.append('displayHeight', String(params.displayHeight));
+  const compactSettings = compactQueryObject(params.settings);
+  const compactRawProfile = compactQueryObject(params.rawProfile);
+  if (compactSettings) query.append('settings', JSON.stringify(compactSettings));
+  if (compactRawProfile) query.append('rawProfile', JSON.stringify(compactRawProfile));
+  return get(`${API_BASE_URL}/project/sample_pixel?${query.toString()}`);
 };
 
 export const inferSuffix = (folders: { path: string; suffix?: string }[]) =>

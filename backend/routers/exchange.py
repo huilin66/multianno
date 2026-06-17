@@ -27,6 +27,7 @@ from utils.format_converters import (
     render_mask_array,
     yolo_to_shapes,
 )
+from utils.image_io import RAW_IMAGE_EXTS, find_image_path, is_raw_image, read_for_export
 
 router = APIRouter(prefix="/api/exchange", tags=["Data Exchange"])
 
@@ -1357,21 +1358,36 @@ def _copy_images_for_stem(stem, view_configs, target_dir):
         out_suffix = vc.suffix
         out_ext = vc.extension
 
-        # 严格匹配
-        src_img_path = os.path.join(src_dir, f"{stem}{src_suffix}{src_ext}")
+        normalized_src_ext = src_ext if str(src_ext).startswith(".") else f".{src_ext}"
+        src_img_path = os.path.join(src_dir, f"{stem}{src_suffix}{normalized_src_ext}")
+        if not os.path.exists(src_img_path):
+            src_img_path = find_image_path(src_dir, f"{stem}{src_suffix}{normalized_src_ext}") or ""
+        if not out_ext:
+            out_ext = ".jpg" if is_raw_image(src_img_path) else normalized_src_ext
+        if not str(out_ext).startswith("."):
+            out_ext = f".{out_ext}"
+        if is_raw_image(src_img_path) and str(out_ext).lower() in RAW_IMAGE_EXTS:
+            out_ext = ".jpg"
         out_img_path = os.path.join(dst_dir, f"{stem}{out_suffix}{out_ext}")
 
         if not os.path.exists(src_img_path):
-            print(f"⚠️ Image not found: {stem}{src_suffix}.{src_ext}")
+            print(f"⚠️ Image not found: {stem}{src_suffix}{normalized_src_ext}")
             continue
 
         try:
-            img = io.imread(src_img_path)
+            if is_raw_image(src_img_path):
+                img = read_for_export(
+                    src_img_path,
+                    bands=vc.bands,
+                    raw_profile=getattr(vc, "raw_profile", None),
+                )
+            else:
+                img = io.imread(src_img_path)
             if img is None:
                 continue
             h, w = img.shape[:2]
             bands = vc.bands
-            if len(img.shape) > 2 and img.shape[2] != len(bands):
+            if (not is_raw_image(src_img_path)) and len(img.shape) > 2 and img.shape[2] != len(bands):
                 selected = [b - 1 for b in bands]
                 img = img[:, :, selected]
 

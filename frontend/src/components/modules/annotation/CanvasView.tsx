@@ -98,6 +98,18 @@ const CanvasViewInner=({
   const baseGlobalSettings = view.settings || {};
   const baseLocalSettings = tempViewSettings?.[`${currentStem}_${view.id}`] || {};
   const baseSettings = { ...baseGlobalSettings, ...baseLocalSettings };
+  const backendRenderSettings = {
+    rawChannel: baseSettings.rawChannel,
+    displayBit: baseSettings.displayBit,
+    blackLevel: baseSettings.blackLevel,
+    whiteLevel: baseSettings.whiteLevel,
+    exposureGain: baseSettings.exposureGain,
+    wbEnabled: baseSettings.wbEnabled,
+    wbR: baseSettings.wbR,
+    wbG: baseSettings.wbG,
+    wbB: baseSettings.wbB,
+  };
+  const backendRenderKey = JSON.stringify(backendRenderSettings);
 
   const baseFilterStyle = `brightness(${baseSettings.brightness ?? 1}) contrast(${baseSettings.contrast ?? 1}) saturate(${baseSettings.saturation ?? 1})`;
 
@@ -106,14 +118,16 @@ const CanvasViewInner=({
   const preloadStem = (stem: string, folder: any) => {
       const preloadFileName = sceneGroups?.[stem]?.[folder.path] || `${stem}${folder.suffix || '.tif'}`;
       const forceGray = view.bands?.length === 1 ? 'gray' : (view.colormap || 'gray');
-      const preloadUrl = getPreviewImageUrl(folder.path, preloadFileName, view.bands, forceGray);
+      const preloadUrl = getPreviewImageUrl(folder.path, preloadFileName, view.bands, forceGray, backendRenderSettings, folder.rawProfile);
       const preloadImg = new Image();
       preloadImg.crossOrigin = 'anonymous';
       preloadImg.src = preloadUrl;
   };
   const getFullPath = (stem: string, folder: any) => {
       const exactFileName = sceneGroups?.[stem]?.[folder.path];
-      const fileName = exactFileName || `${stem}${folder.suffix || '.tif'}`;
+      const ext = folder.extension || '.tif';
+      const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
+      const fileName = exactFileName || `${stem}${folder.suffix || normalizedExt}`;
       // 在 valid_extensions 中匹配实际文件
       // 简化版：直接用 folder.path + fileName
       return `${folder.path}/${fileName}`;
@@ -128,9 +142,11 @@ const CanvasViewInner=({
 
       // ========== 加载当前图片 ==========
       const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
-      const fileName = exactFileName || `${currentStem}${folder.suffix || '.tif'}`;
+      const ext = folder.extension || '.tif';
+      const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
+      const fileName = exactFileName || `${currentStem}${folder.suffix || normalizedExt}`;
       const forceGray = view.bands?.length === 1 ? 'gray' : (view.colormap || 'gray');
-      const url = getPreviewImageUrl(folder.path, fileName, view.bands, forceGray);
+      const url = getPreviewImageUrl(folder.path, fileName, view.bands, forceGray, backendRenderSettings, folder.rawProfile);
 
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -163,7 +179,7 @@ const CanvasViewInner=({
       if (prefetchPaths.length > 0) {
           prefetchImages(prefetchPaths);
       }
-}, [view.folderId, view.bands, currentStem, folders, stems, view.id]);
+}, [view.folderId, view.bands, currentStem, folders, stems, view.id, backendRenderKey]);
 
   // 🌟 引擎阶段 2：纯前端内存像素级渲染（极速重绘 Colormap 和 Stretch Range）
 // 🌟 阶段 2：内存像素管线（当滑块、参数或原始图发生变化时，纯前端极速重绘）
@@ -294,8 +310,17 @@ const CanvasViewInner=({
     const folder = folders.find((f: any) => f.id === oView.folderId);
     if (!folder) return '';
     const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
+    const ext = folder.extension || '.tif';
+    const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
     // 传入 oView.colormap
-    return getPreviewImageUrl(folder.path, exactFileName || `${currentStem}${folder.suffix || '.tif'}`, oView.bands, oView.colormap);
+    return getPreviewImageUrl(
+      folder.path,
+      exactFileName || `${currentStem}${folder.suffix || normalizedExt}`,
+      oView.bands,
+      oView.colormap,
+      oView.settings,
+      folder.rawProfile
+    );
   };
 
 // 🌟 现在的 Canvas 渲染主逻辑：解耦分离！

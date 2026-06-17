@@ -135,10 +135,12 @@ const getPreviewUrl = (view: typeof mainView) => {
 
     // 🌟 2. 从 sceneGroups 字典中精准获取真实的 fileName
     const exactFileName = sceneGroups?.[previewStem]?.[folder.path];
-    const fileName = exactFileName || `${previewStem}${folder.suffix || '.tif'}`; // 兜底防崩溃
+    const ext = folder.extension || '.tif';
+    const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
+    const fileName = exactFileName || `${previewStem}${folder.suffix || normalizedExt}`;
     
     // 🌟 3. 传入带真实文件名的参数，彻底解决对齐画面不一致的问题！
-    return getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap || 'gray');
+    return getPreviewImageUrl(folder.path, fileName, view.bands, view.colormap || 'gray', view.settings, folder.rawProfile);
   };
 
   const updateAugDOMTransform = () => {

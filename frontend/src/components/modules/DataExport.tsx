@@ -35,6 +35,14 @@ interface ViewExportConfig {
   keepOriginal: boolean;
 }
 
+const IMAGE_OUTPUT_EXTENSIONS = ['.png', '.jpg', '.tif', '.bmp'];
+
+const getExportImageExtension = (sourceExt?: string) => {
+  if (!sourceExt) return '.jpg';
+  const normalized = sourceExt.startsWith('.') ? sourceExt : `.${sourceExt}`;
+  return IMAGE_EXT_MAP[normalized] || IMAGE_EXT_MAP[normalized.toLowerCase()] || '.jpg';
+};
+
 interface StepItem {
   id: string;
   label: string;
@@ -339,6 +347,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
         return {
           source_suffix: folder?.suffix || '',
           source_extension: folder?.extension || 'tif',
+          raw_profile: folder?.rawProfile,
           suffix: vc.suffix,
           extension: vc.extension,
           subdir: vc.subdir,
@@ -716,7 +725,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                       {t('dataExport.stepNaming.extension')}
                     </Label>
                     <div className="flex flex-wrap gap-1.5">
-                      {['.png', '.jpg', '.tif', '.bmp'].map(ext => (
+                      {IMAGE_OUTPUT_EXTENSIONS.map(ext => (
                         <div
                           key={ext}
                           onClick={() => updateViewConfig(vc.viewId, { extension: ext })}
@@ -1085,7 +1094,7 @@ useEffect(() => {
       viewId: v.id,
       viewName: v.isMain ? t('view.mainView') : `${t('view.augView')} ${i}`,
       suffix: folder?.suffix || '',           // 🆕 从 store 读取
-      extension: IMAGE_EXT_MAP[folder?.extension],  // 🆕 从 store 读取
+      extension: getExportImageExtension(folder?.extension),  // 🆕 从 store 读取
       subdir: v.isMain ? 'main' : `aug_${i}`,
       keepOriginal: false,
     };

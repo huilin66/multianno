@@ -17,10 +17,13 @@ interface ViewMeta {
   name: string;
   folder_path: string;
   suffix: string;
+  extension?: string;
   bands: number[];
   render_type: string;
   transform: any;
   crop?: { t: number; r: number; b: number; l: number };
+  rawProfile?: Record<string, any>;
+  settings?: Record<string, any>;
 }
 
 const CardButton: React.FC<{
@@ -255,10 +258,13 @@ export function LocalVisualization() {
           name: view.id || t('localVis.preview.unknownView'),
           folder_path: matchedFolder ? matchedFolder.path : t('localVis.preview.pathNotFound'),
           suffix: matchedFolder ? (matchedFolder.suffix || "") : "",
+          extension: matchedFolder ? matchedFolder.extension : "",
           bands: view.bands || [],
           render_type: view.renderMode || "unknown",
           transform: view.transform || {},
-          crop: view.crop || view.transform?.crop || { t: 0, r: 100, b: 100, l: 0 }
+          crop: view.crop || view.transform?.crop || { t: 0, r: 100, b: 100, l: 0 },
+          rawProfile: matchedFolder?.rawProfile,
+          settings: view.settings || {}
         };
       });
 

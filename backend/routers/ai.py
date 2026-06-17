@@ -10,6 +10,7 @@ from models import (
     SAMInitRequest,
     SAMInteractiveRequest,
 )
+from utils.image_io import is_raw_image, render_preview_rgb
 
 try:
     from utils.ai_engine import InteractiveVisionEngine
@@ -36,6 +37,16 @@ def _require_vision_engine():
     if vision_engine is None:
         raise HTTPException(status_code=503, detail=_ai_unavailable_detail())
     return vision_engine
+
+
+def _read_ai_image(image_path: str):
+    if not image_path:
+        return None
+    img = None if is_raw_image(image_path) else cv2.imread(image_path)
+    if img is not None:
+        return img
+    rgb = render_preview_rgb(image_path)
+    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
 
 @router.get("/status")
@@ -91,7 +102,9 @@ async def init_image(req: SAMInitRequest):
             nparr = np.frombuffer(data, np.uint8)
             img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         else:
-            img = cv2.imread(req.image_path)
+            img = _read_ai_image(req.image_path)
+        if img is None:
+            raise ValueError("Failed to read image for AI initialization.")
 
         # 🌟 核心修复：将裁剪逻辑提取到公共区域！无论数据源是什么，必须先切片！
         print(
@@ -141,7 +154,7 @@ async def predict_interactive(req: SAMInteractiveRequest):
 
     # 兜底：如果前端忘记点 Confirm，这里自动补救
     if engine.current_image_key != req.image_path:
-        engine.predictor.set_image(req.image_path)
+        engine.predictor.set_image(_read_ai_image(req.image_path))
         engine.current_image_key = req.image_path
     if hasattr(engine.predictor, "reset_prompts"):
         engine.predictor.reset_prompts()  # 1. 调用官方方法清空 Embedding 缓存
@@ -223,7 +236,7 @@ async def predict_auto(req: SAMAutoRequest):
 
     # 兜底：如果特征图没缓存，自动补救
     if engine.current_image_key != req.image_path:
-        engine.predictor.set_image(req.image_path)
+        engine.predictor.set_image(_read_ai_image(req.image_path))
         engine.current_image_key = req.image_path
     # 🌟🌟🌟 双保险强杀：清理上一次 Semi 任务的残留
     if hasattr(engine.predictor, "reset_prompts"):
