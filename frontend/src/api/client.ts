@@ -51,7 +51,7 @@ export const saveProjectMeta = (payload: { file_path: string; content: any }) =>
 export const loadProjectMetaFromServer = (file_path: string) =>
   get(`${API_BASE_URL}/project/load_meta?file_path=${encodeURIComponent(file_path)}`);
 
-export const analyzeWorkspaceFolders = (folders: { path: string; suffix?: string }[]) =>
+export const analyzeWorkspaceFolders = (folders: { path: string; suffix?: string; rawProfile?: Record<string, any> }[]) =>
   post(`${API_BASE_URL}/project/analyze`, { folders });
 
 export const checkWorkspaceJson = (path: string) =>
@@ -216,6 +216,10 @@ export const predictAutoSAM = (
   image_size?: number
 ) => post(`${VISION_AI_API_URL}/auto`, { image_path: imagePath, texts, conf, image_size });
 
+export const initVisionModel = initSAM;
+export const predictVisionInteractive = predictSAM;
+export const predictVisionAuto = predictAutoSAM;
+
 export const requestVisPreview = (payload: any) =>
   post(`${API_BASE_URL}/vis/preview`, payload);
 
@@ -307,5 +311,5 @@ export const sampleProjectPixel = (params: {
   return get(`${API_BASE_URL}/project/sample_pixel?${query.toString()}`);
 };
 
-export const inferSuffix = (folders: { path: string; suffix?: string }[]) =>
+export const inferSuffix = (folders: { path: string; suffix?: string; rawProfile?: Record<string, any> }[]) =>
   post(`${API_BASE_URL}/project/infer_suffix`, { folders });

@@ -18,6 +18,17 @@ interface AISettingsModalProps {
   onClose: () => void; 
 }
 
+const VISION_MODEL_OPTIONS = [
+  { value: 'SAM-3', label: 'Segment Anything 3' },
+  { value: 'YOLOv8', label: 'YOLOv8' },
+  { value: 'YOLOv9', label: 'YOLOv9' },
+  { value: 'YOLOv10', label: 'YOLOv10' },
+  { value: 'YOLO11', label: 'YOLO11' },
+  { value: 'YOLO12', label: 'YOLO12' },
+  { value: 'YOLO26', label: 'YOLO26' },
+  { value: 'LocateAnything', label: 'NVIDIA LocateAnything' },
+];
+
 export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const { t } = useTranslation();
   const aiSettings = useStore((s) => s.aiSettings);
@@ -111,7 +122,11 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="SAM-3">Segment Anything 3</SelectItem>
+                  {VISION_MODEL_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

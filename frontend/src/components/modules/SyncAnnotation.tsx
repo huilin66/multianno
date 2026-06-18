@@ -10,7 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Button } from '@/components/ui/button';
 import PolyBool from 'polybooljs';
 import { AIToolPanel } from './annotation/AIToolPanel';
-import { initSAM, predictSAM, checkVisionAIStatus, predictAutoSAM } from '../../api/client'
+import {
+  initVisionModel,
+  predictVisionInteractive,
+  checkVisionAIStatus,
+  predictVisionAuto,
+} from '../../api/client'
 import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { createPortal } from 'react-dom';
 import { CURSOR_FOCUS, CURSOR_DRAG } from '../../lib/cursors';
@@ -619,7 +624,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       }));
 
       // 注意：使用 mappedPrompts 和 inferSize
-      const result = await predictSAM(
+      const result = await predictVisionInteractive(
         fullPath || '', 
         mappedPrompts, 
         undefined, 
@@ -1273,7 +1278,7 @@ const getFullImagePath = (view: any) => {
   const exactFileName = currentStem ? sceneGroups?.[currentStem]?.[folder.path] : '';
   const ext = folder.extension || '.tif';
   const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
-  const fileName = exactFileName || `${currentStem}${folder.suffix || normalizedExt}`;
+  const fileName = exactFileName || `${currentStem}${folder.suffix || ''}${normalizedExt}`;
   return `${folder.path}/${fileName}`;
 };
 
@@ -1408,7 +1413,7 @@ const handleAIInit = async () => {
         ? document.querySelector('img[alt="Base Layer"]')?.getAttribute('src') 
         : null;
 
-      await initSAM({ 
+      await initVisionModel({
         image_path: fullPath || '', 
         image_data: renderedData || undefined,
         image_size: aiSettings.inferenceSize,
@@ -1454,7 +1459,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       setIsPredicting(true);
       setAutoResultMsg(''); 
       
-      const result = await predictAutoSAM(
+      const result = await predictVisionAuto(
         fullPath || '',
         tags,
         aiSettings.confidence,

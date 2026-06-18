@@ -142,6 +142,42 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
     });
   };
 
+  const isPlainRawExtension = (extension?: string) => {
+    if (!extension) return false;
+    return extension.replace(/^\./, '').toLowerCase() === 'raw';
+  };
+
+  const parsePlainRawProfile = (value: string) => {
+    const parts = value.split(',').map((part) => part.trim()).filter(Boolean);
+    if (parts.length < 2) return null;
+    const width = Number.parseInt(parts[0], 10);
+    const height = Number.parseInt(parts[1], 10);
+    const bit = Number.parseInt(parts[2] || '16', 10);
+    const pattern = (parts[3] || 'RGGB').toUpperCase();
+    const packing = (parts[4] || 'u16').toLowerCase();
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return null;
+    if (!Number.isFinite(bit) || bit <= 0) return null;
+    if (!['RGGB', 'BGGR', 'GRBG', 'GBRG'].includes(pattern)) return null;
+    if (!['u16', 'u8', 'mipi10', 'mipi12'].includes(packing)) return null;
+    return { kind: 'plain_raw', width, height, bit, pattern, packing };
+  };
+
+  const requestPlainRawProfile = () => {
+    const lastProfile = localStorage.getItem('multiAnno_plainRawProfile') || '';
+    const input = window.prompt(
+      'Plain .raw profile, optional. For camera RAW supported by rawpy, leave blank. For sensor RAW, enter: width,height,bit,bayer,packing',
+      lastProfile
+    );
+    if (!input || !input.trim()) return undefined;
+    const profile = parsePlainRawProfile(input);
+    if (!profile) {
+      alert('Invalid RAW profile. Example: 4096,3072,10,RGGB,mipi10');
+      return null;
+    }
+    localStorage.setItem('multiAnno_plainRawProfile', input.trim());
+    return profile;
+  };
+
   const handleAddFolder = async (path: string) => {
     if (!path.trim()) return;
     setIsConfirming(true);
@@ -172,7 +208,11 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
     if (!item.path.trim()) return;
     setIsConfirming(true);
     try {
-      const existingFolders = folders.map(f => ({ path: f.path, suffix: f.suffix || '' }));
+      const existingFolders = folders.map(f => ({
+        path: f.path,
+        suffix: f.suffix || '',
+        rawProfile: f.rawProfile,
+      }));
       const allFolders = [...existingFolders, { path: item.path.trim(), suffix: item.suffix.trim() }];
 
       const inferenceResult = await inferSuffix(allFolders);
@@ -189,10 +229,21 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
         }
       }
 
+      let rawProfile: any = undefined;
+      if (isPlainRawExtension(detectedExt)) {
+        const profile = requestPlainRawProfile();
+        if (profile === null) return;
+        rawProfile = profile;
+      }
+
       const analysisPayload = allFolders.map((f, i) => {
         const inf = inferenceResult.results?.find((r: any) => r.folder_index === i);
         const suffix = i === allFolders.length - 1 ? cleanSuffix : (inf?.suffix || f.suffix || '');
-        return { path: f.path, suffix };
+        return {
+          path: f.path,
+          suffix,
+          rawProfile: i === allFolders.length - 1 ? rawProfile : (f as any).rawProfile,
+        };
       });
       const result = await analyzeWorkspaceFolders(analysisPayload);
       const backendData = result.data;
@@ -212,6 +263,7 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
         path: newFolderMeta.folderPath || item.path,
         suffix: cleanSuffix,
         extension: detectedExt || newFolderMeta.dtype || 'tif',
+        rawProfile,
         files: [],
         metadata: {
           width: newFolderMeta.width || 1024,
@@ -292,7 +344,11 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
     if (!folder?.path) return;
     setIsConfirming(true);
     try {
-      const allFolders = folders.map(f => ({ path: f.path, suffix: f.suffix || '' }));
+      const allFolders = folders.map(f => ({
+        path: f.path,
+        suffix: f.suffix || '',
+        rawProfile: f.rawProfile,
+      }));
       const result = await analyzeWorkspaceFolders(allFolders);
 
       result.data?.forEach((meta: any) => {
@@ -511,6 +567,11 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
                     <span>📐 {folder.metadata.width}×{folder.metadata.height}</span>
                     <span>🎨 {folder.metadata.bands} bands</span>
                     <span>📄 {folder.metadata.fileType}</span>
+                    {folder.rawProfile?.kind === 'plain_raw' && (
+                      <span>
+                        RAW {folder.rawProfile.width}×{folder.rawProfile.height} {folder.rawProfile.bit || folder.rawProfile.bitDepth}bit {folder.rawProfile.pattern || folder.rawProfile.bayer}
+                      </span>
+                    )}
                     <span className="text-green-600">✓ {folder.metadata.sceneGroupsLoaded} loaded</span>
                     {folder.metadata.sceneGroupsSkipped > 0 && (
                       <span className="text-destructive">✗ {folder.metadata.sceneGroupsSkipped} skipped</span>

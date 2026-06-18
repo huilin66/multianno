@@ -57,6 +57,7 @@ async def get_engine_status():
             "is_loaded": False,
             "model_path": "",
             "model_type": "",
+            "supported_models": [],
             "detail": _ai_unavailable_detail(),
         }
 
@@ -65,6 +66,7 @@ async def get_engine_status():
         "is_loaded": vision_engine.is_loaded,
         "model_path": vision_engine.model_path,
         "model_type": vision_engine.model_type,
+        "supported_models": vision_engine.supported_models,
     }
 
 
@@ -131,8 +133,8 @@ async def init_image(req: SAMInitRequest):
             new_w, new_h = int(w * scale), int(h * scale)
             img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-        # 3. 动态更新 predictor 的内部参数以匹配前端尺寸
-        engine.predictor.set_image(img)
+        # 3. 动态更新模型内部缓存以匹配前端尺寸
+        engine.set_image(img)
         engine.current_image_key = cache_key
         return {"status": "success"}
     except Exception as e:
@@ -154,67 +156,20 @@ async def predict_interactive(req: SAMInteractiveRequest):
 
     # 兜底：如果前端忘记点 Confirm，这里自动补救
     if engine.current_image_key != req.image_path:
-        engine.predictor.set_image(_read_ai_image(req.image_path))
+        engine.set_image(_read_ai_image(req.image_path))
         engine.current_image_key = req.image_path
-    if hasattr(engine.predictor, "reset_prompts"):
-        engine.predictor.reset_prompts()  # 1. 调用官方方法清空 Embedding 缓存
-    if hasattr(engine.predictor, "args"):
-        engine.predictor.args.text = None  # 2. 强行抹除配置项中的文本记忆
 
-    pts = [[[p.x, p.y] for p in req.points]] if req.points else None
-    labels = [[p.label for p in req.points]] if req.points else None
+    pts = [[p.x, p.y] for p in req.points] if req.points else None
+    labels = [p.label for p in req.points] if req.points else None
 
     print(f"--> [AI Predict] Points: {pts}, Labels: {labels}, Box: {req.box}")
     try:
-        # 直接推理，由于 set_image 已执行，这里耗时只有几十毫秒
-        results = engine.predictor(
+        response_data = engine.predict_interactive(
             points=pts,
             labels=labels,
-            bboxes=req.box,
+            box=req.box,
             conf=req.conf,
         )
-
-        result = results[0]
-        response_data = {"polygons": [], "bboxes": []}
-
-        if result.masks is not None and len(result.masks.data) > 0:
-            best_mask_np = None
-
-            # 获取原图尺寸，计算当前图片的物理总面积
-            img_h, img_w = (
-                result.orig_shape if hasattr(result, "orig_shape") else (644, 644)
-            )
-            total_area = img_h * img_w
-
-            # 🌟 修复 2：智能防爆屏过滤 (Anti-Background Explosion)
-            # 遍历 SAM 给出的所有候选 Mask
-            for i in range(len(result.masks.data)):
-                mask_np = result.masks.data[i].cpu().numpy()
-                bbox = engine.mask_to_bbox(mask_np)
-
-                if bbox:
-                    w = bbox[2] - bbox[0]
-                    h = bbox[3] - bbox[1]
-                    area = w * h
-
-                    # 💡 核心逻辑：只要这个 Mask 面积小于整张图的 90%，
-                    # 说明它是一个具体的物体，而不是“全屏背景”，直接采纳并跳出！
-                    if area < total_area * 0.90:
-                        best_mask_np = mask_np
-                        break
-
-            # 兜底逻辑：如果所有 Mask 都超过 90%（说明用户真的在选一个填满全屏的超级大物体）
-            # 或者找不到符合条件的，就回退到使用分数最高的第一张
-            if best_mask_np is None:
-                best_mask_np = result.masks.data[0].cpu().numpy()
-
-            # 解析多边形并返回
-            response_data["polygons"].extend(
-                engine.mask_to_polygons(best_mask_np)
-            )
-            bbox = engine.mask_to_bbox(best_mask_np)
-            if bbox:
-                response_data["bboxes"].append(bbox)
         print(f"--> [AI Predict] Result: {response_data}")
         return response_data
     except Exception as e:
@@ -236,59 +191,10 @@ async def predict_auto(req: SAMAutoRequest):
 
     # 兜底：如果特征图没缓存，自动补救
     if engine.current_image_key != req.image_path:
-        engine.predictor.set_image(_read_ai_image(req.image_path))
+        engine.set_image(_read_ai_image(req.image_path))
         engine.current_image_key = req.image_path
-    # 🌟🌟🌟 双保险强杀：清理上一次 Semi 任务的残留
-    if hasattr(engine.predictor, "reset_prompts"):
-        engine.predictor.reset_prompts()  # 1. 清空特征与 Prompt 缓存
-    if hasattr(engine.predictor, "args"):
-        engine.predictor.args.points = None  # 2. 强行抹除几何坐标记忆
-        engine.predictor.args.labels = None
-        engine.predictor.args.bboxes = None
     try:
-        results = engine.predictor(text=req.texts, conf=req.conf)
-
-        # 🌟 1. 初始化一个字典，用来按 prompt 收集多边形
-        grouped_polygons = {text: [] for text in req.texts}
-
-        for result in results:
-            if result.masks is not None and result.boxes is not None:
-                # 这里的 names_data 可能是 dict，也可能是 list
-                names_data = result.names
-
-                for i in range(len(result.masks.data)):
-                    # 1. 提取当前 mask 对应的类别 ID
-                    cls_id = int(result.boxes.cls[i].item())
-
-                    # 🌟 2. 核心修复：兼容 list 和 dict 两种情况
-                    if isinstance(names_data, dict):
-                        prompt_text = names_data.get(cls_id, "unknown")
-                    elif isinstance(names_data, list):
-                        prompt_text = (
-                            names_data[cls_id]
-                            if 0 <= cls_id < len(names_data)
-                            else "unknown"
-                        )
-                    else:
-                        prompt_text = "unknown"
-
-                    # 3. 提取并转换坐标
-                    mask_np = result.masks.data[i].cpu().numpy()
-                    polys = engine.mask_to_polygons(mask_np)
-
-                    if polys:
-                        if prompt_text not in grouped_polygons:
-                            grouped_polygons[prompt_text] = []
-                        grouped_polygons[prompt_text].extend(polys)
-
-        # 🌟 3. 组装为前端需要的、带签名的结构体数组
-        final_results = []
-        for prompt, polys in grouped_polygons.items():
-            # 只有当该 prompt 真的识别到了多边形，才放进返回列表里
-            if len(polys) > 0:
-                final_results.append({"prompt": prompt, "polygons": polys})
-
-        return {"results": final_results}
+        return engine.predict_auto(texts=req.texts, conf=req.conf)
 
     except Exception as e:
         import traceback
