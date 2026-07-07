@@ -19,6 +19,7 @@ import {
 import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { createPortal } from 'react-dom';
 import { CURSOR_FOCUS, CURSOR_DRAG } from '../../lib/cursors';
+import { TAXONOMY_COLORS } from '../../config/colors';
 
 export interface SAMPoint {
   x: number;
@@ -48,7 +49,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   // 🌟 安全解构：使用 default value 防止 useStore 还没有彻底更新导致报错
   const state = useStore();
   const {
-    views, folders, annotations, addAnnotation, removeAnnotation,
+    views, folders, annotations, addAnnotation, removeAnnotation, addTaxonomyClass,
     viewport, setViewport, currentStem,  theme,
     sceneGroups,
     setCurrentStem,
@@ -1468,11 +1469,25 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       
       const groupedResults = result.results || [];
       let totalFound = 0;
+      const knownClassNames = new Set(taxonomyClasses.map((cls: any) => cls.name));
+      const ensureClass = (className: string) => {
+        if (!className || className === 'Uncategorized' || knownClassNames.has(className)) {
+          return;
+        }
+        const color = TAXONOMY_COLORS[knownClassNames.size % TAXONOMY_COLORS.length] || '#10B981';
+        addTaxonomyClass({
+          id: `class-ai-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: className,
+          color,
+        });
+        knownClassNames.add(className);
+      };
       
       if (groupedResults.length > 0) {
         groupedResults.forEach((group: { prompt: string, polygons: any[] }) => {
           const { prompt, polygons } = group;
-          const finalClassName = mappingDict[prompt] || 'Uncategorized'; 
+          const finalClassName = mappingDict[prompt] || prompt || 'Uncategorized';
+          ensureClass(finalClassName);
 
           polygons.forEach((poly: any, index: number) => {
             const { rawWidth, rawHeight } = getViewDimensions(targetView);

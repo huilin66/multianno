@@ -76,6 +76,7 @@ class AIConfigRequest(BaseModel):
     model_path: str
     model_type: str
     confidence: float
+    classes_file: Optional[str] = None
 
 
 class StatRequest(BaseModel):

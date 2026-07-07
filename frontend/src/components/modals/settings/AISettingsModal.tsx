@@ -26,6 +26,7 @@ const VISION_MODEL_OPTIONS = [
   { value: 'YOLO11', label: 'YOLO11' },
   { value: 'YOLO12', label: 'YOLO12' },
   { value: 'YOLO26', label: 'YOLO26' },
+  { value: 'YOLO-Custom', label: 'Custom YOLO (.pt/.onnx/.pth)' },
   { value: 'LocateAnything', label: 'NVIDIA LocateAnything' },
 ];
 
@@ -37,7 +38,10 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const [localSettings, setLocalSettings] = useState(aiSettings);
   const [isVerifying, setIsVerifying] = useState(false);
   const [fileExplorerOpen, setFileExplorerOpen] = useState(false);
+  const [fileExplorerTarget, setFileExplorerTarget] = useState<'model' | 'classes'>('model');
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
+
+  const isYoloModel = String(localSettings.model || '').toLowerCase().startsWith('yolo');
 
   useEffect(() => { 
     if (open) {
@@ -73,7 +77,8 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       await updateAIConfig({
         model_path: localSettings.modelPath,
         model_type: localSettings.model,
-        confidence: localSettings.confidence
+        confidence: localSettings.confidence,
+        classes_file: localSettings.classFilePath?.trim() || undefined
       });
       
       savePathsToHistory(localSettings.modelPath);
@@ -143,7 +148,10 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                   onChange={(e) => setLocalSettings({ ...localSettings, modelPath: e.target.value })}
                 />
                 <button
-                  onClick={() => setFileExplorerOpen(true)}
+                  onClick={() => {
+                    setFileExplorerTarget('model');
+                    setFileExplorerOpen(true);
+                  }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                 >
                   <FolderSearch size={14} />
@@ -169,6 +177,32 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
+                {t("aiSettings.classFile")}
+              </Label>
+              <div className="relative">
+                <Input
+                  className="h-9 text-xs pr-9 font-mono"
+                  placeholder={isYoloModel ? t("aiSettings.infoClassFile") : t("aiSettings.infoClassFileOptional")}
+                  value={localSettings.classFilePath || ''}
+                  onChange={(e) => setLocalSettings({ ...localSettings, classFilePath: e.target.value })}
+                />
+                <button
+                  onClick={() => {
+                    setFileExplorerTarget('classes');
+                    setFileExplorerOpen(true);
+                  }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  <FolderSearch size={14} />
+                </button>
+              </div>
+              <p className="text-[10px] leading-relaxed text-muted-foreground">
+                {t("aiSettings.classFileHint")}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -220,12 +254,16 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
 
       <FileExplorerDialog 
         open={fileExplorerOpen}
-        initialPath={localSettings.modelPath || '/'}
+        initialPath={(fileExplorerTarget === 'classes' ? localSettings.classFilePath : localSettings.modelPath) || '/'}
         selectType="file" 
         onClose={() => setFileExplorerOpen(false)}
         onConfirm={(paths) => {
           if (paths.length > 0) {
-            setLocalSettings({ ...localSettings, modelPath: paths[0] });
+            if (fileExplorerTarget === 'classes') {
+              setLocalSettings({ ...localSettings, classFilePath: paths[0] });
+            } else {
+              setLocalSettings({ ...localSettings, modelPath: paths[0] });
+            }
           }
           setFileExplorerOpen(false);
         }}

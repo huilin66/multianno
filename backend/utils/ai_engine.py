@@ -1,4 +1,5 @@
 import gc
+import json
 import os
 from typing import Any, Optional
 
@@ -30,6 +31,7 @@ YOLO_MODEL_TYPES = {
     "YOLO11",
     "YOLO12",
     "YOLO26",
+    "YOLO-Custom",
 }
 SUPPORTED_MODEL_TYPES = [
     "SAM-3",
@@ -39,6 +41,7 @@ SUPPORTED_MODEL_TYPES = [
     "YOLO11",
     "YOLO12",
     "YOLO26",
+    "YOLO-Custom",
     "LocateAnything",
 ]
 
@@ -78,6 +81,9 @@ def _normalize_model_type(model_type: str) -> str:
         "yolov12": "YOLO12",
         "yolo26": "YOLO26",
         "yolov26": "YOLO26",
+        "yolocustom": "YOLO-Custom",
+        "customyolo": "YOLO-Custom",
+        "customultralytics": "YOLO-Custom",
     }
     if lowered in yolo_aliases:
         return yolo_aliases[lowered]
@@ -125,6 +131,62 @@ def _name_from_result(names: Any, cls_id: int) -> str:
     if isinstance(names, list) and 0 <= cls_id < len(names):
         return str(names[cls_id])
     return f"class_{cls_id}"
+
+
+def _load_class_names(classes_file: Optional[str]) -> list[str]:
+    if not classes_file:
+        return []
+    path = os.path.abspath(os.path.expanduser(classes_file))
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Class file does not exist: {classes_file}")
+
+    ext = os.path.splitext(path)[1].lower()
+    with open(path, "r", encoding="utf-8") as f:
+        raw = f.read()
+
+    def _names_from_mapping(data: Any) -> list[str]:
+        if isinstance(data, dict):
+            data = data.get("names", data)
+            if isinstance(data, dict):
+                def _sort_key(item: Any):
+                    text = str(item)
+                    return (0, int(text)) if text.isdigit() else (1, text)
+
+                return [
+                    str(data[key]).strip()
+                    for key in sorted(data, key=_sort_key)
+                    if str(data[key]).strip()
+                ]
+        if isinstance(data, list):
+            return [str(item).strip() for item in data if str(item).strip()]
+        return []
+
+    if ext == ".json":
+        names = _names_from_mapping(json.loads(raw))
+    elif ext in {".yaml", ".yml"}:
+        try:
+            import yaml
+        except ImportError as exc:
+            raise RuntimeError("Reading YAML class files requires PyYAML.") from exc
+        names = _names_from_mapping(yaml.safe_load(raw))
+    else:
+        names = []
+        for line in raw.splitlines():
+            cleaned = line.strip()
+            if not cleaned or cleaned.startswith("#"):
+                continue
+            if ":" in cleaned and cleaned.split(":", 1)[0].strip().isdigit():
+                cleaned = cleaned.split(":", 1)[1].strip()
+            else:
+                parts = cleaned.split(maxsplit=1)
+                if len(parts) == 2 and parts[0].isdigit():
+                    cleaned = parts[1].strip()
+            if cleaned:
+                names.append(cleaned)
+
+    if not names:
+        raise ValueError(f"No class names found in class file: {classes_file}")
+    return names
 
 
 def _clean_text(value: str) -> str:
@@ -271,7 +333,7 @@ class SAM3Adapter:
     def is_loaded(self):
         return self.predictor is not None
 
-    def load(self, path: str, conf: float = 0.25):
+    def load(self, path: str, conf: float = 0.25, classes_file: Optional[str] = None):
         if SAM3Predictor is None or SAM3SemanticPredictor is None:
             raise RuntimeError(
                 "SAM3 is not available in the installed Ultralytics package. "
@@ -404,16 +466,23 @@ class UltralyticsYOLOAdapter:
         self.model = None
         self.default_conf = 0.25
         self.current_cv2_img: np.ndarray | None = None
+        self.class_names: list[str] = []
 
     @property
     def is_loaded(self):
         return self.model is not None
 
-    def load(self, path: str, conf: float = 0.25):
+    def load(self, path: str, conf: float = 0.25, classes_file: Optional[str] = None):
         from ultralytics import YOLO
 
         self.model = YOLO(path)
         self.default_conf = conf
+        self.class_names = _load_class_names(classes_file)
+
+    def _class_name(self, result_names: Any, cls_id: int) -> str:
+        if 0 <= cls_id < len(self.class_names):
+            return self.class_names[cls_id]
+        return _name_from_result(result_names, cls_id)
 
     def set_image(self, img_array: np.ndarray):
         self.current_cv2_img = img_array
@@ -445,7 +514,7 @@ class UltralyticsYOLOAdapter:
             for i, bbox_np in enumerate(boxes):
                 bbox = [float(v) for v in bbox_np.tolist()]
                 cls_id = int(class_ids[i])
-                class_name = _name_from_result(result.names, cls_id)
+                class_name = self._class_name(result.names, cls_id)
                 polygon = None
                 if i < len(mask_polygons):
                     mask_xy = np.asarray(mask_polygons[i])
@@ -544,7 +613,7 @@ class LocateAnythingAdapter:
     def is_loaded(self):
         return False
 
-    def load(self, path: str, conf: float = 0.25):
+    def load(self, path: str, conf: float = 0.25, classes_file: Optional[str] = None):
         raise RuntimeError(
             "LocateAnything is recognized by MultiAnno, but no official public "
             "code/model API is available in this repository. Provide NVIDIA's "
@@ -559,6 +628,7 @@ class InteractiveVisionEngine:
         self.current_image_key = ""
         self.model_type = ""
         self.confidence = 0.25
+        self.classes_file = ""
         self.predictor = None
 
     @property
@@ -581,23 +651,31 @@ class InteractiveVisionEngine:
             f"Supported: {', '.join(SUPPORTED_MODEL_TYPES)}"
         )
 
-    def load_model(self, path: str, model_type: str, conf: float = 0.25):
+    def load_model(
+        self,
+        path: str,
+        model_type: str,
+        conf: float = 0.25,
+        classes_file: Optional[str] = None,
+    ):
         normalized_type = _normalize_model_type(model_type)
         if (
             self.model_path == path
             and self.model_type == normalized_type
             and self.is_loaded
             and self.confidence == conf
+            and self.classes_file == (classes_file or "")
         ):
             return
 
         adapter = self._create_adapter(normalized_type)
-        adapter.load(path, conf)
+        adapter.load(path, conf, classes_file)
         self.adapter = adapter
         self.predictor = getattr(adapter, "predictor", None)
         self.model_path = path
         self.model_type = normalized_type
         self.confidence = conf
+        self.classes_file = classes_file or ""
         self.current_image_key = ""
 
     def set_image(self, img_array: np.ndarray):

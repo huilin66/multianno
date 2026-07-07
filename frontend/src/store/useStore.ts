@@ -235,6 +235,7 @@ export interface AppState {
   aiSettings: {
       model: string;
       modelPath: string;
+      classFilePath: string;
       confidence: number;
       isConfigured: boolean;
       inferenceSize: number;
@@ -366,6 +367,7 @@ export const useStore = create<AppState>()(
       aiSettings: {
         model: 'SAM-3',
         modelPath: '',
+        classFilePath: '',
         confidence: 0.25,
         isConfigured: false,
         inferenceSize: 644,

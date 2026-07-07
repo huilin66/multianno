@@ -47,6 +47,7 @@ export function AIToolPanel({
 
   const [autoTags, setAutoTags] = useState<string[]>([]);
   const [autoText, setAutoText] = useState('');
+  const isYoloModel = String(aiSettings?.model || '').toLowerCase().startsWith('yolo');
 
   if (!isOpen) return null;
 
@@ -273,7 +274,7 @@ return (
             </div>
 
             {/* 🌟 3. 操作区：去掉了 Batch 按钮，突出核心推断 */}
-            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 relative">
+            <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800 relative space-y-2">
               <Button 
                 className="w-full bg-blue-600 hover:bg-blue-700 h-8 text-[11px] font-bold shadow-sm gap-2 transition-all" 
                 onClick={() => {
@@ -301,11 +302,23 @@ return (
                     onAutoPredict(finalTags, directMap);
                   }
                 }}
-                disabled={!isAIReady || isPredicting || (autoTags.length === 0 && autoText.trim() === '')}
+                disabled={!isAIReady || isPredicting || (!isYoloModel && autoTags.length === 0 && autoText.trim() === '')}
               >
                 {isPredicting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />} 
                 {isPredicting ? t('aiTool.inferring') : t('aiTool.inferCurrent')}
               </Button>
+              {isYoloModel && (
+                <Button
+                  variant="outline"
+                  className="w-full h-8 text-[11px] font-bold shadow-sm gap-2"
+                  onClick={() => onAutoPredict([], {})}
+                  disabled={!isAIReady || isPredicting}
+                  title={t('aiTool.inferAllClassesHint')}
+                >
+                  {isPredicting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                  {t('aiTool.inferAllClasses')}
+                </Button>
+              )}
             </div>
 
             {/* 🌟 4. Mapping Modal (未知标签处理弹窗) */}

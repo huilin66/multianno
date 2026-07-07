@@ -189,6 +189,7 @@ export const updateAIConfig = (config: {
   model_path: string;
   model_type: string;
   confidence: number;
+  classes_file?: string;
 }) => post(`${VISION_AI_API_URL}/config`, config);
 
 export const initSAM = (req: {

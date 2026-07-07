@@ -74,7 +74,7 @@ async def get_engine_status():
 async def update_ai_config(req: AIConfigRequest):
     engine = _require_vision_engine()
     try:
-        engine.load_model(req.model_path, req.model_type, req.confidence)
+        engine.load_model(req.model_path, req.model_type, req.confidence, req.classes_file)
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
