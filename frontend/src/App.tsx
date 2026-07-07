@@ -411,6 +411,7 @@ export default function App() {
 
       <Dialog
         open={activeModule === 'exchange_import'}
+        disablePointerDismissal
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-4xl sm:max-w-4xl h-[90vh] flex flex-col p-0 border-border overflow-hidden">
@@ -425,6 +426,7 @@ export default function App() {
 
       <Dialog
         open={activeModule === 'exchange_export'}
+        disablePointerDismissal
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-4xl sm:max-w-4xl h-[90vh] flex flex-col p-0 border-border overflow-hidden">
