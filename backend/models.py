@@ -131,6 +131,7 @@ class ExportRequest(BaseModel):
     split_files: dict = {}
     split_content_mode: str = "stem"  # "stem" or "main_view"
     overwrite_target: bool = False
+    include_unlabeled_images: bool = True
 
 
 class ImportRequest(BaseModel):

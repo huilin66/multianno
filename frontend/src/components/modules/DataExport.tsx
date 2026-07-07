@@ -113,6 +113,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const [splitValFile, setSplitValFile] = useState(DefaultSplitConfig.splitValFile);
   const [splitTestFile, setSplitTestFile] = useState(DefaultSplitConfig.splitTestFile);
   const [splitContentMode, setSplitContentMode] = useState<'stem' | 'main_view'>('stem');
+  const [includeUnlabeledImages, setIncludeUnlabeledImages] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // --- Card 5: Shape Filter & Class Order ---
@@ -380,6 +381,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           split_files: { train: splitTrainFile, val: splitValFile, test: splitTestFile },
           split_content_mode: splitContentMode,
           overwrite_target: overwriteTarget,
+          include_unlabeled_images: includeUnlabeledImages,
         }, (current, total) => {
           setExportProgress(Math.round((current / total) * 100));
         }, signal);
@@ -518,6 +520,24 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                 ))}
               </div>
             </div>
+
+            {exportMode === 'dataset' && (
+              <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
+                <Checkbox
+                  checked={includeUnlabeledImages}
+                  onCheckedChange={(checked) => setIncludeUnlabeledImages(Boolean(checked))}
+                  className="mt-0.5"
+                />
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold">
+                    {t('dataExport.stepTask.includeUnlabeled')}
+                  </Label>
+                  <p className="text-[10px] leading-relaxed text-muted-foreground">
+                    {t('dataExport.stepTask.includeUnlabeledDesc')}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="h-px bg-border" />
 
@@ -852,7 +872,6 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
             {/* 配置面板 */}
             <div className="p-5 rounded-xl border bg-muted/20 space-y-5">
-
               {/* 三列百分比 + 文件数 */}
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div className="space-y-0.5">
@@ -1180,6 +1199,7 @@ useEffect(() => {
                         setSplitValFile(DefaultSplitConfig.splitValFile);
                         setSplitTestFile(DefaultSplitConfig.splitTestFile);
                         setSplitContentMode('stem');
+                        setIncludeUnlabeledImages(true);
                       } else if (activeStep === 'shapes') {
                         const mapping = TASK_SHAPE_MAPPINGS[taskType];
                         const sel: Record<string, boolean> = {};

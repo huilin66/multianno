@@ -98,6 +98,37 @@ def _prepare_dataset_target_dir(req: ExportRequest):
     os.makedirs(req.target_dir, exist_ok=True)
 
 
+def _stem_has_exportable_annotations(source_dir: str, stem: str, req: ExportRequest) -> bool:
+    json_path = os.path.join(source_dir, f"{stem}.json")
+    if not os.path.exists(json_path):
+        return False
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return False
+
+    filtered_shapes, _ = filter_multianno(
+        data.get("shapes", []),
+        req.selected_classes,
+        req.allowed_shapes,
+    )
+    return len(filtered_shapes) > 0
+
+
+def _apply_unlabeled_filter(req: ExportRequest):
+    if req.include_unlabeled_images:
+        return
+    if not req.source_dirs:
+        return
+    source_dir = req.source_dirs[0]
+    req.stems = [
+        stem
+        for stem in req.stems
+        if _stem_has_exportable_annotations(source_dir, stem, req)
+    ]
+
+
 @router.get("/read_text")
 async def read_text_file(path: str):
     if not os.path.exists(path):
@@ -118,6 +149,7 @@ async def handle_export(req: ExportRequest):
 
     if req.export_mode == "dataset":
         _ensure_dataset_target_safe(req)
+        _apply_unlabeled_filter(req)
         if req.format == "yolo":
             return StreamingResponse(
                 export_yolo_dataset_stream(req), media_type="application/x-ndjson"

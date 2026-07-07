@@ -345,7 +345,9 @@
       "data": "Data",
       "dataFull": "Export Full Data (annotation + images)",
       "task": "Task Type",
-      "format": "Format"
+      "format": "Format",
+      "includeUnlabeled": "Export Unlabeled Images",
+      "includeUnlabeledDesc": "When enabled, keep all scene images. When disabled, export only scenes that still have annotations after the current class and shape filters."
     },
 
     "stepNaming": {
