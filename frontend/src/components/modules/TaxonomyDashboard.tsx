@@ -1,5 +1,5 @@
 // src/components/modules/TaxonomyDashboard.tsx
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
   Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser, Wrench,
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '..
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute } from '../../api/client';
+import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 import { useDialogStore } from '../../store/useDialogStore';
@@ -353,6 +353,153 @@ const AttributeAnalysisCard = ({ title, icon: Icon, totalTags, densityData, deta
   );
 };
 
+type PreviewPoint = { x: number; y: number };
+type PreviewObject = {
+  id: string;
+  label: string;
+  type: string;
+  points: PreviewPoint[];
+};
+
+const normalizePreviewShapeType = (type?: string) => {
+  const value = String(type || 'bbox').toLowerCase();
+  if (value === 'rectangle') return 'bbox';
+  if (value === 'linestrip') return 'line';
+  return value;
+};
+
+const shapeToPreviewObject = (shape: any, index: number): PreviewObject => ({
+  id: shape.id || shape.group_id || `object-${index + 1}`,
+  label: shape.label || '',
+  type: normalizePreviewShapeType(shape.shape_type || shape.type),
+  points: (shape.points || []).map((p: any) => ({
+    x: Number(p?.[0] ?? p?.x ?? 0),
+    y: Number(p?.[1] ?? p?.y ?? 0),
+  })),
+});
+
+const getPreviewObjectBounds = (obj: PreviewObject) => {
+  if (!obj.points.length) return null;
+  const xs = obj.points.map(p => p.x);
+  const ys = obj.points.map(p => p.y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+};
+
+const formatPreviewNumber = (value: number) => Number(value.toFixed(2));
+
+const getPreviewViewBox = (
+  obj: PreviewObject | undefined,
+  dimensions: { width: number; height: number }
+) => {
+  const imageWidth = Math.max(Number(dimensions.width) || 1, 1);
+  const imageHeight = Math.max(Number(dimensions.height) || 1, 1);
+  const fullViewBox = `0 0 ${imageWidth} ${imageHeight}`;
+  if (!obj) return fullViewBox;
+
+  const bounds = getPreviewObjectBounds(obj);
+  if (!bounds) return fullViewBox;
+
+  const objectWidth = Math.max(bounds.maxX - bounds.minX, 4);
+  const objectHeight = Math.max(bounds.maxY - bounds.minY, 4);
+  const padding = Math.max(Math.max(objectWidth, objectHeight) * 0.8, Math.min(imageWidth, imageHeight) * 0.03, 24);
+
+  let viewWidth = Math.max(objectWidth + padding * 2, imageWidth * 0.08, 64);
+  let viewHeight = Math.max(objectHeight + padding * 2, imageHeight * 0.08, 64);
+  const imageAspect = imageWidth / imageHeight;
+  const viewAspect = viewWidth / viewHeight;
+
+  if (viewAspect > imageAspect) {
+    viewHeight = viewWidth / imageAspect;
+  } else {
+    viewWidth = viewHeight * imageAspect;
+  }
+
+  viewWidth = Math.min(viewWidth, imageWidth);
+  viewHeight = Math.min(viewHeight, imageHeight);
+
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
+  const x = Math.min(Math.max(centerX - viewWidth / 2, 0), imageWidth - viewWidth);
+  const y = Math.min(Math.max(centerY - viewHeight / 2, 0), imageHeight - viewHeight);
+
+  return `${formatPreviewNumber(x)} ${formatPreviewNumber(y)} ${formatPreviewNumber(viewWidth)} ${formatPreviewNumber(viewHeight)}`;
+};
+
+const mapObjectToView = (obj: PreviewObject, view: any) => {
+  if (!view || view.isMain) return obj;
+  const { offsetX = 0, offsetY = 0, scaleX = 1, scaleY = 1 } = view.transform || {};
+  const sx = scaleX || 1;
+  const sy = scaleY || scaleX || 1;
+  return {
+    ...obj,
+    points: obj.points.map(p => ({
+      x: (p.x - offsetX) / sx,
+      y: (p.y - offsetY) / sy,
+    })),
+  };
+};
+
+const PreviewOverlayShape = ({
+  obj,
+  index,
+  color,
+  active,
+  dimmed,
+}: {
+  key?: React.Key;
+  obj: PreviewObject;
+  index: number;
+  color: string;
+  active: boolean;
+  dimmed: boolean;
+}) => {
+  if (!obj.points.length) return null;
+  const strokeWidth = active ? 3 : 2;
+  const opacity = dimmed ? 0.22 : 0.95;
+  const bounds = getPreviewObjectBounds(obj);
+  const labelX = bounds ? bounds.minX : obj.points[0].x;
+  const labelY = bounds ? Math.max(16, bounds.minY - 4) : obj.points[0].y;
+
+  let geometry: React.ReactNode = null;
+  if (obj.type === 'bbox' && obj.points.length >= 2) {
+    const [p1, p2] = obj.points;
+    const x = Math.min(p1.x, p2.x);
+    const y = Math.min(p1.y, p2.y);
+    const w = Math.abs(p2.x - p1.x);
+    const h = Math.abs(p2.y - p1.y);
+    geometry = <rect x={x} y={y} width={w} height={h} rx={2} fill={`${color}24`} stroke={color} strokeWidth={strokeWidth} />;
+  } else if ((obj.type === 'ellipse' || obj.type === 'circle') && obj.points.length >= 2) {
+    const [p1, p2] = obj.points;
+    const x = Math.min(p1.x, p2.x);
+    const y = Math.min(p1.y, p2.y);
+    const w = Math.abs(p2.x - p1.x);
+    const h = Math.abs(p2.y - p1.y);
+    geometry = <ellipse cx={x + w / 2} cy={y + h / 2} rx={w / 2} ry={obj.type === 'circle' ? w / 2 : h / 2} fill={`${color}20`} stroke={color} strokeWidth={strokeWidth} />;
+  } else if (obj.type === 'point') {
+    const p = obj.points[0];
+    geometry = <circle cx={p.x} cy={p.y} r={6} fill={`${color}cc`} stroke="#fff" strokeWidth={2} />;
+  } else if (obj.type === 'line') {
+    geometry = <polyline points={obj.points.map(p => `${p.x},${p.y}`).join(' ')} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />;
+  } else {
+    geometry = <polygon points={obj.points.map(p => `${p.x},${p.y}`).join(' ')} fill={`${color}24`} stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" />;
+  }
+
+  return (
+    <g opacity={opacity}>
+      {geometry}
+      <rect x={labelX} y={labelY - 14} width={24} height={14} rx={3} fill={active ? color : '#111827'} opacity={0.9} />
+      <text x={labelX + 12} y={labelY - 3} textAnchor="middle" fontSize={10} fontWeight={800} fill="#fff">
+        {index + 1}
+      </text>
+    </g>
+  );
+};
+
 // ============================================================================
 // 🌟 主页面组件
 // ============================================================================
@@ -361,7 +508,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
-    folders, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
+    folders, views, sceneGroups, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
     mergeTaxonomyClassesWithAttributes, stems, workspacePath 
   } = useStore() as any;
 
@@ -402,6 +549,155 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [attrSortDir, setAttrSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
 
   const [newTargetClassName, setNewTargetClassName] = useState('');
+  const [previewStem, setPreviewStem] = useState<string | null>(null);
+  const [previewViewId, setPreviewViewId] = useState<string>('');
+  const [previewObjects, setPreviewObjects] = useState<PreviewObject[]>([]);
+  const [previewObjectIndex, setPreviewObjectIndex] = useState<number | null>(null);
+  const [previewCounts, setPreviewCounts] = useState<Record<string, number>>({});
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+
+  const resolveStoreStem = useCallback((stem: string) => {
+    return stems.find((s: string) => s === stem || s.startsWith(stem)) || stem;
+  }, [stems]);
+
+  const getWorkspaceJsonPath = useCallback((stem: string) => {
+    const resolved = resolveStoreStem(stem);
+    const base = String(workspacePath || '').replace(/[\\/]+$/, '');
+    return base ? `${base}/${resolved}.json` : '';
+  }, [resolveStoreStem, workspacePath]);
+
+  const loadClassObjectsForStem = useCallback(async (stem: string, className: string) => {
+    const jsonPath = getWorkspaceJsonPath(stem);
+    if (!jsonPath) return [];
+    const rawData = await getFileContent(jsonPath);
+    const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
+    return (data.shapes || [])
+      .map((shape: any, index: number) => shapeToPreviewObject(shape, index))
+      .filter((obj: PreviewObject) => obj.label === className);
+  }, [getWorkspaceJsonPath]);
+
+  const classSceneStems = useMemo(
+    () => activeClass ? (statsData?.classes?.[activeClass.name]?.stems || []) : [],
+    [activeClass, statsData]
+  );
+
+  useEffect(() => {
+    const firstStem = classSceneStems[0] || null;
+    setPreviewStem(firstStem);
+    setPreviewObjectIndex(null);
+    setPreviewObjects([]);
+    setPreviewError('');
+  }, [activeClass?.name, classSceneStems.join('|')]);
+
+  useEffect(() => {
+    if (!views?.length) return;
+    const mainView = views.find((v: any) => v.isMain) || views[0];
+    if (!previewViewId || !views.some((v: any) => v.id === previewViewId)) {
+      setPreviewViewId(mainView?.id || '');
+    }
+  }, [views, previewViewId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadCounts = async () => {
+      if (!activeClass || !classSceneStems.length) {
+        setPreviewCounts({});
+        return;
+      }
+      const entries = await Promise.all(
+        classSceneStems.map(async (stem: string) => {
+          try {
+            const objects = await loadClassObjectsForStem(stem, activeClass.name);
+            return [stem, objects.length] as const;
+          } catch {
+            return [stem, 0] as const;
+          }
+        })
+      );
+      if (!cancelled) setPreviewCounts(Object.fromEntries(entries));
+    };
+    loadCounts();
+    return () => { cancelled = true; };
+  }, [activeClass?.name, classSceneStems.join('|'), loadClassObjectsForStem]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadPreview = async () => {
+      if (!activeClass || !previewStem) {
+        setPreviewObjects([]);
+        setPreviewError('');
+        return;
+      }
+      setPreviewLoading(true);
+      setPreviewError('');
+      try {
+        const objects = await loadClassObjectsForStem(previewStem, activeClass.name);
+        if (!cancelled) {
+          setPreviewObjects(objects);
+          setPreviewObjectIndex(null);
+          setPreviewCounts(prev => ({ ...prev, [previewStem]: objects.length }));
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setPreviewObjects([]);
+          setPreviewObjectIndex(null);
+          setPreviewError(err?.message || t('common.failed'));
+        }
+      } finally {
+        if (!cancelled) setPreviewLoading(false);
+      }
+    };
+    loadPreview();
+    return () => { cancelled = true; };
+  }, [activeClass?.name, previewStem, loadClassObjectsForStem, t]);
+
+  const previewView = useMemo(
+    () => views?.find((v: any) => v.id === previewViewId) || views?.find((v: any) => v.isMain) || views?.[0],
+    [views, previewViewId]
+  );
+
+  const previewFolder = useMemo(
+    () => folders?.find((f: any) => f.id === previewView?.folderId),
+    [folders, previewView]
+  );
+
+  const previewImageUrl = useMemo(() => {
+    if (!previewStem || !previewView || !previewFolder) return '';
+    const resolvedStem = resolveStoreStem(previewStem);
+    const exactFileName = sceneGroups?.[resolvedStem]?.[previewFolder.path];
+    const ext = previewFolder.extension || '.tif';
+    const normalizedExt = ext.startsWith('.') ? ext : `.${ext}`;
+    const fileName = exactFileName || `${resolvedStem}${previewFolder.suffix || ''}${normalizedExt}`;
+    return getPreviewImageUrl(
+      previewFolder.path,
+      fileName,
+      previewView.bands || [1, 2, 3],
+      previewView.colormap || 'gray',
+      undefined,
+      previewFolder.rawProfile
+    );
+  }, [previewStem, previewView, previewFolder, sceneGroups, resolveStoreStem]);
+
+  const previewDimensions = useMemo(() => {
+    const width = previewFolder?.metadata?.width || 1024;
+    const height = previewFolder?.metadata?.height || 1024;
+    return { width, height };
+  }, [previewFolder]);
+
+  const previewDisplayObjects = useMemo(
+    () => previewObjects.map(obj => mapObjectToView(obj, previewView)),
+    [previewObjects, previewView]
+  );
+
+  const previewViewBox = useMemo(
+    () => getPreviewViewBox(
+      previewObjectIndex === null ? undefined : previewDisplayObjects[previewObjectIndex],
+      previewDimensions
+    ),
+    [previewDisplayObjects, previewObjectIndex, previewDimensions]
+  );
+
   const getSaveDirs = (): string[] => {
       if (workspacePath) return [workspacePath];
       return folders.map((f: any) => f.path).filter(Boolean);
@@ -1589,8 +1885,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <div className="w-full xl:w-1/3 flex flex-col gap-6">
 
                       
-                      {/* 🌟 2. 修改后的 Scenes Involved 列表 */}
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col h-[400px]">
+                      {/* Scenes Involved + read-only preview */}
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col h-[680px] overflow-hidden">
             <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-blue-500" />
@@ -1599,58 +1895,164 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 </h3>
               </div>
               <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500">
-                {statsData?.classes?.[activeClass.name]?.stems?.length || 0} {t('taxonomyDashboard.files')}
+                {classSceneStems.length || 0} {t('taxonomyDashboard.files')}
               </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar">
+            <div className="h-[250px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800">
               <div className="flex flex-col gap-1">
-                {statsData?.classes?.[activeClass.name]?.stems?.map((stem: string) => (
-                  <div 
-                    key={stem}
-                    onDoubleClick={() => {
-                      const storeStems = useStore.getState().stems;
-                      const matchedStem = storeStems.find((s: string) => s.startsWith(stem));
-                      
-                      if (matchedStem) {
-                        onClose?.();
-                        setTimeout(() => {
-                          setCurrentStem(matchedStem);
-                          setActiveModule('workspace');
-                        }, 150);
-                      } else {
-                        openDialog({
-                          type: 'warning',
-                          title: t('taxonomyDashboard.sceneNotFound'),
-                          description: t('taxonomyDashboard.sceneNotFoundDesc', { stem }),
-                          confirmText: t('taxonomyDashboard.gotIt'),
-                          hideCancel: true,
-                        });
-                      }
-                    }}
-                    title={t('taxonomyDashboard.tipDoubleClick')}
-                    className="group flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer transition-all border border-transparent hover:border-blue-100 dark:hover:border-blue-800"
-                  >
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <div className="w-1 h-1 rounded-full bg-blue-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      <span className="text-xs font-medium text-neutral-600 dark:text-neutral-400 truncate">
-                        {stem}
-                      </span>
+                {classSceneStems.map((stem: string) => {
+                  const isSelected = previewStem === stem;
+                  const objectCount = previewCounts[stem];
+                  return (
+                    <div
+                      key={stem}
+                      onClick={() => setPreviewStem(stem)}
+                      onDoubleClick={() => {
+                        const storeStems = useStore.getState().stems;
+                        const matchedStem = storeStems.find((s: string) => s.startsWith(stem));
+                        
+                        if (matchedStem) {
+                          onClose?.();
+                          setTimeout(() => {
+                            setCurrentStem(matchedStem);
+                            setActiveModule('workspace');
+                          }, 150);
+                        } else {
+                          openDialog({
+                            type: 'warning',
+                            title: t('taxonomyDashboard.sceneNotFound'),
+                            description: t('taxonomyDashboard.sceneNotFoundDesc', { stem }),
+                            confirmText: t('taxonomyDashboard.gotIt'),
+                            hideCancel: true,
+                          });
+                        }
+                      }}
+                      title={t('taxonomyDashboard.tipClickPreview')}
+                      className={`group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all border ${
+                        isSelected
+                          ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                          : 'border-transparent hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-100 dark:hover:border-blue-800'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        <div className={`w-1 h-1 rounded-full bg-blue-400 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+                        <span className={`text-xs font-medium truncate ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-400'}`}>
+                          {stem}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+                          {objectCount ?? '-'}
+                        </span>
+                        <ArrowRight className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                      </div>
                     </div>
-                    <ArrowRight className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
-                  </div>
-                ))}
+                  );
+                })}
                 
-                {(!statsData?.classes?.[activeClass.name]?.stems || statsData.classes[activeClass.name].stems.length === 0) && (
+                {classSceneStems.length === 0 && (
                   <div className="py-10 text-center text-neutral-400 text-xs italic">
                     {t('taxonomyDashboard.noScenesFound')}
                   </div>
                 )}
               </div>
             </div>
-            
-            <div className="p-2 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/30 text-[9px] text-center text-neutral-400 font-bold uppercase tracking-tighter">
-              {t('taxonomyDashboard.tipDoubleClick')}
+
+            <div className="flex-1 min-h-0 flex flex-col bg-neutral-50/40 dark:bg-neutral-950/30">
+              <div className="px-3 py-2 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-2 shrink-0">
+                <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
+                  {t('taxonomyDashboard.preview')}
+                </div>
+                <div className="flex gap-1 overflow-x-auto custom-scrollbar">
+                  {views.map((view: any, idx: number) => (
+                    <button
+                      key={view.id}
+                      onClick={() => setPreviewViewId(view.id)}
+                      className={`px-2 py-1 rounded text-[9px] font-bold whitespace-nowrap transition-colors ${
+                        previewView?.id === view.id
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white dark:bg-neutral-900 text-neutral-500 border border-neutral-200 dark:border-neutral-800 hover:text-blue-600'
+                      }`}
+                    >
+                      {view.isMain ? t('view.mainView') : `${t('view.augView')} ${idx}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex-1 min-h-0 flex">
+                <div className="flex-1 min-w-0 relative bg-neutral-100 dark:bg-neutral-950 flex items-center justify-center">
+                  {!previewStem ? (
+                    <div className="text-xs text-neutral-400 text-center px-4">{t('taxonomyDashboard.previewSelectScene')}</div>
+                  ) : previewLoading ? (
+                    <div className="flex items-center gap-2 text-xs text-neutral-400"><Loader2 className="w-4 h-4 animate-spin" /> {t('common.loading')}</div>
+                  ) : previewError ? (
+                    <div className="text-xs text-red-500 text-center px-4">{previewError}</div>
+                  ) : previewImageUrl ? (
+                    <>
+                      <svg
+                        className="absolute inset-0 w-full h-full pointer-events-none transition-all duration-200 ease-out"
+                        viewBox={previewViewBox}
+                        preserveAspectRatio="xMidYMid meet"
+                      >
+                        <image
+                          href={previewImageUrl}
+                          x={0}
+                          y={0}
+                          width={previewDimensions.width}
+                          height={previewDimensions.height}
+                          preserveAspectRatio="none"
+                        />
+                        {previewDisplayObjects.map((obj, index) => (
+                          <PreviewOverlayShape
+                            key={`${obj.id}-${index}`}
+                            obj={obj}
+                            index={index}
+                            color={activeClass.color || '#3b82f6'}
+                            active={previewObjectIndex === index}
+                            dimmed={previewObjectIndex !== null && previewObjectIndex !== index}
+                          />
+                        ))}
+                      </svg>
+                      {previewDisplayObjects.length === 0 && (
+                        <div className="absolute inset-x-3 bottom-3 rounded bg-white/90 dark:bg-neutral-900/90 border border-neutral-200 dark:border-neutral-800 px-3 py-2 text-[10px] text-neutral-500 text-center">
+                          {t('taxonomyDashboard.previewNoObjects')}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-xs text-neutral-400 text-center px-4">{t('taxonomyDashboard.previewUnavailable')}</div>
+                  )}
+                </div>
+
+                <div className="w-16 border-l border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-1.5 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
+                  <button
+                    onClick={() => setPreviewObjectIndex(null)}
+                    className={`h-7 rounded text-[9px] font-black uppercase transition-colors ${
+                      previewObjectIndex === null ? 'bg-blue-600 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-blue-600'
+                    }`}
+                  >
+                    {t('taxonomyDashboard.previewFull')}
+                  </button>
+                  {previewObjects.map((obj, index) => (
+                    <button
+                      key={`${obj.id}-${index}`}
+                      onClick={() => setPreviewObjectIndex(index)}
+                      className={`h-7 rounded text-[9px] font-bold transition-colors ${
+                        previewObjectIndex === index ? 'bg-blue-600 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-blue-600'
+                      }`}
+                      title={`${index + 1}: ${obj.type}`}
+                    >
+                      #{index + 1}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="px-3 py-1.5 border-t border-neutral-100 dark:border-neutral-800 text-[9px] text-neutral-400 font-mono truncate shrink-0">
+                {previewStem ? `${previewStem} | ${activeClass.name} | ${previewObjects.length} ${t('taxonomyDashboard.objects')}` : t('taxonomyDashboard.tipClickPreview')}
+              </div>
             </div>
           </div>
         </div>
