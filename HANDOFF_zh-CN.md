@@ -1,17 +1,126 @@
-# MultiAnno 系统说明
+# MultiAnno 项目交接指南
 
-本文档面向 MultiAnno 的新开发者、PR 贡献者和 AI 编程助手。目标是让参与者快速理解系统设计、代码边界、数据契约和贡献方式，减少误改核心链路的风险。
+本文档是 MultiAnno 的长期维护与工程交接基线，面向维护者、新开发者、PR 审查者和 AI 编程助手。除系统设计外，它还记录当前实现状态、实际运行和数据流程、近期变更、高风险区域以及新维护者的接手顺序。
 
-如果你是第一次接触本项目，建议按以下顺序阅读：
+本次交接代码核对时间：2026-07-28；文档重命名前基于 `main` 分支提交 `4ab02be`。
 
-1. 项目定位与设计背景
-2. 快速开始
-3. 整体架构
-4. 核心数据契约
-5. 文件与目录说明
-6. 开发约束与系统不变量
-7. PR 提交与验收流程
-8. AI 协作指南
+建议按以下顺序阅读：
+
+1. 交接摘要
+2. 项目定位与设计背景
+3. 快速开始
+4. 整体架构
+5. 核心数据契约
+6. 文件与目录说明
+7. 开发约束与系统不变量
+8. 当前风险与后续工作
+9. PR 提交与验收流程
+10. AI 协作指南
+
+## 0. 交接摘要
+
+### 0.1 当前基线
+
+当前仓库是一个通过根目录单一脚本启动的本地 FastAPI + React 应用。编写本交接文档时工作区干净，主要标注流程已经可用；端到端自动化测试和正式发行打包仍不完整。
+
+当前运行结构：
+
+```text
+python app.py
+  -> FastAPI 后端：http://127.0.0.1:8090
+  -> 健康检查：    http://127.0.0.1:8090/api/health
+  -> Vite 前端：   http://127.0.0.1:5173
+  -> 两个服务均就绪后才打开浏览器
+```
+
+当前持久化结构：
+
+```text
+project_meta.json
+  -> 项目配置、图像文件夹、scene group、view、taxonomy
+
+<workspace>/<stem>.json
+  -> 每个 scene group 一份 MultiAnno 原生标注
+
+导出目录
+  -> 转换后的标注，以及可选图像、数据集划分文件、classes.txt 和报告
+```
+
+系统没有数据库、用户账号、云同步或后台任务服务，本地文件是唯一事实来源。
+
+### 0.2 用户工作流与模块归属
+
+完整标注工作流为：
+
+1. 创建或加载项目。
+2. 选择本地图像文件夹并推断文件名后缀。
+3. 将不同文件夹绑定为 scene group，并配置 view。
+4. 使用 crop 和 transform 将辅助 view 与主 view 对齐。
+5. 定义类别与属性。
+6. 在同步标注工作区逐个处理 scene group。
+7. 在 Taxonomy 中检查类别分布和具体对象。
+8. 导入既有标签，或导出仅标注/完整数据集。
+
+| 工作流 | 前端入口 | 后端入口 | 持久化结果 |
+| --- | --- | --- | --- |
+| 创建/加载项目 | `CreateProject.tsx`、`LoadProject.tsx`、`DataPreload.tsx` | `project.py`、`filesystem.py` | `project_meta.json` |
+| 视图对齐 | `ViewExtentCheck.tsx`、`projectUtils.ts` | project meta 保存接口 | `views[].crop`、`views[].transform` |
+| 标注 | `SyncAnnotation.tsx`、annotation 子组件与 hooks | `annotation.py` | `<stem>.json` |
+| Taxonomy/统计 | `TaxonomyDashboard.tsx` | `taxonomy.py` | project meta 和标注 JSON |
+| 导入导出 | `DataImport.tsx`、`DataExport.tsx` | `exchange.py`、`format_converters.py` | 用户选择的目标目录 |
+| AI 辅助 | `AIToolPanel.tsx`、`AISettingsModal.tsx` | `ai.py`、`ai_engine.py` | 预览 shape，确认后进入普通标注状态 |
+| 本地可视化 | `LocalVisualization.tsx` | `vis.py`、`visualizer.py` | 渲染预览图或导出图 |
+
+### 0.3 近期已完成变更
+
+以下行为已经进入当前基线，后续修改不得无意回退：
+
+- 原生矩形框统一使用 `shape_type: "bbox"`；外部或旧版 `rectangle` 只在兼容边界归一化。
+- 裁剪数据保存到 `view.crop`；`view.transform` 只保存缩放和偏移。
+- 完整数据集导出遇到非空目标目录时，必须由前端二次确认覆盖，后端也会校验覆盖标志。
+- 完整数据集默认包含无标注图像，前端可取消勾选。
+- 完整数据和仅标注导出都使用 NDJSON 流向同一进度界面反馈进度。
+- 仅标注导出会在用户选择的导出目录中生成 `classes.txt`。
+- 导入/导出弹窗不会因误点外部区域关闭，只能显式关闭。
+- Taxonomy 的 scene 行显示当前类别对象数；单击显示只读多视图预览，选择对象后缩放到对象，双击仍跳转标注工作区。
+- crop 吸附加入滞回释放逻辑，吸附后可以继续拖离边界。
+- Vision AI 支持 SAM-3 和 Ultralytics YOLO 适配器，包括 YOLOv8/v9/v10/11/12/26，以及自定义 `.pt`、`.onnx`、`.pth` 模型路径；类别文件由引擎读取。
+- 基础模式不依赖 AI 包即可启动；RAW/DNG 也作为独立可选依赖组。
+
+### 0.4 发版前最低验收
+
+至少执行：
+
+```bash
+python -m compileall -q backend app.py
+
+cd frontend
+npm run lint
+npm run build
+```
+
+然后使用一次性测试项目完成手动冒烟：
+
+- 创建项目并重新打开。
+- 保存 crop/transform，对应用重启后确认恢复。
+- 绘制、编辑、删除 `bbox` 和 polygon，确认自动保存。
+- 分别执行一次仅标注导出和完整数据集导出。
+- 检查进度、`classes.txt`、无标注图像选项和覆盖二次确认。
+- 打开 Taxonomy 预览，切换 view，并切换 Full 与单个对象 ID。
+- 使用基础依赖启动一次；AI 功能在安装 AI 依赖的独立环境中验证。
+
+目前没有覆盖上述流程的自动化端到端测试。类型检查和语法检查通过是发版必要条件，但不能替代手动验收。
+
+### 0.5 下一位维护者建议优先级
+
+建议按以下顺序推进：
+
+1. 为导入导出转换及目标目录安全增加基于 fixture 的后端测试。
+2. 为项目创建、对齐持久化、标注自动保存和导出进度增加浏览器冒烟测试。
+3. 明确发版形态：源码启动器、由 FastAPI 托管构建后的前端，或桌面应用打包。
+4. 在输出一致性测试完善后，合并 `exchange.py` 中旧版与流式导出的重复实现。
+5. 对超大项目下的 Taxonomy 统计/预览和图像预取做性能基线。
+6. 增加结构化日志和用户可理解的诊断信息，同时避免不必要地暴露本地路径。
 
 ## 1. 项目定位与设计背景
 
@@ -25,7 +134,7 @@ MultiAnno 是一个面向多视图、多模态影像的本地图像标注工具�
 - 标注体系管理，包括类别、属性、统计和批量维护。
 - 标注数据导入、导出和格式转换。
 - 本地可视化多视图影像、标注和预测结果。
-- 可选 AI 辅助标注，当前以 SAM/SAM3 类能力为主。
+- 可选 AI 辅助标注，支持 SAM-3，以及基于 Ultralytics YOLO 的检测和分割模型。
 
 ### 设计取向
 
@@ -569,9 +678,8 @@ AI 模块必须可选，不得阻止基础模式启动。
 | `README_zh-CN.md` | 中文 README。 |
 | `task_en.md` | 英文任务说明。 |
 | `task_zh-CN.md` | 中文任务说明。 |
-| `SYSTEM_GUIDE.md` | 英文系统说明与贡献指南。 |
-| `SYSTEM_GUIDE_zh-CN.md` | 中文系统说明与贡献指南。 |
-| `demo/` | demo、review、辅助文档和示例资源。 |
+| `HANDOFF.md` | 英文项目交接与贡献指南。 |
+| `HANDOFF_zh-CN.md` | 中文项目交接与贡献指南。 |
 | `doc/` | 文档图片等静态资源。 |
 
 ### backend
@@ -582,6 +690,7 @@ AI 模块必须可选，不得阻止基础模式启动。
 | `backend/models.py` | Pydantic 请求模型。 |
 | `backend/requirements.txt` | 基础后端依赖，不包含 AI/GPU 依赖。 |
 | `backend/requirements-gpu.txt` | AI/GPU 额外依赖。 |
+| `backend/requirements-raw.txt` | RAW/DNG 图像支持的可选依赖。 |
 | `backend/routers/filesystem.py` | 文件系统浏览、创建文件夹、目录状态检查。 |
 | `backend/routers/project.py` | 项目扫描、预览、元数据读写。 |
 | `backend/routers/annotation.py` | 标注保存。 |
@@ -789,7 +898,7 @@ python -m py_compile backend/main.py backend/routers/exchange.py
 fix/export-overwrite-confirm
 fix/view-crop-contract
 feat/local-visualization-layout
-docs/system-guide
+docs/handoff
 refactor/annotation-payload
 ```
 
@@ -800,7 +909,7 @@ refactor/annotation-payload
 ```text
 fix: prevent dataset export from deleting target dir without confirmation
 feat: add optional AI dependency fallback
-docs: add system guide for contributors
+docs: update engineering handoff for contributors
 refactor: normalize view crop contract
 ```
 
@@ -810,7 +919,7 @@ refactor: normalize view crop contract
 
 ```md
 ## 修改内容
-- 
+- 描述本次聚焦修改。
 
 ## 影响范围
 - 前端：
@@ -831,7 +940,7 @@ refactor: normalize view crop contract
 - [ ] 手动验证：
 
 ## 兼容性说明
-- 
+- 描述迁移或向后兼容影响。
 ```
 
 ### 11.4 Review 优先级
@@ -866,10 +975,10 @@ refactor: normalize view crop contract
 
 通用任务先读：
 
-- `SYSTEM_GUIDE_zh-CN.md`
-- `SYSTEM_GUIDE.md`
+- `HANDOFF_zh-CN.md`
+- `HANDOFF.md`
 - `README.md` 或 `README_zh-CN.md`
-- 相关 review 文档
+- 当前 issue 或分支附带的相关 review 文档
 - 相关模块源码
 
 涉及数据契约先读：
@@ -913,7 +1022,7 @@ refactor: normalize view crop contract
 
 ### 13.3 AI Review 输出约定
 
-如果进行 review，建议输出到 `demo/*_gpt.md`，并按优先级组织：
+如果要求生成 review 文档，应写入任务指定的 Markdown 路径，并按优先级组织：
 
 ```text
 P0：必须发版前修复
@@ -953,6 +1062,8 @@ P2：可后续优化
 
 - 更完整的端到端测试。
 - 更稳定的发布版前端托管方式。
+- 前端拆包优化：当前生产构建提示 JavaScript chunk 超过 500 kB；`projectUtils.ts` 同时被静态和动态导入，因此动态导入不会形成独立 chunk。
+- 导入导出整理：`backend/routers/exchange.py` 中流式与旧同步实现并存；应在输出一致性测试完善后再合并。
 - 更系统的 API 文档。
 - 更完整的示例数据。
 - 更清晰的 AI 安装指南。

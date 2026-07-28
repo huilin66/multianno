@@ -1,17 +1,126 @@
-# MultiAnno System Guide
+# MultiAnno Handoff Guide
 
-This document is written for new contributors, PR reviewers, and AI coding agents. It explains the system design, module boundaries, data contracts, contribution workflow, and invariants that must not be broken.
+This is the living engineering handoff for MultiAnno. It is written for maintainers, new contributors, PR reviewers, and AI coding agents. It records the long-term system design together with the current implementation baseline, operational workflows, recent changes, risk areas, and the recommended takeover order.
+
+Last code review for this handoff: 2026-07-28, based on `main` at `4ab02be` before the documentation rename.
 
 Recommended reading order:
 
-1. Project Purpose and Design Background
-2. Quick Start
-3. Architecture Overview
-4. Core Data Contracts
-5. File and Directory Map
-6. Development Invariants
-7. PR Workflow and Review Checklist
-8. AI Collaboration Guide
+1. Handoff Snapshot
+2. Project Purpose and Design Background
+3. Quick Start
+4. Architecture Overview
+5. Core Data Contracts
+6. File and Directory Map
+7. Development Invariants
+8. Current Risks and Next Steps
+9. PR Workflow and Review Checklist
+10. AI Collaboration Guide
+
+## 0. Handoff Snapshot
+
+### 0.1 Current Baseline
+
+The repository is a local-first FastAPI and React application launched from a single root script. The working tree was clean when this handoff was prepared. The main annotation workflow is usable, while automated end-to-end coverage and release packaging remain incomplete.
+
+Current runtime:
+
+```text
+python app.py
+  -> FastAPI backend: http://127.0.0.1:8090
+  -> health gate:     http://127.0.0.1:8090/api/health
+  -> Vite frontend:   http://127.0.0.1:5173
+  -> browser opens only after both services are ready
+```
+
+Current persistence:
+
+```text
+project_meta.json
+  -> project configuration, folders, scene groups, views, taxonomy
+
+<workspace>/<stem>.json
+  -> one native MultiAnno annotation document per scene group
+
+export target
+  -> converted annotations and optionally images, split files, classes.txt, report
+```
+
+There is no database, account system, cloud synchronization, or background job service. Local files are the source of truth.
+
+### 0.2 User Workflow and Ownership
+
+The primary annotation workflow is:
+
+1. Create or load a project.
+2. Select local image folders and infer filename suffixes.
+3. Bind folders into scene groups and configure views.
+4. Align augmented views to the main view with crop and transform.
+5. Define classes and attributes.
+6. Annotate scene groups in the synchronized workspace.
+7. Inspect class distribution and objects in Taxonomy.
+8. Import existing labels or export annotations/full datasets.
+
+| Workflow | Frontend owner | Backend owner | Persistent output |
+| --- | --- | --- | --- |
+| Create/load project | `CreateProject.tsx`, `LoadProject.tsx`, `DataPreload.tsx` | `project.py`, `filesystem.py` | `project_meta.json` |
+| View alignment | `ViewExtentCheck.tsx`, `projectUtils.ts` | project meta save API | `views[].crop`, `views[].transform` |
+| Annotation | `SyncAnnotation.tsx`, annotation components and hooks | `annotation.py` | `<stem>.json` |
+| Taxonomy/statistics | `TaxonomyDashboard.tsx` | `taxonomy.py` | project meta and annotation JSON |
+| Import/export | `DataImport.tsx`, `DataExport.tsx` | `exchange.py`, `format_converters.py` | selected target directory |
+| AI assistance | `AIToolPanel.tsx`, `AISettingsModal.tsx` | `ai.py`, `ai_engine.py` | preview shapes, then normal annotation state |
+| Local visualization | `LocalVisualization.tsx` | `vis.py`, `visualizer.py` | rendered preview/export images |
+
+### 0.3 Recently Completed Changes
+
+These behaviors are part of the current baseline and should not be accidentally regressed:
+
+- Native bounding boxes use `shape_type: "bbox"`. External or legacy `rectangle` values are normalized at compatibility boundaries.
+- View crop is saved at `view.crop`; `view.transform` contains only scale and offsets.
+- Dataset export checks a non-empty target and requires explicit overwrite confirmation before cleanup.
+- Dataset export includes unlabeled images by default and exposes a checkbox to exclude them.
+- Full-dataset and annotation-only exports both stream NDJSON progress to the same progress UI.
+- Annotation-only exports write `classes.txt` into the selected export directory.
+- Import/export dialogs ignore accidental outside clicks; users close them explicitly.
+- Taxonomy scene rows show per-class object counts. Single click opens a read-only multi-view preview; selecting an object zooms to it; double click opens the annotation workspace.
+- Crop snapping uses hysteresis so a snapped edge can be dragged away without feeling locked.
+- Vision AI supports SAM-3 and Ultralytics YOLO adapters, including YOLOv8/v9/v10/11/12/26 and custom `.pt`, `.onnx`, or `.pth` model paths. Optional class files are parsed by the engine.
+- Basic mode remains startable without AI packages. RAW/DNG support is also an optional dependency group.
+
+### 0.4 Release Readiness
+
+Before publishing a release, run at minimum:
+
+```bash
+python -m compileall -q backend app.py
+
+cd frontend
+npm run lint
+npm run build
+```
+
+Then complete a manual smoke test with a disposable project:
+
+- Create and reopen a project.
+- Save crop/transform alignment, restart, and verify restoration.
+- Draw/edit/delete `bbox` and polygon annotations and verify autosave.
+- Run one annotation-only export and one full-dataset export.
+- Verify progress, `classes.txt`, unlabeled-image selection, and overwrite confirmation.
+- Open Taxonomy preview, switch views, select Full and individual object IDs.
+- Start once with base dependencies only; test AI separately in an AI-enabled environment.
+
+There is currently no automated end-to-end suite that proves these workflows. A successful type/syntax check is necessary but not sufficient for release.
+
+### 0.5 First Tasks for the Next Maintainer
+
+Recommended order:
+
+1. Add fixture-based backend tests for import/export conversion and target-directory safety.
+2. Add browser smoke tests for project creation, alignment persistence, annotation autosave, and export progress.
+3. Decide on a release distribution model: source launcher, built frontend served by FastAPI, or packaged desktop application.
+4. Consolidate duplicated legacy and streaming export implementations after output parity tests exist.
+5. Add large-project performance measurements for Taxonomy statistics/preview and image prefetching.
+6. Improve structured logging and user-facing diagnostics without exposing local filesystem data unnecessarily.
 
 ## 1. Project Purpose and Design Background
 
@@ -25,7 +134,7 @@ The project focuses on:
 - Managing annotation classes, attributes, statistics, and batch cleanup.
 - Importing and exporting annotations in common dataset formats.
 - Visualizing multi-view images, annotations, and model predictions locally.
-- Providing optional AI-assisted annotation with SAM/SAM3-style models.
+- Providing optional AI-assisted annotation with SAM-3 and Ultralytics YOLO detection/segmentation models.
 
 ### Design Direction
 
@@ -563,9 +672,8 @@ AI must remain optional.
 | `README_zh-CN.md` | Chinese README. |
 | `task_en.md` | English task description. |
 | `task_zh-CN.md` | Chinese task description. |
-| `SYSTEM_GUIDE.md` | English system guide. |
-| `SYSTEM_GUIDE_zh-CN.md` | Chinese system guide. |
-| `demo/` | Demos, review notes, helper files, and sample assets. |
+| `HANDOFF.md` | English engineering handoff and contribution guide. |
+| `HANDOFF_zh-CN.md` | Chinese engineering handoff and contribution guide. |
 | `doc/` | Static documentation assets. |
 
 ### Backend
@@ -576,6 +684,7 @@ AI must remain optional.
 | `backend/models.py` | Pydantic request models. |
 | `backend/requirements.txt` | Basic backend dependencies, excluding AI/GPU dependencies. |
 | `backend/requirements-gpu.txt` | Optional AI/GPU dependencies. |
+| `backend/requirements-raw.txt` | Optional RAW/DNG image dependencies. |
 | `backend/routers/filesystem.py` | File browser, mkdir, directory status. |
 | `backend/routers/project.py` | Project scan, preview, metadata load/save. |
 | `backend/routers/annotation.py` | Annotation save. |
@@ -747,7 +856,7 @@ Examples:
 fix/export-overwrite-confirm
 fix/view-crop-contract
 feat/local-visualization-layout
-docs/system-guide
+docs/handoff
 refactor/annotation-payload
 ```
 
@@ -758,7 +867,7 @@ Examples:
 ```text
 fix: prevent dataset export from deleting target dir without confirmation
 feat: add optional AI dependency fallback
-docs: add system guide for contributors
+docs: update engineering handoff for contributors
 refactor: normalize view crop contract
 ```
 
@@ -766,7 +875,7 @@ refactor: normalize view crop contract
 
 ```md
 ## Changes
-- 
+- Describe the focused change.
 
 ## Impact
 - Frontend:
@@ -787,7 +896,7 @@ refactor: normalize view crop contract
 - [ ] Manual validation:
 
 ## Compatibility
-- 
+- Describe migration or backward-compatibility impact.
 ```
 
 ### 11.4 Review Severity
@@ -819,9 +928,10 @@ This section is for AI coding agents and human contributors who need quick orien
 
 General tasks:
 
-- `SYSTEM_GUIDE.md`
+- `HANDOFF.md`
+- `HANDOFF_zh-CN.md` when Chinese details are useful
 - `README.md` or `README_zh-CN.md`
-- Relevant review notes in `demo/`
+- Any task-specific review notes supplied with the issue or branch
 - Relevant source modules
 
 Data contract tasks:
@@ -865,7 +975,7 @@ AI tasks:
 
 ### 13.3 AI Review Output
 
-Review notes should go to `demo/*_gpt.md` and use:
+When a review artifact is requested, write it to the requested Markdown path and use:
 
 ```text
 P0: must fix before release
@@ -905,6 +1015,8 @@ Future contribution areas:
 
 - End-to-end tests.
 - More stable release-mode frontend hosting.
+- Frontend bundle splitting: the current production build reports a JavaScript chunk above 500 kB, and `projectUtils.ts` is both statically and dynamically imported, so that dynamic import does not create a separate chunk.
+- Import/export cleanup: streaming and older synchronous implementations coexist in `backend/routers/exchange.py`; preserve both until parity tests make consolidation safe.
 - More complete API documentation.
 - Better sample datasets.
 - Clearer AI installation guide.

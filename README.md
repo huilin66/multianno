@@ -28,9 +28,9 @@ Built with React, MultiAnno provides a clean and modular user interface. It incl
 ## Documentation
 
 - [Annotation Quick Start](./QUICK_START.md)
-- [System Guide](./SYSTEM_GUIDE.md)
+- [Engineering Handoff](./HANDOFF.md)
 
-The annotation quick start is for users who want to start an annotation project. The system guide explains the architecture, data contracts, module boundaries, development invariants, and PR workflow for contributors and AI coding assistants.
+The annotation quick start is for users who want to start an annotation project. The engineering handoff records the current implementation baseline, architecture, data contracts, module boundaries, release checks, risks, and contribution workflow.
 
 ---
 
