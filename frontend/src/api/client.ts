@@ -113,8 +113,7 @@ export const importData = (payload: any) =>
 export const checkDirectoryStatus = (path: string) =>
   get(`${API_BASE_URL}/fs/dir_status?path=${encodeURIComponent(path)}`);
 
-// client.ts 新增
-export const exportDatasetStream = async (
+export const exportDataStream = async (
   payload: any,
   onProgress: (current: number, total: number) => void,
   signal?: AbortSignal
@@ -134,14 +133,21 @@ export const exportDatasetStream = async (
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = '';
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        buffer += decoder.decode();
+        break;
+      }
 
-      const lines = decoder.decode(value, { stream: true }).split('\n').filter(l => l.trim());
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
       for (const line of lines) {
+        if (!line.trim()) continue;
         const data = JSON.parse(line);
         if (data.type === 'progress') {
           onProgress(data.current, data.total);
@@ -153,10 +159,18 @@ export const exportDatasetStream = async (
         }
       }
     }
+
+    if (buffer.trim()) {
+      const data = JSON.parse(buffer);
+      if (data.type === 'complete') return data;
+      if (data.type === 'error') throw new Error(data.message);
+    }
   } finally {
     reader.releaseLock();
   }
 };
+
+export const exportDatasetStream = exportDataStream;
 
 export const exploreDirectory = async (path: string) => {
   const savedHistory = localStorage.getItem('multiAnno_recentPaths');

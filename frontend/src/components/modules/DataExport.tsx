@@ -9,7 +9,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Legend } from '../ui/legend';
 import Slider from 'rc-slider';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
-import { exportData, getFileContent, exportDatasetStream, checkDirectoryStatus } from '../../api/client';
+import { getFileContent, exportDataStream, checkDirectoryStatus } from '../../api/client';
 import { showDialog } from '../../store/useDialogStore';
 import {
   SUPPORTED_TASKS,
@@ -362,7 +362,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       });
 
       if (exportMode === 'dataset') {
-        const result = await exportDatasetStream({
+        const result = await exportDataStream({
           source_dirs: [workspacePath],
           target_dir: targetDir,
           task_type: taskType,
@@ -408,7 +408,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           onClose?.();
         }
       } else {
-        const result = await exportData({
+        const result = await exportDataStream({
           source_dirs: [workspacePath],
           target_dir: targetDir,
           task_type: taskType,
@@ -421,6 +421,8 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           stems: stems,
           export_mode: 'annotation',
           split_content_mode: splitContentMode,
+        }, (current, total) => {
+          setExportProgress(Math.round((current / total) * 100));
         }, signal);
 
         setExportProgress(100);
@@ -433,7 +435,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
             t('dataExport.result.classes', { count: selectedClassNames.length }),
           ];
           const exported = result?.exported;
-          if (exported) {
+          if (exported !== undefined) {
             lines[2] = t('dataExport.result.scenes', { count: exported, total: stems.length });
           }
           await showDialog({

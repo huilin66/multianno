@@ -129,6 +129,42 @@ def _apply_unlabeled_filter(req: ExportRequest):
     ]
 
 
+def _get_annotation_json_paths(req: ExportRequest):
+    if req.stems and req.source_dirs:
+        source_dir = req.source_dirs[0]
+        paths = [os.path.join(source_dir, f"{stem}.json") for stem in req.stems]
+        return [path for path in paths if os.path.exists(path)]
+    return get_native_jsons(req.source_dirs)
+
+
+def _progress_event(current: int, total: int):
+    percent = int((current / total) * 100) if total else 100
+    return json.dumps(
+        {
+            "type": "progress",
+            "current": current,
+            "total": total,
+            "percent": percent,
+        }
+    ) + "\n"
+
+
+def _complete_event(exported: int, **extra):
+    return json.dumps(
+        {
+            "type": "complete",
+            "percent": 100,
+            "exported": exported,
+            **extra,
+        }
+    ) + "\n"
+
+
+def _write_classes_file(target_dir: str, selected_classes: list[str]):
+    with open(os.path.join(target_dir, "classes.txt"), "w", encoding="utf-8") as cf:
+        cf.write("\n".join(selected_classes))
+
+
 @router.get("/read_text")
 async def read_text_file(path: str):
     if not os.path.exists(path):
@@ -173,15 +209,22 @@ async def handle_export(req: ExportRequest):
         raise HTTPException(status_code=400, detail="不支持的导出格式")
 
     if req.format == "multianno":
-        return await export_to_multianno(req)
-    elif req.format == "yolo":
-        return await export_to_yolo(req)
-    elif req.format == "coco":
-        return await export_to_coco(req)
-    elif req.format == "mask":
-        return await export_to_images_only(req)
-    else:
-        raise HTTPException(status_code=400, detail="不支持的导出格式")
+        return StreamingResponse(
+            export_multianno_annotation_stream(req), media_type="application/x-ndjson"
+        )
+    if req.format == "yolo":
+        return StreamingResponse(
+            export_yolo_annotation_stream(req), media_type="application/x-ndjson"
+        )
+    if req.format == "coco":
+        return StreamingResponse(
+            export_coco_annotation_stream(req), media_type="application/x-ndjson"
+        )
+    if req.format == "mask":
+        return StreamingResponse(
+            export_mask_annotation_stream(req), media_type="application/x-ndjson"
+        )
+    raise HTTPException(status_code=400, detail="不支持的导出格式")
 
 
 async def export_yolo_dataset_stream(req: ExportRequest):
@@ -774,6 +817,207 @@ async def export_mask_dataset_stream(req: ExportRequest):
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
+async def export_multianno_annotation_stream(req: ExportRequest):
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        json_paths = _get_annotation_json_paths(req)
+        total = len(json_paths)
+        if not total:
+            yield json.dumps({"type": "error", "message": "未找到任何标注文件"}) + "\n"
+            return
+
+        exported_count = 0
+        for idx, j_path in enumerate(json_paths):
+            with open(j_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            base_stem = data.get("stem", Path(j_path).stem)
+            filtered_shapes, stats = filter_multianno(
+                data.get("shapes", []), req.selected_classes, req.allowed_shapes
+            )
+            if filtered_shapes or len(data.get("shapes", [])) == 0:
+                data["shapes"] = filtered_shapes
+                with open(
+                    os.path.join(
+                        req.target_dir,
+                        f"{base_stem}{req.custom_suffix}{req.extension}",
+                    ),
+                    "w",
+                    encoding="utf-8",
+                ) as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+                exported_count += 1
+
+            reporter.log_scene(base_stem, stats)
+            yield _progress_event(idx + 1, total)
+            await asyncio.sleep(0)
+
+        reporter.save_report(req.task_type, req.format)
+        _write_classes_file(req.target_dir, req.selected_classes)
+        yield _complete_event(exported_count)
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+
+async def export_yolo_annotation_stream(req: ExportRequest):
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        json_paths = _get_annotation_json_paths(req)
+        total = len(json_paths)
+        if not total:
+            yield json.dumps({"type": "error", "message": "未找到任何标注文件"}) + "\n"
+            return
+
+        exported_count = 0
+        for idx, j_path in enumerate(json_paths):
+            with open(j_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            base_stem = data.get("stem", Path(j_path).stem)
+            yolo_lines, stats = convert_to_yolo(
+                data.get("shapes", []),
+                data.get("imageWidth", 1),
+                data.get("imageHeight", 1),
+                req.selected_classes,
+                req.allowed_shapes,
+                req.task_type,
+            )
+            if yolo_lines:
+                with open(
+                    os.path.join(
+                        req.target_dir,
+                        f"{base_stem}{req.custom_suffix}{req.extension}",
+                    ),
+                    "w",
+                    encoding="utf-8",
+                ) as tf:
+                    tf.write("\n".join(yolo_lines))
+                exported_count += 1
+
+            reporter.log_scene(base_stem, stats)
+            yield _progress_event(idx + 1, total)
+            await asyncio.sleep(0)
+
+        reporter.save_report(req.task_type, req.format)
+        _write_classes_file(req.target_dir, req.selected_classes)
+        yield _complete_event(exported_count)
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+
+async def export_coco_annotation_stream(req: ExportRequest):
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        json_paths = _get_annotation_json_paths(req)
+        total = len(json_paths)
+        if not total:
+            yield json.dumps({"type": "error", "message": "未找到任何标注文件"}) + "\n"
+            return
+
+        coco_dict = {
+            "images": [],
+            "annotations": [],
+            "categories": [
+                {"id": i, "name": name}
+                for i, name in enumerate(req.selected_classes)
+            ],
+        }
+        img_id, ann_id = 1, 1
+        for idx, j_path in enumerate(json_paths):
+            with open(j_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            base_stem = data.get("stem", Path(j_path).stem)
+            coco_dict["images"].append(
+                {
+                    "id": img_id,
+                    "file_name": f"{base_stem}.jpg",
+                    "width": data.get("imageWidth", 1),
+                    "height": data.get("imageHeight", 1),
+                }
+            )
+            anns, stats, ann_id = convert_to_coco_anns(
+                data.get("shapes", []),
+                img_id,
+                ann_id,
+                req.selected_classes,
+                req.allowed_shapes,
+            )
+            coco_dict["annotations"].extend(anns)
+            img_id += 1
+            reporter.log_scene(base_stem, stats)
+            yield _progress_event(idx + 1, total)
+            await asyncio.sleep(0)
+
+        reporter.save_report(req.task_type, req.format)
+        with open(
+            os.path.join(
+                req.target_dir,
+                f"instances_default{req.custom_suffix}{req.extension}",
+            ),
+            "w",
+            encoding="utf-8",
+        ) as f:
+            json.dump(coco_dict, f, ensure_ascii=False)
+        _write_classes_file(req.target_dir, req.selected_classes)
+        yield _complete_event(img_id - 1)
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+
+async def export_mask_annotation_stream(req: ExportRequest):
+    try:
+        reporter = ExportReporter(req.target_dir, req.generate_report)
+        json_paths = _get_annotation_json_paths(req)
+        total = len(json_paths)
+        if not total:
+            yield json.dumps({"type": "error", "message": "未找到任何标注文件"}) + "\n"
+            return
+
+        exported_count = 0
+        for idx, j_path in enumerate(json_paths):
+            with open(j_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            base_stem = data.get("stem", Path(j_path).stem)
+            img_w, img_h = data.get("imageWidth"), data.get("imageHeight")
+            if img_w and img_h:
+                mask, stats = render_mask_array(
+                    data.get("shapes", []),
+                    img_w,
+                    img_h,
+                    req.selected_classes,
+                    req.allowed_shapes,
+                )
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    io.imsave(
+                        os.path.join(
+                            req.target_dir,
+                            f"{base_stem}{req.custom_suffix}{req.extension}",
+                        ),
+                        mask,
+                        check_contrast=False,
+                    )
+                exported_count += 1
+            else:
+                stats = {"native": 0, "converted": 0, "discarded": 0}
+
+            reporter.log_scene(base_stem, stats)
+            yield _progress_event(idx + 1, total)
+            await asyncio.sleep(0)
+
+        reporter.save_report(req.task_type, req.format)
+        _write_classes_file(req.target_dir, req.selected_classes)
+        yield _complete_event(exported_count)
+    except asyncio.CancelledError:
+        print("⚠️ Client disconnected, export cancelled")
+    except Exception as e:
+        yield json.dumps({"type": "error", "message": str(e)}) + "\n"
+
+
 async def export_to_multianno(req: ExportRequest):
     reporter = ExportReporter(req.target_dir, req.generate_report)
     exported_count = 0
@@ -831,10 +1075,7 @@ async def export_to_yolo(req: ExportRequest):
             exported_count += 1
         reporter.log_scene(base_stem, stats)
     reporter.save_report(req.task_type, req.format)
-    with open(
-        os.path.join(reporter.parent_dir, "classes.txt"), "w", encoding="utf-8"
-    ) as cf:
-        cf.write("\n".join(req.selected_classes))
+    _write_classes_file(req.target_dir, req.selected_classes)
     return {"status": "success", "message": f"YOLO: 生成 {exported_count} 个 txt。"}
 
 
@@ -911,10 +1152,7 @@ async def export_to_images_only(req: ExportRequest):
         exported_count += 1
         reporter.log_scene(base_stem, stats)
     reporter.save_report(req.task_type, req.format)
-    with open(
-        os.path.join(reporter.parent_dir, "classes.txt"), "w", encoding="utf-8"
-    ) as cf:
-        cf.write("\n".join(req.selected_classes))
+    _write_classes_file(req.target_dir, req.selected_classes)
     return {
         "status": "success",
         "message": f"语义分割: 成功渲染并导出 {exported_count} 张掩码图。",
