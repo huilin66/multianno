@@ -10,7 +10,6 @@ import urllib.request
 import webbrowser
 from urllib.error import URLError
 
-
 BACKEND_HOST = "127.0.0.1"
 BACKEND_PORT = 8090
 FRONTEND_HOST = "127.0.0.1"

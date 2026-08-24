@@ -26,6 +26,87 @@ const mapFrontendTypeToDiskType = (frontendType: string) => {
   return typeMap[frontendType] || 'polygon';
 };
 
+type StemAnnotationLoadResult = {
+  annotations: Annotation[];
+  found: boolean;
+};
+
+const getAnnotationPath = (stem: string, mainFolderPath: string) => {
+  const separator = mainFolderPath.includes('\\') ? '\\' : '/';
+  const cleanPath = mainFolderPath.endsWith(separator)
+    ? mainFolderPath
+    : mainFolderPath + separator;
+  return `${cleanPath}${stem}.json`;
+};
+
+const readStemAnnotations = async (
+  stem: string,
+  mainFolderPath: string,
+): Promise<StemAnnotationLoadResult> => {
+  const rawData = await getFileContent(getAnnotationPath(stem, mainFolderPath));
+  const data = typeof rawData.content === 'string'
+    ? JSON.parse(rawData.content)
+    : rawData;
+  const shapes = Array.isArray(data?.shapes) ? data.shapes : [];
+
+  const annotations = shapes
+    .filter((shape: any) => Array.isArray(shape.points))
+    .map((shape: any) => ({
+      id: crypto.randomUUID(),
+      stem,
+      label: shape.label,
+      text: shape.text || '',
+      type: mapDiskTypeToFrontend(shape.shape_type ?? shape.type),
+      points: shape.points.map((p: any) => ({ x: p[0] ?? p.x, y: p[1] ?? p.y })),
+      attributes: shape.attributes || {},
+      difficult: shape.difficult || false,
+      occluded: shape.occluded || false,
+      truncated: shape.truncated || false,
+      group_id: shape.group_id,
+      track_id: shape.track_id,
+      flags: shape.flags || {},
+    }));
+
+  return { annotations, found: true };
+};
+
+/** 清理当前场景的前端持久化缓存，并从磁盘重新读取该场景 JSON。 */
+export const reloadProjectAnnotation = async (
+  stem: string,
+  mainFolderPath: string,
+): Promise<{ found: boolean; annotationCount: number }> => {
+  const currentState = useStore.getState();
+
+  // Zustand persist 会同步更新 localStorage；先移除旧缓存，避免读取失败时继续显示旧数据。
+  useStore.setState({
+    annotations: currentState.annotations.filter((annotation) => annotation.stem !== stem),
+    isAnnotationDirty: false,
+    activeAnnotationId: null,
+  });
+
+  let result: StemAnnotationLoadResult = { annotations: [], found: false };
+  try {
+    result = await readStemAnnotations(stem, mainFolderPath);
+  } catch {
+    // 文件不存在或网络文件读取失败时，按空标注处理；调用方会展示 found=false。
+  }
+
+  const latestState = useStore.getState();
+  useStore.setState({
+    annotations: [
+      ...latestState.annotations.filter((annotation) => annotation.stem !== stem),
+      ...result.annotations,
+    ],
+    isAnnotationDirty: false,
+    activeAnnotationId: null,
+  });
+
+  return {
+    found: result.found,
+    annotationCount: result.annotations.length,
+  };
+};
+
 export const loadAllProjectAnnotations = async (
   stems: string[], 
   mainFolderPath: string,
@@ -35,41 +116,31 @@ export const loadAllProjectAnnotations = async (
   if (!stems || stems.length === 0 || !mainFolderPath) return;
 
   const allLoadedAnnotations: Annotation[] = [];
+  let loadedSceneCount = 0;
+  let missingSceneCount = 0;
   const CHUNK_SIZE = chunkSize || 50; 
-  const separator = mainFolderPath.includes('\\') ? '\\' : '/';
-  const cleanPath = mainFolderPath.endsWith(separator) ? mainFolderPath : mainFolderPath + separator;
 
   for (let i = 0; i < stems.length; i += CHUNK_SIZE) {
     const chunk = stems.slice(i, i + CHUNK_SIZE);
     
     const promises = chunk.map(async (stem) => {
-      const jsonPath = `${cleanPath}${stem}.json`;
       try {
-        const rawData = await getFileContent(jsonPath);
-        const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
-        
-        return (data.shapes || []).map((shape: any) => ({
-          id: crypto.randomUUID(), 
-          stem: stem,
-          label: shape.label,
-          text: shape.text || '',
-          type: mapDiskTypeToFrontend(shape.shape_type ?? shape.type),
-          points: shape.points.map((p: any) => ({ x: p[0] ?? p.x, y: p[1] ?? p.y })),
-          attributes: shape.attributes || {},
-          difficult: shape.difficult || false,
-          occluded: shape.occluded || false,
-          group_id: shape.group_id
-        }));
-      } catch (error) {
-        return []; 
+        return await readStemAnnotations(stem, mainFolderPath);
+      } catch {
+        return { annotations: [], found: false };
       }
     });
 
     const chunkResults = await Promise.all(promises);
     
-    chunkResults.forEach(annos => {
-      if (annos && annos.length > 0) {
-        allLoadedAnnotations.push(...annos);
+    chunkResults.forEach(result => {
+      if (result.found) {
+        loadedSceneCount += 1;
+      } else {
+        missingSceneCount += 1;
+      }
+      if (result.annotations.length > 0) {
+        allLoadedAnnotations.push(...result.annotations);
       }
     });
 
@@ -80,7 +151,12 @@ export const loadAllProjectAnnotations = async (
     onProgress?.(completed, stems.length);
   }
 
-
+  return {
+    totalScenes: stems.length,
+    loadedSceneCount,
+    missingSceneCount,
+    annotationCount: allLoadedAnnotations.length,
+  };
 };
 
 /**

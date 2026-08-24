@@ -23,10 +23,10 @@ const post = async (url: string, body: any, signal?: AbortSignal) => {
   return response.json();
 };
 
-const get = async (url: string) => {
+const get = async (url: string, init?: RequestInit) => {
   let response: Response;
   try {
-    response = await fetch(url);
+    response = await fetch(url, init);
   } catch {
     throw new Error('Backend unreachable. Please check if the server is running.');
   }
@@ -64,7 +64,9 @@ export const saveAnnotation = (payload: {
 }) => post(`${API_BASE_URL}/annotations/save`, payload);
 
 export const getFileContent = (path: string) =>
-  get(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`);
+  get(`${API_BASE_URL}/exchange/read_text?path=${encodeURIComponent(path)}`, {
+    cache: 'no-store',
+  });
 
 export const batchMergeClass = (payload: {
   save_dirs: string[];

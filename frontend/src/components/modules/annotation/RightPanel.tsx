@@ -9,7 +9,7 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, EyeOff, Check, X, MapPin, Copy
+  Tag, Type, Hash, EyeOff, Check, X, MapPin, Copy, RefreshCw
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -31,6 +31,8 @@ interface RightPanelProps {
   hiddenAnnotations: string[];
   toggleAnnotationVisibility: (id: string) => void;
   handleClear: () => void;
+  handleRefreshAnnotations: () => void;
+  isRefreshingAnnotations: boolean;
 }
 
 export function RightPanel({ 
@@ -39,6 +41,7 @@ export function RightPanel({
   layerOrder, setLayerOrder,
   visibleLayers, setVisibleLayers,
   hiddenAnnotations, toggleAnnotationVisibility, handleClear,
+  handleRefreshAnnotations, isRefreshingAnnotations,
 }: RightPanelProps) {
   const { t } = useTranslation();
   
@@ -1046,71 +1049,88 @@ export function RightPanel({
           isExpanded={expanded.objects} onToggle={() => toggleSection('objects')} 
           badge={currentAnnotations.filter((a: any) => !hiddenClasses.includes(a.label)).length}
           actionNode={
-            currentAnnotations.length > 0 && (
-              <div className="flex items-center gap-1">{/* 🌟 显示/隐藏已隐藏的对象 */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowHiddenObjects(prev => !prev);
-                }}
-                className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
-                  showHiddenObjects 
-                    ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40' 
-                    : 'text-neutral-400 hover:text-amber-500'
-                }`}
-                title={showHiddenObjects ? t('rightPanel.hideHiddenObjects') : t('rightPanel.showHiddenObjects')}
-              >
-                {showHiddenObjects ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-              </button>
-              <button
-                  onClick={(e) => { e.stopPropagation(); setNmsPanelOpen(!nmsPanelOpen); }}
-                  className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${nmsPanelOpen || hasScanned ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40' : 'text-neutral-400 hover:text-blue-500'}`}
-                  title={t('rightPanel.findOverlapping')}
+            currentStem && (
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRefreshAnnotations();
+                  }}
+                  disabled={isRefreshingAnnotations}
+                  className="w-6 h-6 flex items-center justify-center text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded transition-all disabled:opacity-50"
+                  title={t('rightPanel.refreshAnnotations')}
                 >
-                  <Copy className="w-3.5 h-3.5" /> {/* 🌟 修改为交叠矩形图标 */}
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingAnnotations ? 'animate-spin' : ''}`} />
                 </button>
+                {currentAnnotations.length > 0 && (
+                  <>
+                    {/* 🌟 显示/隐藏已隐藏的对象 */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowHiddenObjects(prev => !prev);
+                      }}
+                      className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
+                        showHiddenObjects
+                          ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40'
+                          : 'text-neutral-400 hover:text-amber-500'
+                      }`}
+                      title={showHiddenObjects ? t('rightPanel.hideHiddenObjects') : t('rightPanel.showHiddenObjects')}
+                    >
+                      {showHiddenObjects ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setNmsPanelOpen(!nmsPanelOpen); }}
+                      className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${nmsPanelOpen || hasScanned ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40' : 'text-neutral-400 hover:text-blue-500'}`}
+                      title={t('rightPanel.findOverlapping')}
+                    >
+                      <Copy className="w-3.5 h-3.5" /> {/* 🌟 修改为交叠矩形图标 */}
+                    </button>
 
-                {confirmDeleteAll ? (
-                  // 🛡️ 点击后展开的原地确认菜单
-                  <div className="flex items-center gap-1 bg-red-100 dark:bg-red-900/40 rounded px-1 animate-in fade-in zoom-in-95">
-                    <span className="text-[9px] text-red-600 font-bold px-1 uppercase tracking-wider">{t('rightPanel.sureConfirm')}</span>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleClear();
-                        setConfirmDeleteAll(false);
-                      }}
-                      className="w-5 h-5 flex items-center justify-center text-red-600 hover:bg-red-200 dark:hover:bg-red-800/60 rounded transition-colors"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        // 点 X 取消操作，恢复垃圾桶
-                        setConfirmDeleteAll(false);
-                      }}
-                      className="w-5 h-5 flex items-center justify-center text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  // 默认状态下的垃圾桶图标
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // 点击垃圾桶，激活二次确认 UI
-                      setConfirmDeleteAll(true);
-                    }}
-                    className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-all"
-                    title={t('rightPanel.deleteAllObjects')}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                    {confirmDeleteAll ? (
+                      // 🛡️ 点击后展开的原地确认菜单
+                      <div className="flex items-center gap-1 bg-red-100 dark:bg-red-900/40 rounded px-1 animate-in fade-in zoom-in-95">
+                        <span className="text-[9px] text-red-600 font-bold px-1 uppercase tracking-wider">{t('rightPanel.sureConfirm')}</span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleClear();
+                            setConfirmDeleteAll(false);
+                          }}
+                          className="w-5 h-5 flex items-center justify-center text-red-600 hover:bg-red-200 dark:hover:bg-red-800/60 rounded transition-colors"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // 点 X 取消操作，恢复垃圾桶
+                            setConfirmDeleteAll(false);
+                          }}
+                          className="w-5 h-5 flex items-center justify-center text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-700 rounded transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ) : (
+                      // 默认状态下的垃圾桶图标
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // 点击垃圾桶，激活二次确认 UI
+                          setConfirmDeleteAll(true);
+                        }}
+                        className="w-5 h-5 flex items-center justify-center text-neutral-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-all"
+                        title={t('rightPanel.deleteAllObjects')}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             )

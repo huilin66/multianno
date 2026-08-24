@@ -20,6 +20,9 @@ import { X, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { createPortal } from 'react-dom';
 import { CURSOR_FOCUS, CURSOR_DRAG } from '../../lib/cursors';
 import { TAXONOMY_COLORS } from '../../config/colors';
+import { reloadProjectAnnotation } from '../../lib/annotationUtils';
+import { showDialog } from '../../store/useDialogStore';
+import { toast } from '../../store/useToastStore';
 
 export interface SAMPoint {
   x: number;
@@ -125,6 +128,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const [activeControlLayer, setActiveControlLayer] = useState<string>(''); // 顶部控制条当前选中的图层
   type RenderState = 'loading' | 'ready';
   const [renderState, setRenderState] = useState<RenderState>('ready');
+  const [isRefreshingAnnotations, setIsRefreshingAnnotations] = useState(false);
   useEffect(() => {
       setRenderState('loading');
   }, [currentStem]);
@@ -330,6 +334,52 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     
     currentAnnos.forEach(a => state.removeAnnotation(a.id));
     state.setActiveAnnotationId(null);
+  };
+
+  const handleRefreshCurrentAnnotations = async () => {
+    if (isRefreshingAnnotations) return;
+
+    const state = useStore.getState();
+    const stem = state.currentStem;
+    const mainFolder = state.folders.find(
+      (folder: any) => folder.id === state.views.find((view: any) => view.isMain)?.folderId,
+    ) || state.folders[0];
+    const saveDir = state.workspacePath || mainFolder?.path || '';
+
+    if (!stem || !saveDir) {
+      toast.warning(t('rightPanel.refreshAnnotationsNoProject'));
+      return;
+    }
+
+    if (state.isAnnotationDirty) {
+      const confirmed = await showDialog({
+        type: 'warning',
+        title: t('rightPanel.refreshAnnotationsTitle'),
+        description: t('rightPanel.refreshAnnotationsDirtyDesc'),
+        confirmText: t('common.confirm'),
+        cancelText: t('common.cancel'),
+      });
+      if (!confirmed) return;
+    }
+
+    setIsRefreshingAnnotations(true);
+    try {
+      const result = await reloadProjectAnnotation(stem, saveDir);
+      setActiveAnnotationId(null);
+      if (result.found) {
+        toast.success(t('rightPanel.refreshAnnotationsSuccess', {
+          count: result.annotationCount,
+        }));
+      } else {
+        toast.warning(t('rightPanel.refreshAnnotationsMissing'));
+      }
+    } catch (error: any) {
+      toast.error(t('rightPanel.refreshAnnotationsError', {
+        message: error?.message || String(error),
+      }));
+    } finally {
+      setIsRefreshingAnnotations(false);
+    }
   };
 
   // 🌟 1. 核心修复：建立 AI 状态同步监听器
@@ -1909,6 +1959,8 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             hiddenAnnotations={hiddenAnnotations}
             toggleAnnotationVisibility={toggleAnnotationVisibility}
             handleClear={handleClear}
+            handleRefreshAnnotations={handleRefreshCurrentAnnotations}
+            isRefreshingAnnotations={isRefreshingAnnotations}
           />
         ) : (
           <button
