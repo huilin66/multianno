@@ -476,6 +476,7 @@
       "method": "Method: {{format}}",
       "shapes": "Shapes imported: {{count}}",
       "images": "Images modified: {{imported}}/{{total}}",
+      "emptyJson": "Empty JSON files created for unlabeled scenes: {{count}}",
       "dimensionFallback": "Image dimensions could not be read for {{count}} scene(s); default dimensions were used. Check image paths."
     }
   },

@@ -221,10 +221,16 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         t('dataImport.result.shapes', { count: shapeCount }),
         t('dataImport.result.images', { imported: importedCount, total: totalCount }),
       ].join('\n');
+      const emptyJsonCount = res?.empty_json_count ?? 0;
       const dimensionFallbackCount = res?.dimension_fallback_count ?? 0;
-      const resultDescription = format === 'yolo' && dimensionFallbackCount > 0
-        ? `${desc}\n${t('dataImport.result.dimensionFallback', { count: dimensionFallbackCount })}`
-        : desc;
+      const resultLines = [desc];
+      if (format === 'yolo' && emptyJsonCount > 0) {
+        resultLines.push(t('dataImport.result.emptyJson', { count: emptyJsonCount }));
+      }
+      if (format === 'yolo' && dimensionFallbackCount > 0) {
+        resultLines.push(t('dataImport.result.dimensionFallback', { count: dimensionFallbackCount }));
+      }
+      const resultDescription = resultLines.join('\n');
       await showDialog({
         title: t('dataImport.success'),
         description: resultDescription,

@@ -1223,6 +1223,8 @@ async def import_from_yolo(req: ImportRequest):
             classes_map = [line.strip() for line in f if line.strip()]
 
     imported_count = 0
+    empty_json_count = 0
+    missing_label_count = 0
     processed_stems = set()
     total_shapes = 0
     dimension_fallback_count = 0
@@ -1236,15 +1238,27 @@ async def import_from_yolo(req: ImportRequest):
     for stem in stems:
         filename = f"{stem}{req.custom_suffix}{req.extension}" if req.extension else f"{stem}{req.custom_suffix}.txt"
         txt_path = os.path.join(req.source_path, filename)
-        if not os.path.exists(txt_path):
-            continue
         base_stem = stem
         target_json = os.path.join(req.target_dir, f"{base_stem}.json")
+
+        # YOLO 数据集允许通过“没有对应 txt 文件”表示负样本。
+        # MultiAnno 则按场景保存原生 JSON，因此即使没有标签文件，也要为
+        # 这个场景创建一个 shapes 为空的 JSON，避免前端加载时得到 404。
+        label_file_exists = os.path.exists(txt_path)
+        if not label_file_exists:
+            missing_label_count += 1
 
         existing_data = {"shapes": []}
         if os.path.exists(target_json):
             with open(target_json, "r", encoding="utf-8") as f:
                 existing_data = json.load(f)
+
+        if not isinstance(existing_data.get("shapes"), list):
+            existing_data["shapes"] = []
+
+        # 让 mirror 模式把所有项目场景视为已处理；即使某个场景没有
+        # YOLO 标签文件，也会被写成空标注 JSON，而不是被后续清洗器误判。
+        processed_stems.add(base_stem)
 
         # YOLO 坐标是相对于原图宽高归一化的。优先读取前端传来的
         # 主视图真实图像路径，避免把 workspace 中不存在图像时的旧默认值
@@ -1290,20 +1304,26 @@ async def import_from_yolo(req: ImportRequest):
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
-        processed_stems.add(base_stem)
 
-        with open(txt_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        new_shapes, _ = yolo_to_shapes(lines, img_w, img_h, classes_map)
+        new_shapes = []
+        if label_file_exists:
+            with open(txt_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            new_shapes, _ = yolo_to_shapes(lines, img_w, img_h, classes_map)
 
-        if new_shapes:
-            existing_data["shapes"].extend(new_shapes)
-            existing_data["stem"] = base_stem
-            existing_data["imageWidth"], existing_data["imageHeight"] = img_w, img_h
-            with open(target_json, "w", encoding="utf-8") as f:
-                json.dump(existing_data, f, ensure_ascii=False, indent=2)
-            imported_count += 1
-            total_shapes += len(new_shapes)
+        existing_data["shapes"].extend(new_shapes)
+        existing_data["stem"] = base_stem
+        existing_data["imageWidth"], existing_data["imageHeight"] = img_w, img_h
+        if image_path:
+            existing_data.setdefault("imageNameMain", os.path.basename(image_path))
+
+        # 无论是否有有效目标，都落盘一个完整的原生 JSON。
+        with open(target_json, "w", encoding="utf-8") as f:
+            json.dump(existing_data, f, ensure_ascii=False, indent=2)
+        imported_count += 1
+        total_shapes += len(new_shapes)
+        if not existing_data["shapes"]:
+            empty_json_count += 1
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
@@ -1311,10 +1331,12 @@ async def import_from_yolo(req: ImportRequest):
 
     return {
         "status": "success",
-        "message": f"成功合并导入 {imported_count} 个 YOLO 场景。",
+        "message": f"成功合并导入 {imported_count} 个 YOLO 场景，其中 {empty_json_count} 个为空标注场景。",
         "format": "YOLO",
         "imported_count": imported_count,
         "shape_count": total_shapes,
+        "empty_json_count": empty_json_count,
+        "missing_label_count": missing_label_count,
         "dimension_fallback_count": dimension_fallback_count,
     }
 
