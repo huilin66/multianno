@@ -36,6 +36,12 @@
     "fillShapes": "Fill Shapes",
     "showAnnotationToolLabel": "Show Annotation Tool Label",
     "autoRefreshStats": "Auto Refresh Statistics",
+    "reloadAll": "Reload All Annotations",
+    "reloadAllNoProject": "There are no project annotations to reload",
+    "reloadAllTitle": "Reload all annotations?",
+    "reloadAllDirtyDesc": "Reloading will discard unsaved annotation changes. Continue?",
+    "reloadAllSuccess": "Reloaded all annotations: {{scenes}} scenes, {{count}} objects",
+    "reloadAllError": "Failed to reload all annotations: {{message}}",
     "shortcutSetting": "Shortcut Settings",
     "aiSetting": "AI Settings",
     "viewLayout": "View Layout"

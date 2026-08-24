@@ -16,7 +16,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -29,6 +29,9 @@ import { GlobalConfirmDialog } from './components/modals/GlobalConfirmDialog';
 import { ViewLayoutSettingsModal } from './components/modals/settings/ViewLayoutSettingsModal';
 import { ToastContainer } from './components/ui/toast';
 import { useBackendHealth } from './hooks/useBackendHealth';
+import { loadAllProjectAnnotations } from './lib/annotationUtils';
+import { showDialog } from './store/useDialogStore';
+import { toast } from './store/useToastStore';
 
 export default function App() {
   const { t, i18n } = useTranslation();
@@ -41,6 +44,65 @@ export default function App() {
   const [viewLayoutModalOpen, setViewLayoutModalOpen] = useState(false);
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
+  const [isReloadingAll, setIsReloadingAll] = useState(false);
+  const [reloadProgress, setReloadProgress] = useState({ current: 0, total: 0 });
+
+  const handleReloadAll = async () => {
+    if (isReloadingAll) return;
+
+    const state = useStore.getState();
+    const mainFolder = state.folders.find(
+      (folder) => folder.id === state.views.find((view) => view.isMain)?.folderId,
+    ) || state.folders[0];
+    const saveDir = state.workspacePath || mainFolder?.path || '';
+
+    if (state.stems.length === 0 || !saveDir) {
+      toast.warning(t('headerSetting.reloadAllNoProject'));
+      return;
+    }
+
+    if (state.isAnnotationDirty) {
+      const confirmed = await showDialog({
+        type: 'warning',
+        title: t('headerSetting.reloadAllTitle'),
+        description: t('headerSetting.reloadAllDirtyDesc'),
+        confirmText: t('common.confirm'),
+        cancelText: t('common.cancel'),
+      });
+      if (!confirmed) return;
+    }
+
+    setIsReloadingAll(true);
+    setReloadProgress({ current: 0, total: state.stems.length });
+    useStore.setState({
+      annotations: [],
+      hiddenAnnotations: [],
+      activeAnnotationId: null,
+      isAnnotationDirty: false,
+    });
+
+    try {
+      const result = await loadAllProjectAnnotations(
+        state.stems,
+        saveDir,
+        (current, total) => setReloadProgress({ current, total }),
+        10,
+      );
+
+      if (result) {
+        toast.success(t('headerSetting.reloadAllSuccess', {
+          scenes: result.loadedSceneCount,
+          count: result.annotationCount,
+        }));
+      }
+    } catch (error: any) {
+      toast.error(t('headerSetting.reloadAllError', {
+        message: error?.message || String(error),
+      }));
+    } finally {
+      setIsReloadingAll(false);
+    }
+  };
 
   useEffect(() => {
     i18n.changeLanguage(language);
@@ -285,6 +347,20 @@ export default function App() {
                   />
                 </div>
                 <div className="border-t border-neutral-300 dark:border-neutral-700 pt-1" />
+                <button
+                  type="button"
+                  onClick={handleReloadAll}
+                  disabled={isReloadingAll}
+                  className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-1 transition-colors disabled:opacity-60"
+                  title={t('headerSetting.reloadAll')}
+                >
+                  <span className="text-xs cursor-pointer">
+                    {isReloadingAll && reloadProgress.total > 0
+                      ? `${t('headerSetting.reloadAll')} (${reloadProgress.current}/${reloadProgress.total})`
+                      : t('headerSetting.reloadAll')}
+                  </span>
+                  <RefreshCw className={`w-4 h-4 ${isReloadingAll ? 'animate-spin' : ''}`} />
+                </button>
                 <button
                   onClick={() => setViewLayoutModalOpen(true)}
                   className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-1 transition-colors"

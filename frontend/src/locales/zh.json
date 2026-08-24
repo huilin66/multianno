@@ -36,6 +36,12 @@
     "fillShapes": "填充掩膜",
     "showAnnotationToolLabel": "显示标注工具标签",
     "autoRefreshStats": "自动刷新统计信息",
+    "reloadAll": "全部重新加载",
+    "reloadAllNoProject": "当前没有可重新加载的项目标注",
+    "reloadAllTitle": "全部重新加载标注？",
+    "reloadAllDirtyDesc": "重新加载会丢弃尚未保存的前端标注修改，是否继续？",
+    "reloadAllSuccess": "已重新加载全部标注：{{scenes}} 个场景，{{count}} 个对象",
+    "reloadAllError": "全部重新加载失败：{{message}}",
     "shortcutSetting": "快捷键设置",
     "aiSetting": "AI 设置",
     "viewLayout": "视图布局"
