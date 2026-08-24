@@ -108,10 +108,16 @@ async def request_logging_middleware(request: Request, call_next):
             reset_request_id(token)
 
 
-@app.get("/api/health")
+@app.get("/api/health", tags=["System"])
 async def health_check():
     logger.info("HEALTH_CHECK")
-    return {"status": "ok"}
+    return JSONResponse(
+        content={"status": "ok"},
+        headers={
+            "Cache-Control": "no-store, no-cache, must-revalidate",
+            "Pragma": "no-cache",
+        },
+    )
 
 
 # 🌟 把这个无敌显微镜加在这里（紧跟在 app = FastAPI() 之后）

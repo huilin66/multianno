@@ -17,10 +17,9 @@ export function useBackendHealth() {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
-        const res = await fetch(`${API_BASE_URL}/project/analyze`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ folders: [] }),
+        const res = await fetch(`${API_BASE_URL}/health`, {
+          method: 'GET',
+          cache: 'no-store',
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
