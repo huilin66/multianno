@@ -27,7 +27,13 @@ from utils.format_converters import (
     render_mask_array,
     yolo_to_shapes,
 )
-from utils.image_io import RAW_IMAGE_EXTS, find_image_path, is_raw_image, read_for_export
+from utils.image_io import (
+    RAW_IMAGE_EXTS,
+    find_image_path,
+    is_raw_image,
+    read_for_export,
+    read_metadata,
+)
 
 router = APIRouter(prefix="/api/exchange", tags=["Data Exchange"])
 
@@ -1219,6 +1225,7 @@ async def import_from_yolo(req: ImportRequest):
     imported_count = 0
     processed_stems = set()
     total_shapes = 0
+    dimension_fallback_count = 0
     # 使用 stems 列表按 {stem}{custom_suffix}{extension} 规则定位文件
     stems = req.stems or []
     if not stems:
@@ -1234,23 +1241,50 @@ async def import_from_yolo(req: ImportRequest):
         base_stem = stem
         target_json = os.path.join(req.target_dir, f"{base_stem}.json")
 
-        img_w, img_h = 1024, 1024
         existing_data = {"shapes": []}
         if os.path.exists(target_json):
             with open(target_json, "r", encoding="utf-8") as f:
                 existing_data = json.load(f)
-                img_w, img_h = (
-                    existing_data.get("imageWidth", img_w),
-                    existing_data.get("imageHeight", img_h),
-                )
-        else:
-            for ext in [".jpg", ".png", ".bmp", ".tif"]:
-                img_path = os.path.join(req.target_dir, f"{stem}{ext}")
-                if os.path.exists(img_path):
-                    img = cv2.imread(img_path)
-                    if img is not None:
-                        img_h, img_w = img.shape[:2]
+
+        # YOLO 坐标是相对于原图宽高归一化的。优先读取前端传来的
+        # 主视图真实图像路径，避免把 workspace 中不存在图像时的旧默认值
+        # 1024x1024 写入标注 JSON。
+        image_path = req.image_paths.get(base_stem) or req.image_paths.get(stem)
+        if not image_path:
+            for folder in (req.target_dir, req.source_path):
+                if not folder:
+                    continue
+                image_path = find_image_path(folder, stem)
+                if image_path:
                     break
+
+        image_dimensions = None
+        if image_path and os.path.exists(image_path):
+            try:
+                image_meta = read_metadata(
+                    image_path,
+                    raw_profile=req.image_raw_profile,
+                )
+                width = int(image_meta.get("width") or 0)
+                height = int(image_meta.get("height") or 0)
+                if width > 0 and height > 0:
+                    image_dimensions = (width, height)
+            except Exception as exc:
+                print(f"Failed to read image dimensions for {image_path}: {exc}")
+
+        if image_dimensions:
+            img_w, img_h = image_dimensions
+        else:
+            # 兼容旧的原生 JSON；只有无法访问真实图像且 JSON 没有尺寸时，
+            # 才使用历史默认值。
+            try:
+                img_w = int(existing_data.get("imageWidth") or 0)
+                img_h = int(existing_data.get("imageHeight") or 0)
+            except (TypeError, ValueError):
+                img_w, img_h = 0, 0
+            if img_w <= 0 or img_h <= 0:
+                img_w, img_h = 1024, 1024
+                dimension_fallback_count += 1
 
         if req.merge_strategy == "skip" and existing_data.get("shapes"):
             continue
@@ -1281,6 +1315,7 @@ async def import_from_yolo(req: ImportRequest):
         "format": "YOLO",
         "imported_count": imported_count,
         "shape_count": total_shapes,
+        "dimension_fallback_count": dimension_fallback_count,
     }
 
 

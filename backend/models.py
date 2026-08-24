@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class FolderPayload(BaseModel):
@@ -145,6 +145,9 @@ class ImportRequest(BaseModel):
     import_zero_class: bool = False
     coco_mode: str = "polygon"
     stems: list[str] = []
+    # 主视图图像路径，用于在导入归一化标注前读取每张图像的真实尺寸。
+    image_paths: Dict[str, str] = Field(default_factory=dict)
+    image_raw_profile: Optional[Dict[str, Any]] = None
 
 
 class ProjectMetaPayload(BaseModel):

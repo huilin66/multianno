@@ -47,6 +47,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const views = useStore(s => s.views);
   const workspacePath = useStore(s => s.workspacePath);
   const stems = useStore(s => s.stems);
+  const sceneGroups = useStore(s => s.sceneGroups);
 
   const mainViewFolder = folders?.find((f: any) =>
     f.id === views?.find((v: any) => v.isMain)?.folderId
@@ -137,6 +138,24 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
     setImportStatus('importing');
     setImportProgress(0);
 
+    // 传递主视图每个 stem 的真实图像路径。YOLO 标签只有归一化坐标，
+    // 后端必须读取对应原图尺寸后才能还原成像素坐标。
+    const imagePaths: Record<string, string> = {};
+    if (mainViewFolder?.path) {
+      const basePath = mainViewFolder.path.replace(/[\\/]+$/, '');
+      const extension = mainViewFolder.extension || '';
+      const normalizedExtension = extension
+        ? (extension.startsWith('.') ? extension : `.${extension}`)
+        : '';
+
+      stems.forEach((stem) => {
+        const exactFileName = sceneGroups?.[stem]?.[mainViewFolder.path];
+        const fileName = exactFileName
+          || `${stem}${mainViewFolder.suffix || ''}${normalizedExtension}`;
+        if (fileName) imagePaths[stem] = `${basePath}/${fileName}`;
+      });
+    }
+
     // 模拟进度动画
     const progressTimer = setInterval(() => {
       setImportProgress(prev => Math.min(prev + 5, 90));
@@ -154,6 +173,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         import_zero_class: importZeroClass,
         coco_mode: cocoMode,
         stems: stems,
+        image_paths: imagePaths,
+        image_raw_profile: mainViewFolder?.rawProfile,
       });
 
       clearInterval(progressTimer);
@@ -200,9 +221,13 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         t('dataImport.result.shapes', { count: shapeCount }),
         t('dataImport.result.images', { imported: importedCount, total: totalCount }),
       ].join('\n');
+      const dimensionFallbackCount = res?.dimension_fallback_count ?? 0;
+      const resultDescription = format === 'yolo' && dimensionFallbackCount > 0
+        ? `${desc}\n${t('dataImport.result.dimensionFallback', { count: dimensionFallbackCount })}`
+        : desc;
       await showDialog({
         title: t('dataImport.success'),
-        description: desc,
+        description: resultDescription,
         type: 'success',
       });
       onClose?.();

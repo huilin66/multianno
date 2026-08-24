@@ -475,7 +475,8 @@
     "result": {
       "method": "使用 {{format}} 方法",
       "shapes": "导入 shape 总数: {{count}}",
-      "images": "修改涉及图像数: {{imported}}/{{total}}"
+      "images": "修改涉及图像数: {{imported}}/{{total}}",
+      "dimensionFallback": "有 {{count}} 个场景未能读取原图尺寸，使用了默认尺寸，请检查图像路径。"
     }
   },
   "localVis": {
