@@ -10,6 +10,7 @@ import { Legend } from '../ui/legend';
 import Slider from 'rc-slider';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { getFileContent, exportDataStream, checkDirectoryStatus } from '../../api/client';
+import { saveCurrentAnnotations } from '../../lib/annotationSaveService';
 import { showDialog } from '../../store/useDialogStore';
 import {
   SUPPORTED_TASKS,
@@ -338,6 +339,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       setExportStatus('exporting');
       setIsExporting(true);
       setExportProgress(0);
+
+      // 导出端读取的是磁盘 JSON；先等待当前前端修改落盘，避免导出旧标注。
+      await saveCurrentAnnotations();
 
       abortControllerRef.current = new AbortController();
       const signal = abortControllerRef.current.signal;

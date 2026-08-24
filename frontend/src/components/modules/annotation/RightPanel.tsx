@@ -14,6 +14,7 @@ import {
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
 import { ObjectEditorForm } from './ObjectEditorForm'; // 🌟 引入新组件
+import { toast } from '../../../store/useToastStore';
 
 interface RightPanelProps {
   tool: string;
@@ -31,6 +32,7 @@ interface RightPanelProps {
   hiddenAnnotations: string[];
   toggleAnnotationVisibility: (id: string) => void;
   handleClear: () => void;
+  handleSave: () => Promise<boolean>;
   handleRefreshAnnotations: () => void;
   isRefreshingAnnotations: boolean;
 }
@@ -40,7 +42,7 @@ export function RightPanel({
   focusedViewId, setFocusedViewId,
   layerOrder, setLayerOrder,
   visibleLayers, setVisibleLayers,
-  hiddenAnnotations, toggleAnnotationVisibility, handleClear,
+  hiddenAnnotations, toggleAnnotationVisibility, handleClear, handleSave,
   handleRefreshAnnotations, isRefreshingAnnotations,
 }: RightPanelProps) {
   const { t } = useTranslation();
@@ -282,6 +284,9 @@ export function RightPanel({
     });
     setNmsGroups({});
     setNmsPanelOpen(false);
+    void handleSave().then((saved) => {
+      if (!saved) toast.error(t('rightPanel.deleteSaveError'));
+    });
   };
 
   const zoomToAnnotation = (ann: any) => {
@@ -1311,6 +1316,9 @@ export function RightPanel({
                       if (targetAnno) pushAction({ type: 'delete', anno: targetAnno });
                       removeAnnotation(ann.id); 
                       if(isActive) setActiveAnnotationId(null); 
+                      void handleSave().then((saved) => {
+                        if (!saved) toast.error(t('rightPanel.deleteSaveError'));
+                      });
                     }}
                   >
                     <Trash2 className="w-3.5 h-3.5" />

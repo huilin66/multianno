@@ -646,6 +646,7 @@
     "refreshAnnotationsMissing": "未找到当前场景 JSON，已清空当前场景标注缓存",
     "refreshAnnotationsError": "刷新标注失败：{{message}}",
     "refreshAnnotationsNoProject": "当前没有可刷新的项目或标注目录",
+    "deleteSaveError": "删除后的标注保存到后台失败，请检查连接后重试，暂不要导出",
     "deleteAllObjects": "删除当前图像所有对象",
     "sureConfirm": "确认?",
     "overlapCleaner": "重叠清理器",

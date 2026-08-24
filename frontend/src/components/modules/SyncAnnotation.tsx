@@ -43,7 +43,7 @@ const getControlPoints = (anno: any) => {
   return anno.points.map((p: any, i: number) => ({ ...p, id: i, type: 'point' }));
 };
 interface SyncAnnotationProps {
-  autoSave: () => void;
+  autoSave: () => Promise<boolean>;
 }
 export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   const { t } = useTranslation();
@@ -308,7 +308,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     setPasteOffset(prev => prev + 1); // 累加计数
   }, [clipboard, currentStem, pasteOffset]);
   
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const state = useStore.getState();
     const id = state.activeAnnotationId;
     if (id) {
@@ -316,9 +316,14 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
       if (anno) pushAction({ type: 'delete', anno: anno });
       state.removeAnnotation(id);
       state.setActiveAnnotationId(null);
+
+      const saved = await autoSave();
+      if (!saved) {
+        toast.error(t('rightPanel.deleteSaveError'));
+      }
     }
   };
-  const handleClear = () => {
+  const handleClear = async () => {
     const state = useStore.getState();
     const stem = state.currentStem;
     if (!stem) return;
@@ -334,6 +339,11 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
     
     currentAnnos.forEach(a => state.removeAnnotation(a.id));
     state.setActiveAnnotationId(null);
+
+    const saved = await autoSave();
+    if (!saved) {
+      toast.error(t('rightPanel.deleteSaveError'));
+    }
   };
 
   const handleRefreshCurrentAnnotations = async () => {
@@ -1959,6 +1969,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             hiddenAnnotations={hiddenAnnotations}
             toggleAnnotationVisibility={toggleAnnotationVisibility}
             handleClear={handleClear}
+            handleSave={autoSave}
             handleRefreshAnnotations={handleRefreshCurrentAnnotations}
             isRefreshingAnnotations={isRefreshingAnnotations}
           />

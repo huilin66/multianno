@@ -646,6 +646,7 @@
     "refreshAnnotationsMissing": "No JSON was found for the current scene; its annotation cache was cleared",
     "refreshAnnotationsError": "Failed to refresh annotations: {{message}}",
     "refreshAnnotationsNoProject": "There is no project or annotation directory to refresh",
+    "deleteSaveError": "Failed to save the deleted annotation to the backend. Check the connection and retry before exporting.",
     "deleteAllObjects": "Delete All Objects in Current Image",
     "sureConfirm": "Sure?",
     "overlapCleaner": "Overlap Cleaner",
