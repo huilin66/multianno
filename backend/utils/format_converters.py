@@ -112,9 +112,20 @@ def filter_multianno(
     return filtered_shapes, stats
 
 
-def ma_to_yolo(ma_path, yolo_path, selected_classes, allowed_shapes, task_type):
+def ma_to_yolo(
+    ma_path,
+    yolo_path,
+    selected_classes,
+    allowed_shapes,
+    task_type,
+    include_empty: bool = False,
+):
     """将 MultiAnno 格式的标注文件转换为 YOLO 格式"""
     if not os.path.exists(ma_path):
+        if include_empty:
+            with open(yolo_path, "w", encoding="utf-8"):
+                pass
+            return True
         return False
     with open(ma_path, "r", encoding="utf-8") as f:
         data = json.load(f)
@@ -127,27 +138,40 @@ def ma_to_yolo(ma_path, yolo_path, selected_classes, allowed_shapes, task_type):
         allowed_shapes,
         task_type,
     )
-    if yolo_lines:
-        with open(yolo_path, "w") as f:
+    if yolo_lines or include_empty:
+        with open(yolo_path, "w", encoding="utf-8") as f:
             f.write("\n".join(yolo_lines))
         return True
     return False
 
 
-def ma_to_voc(ma_path, voc_path, selected_classes, allowed_shapes, task_type):
+def ma_to_voc(
+    ma_path,
+    voc_path,
+    selected_classes,
+    allowed_shapes,
+    task_type,
+    include_empty: bool = False,
+):
     """将 MultiAnno 格式的标注文件转换为 Pascal VOC XML（检测框）"""
     if not os.path.exists(ma_path):
-        return False
-
-    with open(ma_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+        if not include_empty:
+            return False
+        data = {}
+    else:
+        with open(ma_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
     shapes = data.get("shapes", [])
     img_w = max(1, int(data.get("imageWidth", 1)))
     img_h = max(1, int(data.get("imageHeight", 1)))
     img_d = max(1, int(data.get("imageDepth", 3)))
     image_path = data.get("imagePath", "")
-    file_name = os.path.basename(image_path) if image_path else ""
+    file_name = (
+        os.path.basename(image_path)
+        if image_path
+        else f"{os.path.splitext(os.path.basename(ma_path))[0]}.jpg"
+    )
     allowed_shapes_lower = [s.lower() for s in allowed_shapes]
 
     root = ET.Element("annotation")
@@ -200,7 +224,7 @@ def ma_to_voc(ma_path, voc_path, selected_classes, allowed_shapes, task_type):
         ET.SubElement(bndbox, "ymax").text = str(ymax)
         has_object = True
 
-    if not has_object:
+    if not has_object and not include_empty:
         return False
 
     ET.ElementTree(root).write(voc_path, encoding="utf-8", xml_declaration=True)

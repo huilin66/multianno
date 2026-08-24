@@ -346,8 +346,8 @@
       "dataFull": "Export Full Data (annotation + images)",
       "task": "Task Type",
       "format": "Format",
-      "includeUnlabeled": "Export Unlabeled Images",
-      "includeUnlabeledDesc": "When enabled, keep all scene images. When disabled, export only scenes that still have annotations after the current class and shape filters."
+      "includeUnlabeled": "Export Empty Annotation Results",
+      "includeUnlabeledDesc": "When enabled, keep all scenes and create empty annotation results for scenes without exportable labels (YOLO creates an empty .txt file). When disabled, skip those scenes."
     },
 
     "stepNaming": {

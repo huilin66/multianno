@@ -129,12 +129,20 @@ def _apply_unlabeled_filter(req: ExportRequest):
         return
     if not req.source_dirs:
         return
+    before_count = len(req.stems)
     source_dir = req.source_dirs[0]
     req.stems = [
         stem
         for stem in req.stems
         if _stem_has_exportable_annotations(source_dir, stem, req)
     ]
+    logger.info(
+        "EXPORT_EMPTY_FILTER before=%d after=%d removed=%d source=%s",
+        before_count,
+        len(req.stems),
+        before_count - len(req.stems),
+        shorten(source_dir, 1500),
+    )
 
 
 def _get_annotation_json_paths(req: ExportRequest):
@@ -211,7 +219,7 @@ async def read_text_file(path: str):
 async def handle_export(req: ExportRequest):
     logger.info(
         "EXPORT_REQUEST format=%s mode=%s task=%s source_dirs=%d stems=%d "
-        "target=%s strategy_overwrite=%s",
+        "target=%s strategy_overwrite=%s include_empty=%s",
         req.format,
         req.export_mode,
         req.task_type,
@@ -219,13 +227,18 @@ async def handle_export(req: ExportRequest):
         len(req.stems),
         shorten(req.target_dir, 1000),
         req.overwrite_target,
+        req.include_unlabeled_images,
     )
     if not os.path.exists(req.target_dir):
         os.makedirs(req.target_dir, exist_ok=True)
 
+    # The same option applies to dataset and annotation exports.  For
+    # annotation-only exports this decides whether empty JSON/YOLO/COCO/mask
+    # results are written or skipped.
+    _apply_unlabeled_filter(req)
+
     if req.export_mode == "dataset":
         _ensure_dataset_target_safe(req)
-        _apply_unlabeled_filter(req)
         if req.format == "yolo":
             return StreamingResponse(
                 export_yolo_dataset_stream(req), media_type="application/x-ndjson"
@@ -324,6 +337,7 @@ async def export_yolo_dataset_stream(req: ExportRequest):
                 req.selected_classes,
                 req.allowed_shapes,
                 req.task_type,
+                include_empty=req.include_unlabeled_images,
             )
             exported_count += int(result_yolo)
 
@@ -608,6 +622,7 @@ async def export_voc_dataset_stream(req: ExportRequest):
                 req.selected_classes,
                 req.allowed_shapes,
                 req.task_type,
+                include_empty=req.include_unlabeled_images,
             )
             exported_count += int(result_voc)
             reporter.log_scene(
@@ -728,7 +743,7 @@ async def export_multianno_dataset_stream(req: ExportRequest):
                 filtered_shapes, stats = filter_multianno(
                     data.get("shapes", []), req.selected_classes, req.allowed_shapes
                 )
-                if filtered_shapes or len(data.get("shapes", [])) == 0:
+                if req.include_unlabeled_images or filtered_shapes:
                     data["shapes"] = filtered_shapes
                     with open(
                         os.path.join(
@@ -939,7 +954,7 @@ async def export_multianno_annotation_stream(req: ExportRequest):
             filtered_shapes, stats = filter_multianno(
                 data.get("shapes", []), req.selected_classes, req.allowed_shapes
             )
-            if filtered_shapes or len(data.get("shapes", [])) == 0:
+            if req.include_unlabeled_images or filtered_shapes:
                 data["shapes"] = filtered_shapes
                 with open(
                     os.path.join(
@@ -978,17 +993,26 @@ async def export_yolo_annotation_stream(req: ExportRequest):
     )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
-        json_paths = _get_annotation_json_paths(req)
-        total = len(json_paths)
+        source_dir = req.source_dirs[0] if req.source_dirs else ""
+        if req.stems:
+            export_stems = list(dict.fromkeys(req.stems))
+        else:
+            json_paths = _get_annotation_json_paths(req)
+            export_stems = [Path(path).stem for path in json_paths]
+        total = len(export_stems)
         if not total:
             yield json.dumps({"type": "error", "message": "未找到任何标注文件"}) + "\n"
             return
 
         exported_count = 0
-        for idx, j_path in enumerate(json_paths):
-            with open(j_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            base_stem = data.get("stem", Path(j_path).stem)
+        empty_count = 0
+        for idx, stem in enumerate(export_stems):
+            j_path = os.path.join(source_dir, f"{stem}.json") if source_dir else ""
+            data = {"shapes": []}
+            if j_path and os.path.exists(j_path):
+                with open(j_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            base_stem = data.get("stem", stem)
             yolo_lines, stats = convert_to_yolo(
                 data.get("shapes", []),
                 data.get("imageWidth", 1),
@@ -997,7 +1021,8 @@ async def export_yolo_annotation_stream(req: ExportRequest):
                 req.allowed_shapes,
                 req.task_type,
             )
-            if yolo_lines:
+            should_write = bool(yolo_lines) or req.include_unlabeled_images
+            if should_write:
                 with open(
                     os.path.join(
                         req.target_dir,
@@ -1008,6 +1033,10 @@ async def export_yolo_annotation_stream(req: ExportRequest):
                 ) as tf:
                     tf.write("\n".join(yolo_lines))
                 exported_count += 1
+                if not yolo_lines:
+                    empty_count += 1
+            else:
+                empty_count += 1
 
             reporter.log_scene(base_stem, stats)
             yield _progress_event(idx + 1, total)
@@ -1015,7 +1044,7 @@ async def export_yolo_annotation_stream(req: ExportRequest):
 
         reporter.save_report(req.task_type, req.format)
         _write_classes_file(req.target_dir, req.selected_classes)
-        yield _complete_event(exported_count)
+        yield _complete_event(exported_count, empty_annotations=empty_count)
     except asyncio.CancelledError:
         logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
@@ -1054,23 +1083,25 @@ async def export_coco_annotation_stream(req: ExportRequest):
             with open(j_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
             base_stem = data.get("stem", Path(j_path).stem)
-            coco_dict["images"].append(
-                {
-                    "id": img_id,
-                    "file_name": f"{base_stem}.jpg",
-                    "width": data.get("imageWidth", 1),
-                    "height": data.get("imageHeight", 1),
-                }
-            )
-            anns, stats, ann_id = convert_to_coco_anns(
+            anns, stats, next_ann_id = convert_to_coco_anns(
                 data.get("shapes", []),
                 img_id,
                 ann_id,
                 req.selected_classes,
                 req.allowed_shapes,
             )
-            coco_dict["annotations"].extend(anns)
-            img_id += 1
+            if anns or req.include_unlabeled_images:
+                coco_dict["images"].append(
+                    {
+                        "id": img_id,
+                        "file_name": f"{base_stem}.jpg",
+                        "width": data.get("imageWidth", 1),
+                        "height": data.get("imageHeight", 1),
+                    }
+                )
+                coco_dict["annotations"].extend(anns)
+                ann_id = next_ann_id
+                img_id += 1
             reporter.log_scene(base_stem, stats)
             yield _progress_event(idx + 1, total)
             await asyncio.sleep(0)
@@ -1126,17 +1157,21 @@ async def export_mask_annotation_stream(req: ExportRequest):
                     req.selected_classes,
                     req.allowed_shapes,
                 )
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore")
-                    io.imsave(
-                        os.path.join(
-                            req.target_dir,
-                            f"{base_stem}{req.custom_suffix}{req.extension}",
-                        ),
-                        mask,
-                        check_contrast=False,
-                    )
-                exported_count += 1
+                has_exportable_shapes = bool(
+                    stats.get("native", 0) or stats.get("converted", 0)
+                )
+                if req.include_unlabeled_images or has_exportable_shapes:
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        io.imsave(
+                            os.path.join(
+                                req.target_dir,
+                                f"{base_stem}{req.custom_suffix}{req.extension}",
+                            ),
+                            mask,
+                            check_contrast=False,
+                        )
+                    exported_count += 1
             else:
                 stats = {"native": 0, "converted": 0, "discarded": 0}
 
@@ -2189,6 +2224,7 @@ async def export_dataset(req: ExportRequest):
             req.selected_classes,
             req.allowed_shapes,
             req.task_type,
+            include_empty=req.include_unlabeled_images,
         )
         exported_count += int(result_yolo)
 

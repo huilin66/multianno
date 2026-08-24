@@ -421,6 +421,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           stems: stems,
           export_mode: 'annotation',
           split_content_mode: splitContentMode,
+          include_unlabeled_images: includeUnlabeledImages,
         }, (current, total) => {
           setExportProgress(Math.round((current / total) * 100));
         }, signal);
@@ -523,7 +524,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
               </div>
             </div>
 
-            {exportMode === 'dataset' && (
+            {(exportMode === 'dataset' || exportMode === 'annotation') && (
               <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
                 <Checkbox
                   checked={includeUnlabeledImages}

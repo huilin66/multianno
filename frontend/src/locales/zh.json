@@ -346,8 +346,8 @@
       "dataFull": "导出完整数据 (标注 + 图像)",
       "task": "任务类型",
       "format": "格式",
-      "includeUnlabeled": "导出无标注图像",
-      "includeUnlabeledDesc": "勾选时保留所有场景图像；取消勾选时，仅导出当前类别和形状过滤后仍有标注的场景。"
+      "includeUnlabeled": "导出空标注结果",
+      "includeUnlabeledDesc": "勾选时保留所有场景；无可导出标注的场景也会生成空标注结果（YOLO 会生成空的 .txt 文件）。取消勾选时跳过这些场景。"
     },
 
     "stepNaming": {
