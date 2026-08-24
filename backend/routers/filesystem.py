@@ -5,18 +5,23 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from models import MkdirRequest
+from utils.logging_config import get_logger, shorten
 
 router = APIRouter(prefix="/api/fs", tags=["FileSystem"])
+logger = get_logger("filesystem")
 
 
 @router.get("/dir_status")
 def get_directory_status(path: str = Query("")):
     """Return lightweight safety info for a user-selected output directory."""
+    logger.info("DIR_STATUS_START path=%s", shorten(path, 1500))
     if not path:
+        logger.warning("DIR_STATUS_INVALID empty_path")
         raise HTTPException(status_code=400, detail="路径不能为空")
 
     abs_path = os.path.abspath(path)
     if not os.path.exists(abs_path):
+        logger.info("DIR_STATUS_END path=%s exists=False", shorten(abs_path, 1500))
         return {
             "exists": False,
             "is_dir": False,
@@ -27,6 +32,7 @@ def get_directory_status(path: str = Query("")):
         }
 
     if not os.path.isdir(abs_path):
+        logger.info("DIR_STATUS_END path=%s is_dir=False", shorten(abs_path, 1500))
         return {
             "exists": True,
             "is_dir": False,
@@ -45,7 +51,7 @@ def get_directory_status(path: str = Query("")):
                 if len(sample_entries) < 5:
                     sample_entries.append(entry.name)
 
-        return {
+        result = {
             "exists": True,
             "is_dir": True,
             "is_empty": entry_count == 0,
@@ -53,9 +59,17 @@ def get_directory_status(path: str = Query("")):
             "sample_entries": sample_entries,
             "path": abs_path.replace("\\", "/"),
         }
+        logger.info(
+            "DIR_STATUS_END path=%s is_dir=True entries=%d",
+            shorten(abs_path, 1500),
+            entry_count,
+        )
+        return result
     except PermissionError:
+        logger.exception("DIR_STATUS_PERMISSION_ERROR path=%s", shorten(abs_path, 1500))
         raise HTTPException(status_code=403, detail="没有权限访问该文件夹")
     except Exception as e:
+        logger.exception("DIR_STATUS_ERROR path=%s error=%s", shorten(abs_path, 1500), e)
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -64,6 +78,7 @@ def explore_file_system(
     path: str = Query(""),
     history: List[str] = Query(default=[]),  # 🌟 新增：接收前端传来的历史记录
 ):
+    logger.info("EXPLORE_START path=%s history=%d", shorten(path, 1500), len(history))
     # 1. 如果路径为空，返回系统盘符 + 前端传来的历史记录
     if not path:
         items = []
@@ -101,6 +116,7 @@ def explore_file_system(
         else:
             path = "/"
 
+        logger.info("EXPLORE_END path=<root> items=%d", len(items))
         return {"current_path": "", "parent_path": "", "items": items}
     # 2. 规范化路径
     try:
@@ -125,19 +141,24 @@ def explore_file_system(
                 )
 
     except PermissionError:
+        logger.exception("EXPLORE_PERMISSION_ERROR path=%s", shorten(path, 1500))
         return JSONResponse(
             status_code=403,
             content={"error": "Permission Denied (没有权限访问该文件夹)"},
         )
     except FileNotFoundError:
+        logger.exception("EXPLORE_NOT_FOUND path=%s", shorten(path, 1500))
         return JSONResponse(
             status_code=404, content={"error": "Path not found (路径不存在)"}
         )
     except Exception as e:
+        logger.exception("EXPLORE_ERROR path=%s error=%s", shorten(path, 1500), e)
         return JSONResponse(status_code=500, content={"error": str(e)})
 
     # 3. 排序：文件夹排在前面，然后再按字母顺序排
     items.sort(key=lambda x: (x["type"] != "dir", x["name"].lower()))
+
+    logger.info("EXPLORE_END path=%s items=%d", shorten(path, 1500), len(items))
 
     return {
         "current_path": path.replace("\\", "/"),
@@ -153,11 +174,20 @@ async def make_directory(req: MkdirRequest):
     # 安全检查：防止目录穿越漏洞 (例如 name 传了 "../../../etc")
     safe_name = os.path.basename(req.name)
     target_dir = os.path.join(req.path, safe_name)
+    logger.info(
+        "MKDIR_START parent=%s name=%s target=%s",
+        shorten(req.path, 1500),
+        req.name,
+        shorten(target_dir, 1500),
+    )
 
     try:
         os.makedirs(target_dir, exist_ok=True)
+        logger.info("MKDIR_END target=%s", shorten(target_dir, 1500))
         return {"status": "success", "path": target_dir}
     except PermissionError:
+        logger.exception("MKDIR_PERMISSION_ERROR target=%s", shorten(target_dir, 1500))
         raise HTTPException(status_code=403, detail="没有权限在此目录创建文件夹")
     except Exception as e:
+        logger.exception("MKDIR_ERROR target=%s error=%s", shorten(target_dir, 1500), e)
         raise HTTPException(status_code=400, detail=str(e))

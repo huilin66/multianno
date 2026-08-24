@@ -5,6 +5,7 @@ demo/
 runs/
 
 *.pyc
+backend/logs/*.log
 .env
 
 task.md

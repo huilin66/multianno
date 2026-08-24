@@ -34,8 +34,10 @@ from utils.image_io import (
     read_for_export,
     read_metadata,
 )
+from utils.logging_config import get_logger, shorten
 
 router = APIRouter(prefix="/api/exchange", tags=["Data Exchange"])
+logger = get_logger("exchange")
 
 
 # ==========================================
@@ -145,6 +147,7 @@ def _get_annotation_json_paths(req: ExportRequest):
 
 def _progress_event(current: int, total: int):
     percent = int((current / total) * 100) if total else 100
+    logger.info("EXPORT_PROGRESS current=%d total=%d percent=%d", current, total, percent)
     return json.dumps(
         {
             "type": "progress",
@@ -156,6 +159,7 @@ def _progress_event(current: int, total: int):
 
 
 def _complete_event(exported: int, **extra):
+    logger.info("EXPORT_COMPLETE exported=%d extra=%s", exported, shorten(extra, 1000))
     return json.dumps(
         {
             "type": "complete",
@@ -173,10 +177,31 @@ def _write_classes_file(target_dir: str, selected_classes: list[str]):
 
 @router.get("/read_text")
 async def read_text_file(path: str):
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="文件不存在")
-    with open(path, "r", encoding="utf-8") as f:
-        return {"content": f.read()}
+    # Keep this START record immediately before filesystem calls.  If a
+    # network share blocks in exists/open, the missing END record identifies
+    # the exact file that is holding the request.
+    started = asyncio.get_running_loop().time()
+    logger.info("READ_TEXT_START path=%s", shorten(path, 1500))
+    try:
+        exists = os.path.exists(path)
+        logger.info("READ_TEXT_EXISTS path=%s exists=%s", shorten(path, 1500), exists)
+        if not exists:
+            logger.warning("READ_TEXT_MISSING path=%s", shorten(path, 1500))
+            raise HTTPException(status_code=404, detail="文件不存在")
+        with open(path, "r", encoding="utf-8") as f:
+            content = f.read()
+        logger.info(
+            "READ_TEXT_END path=%s bytes=%d duration_ms=%.1f",
+            shorten(path, 1500),
+            len(content.encode("utf-8")),
+            (asyncio.get_running_loop().time() - started) * 1000,
+        )
+        return {"content": content}
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("READ_TEXT_ERROR path=%s", shorten(path, 1500))
+        raise
 
 
 # ==========================================
@@ -184,8 +209,17 @@ async def read_text_file(path: str):
 # ==========================================
 @router.post("/export")
 async def handle_export(req: ExportRequest):
-    print("-" * 50 + "Exporting dataset...")
-    print(req)
+    logger.info(
+        "EXPORT_REQUEST format=%s mode=%s task=%s source_dirs=%d stems=%d "
+        "target=%s strategy_overwrite=%s",
+        req.format,
+        req.export_mode,
+        req.task_type,
+        len(req.source_dirs),
+        len(req.stems),
+        shorten(req.target_dir, 1000),
+        req.overwrite_target,
+    )
     if not os.path.exists(req.target_dir):
         os.makedirs(req.target_dir, exist_ok=True)
 
@@ -235,6 +269,11 @@ async def handle_export(req: ExportRequest):
 
 async def export_yolo_dataset_stream(req: ExportRequest):
     """流式导出，每处理一个 stem 回传进度"""
+    logger.info(
+        "EXPORT_STREAM_START format=YOLO mode=dataset stems=%d target=%s",
+        len(req.stems),
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         stems = req.stems
@@ -292,6 +331,12 @@ async def export_yolo_dataset_stream(req: ExportRequest):
 
             # 🆕 进度回传
             progress = int(((idx + 1) / total) * 100)
+            logger.info(
+                "EXPORT_PROGRESS current=%d total=%d percent=%d",
+                idx + 1,
+                total,
+                progress,
+            )
             yield (
                 json.dumps(
                     {
@@ -335,13 +380,24 @@ async def export_yolo_dataset_stream(req: ExportRequest):
         )
 
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_coco_dataset_stream(req: ExportRequest):
     """COCO 数据集导出（流式）"""
+    logger.info(
+        "EXPORT_STREAM_START format=COCO mode=dataset stems=%d target=%s",
+        len(req.stems),
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         stems = req.stems
@@ -484,13 +540,24 @@ async def export_coco_dataset_stream(req: ExportRequest):
             + "\n"
         )
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_voc_dataset_stream(req: ExportRequest):
     """VOC 数据集导出（流式）"""
+    logger.info(
+        "EXPORT_STREAM_START format=VOC mode=dataset stems=%d target=%s",
+        len(req.stems),
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         stems = req.stems
@@ -592,13 +659,24 @@ async def export_voc_dataset_stream(req: ExportRequest):
             + "\n"
         )
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_multianno_dataset_stream(req: ExportRequest):
     """MultiAnno 数据集导出（流式）"""
+    logger.info(
+        "EXPORT_STREAM_START format=MultiAnno mode=dataset stems=%d target=%s",
+        len(req.stems),
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         stems = req.stems
@@ -703,13 +781,24 @@ async def export_multianno_dataset_stream(req: ExportRequest):
             + "\n"
         )
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_mask_dataset_stream(req: ExportRequest):
     """Mask 数据集导出（流式）"""
+    logger.info(
+        "EXPORT_STREAM_START format=Mask mode=dataset stems=%d target=%s",
+        len(req.stems),
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         stems = req.stems
@@ -818,12 +907,22 @@ async def export_mask_dataset_stream(req: ExportRequest):
             + "\n"
         )
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_multianno_annotation_stream(req: ExportRequest):
+    logger.info(
+        "EXPORT_STREAM_START format=MultiAnno mode=annotation target=%s",
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         json_paths = _get_annotation_json_paths(req)
@@ -861,12 +960,22 @@ async def export_multianno_annotation_stream(req: ExportRequest):
         _write_classes_file(req.target_dir, req.selected_classes)
         yield _complete_event(exported_count)
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_yolo_annotation_stream(req: ExportRequest):
+    logger.info(
+        "EXPORT_STREAM_START format=YOLO mode=annotation target=%s",
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         json_paths = _get_annotation_json_paths(req)
@@ -908,12 +1017,22 @@ async def export_yolo_annotation_stream(req: ExportRequest):
         _write_classes_file(req.target_dir, req.selected_classes)
         yield _complete_event(exported_count)
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_coco_annotation_stream(req: ExportRequest):
+    logger.info(
+        "EXPORT_STREAM_START format=COCO mode=annotation target=%s",
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         json_paths = _get_annotation_json_paths(req)
@@ -969,12 +1088,22 @@ async def export_coco_annotation_stream(req: ExportRequest):
         _write_classes_file(req.target_dir, req.selected_classes)
         yield _complete_event(img_id - 1)
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
 async def export_mask_annotation_stream(req: ExportRequest):
+    logger.info(
+        "EXPORT_STREAM_START format=Mask mode=annotation target=%s",
+        shorten(req.target_dir, 1500),
+    )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
         json_paths = _get_annotation_json_paths(req)
@@ -1019,8 +1148,14 @@ async def export_mask_annotation_stream(req: ExportRequest):
         _write_classes_file(req.target_dir, req.selected_classes)
         yield _complete_event(exported_count)
     except asyncio.CancelledError:
-        print("⚠️ Client disconnected, export cancelled")
+        logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
+        logger.exception(
+            "EXPORT_STREAM_ERROR format=%s mode=%s error=%s",
+            req.format,
+            req.export_mode,
+            e,
+        )
         yield json.dumps({"type": "error", "message": str(e)}) + "\n"
 
 
@@ -1231,6 +1366,12 @@ def _resolve_import_dimensions(
     preferred_dimensions=None,
 ):
     """按真实图像、格式元数据、已有 JSON、默认值的顺序确定尺寸。"""
+    logger.info(
+        "IMPORT_DIMENSIONS_START stem=%s target=%s preferred=%s",
+        stem,
+        shorten(req.target_dir, 1000),
+        preferred_dimensions,
+    )
     image_path = (req.image_paths or {}).get(stem)
     if not image_path:
         image_path = (req.image_paths or {}).get(Path(stem).stem)
@@ -1243,6 +1384,11 @@ def _resolve_import_dimensions(
                     break
 
     if image_path and os.path.exists(image_path):
+        logger.info(
+            "IMPORT_METADATA_START stem=%s image=%s",
+            stem,
+            shorten(image_path, 1500),
+        )
         try:
             image_meta = read_metadata(
                 image_path,
@@ -1252,22 +1398,52 @@ def _resolve_import_dimensions(
                 image_meta.get("width"), image_meta.get("height")
             )
             if dimensions:
+                logger.info(
+                    "IMPORT_DIMENSIONS_END stem=%s width=%s height=%s source=image "
+                    "image=%s",
+                    stem,
+                    dimensions[0],
+                    dimensions[1],
+                    shorten(image_path, 1500),
+                )
                 return (*dimensions, image_path, False)
         except Exception as exc:
-            print(f"Failed to read image dimensions for {image_path}: {exc}")
+            logger.exception(
+                "IMPORT_METADATA_ERROR stem=%s image=%s error=%s",
+                stem,
+                shorten(image_path, 1500),
+                exc,
+            )
 
     dimensions = _positive_dimensions(
         *(preferred_dimensions or (None, None))
     )
     if dimensions:
+        logger.info(
+            "IMPORT_DIMENSIONS_END stem=%s width=%s height=%s source=format_meta",
+            stem,
+            dimensions[0],
+            dimensions[1],
+        )
         return (*dimensions, image_path, False)
 
     dimensions = _positive_dimensions(
         existing_data.get("imageWidth"), existing_data.get("imageHeight")
     )
     if dimensions:
+        logger.info(
+            "IMPORT_DIMENSIONS_END stem=%s width=%s height=%s source=existing_json",
+            stem,
+            dimensions[0],
+            dimensions[1],
+        )
         return (*dimensions, image_path, False)
 
+    logger.warning(
+        "IMPORT_DIMENSIONS_FALLBACK stem=%s width=1024 height=1024 image=%s",
+        stem,
+        shorten(image_path, 1500),
+    )
     return 1024, 1024, image_path, True
 
 
@@ -1280,6 +1456,14 @@ def _finalize_import_annotation(
     image_path: str | None = None,
     image_name: str | None = None,
 ):
+    logger.info(
+        "IMPORT_JSON_WRITE_START stem=%s path=%s shapes=%d dimensions=%sx%s",
+        stem,
+        shorten(target_path, 1500),
+        len(data.get("shapes", [])) if isinstance(data.get("shapes"), list) else -1,
+        width,
+        height,
+    )
     data["stem"] = stem
     data["imageWidth"] = width
     data["imageHeight"] = height
@@ -1289,10 +1473,27 @@ def _finalize_import_annotation(
         data["imageNameMain"] = _image_basename(image_path)
     with open(target_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    logger.info(
+        "IMPORT_JSON_WRITE_END stem=%s path=%s",
+        stem,
+        shorten(target_path, 1500),
+    )
 
 
 @router.post("/import")
 async def handle_import(req: ImportRequest):
+    logger.info(
+        "IMPORT_REQUEST format=%s strategy=%s source=%s target=%s stems=%d "
+        "image_paths=%d extension=%s suffix=%s",
+        req.format,
+        req.merge_strategy,
+        shorten(req.source_path, 1500),
+        shorten(req.target_dir, 1500),
+        len(req.stems),
+        len(req.image_paths or {}),
+        req.extension or "-",
+        req.custom_suffix or "-",
+    )
     if not os.path.exists(req.target_dir):
         os.makedirs(req.target_dir, exist_ok=True)
 
@@ -1337,11 +1538,29 @@ async def import_from_yolo(req: ImportRequest):
         # 回退：扫描目录
         stems = label_stems
 
-    for stem in stems:
+    logger.info(
+        "IMPORT_YOLO_PLAN source=%s target=%s stems=%d label_files=%d strategy=%s",
+        shorten(req.source_path, 1500),
+        shorten(req.target_dir, 1500),
+        len(stems),
+        len(label_stems),
+        req.merge_strategy,
+    )
+
+    for index, stem in enumerate(stems, start=1):
+        scene_started = asyncio.get_running_loop().time()
         filename = f"{stem}{req.custom_suffix}{req.extension}" if req.extension else f"{stem}{req.custom_suffix}.txt"
         txt_path = os.path.join(req.source_path, filename)
         base_stem = stem
         target_json = os.path.join(req.target_dir, f"{base_stem}.json")
+        logger.info(
+            "IMPORT_SCENE_START format=YOLO index=%d/%d stem=%s label=%s target=%s",
+            index,
+            len(stems),
+            stem,
+            shorten(txt_path, 1500),
+            shorten(target_json, 1500),
+        )
 
         # YOLO 数据集允许通过“没有对应 txt 文件”表示负样本。
         # MultiAnno 则按场景保存原生 JSON，因此即使没有标签文件，也要为
@@ -1358,6 +1577,12 @@ async def import_from_yolo(req: ImportRequest):
         processed_stems.add(base_stem)
 
         if req.merge_strategy == "skip" and target_exists and existing_data.get("shapes"):
+            logger.info(
+                "IMPORT_SCENE_SKIP format=YOLO index=%d/%d stem=%s reason=existing_nonempty",
+                index,
+                len(stems),
+                stem,
+            )
             continue
 
         # YOLO 坐标是相对于原图宽高归一化的。优先读取前端传来的
@@ -1385,10 +1610,35 @@ async def import_from_yolo(req: ImportRequest):
         total_shapes += len(new_shapes)
         if not existing_data["shapes"]:
             empty_json_count += 1
+        logger.info(
+            "IMPORT_SCENE_END format=YOLO index=%d/%d stem=%s labels=%d total_shapes=%d "
+            "empty=%s dimensions=%sx%s dimension_source=%s duration_ms=%.1f",
+            index,
+            len(stems),
+            stem,
+            len(new_shapes),
+            len(existing_data["shapes"]),
+            not existing_data["shapes"],
+            img_w,
+            img_h,
+            shorten(image_path, 1500) if image_path else "fallback/no-image",
+            (asyncio.get_running_loop().time() - scene_started) * 1000,
+        )
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
         cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
+
+    logger.info(
+        "IMPORT_YOLO_END imported=%d shapes=%d empty=%d missing_labels=%d "
+        "dimension_fallback=%d mirror_cleaned=%d",
+        imported_count,
+        total_shapes,
+        empty_json_count,
+        missing_label_count,
+        dimension_fallback_count,
+        cleaned_count,
+    )
 
     return {
         "status": "success",
@@ -1447,19 +1697,46 @@ async def import_from_coco(req: ImportRequest):
                 stems.append(info["stem"])
         stems = list(dict.fromkeys([*(req.image_paths or {}).keys(), *stems]))
 
-    for stem in stems:
+    logger.info(
+        "IMPORT_COCO_PLAN source=%s target=%s stems=%d images=%d annotations=%d strategy=%s",
+        shorten(req.source_path, 1500),
+        shorten(req.target_dir, 1500),
+        len(stems),
+        len(img_info),
+        len(coco_data.get("annotations", [])),
+        req.merge_strategy,
+    )
+
+    for index, stem in enumerate(stems, start=1):
+        scene_started = asyncio.get_running_loop().time()
         info = coco_stem_map.get(stem)
         base_stem = stem
         anns = grouped_anns.get(info["id"], []) if info else []
         if info is None:
             missing_source_count += 1
         target_json = os.path.join(req.target_dir, f"{base_stem}.json")
+        logger.info(
+            "IMPORT_SCENE_START format=COCO index=%d/%d stem=%s source_image=%s "
+            "annotations=%d target=%s",
+            index,
+            len(stems),
+            stem,
+            info["image_name"] if info else "missing",
+            len(anns),
+            shorten(target_json, 1500),
+        )
 
         target_exists = os.path.exists(target_json)
         existing_data = _load_import_annotation(target_json)
         processed_stems.add(base_stem)
 
         if req.merge_strategy == "skip" and target_exists and existing_data.get("shapes"):
+            logger.info(
+                "IMPORT_SCENE_SKIP format=COCO index=%d/%d stem=%s reason=existing_nonempty",
+                index,
+                len(stems),
+                stem,
+            )
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
@@ -1490,10 +1767,35 @@ async def import_from_coco(req: ImportRequest):
         total_shapes += scene_shape_count
         if not existing_data["shapes"]:
             empty_json_count += 1
+        logger.info(
+            "IMPORT_SCENE_END format=COCO index=%d/%d stem=%s new_shapes=%d total_shapes=%d "
+            "empty=%s dimensions=%sx%s dimension_source=%s duration_ms=%.1f",
+            index,
+            len(stems),
+            stem,
+            scene_shape_count,
+            len(existing_data["shapes"]),
+            not existing_data["shapes"],
+            img_w,
+            img_h,
+            shorten(image_path, 1500) if image_path else "fallback/no-image",
+            (asyncio.get_running_loop().time() - scene_started) * 1000,
+        )
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
         cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
+
+    logger.info(
+        "IMPORT_COCO_END imported=%d shapes=%d empty=%d missing_source=%d "
+        "dimension_fallback=%d mirror_cleaned=%d",
+        imported_count,
+        total_shapes,
+        empty_json_count,
+        missing_source_count,
+        dimension_fallback_count,
+        cleaned_count,
+    )
 
     return {
         "status": "success",
@@ -1535,7 +1837,17 @@ async def import_from_multianno(req: ImportRequest):
     else:
         stems = source_stems
 
-    for stem in stems:
+    logger.info(
+        "IMPORT_MULTIANNOTATION_PLAN source=%s target=%s stems=%d source_jsons=%d strategy=%s",
+        shorten(req.source_path, 1500),
+        shorten(req.target_dir, 1500),
+        len(stems),
+        len(source_stems),
+        req.merge_strategy,
+    )
+
+    for index, stem in enumerate(stems, start=1):
+        scene_started = asyncio.get_running_loop().time()
         ext = req.extension or ".json"
         filename = f"{stem}{req.custom_suffix}{ext}"
         source_json_path = os.path.join(req.source_path, filename)
@@ -1547,6 +1859,14 @@ async def import_from_multianno(req: ImportRequest):
         # 🌟 修正 3：目标路径必须是绝对纯净的 base_stem.json
         target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
         target_exists = os.path.exists(target_json_path)
+        logger.info(
+            "IMPORT_SCENE_START format=MultiAnno index=%d/%d stem=%s source=%s target=%s",
+            index,
+            len(stems),
+            stem,
+            shorten(source_json_path, 1500),
+            shorten(target_json_path, 1500),
+        )
 
         # 🌟 增加一道保险：防止用户把 source 和 target 选成同一个文件夹导致死循环追加
         if (
@@ -1554,6 +1874,12 @@ async def import_from_multianno(req: ImportRequest):
             and req.merge_strategy == "append"
         ):
             processed_stems.add(base_stem)
+            logger.info(
+                "IMPORT_SCENE_SKIP format=MultiAnno index=%d/%d stem=%s reason=source_target_same_append",
+                index,
+                len(stems),
+                stem,
+            )
             continue
 
         # 1. 读取外部 JSON
@@ -1565,6 +1891,12 @@ async def import_from_multianno(req: ImportRequest):
         # 3. 冲突策略拦截
         processed_stems.add(base_stem)
         if req.merge_strategy == "skip" and target_exists and existing_data.get("shapes"):
+            logger.info(
+                "IMPORT_SCENE_SKIP format=MultiAnno index=%d/%d stem=%s reason=existing_nonempty",
+                index,
+                len(stems),
+                stem,
+            )
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
@@ -1606,10 +1938,35 @@ async def import_from_multianno(req: ImportRequest):
         total_shapes += imported_shape_count
         if not existing_data["shapes"]:
             empty_json_count += 1
+        logger.info(
+            "IMPORT_SCENE_END format=MultiAnno index=%d/%d stem=%s new_shapes=%d "
+            "total_shapes=%d empty=%s dimensions=%sx%s dimension_source=%s duration_ms=%.1f",
+            index,
+            len(stems),
+            stem,
+            imported_shape_count,
+            len(existing_data["shapes"]),
+            not existing_data["shapes"],
+            img_w,
+            img_h,
+            shorten(image_path, 1500) if image_path else "fallback/no-image",
+            (asyncio.get_running_loop().time() - scene_started) * 1000,
+        )
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
         cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
+
+    logger.info(
+        "IMPORT_MULTIANNOTATION_END imported=%d shapes=%d empty=%d missing_source=%d "
+        "dimension_fallback=%d mirror_cleaned=%d",
+        imported_count,
+        total_shapes,
+        empty_json_count,
+        missing_source_count,
+        dimension_fallback_count,
+        cleaned_count,
+    )
 
     # 🌟 修改：返回信息中带上清理数量
     msg = f"成功合并导入 {imported_count} 个 MultiAnno 场景，其中 {empty_json_count} 个为空标注场景。"
@@ -1669,7 +2026,17 @@ async def import_from_images_only(req: ImportRequest):
     else:
         stems = source_stems
 
-    for stem in stems:
+    logger.info(
+        "IMPORT_MASK_PLAN source=%s target=%s stems=%d source_masks=%d strategy=%s",
+        shorten(req.source_path, 1500),
+        shorten(req.target_dir, 1500),
+        len(stems),
+        len(source_stems),
+        req.merge_strategy,
+    )
+
+    for index, stem in enumerate(stems, start=1):
+        scene_started = asyncio.get_running_loop().time()
         # 尝试所有有效扩展名
         mask_path = None
         base_stem = stem
@@ -1680,6 +2047,14 @@ async def import_from_images_only(req: ImportRequest):
                 break
         target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
         target_exists = os.path.exists(target_json_path)
+        logger.info(
+            "IMPORT_SCENE_START format=Mask index=%d/%d stem=%s mask=%s target=%s",
+            index,
+            len(stems),
+            stem,
+            shorten(mask_path, 1500) if mask_path else "missing",
+            shorten(target_json_path, 1500),
+        )
         if mask_path is None:
             missing_source_count += 1
 
@@ -1689,6 +2064,12 @@ async def import_from_images_only(req: ImportRequest):
         # 冲突策略拦截
         processed_stems.add(base_stem)
         if req.merge_strategy == "skip" and target_exists and existing_data.get("shapes"):
+            logger.info(
+                "IMPORT_SCENE_SKIP format=Mask index=%d/%d stem=%s reason=existing_nonempty",
+                index,
+                len(stems),
+                stem,
+            )
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
@@ -1720,10 +2101,35 @@ async def import_from_images_only(req: ImportRequest):
         imported_count += 1
         if not existing_data["shapes"]:
             empty_json_count += 1
+        logger.info(
+            "IMPORT_SCENE_END format=Mask index=%d/%d stem=%s new_shapes=%d "
+            "total_shapes=%d empty=%s dimensions=%sx%s dimension_source=%s duration_ms=%.1f",
+            index,
+            len(stems),
+            stem,
+            len(new_shapes),
+            len(existing_data["shapes"]),
+            not existing_data["shapes"],
+            img_w,
+            img_h,
+            shorten(image_path, 1500) if image_path else "fallback/no-image",
+            (asyncio.get_running_loop().time() - scene_started) * 1000,
+        )
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
         cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
+
+    logger.info(
+        "IMPORT_MASK_END imported=%d shapes=%d empty=%d missing_source=%d "
+        "dimension_fallback=%d mirror_cleaned=%d",
+        imported_count,
+        total_shapes,
+        empty_json_count,
+        missing_source_count,
+        dimension_fallback_count,
+        cleaned_count,
+    )
 
     # 🌟 修改：返回信息中带上清理数量
     msg = f"成功逆向提取并导入 {imported_count} 个掩码场景，其中 {empty_json_count} 个为空标注场景。"
@@ -1837,7 +2243,11 @@ def _copy_images_for_stem(stem, view_configs, target_dir):
         out_img_path = os.path.join(dst_dir, f"{stem}{out_suffix}{out_ext}")
 
         if not os.path.exists(src_img_path):
-            print(f"⚠️ Image not found: {stem}{src_suffix}{normalized_src_ext}")
+            logger.warning(
+                "EXPORT_IMAGE_MISSING stem=%s source=%s",
+                stem,
+                shorten(src_img_path, 1500),
+            )
             continue
 
         try:
@@ -1897,10 +2307,11 @@ def _copy_images_for_stem(stem, view_configs, target_dir):
                 io.imsave(out_img_path, img, check_contrast=False)
 
         except Exception as e:
-            print(f"❌ Error processing {src_img_path}: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.exception(
+                "EXPORT_IMAGE_COPY_ERROR path=%s error=%s",
+                shorten(src_img_path, 1500),
+                e,
+            )
 
 
 def _write_split_files(target_dir, split_files, train, val, test, split_content_mode="stem", view_configs=None):

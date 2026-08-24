@@ -11,6 +11,7 @@ from models import (
     SAMInteractiveRequest,
 )
 from utils.image_io import is_raw_image, render_preview_rgb
+from utils.logging_config import get_logger, shorten
 
 try:
     from utils.ai_engine import InteractiveVisionEngine
@@ -21,6 +22,7 @@ else:
     AI_IMPORT_ERROR = None
 
 router = APIRouter(prefix="/api/ai/vision", tags=["Vision AI"])
+logger = get_logger("ai")
 
 
 vision_engine = InteractiveVisionEngine() if InteractiveVisionEngine else None
@@ -51,6 +53,7 @@ def _read_ai_image(image_path: str):
 
 @router.get("/status")
 async def get_engine_status():
+    logger.info("AI_STATUS available=%s loaded=%s", vision_engine is not None, vision_engine.is_loaded if vision_engine else False)
     if vision_engine is None:
         return {
             "is_available": False,
@@ -72,11 +75,20 @@ async def get_engine_status():
 
 @router.post("/config")
 async def update_ai_config(req: AIConfigRequest):
+    logger.info(
+        "AI_CONFIG_START model=%s type=%s confidence=%s classes=%s",
+        shorten(req.model_path, 1500),
+        req.model_type,
+        req.confidence,
+        shorten(req.classes_file, 1000),
+    )
     engine = _require_vision_engine()
     try:
         engine.load_model(req.model_path, req.model_type, req.confidence, req.classes_file)
+        logger.info("AI_CONFIG_END model=%s", shorten(req.model_path, 1500))
         return {"status": "success"}
     except Exception as e:
+        logger.exception("AI_CONFIG_ERROR model=%s error=%s", req.model_path, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -92,9 +104,17 @@ async def init_image(req: SAMInitRequest):
     if not req.image_path and not req.image_data:
         raise HTTPException(status_code=400, detail="必须提供 image_path 或 image_data")
 
+    logger.info(
+        "AI_INIT_START image=%s has_base64=%s image_size=%s crop=%s",
+        shorten(req.image_path, 1500),
+        bool(req.image_data),
+        req.image_size or 644,
+        (req.crop_x, req.crop_y, req.crop_w, req.crop_h),
+    )
     try:
         cache_key = req.image_path or "base64_temp_image"
         if engine.current_image_key == cache_key:
+            logger.info("AI_INIT_CACHE_HIT key=%s", shorten(cache_key, 1500))
             return {"status": "success", "msg": "Features already cached"}
 
         # 1. 读取图像 (无论是 Base64 还是本地路径，此时都是未经裁剪的全尺寸大图)
@@ -109,8 +129,12 @@ async def init_image(req: SAMInitRequest):
             raise ValueError("Failed to read image for AI initialization.")
 
         # 🌟 核心修复：将裁剪逻辑提取到公共区域！无论数据源是什么，必须先切片！
-        print(
-            f"--> [AI Init] Crop: {req.crop_x}, {req.crop_y}, {req.crop_w}, {req.crop_h}"
+        logger.info(
+            "AI_INIT_CROP x=%s y=%s width=%s height=%s",
+            req.crop_x,
+            req.crop_y,
+            req.crop_w,
+            req.crop_h,
         )
         if req.crop_w and req.crop_h:
             x, y = int(req.crop_x), int(req.crop_y)
@@ -124,7 +148,7 @@ async def init_image(req: SAMInitRequest):
             # 使用 Numpy 进行物理切片
             img = img[max(0, y) : y_end, max(0, x) : x_end]
 
-        print(f"--> [AI Init] Extracting features. Image size: {req.image_size or 644}")
+        logger.info("AI_INIT_FEATURES image_size=%s", req.image_size or 644)
 
         # 2. 对已经裁剪好的精准区域，进行缩放以满足 AI 的 Inference Size
         if req.image_size and req.image_size > 0:
@@ -136,11 +160,10 @@ async def init_image(req: SAMInitRequest):
         # 3. 动态更新模型内部缓存以匹配前端尺寸
         engine.set_image(img)
         engine.current_image_key = cache_key
+        logger.info("AI_INIT_END key=%s shape=%s", shorten(cache_key, 1500), img.shape)
         return {"status": "success"}
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("AI_INIT_ERROR image=%s error=%s", req.image_path, e)
         raise HTTPException(status_code=500, detail=f"Init Error: {str(e)}")
 
 
@@ -154,6 +177,14 @@ async def predict_interactive(req: SAMInteractiveRequest):
     if not engine.is_loaded:
         raise HTTPException(status_code=400, detail="Vision AI 尚未装载")
 
+    logger.info(
+        "AI_PREDICT_START image=%s points=%d box=%s conf=%s",
+        shorten(req.image_path, 1500),
+        len(req.points or []),
+        req.box,
+        req.conf,
+    )
+
     # 兜底：如果前端忘记点 Confirm，这里自动补救
     if engine.current_image_key != req.image_path:
         engine.set_image(_read_ai_image(req.image_path))
@@ -162,7 +193,6 @@ async def predict_interactive(req: SAMInteractiveRequest):
     pts = [[p.x, p.y] for p in req.points] if req.points else None
     labels = [p.label for p in req.points] if req.points else None
 
-    print(f"--> [AI Predict] Points: {pts}, Labels: {labels}, Box: {req.box}")
     try:
         response_data = engine.predict_interactive(
             points=pts,
@@ -170,12 +200,10 @@ async def predict_interactive(req: SAMInteractiveRequest):
             box=req.box,
             conf=req.conf,
         )
-        print(f"--> [AI Predict] Result: {response_data}")
+        logger.info("AI_PREDICT_END result_type=%s", type(response_data).__name__)
         return response_data
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("AI_PREDICT_ERROR image=%s error=%s", req.image_path, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -189,15 +217,22 @@ async def predict_auto(req: SAMAutoRequest):
     if not engine.is_loaded:
         raise HTTPException(status_code=400, detail="Vision AI 尚未装载")
 
+    logger.info(
+        "AI_AUTO_START image=%s texts=%s conf=%s",
+        shorten(req.image_path, 1500),
+        shorten(req.texts, 1000),
+        req.conf,
+    )
+
     # 兜底：如果特征图没缓存，自动补救
     if engine.current_image_key != req.image_path:
         engine.set_image(_read_ai_image(req.image_path))
         engine.current_image_key = req.image_path
     try:
-        return engine.predict_auto(texts=req.texts, conf=req.conf)
+        result = engine.predict_auto(texts=req.texts, conf=req.conf)
+        logger.info("AI_AUTO_END result_type=%s", type(result).__name__)
+        return result
 
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("AI_AUTO_ERROR image=%s error=%s", req.image_path, e)
         raise HTTPException(status_code=500, detail=str(e))

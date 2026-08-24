@@ -2,7 +2,6 @@ import json
 import math
 import os
 import shutil
-import traceback
 from datetime import datetime
 
 import numpy as np
@@ -18,8 +17,10 @@ from models import (
     RepairRequest,
     StatRequest,
 )
+from utils.logging_config import get_logger, shorten
 
 router = APIRouter(prefix="/api/taxonomy", tags=["Taxonomy"])
+logger = get_logger("taxonomy")
 
 
 SHP_RATE_BINS = [
@@ -59,6 +60,12 @@ AREA_RATE_BINS = [0, 0.001, 0.005, 0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.8
 
 @router.post("/merge_class")  # 因为有 prefix，这里写 /merge_class 即可
 async def batch_merge_class(request: BatchMergeClassRequest):
+    logger.info(
+        "MERGE_CLASS_START folders=%d old_names=%s new_name=%s",
+        len(request.save_dirs),
+        shorten(request.old_names, 1000),
+        request.new_name,
+    )
     modified_count = 0
     import json
 
@@ -88,13 +95,20 @@ async def batch_merge_class(request: BatchMergeClassRequest):
                         json.dump(anno_data, f, indent=2, ensure_ascii=False)
                     modified_count += 1
             except Exception as e:
-                print(f"Error processing {file_path}: {e}")
+                logger.exception("MERGE_CLASS_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
+    logger.info("MERGE_CLASS_END modified_files=%d", modified_count)
     return {"status": "success", "modified_files": modified_count}
 
 
 @router.post("/delete_class")
 async def batch_delete_class(request: BatchDeleteClassRequest):
+    logger.info(
+        "DELETE_CLASS_START folders=%d class=%s hard_delete=%s",
+        len(request.save_dirs),
+        request.class_name,
+        request.hard_delete,
+    )
     modified_count = 0
     import json
 
@@ -134,13 +148,19 @@ async def batch_delete_class(request: BatchDeleteClassRequest):
                         json.dump(anno_data, f, indent=2, ensure_ascii=False)
                     modified_count += 1
             except Exception as e:
-                print(f"Error processing {file_path}: {e}")
+                logger.exception("DELETE_CLASS_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
+    logger.info("DELETE_CLASS_END modified_files=%d", modified_count)
     return {"status": "success", "modified_files": modified_count}
 
 
 @router.post("/delete_attribute")
 async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
+    logger.info(
+        "DELETE_ATTRIBUTE_START folders=%d attribute=%s",
+        len(request.save_dirs),
+        request.attribute_name,
+    )
     modified_count = 0
     import json
 
@@ -172,8 +192,9 @@ async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
                         json.dump(anno_data, f, indent=2, ensure_ascii=False)
                     modified_count += 1
             except Exception as e:
-                print(f"Error processing {file_path}: {e}")
+                logger.exception("DELETE_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
+    logger.info("DELETE_ATTRIBUTE_END modified_files=%d", modified_count)
     return {"status": "success", "modified_files": modified_count}
 
 
@@ -244,7 +265,13 @@ def get_2d_heatmap(df: pd.DataFrame, x_col: str, y_col: str, bins: int = 10) -> 
 
 @router.post("/statistics")
 async def get_project_statistics(req: StatRequest):
+    logger.info(
+        "TAXONOMY_STATISTICS_START folders=%d force_refresh=%s",
+        len(req.save_dirs),
+        req.force_refresh,
+    )
     if not req.save_dirs:
+        logger.info("TAXONOMY_STATISTICS_END empty_request=True")
         return {"global": {"total_images": 0, "total_objects": 0}, "classes": {}}
 
     # 🌟 1. 缓存路径定义：存在第一个存档目录的上一级（通常是项目根目录）
@@ -255,9 +282,11 @@ async def get_project_statistics(req: StatRequest):
     if not req.force_refresh and os.path.exists(cache_file):
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
-                return json.load(f)
+                result = json.load(f)
+            logger.info("TAXONOMY_STATISTICS_CACHE_HIT path=%s", shorten(cache_file, 1500))
+            return result
         except Exception as e:
-            print(f"读取缓存失败: {e}，将重新计算。")
+            logger.exception("TAXONOMY_STATISTICS_CACHE_ERROR path=%s error=%s", cache_file, e)
 
     records = []
     total_images = 0
@@ -323,7 +352,7 @@ async def get_project_statistics(req: StatRequest):
                         }
                     )
             except Exception as e:
-                print(f"[Warning] Failed to parse {fpath}: {e}")
+                logger.exception("TAXONOMY_STATISTICS_FILE_ERROR path=%s error=%s", shorten(fpath, 1500), e)
                 continue
 
     # 如果完全没有标注数据，直接返回空
@@ -351,9 +380,11 @@ async def get_project_statistics(req: StatRequest):
         try:
             with open(cache_file, "w", encoding="utf-8") as f:
                 json.dump(final_result, f, ensure_ascii=False)
+            logger.info("TAXONOMY_STATISTICS_CACHE_WRITE path=%s", shorten(cache_file, 1500))
         except Exception:
-            pass
+            logger.exception("TAXONOMY_STATISTICS_CACHE_WRITE_ERROR path=%s", shorten(cache_file, 1500))
 
+        logger.info("TAXONOMY_STATISTICS_END images=%d objects=0", total_images)
         return final_result
 
     # 🌟 2. 转换为 DataFrame 享受降维打击
@@ -457,15 +488,26 @@ async def get_project_statistics(req: StatRequest):
         with open(cache_file, "w", encoding="utf-8") as f:
             json.dump(final_result, f, ensure_ascii=False)
     except Exception as e:
-        print(f"写入缓存失败: {e}")
+        logger.exception("TAXONOMY_STATISTICS_CACHE_WRITE_ERROR path=%s error=%s", cache_file, e)
 
+    logger.info(
+        "TAXONOMY_STATISTICS_END images=%d objects=%d records=%d",
+        total_images,
+        len(records),
+        len(records),
+    )
     return final_result
 
 
 @router.post("/apply_attribute")
 async def batch_apply_attribute(request: ApplyAttributeRequest):
-    print("\n" + "-" * 40)
-    print(f"📥 [Backend] Received Request: {request.dict()}")
+    logger.info(
+        "APPLY_ATTRIBUTE_START folders=%d attribute=%s old_default=%s new_default=%s",
+        len(request.save_dirs),
+        request.attribute_name,
+        request.old_default,
+        request.new_default,
+    )
 
     modified_count = 0
     import json
@@ -473,9 +515,9 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
 
     try:
         for folder in request.save_dirs:
-            print(f"📂 Checking folder: {folder}")
+            logger.info("APPLY_ATTRIBUTE_FOLDER_START path=%s", shorten(folder, 1500))
             if not os.path.exists(folder):
-                print(f"⚠️ Folder not found, skipping: {folder}")
+                logger.warning("APPLY_ATTRIBUTE_FOLDER_MISSING path=%s", shorten(folder, 1500))
                 continue
 
             for file_name in os.listdir(folder):
@@ -513,17 +555,14 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
                         modified_count += 1
 
                 except Exception as e:
-                    print(f"❌ [File Error] Failed on {file_path}: {e}")
-                    traceback.print_exc()
+                    logger.exception("APPLY_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
-        print(f"✅ [Backend] Finished! Modified {modified_count} files.")
-        print("-" * 40 + "\n")
+        logger.info("APPLY_ATTRIBUTE_END modified_files=%d", modified_count)
         return {"status": "success", "modified_files": modified_count}
 
     except Exception as e:
         # 3. 捕获一切内部致命错误
-        print(f"💥 [FATAL ERROR] Backend crashed inside apply_attribute: {e}")
-        traceback.print_exc()
+        logger.exception("APPLY_ATTRIBUTE_FATAL_ERROR error=%s", e)
         return JSONResponse(status_code=500, content={"detail": str(e)})
 
 
@@ -537,7 +576,12 @@ async def repair_project_data(req: RepairRequest):
     - attribute: 修复缺失的属性默认值
     - duplicate: 清理重复标注
     """
-    print(f"📥 [Backend] Received Request: {req.dict()}")
+    logger.info(
+        "REPAIR_START folders=%d types=%s stems=%d",
+        len(req.save_dirs),
+        req.repair_types,
+        len(req.stems),
+    )
     result = {"total_scanned": 0, "total_fixed": 0, "details": {}}
 
     for repair_type in req.repair_types:
@@ -551,6 +595,11 @@ async def repair_project_data(req: RepairRequest):
             result["details"]["json_file"] = json_file_result
             result["total_scanned"] += json_file_result["scanned"]
             result["total_fixed"] += json_file_result["fixed"]
+    logger.info(
+        "REPAIR_END scanned=%d fixed=%d",
+        result["total_scanned"],
+        result["total_fixed"],
+    )
     return result
 
 
@@ -602,7 +651,7 @@ def _repair_stems(save_dirs: list) -> dict:
                     fixed_files.append(fname)
 
             except Exception as e:
-                print(f"❌ [Repair] Failed on {fpath}: {e}")
+                logger.exception("REPAIR_STEM_FILE_ERROR path=%s error=%s", shorten(fpath, 1500), e)
 
     return {"scanned": scanned, "fixed": fixed, "fixed_files": fixed_files}
 
@@ -642,7 +691,7 @@ def _repair_json_files(save_dirs: list, stems: list) -> dict:
                     fixed_files.append(fname)
 
             except Exception as e:
-                print(f"❌ [Repair] Failed on {fpath}: {e}")
+                logger.exception("REPAIR_JSON_FILE_ERROR path=%s error=%s", shorten(fpath, 1500), e)
 
     return {"scanned": scanned, "fixed": fixed, "fixed_files": fixed_files}
 
@@ -652,8 +701,6 @@ async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
     modified_count = 0
     total_objects = 0
 
-    import traceback  # 🌟 确保导入
-
     # 🌟 构建快速查找字典
     merge_map = {}
     for m in request.merges:
@@ -661,13 +708,15 @@ async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
         old_name = m.old_name if hasattr(m, "old_name") else m["old_name"]
         merge_map[old_name] = m
 
-    print(f"\n{'=' * 50}")
-    print(f"🔀 [Merge with Attribute] Processing {len(request.merges)} merge rules")
-    print(f"{'=' * 50}")
+    logger.info(
+        "MERGE_WITH_ATTRIBUTE_START folders=%d rules=%d",
+        len(request.save_dirs),
+        len(request.merges),
+    )
 
     for folder in request.save_dirs:
         if not os.path.exists(folder):
-            print(f"⚠️  Folder not found: {folder}")
+            logger.warning("MERGE_WITH_ATTRIBUTE_FOLDER_MISSING path=%s", shorten(folder, 1500))
             continue
 
         for file_name in os.listdir(folder):
@@ -707,9 +756,15 @@ async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
                             shape["attributes"] = {}
                         shape["attributes"][attr_name] = attr_value
 
-                        print(
-                            f"   ✅ {file_name}: '{label}' → '{new_name}' | "
-                            f"{attr_name}: '{old_attr}' → '{attr_value}'"
+                        logger.info(
+                            "MERGE_WITH_ATTRIBUTE_OBJECT file=%s label=%s new_label=%s "
+                            "attribute=%s old_value=%s new_value=%s",
+                            file_name,
+                            label,
+                            new_name,
+                            attr_name,
+                            old_attr,
+                            attr_value,
                         )
 
                         changed = True
@@ -722,10 +777,13 @@ async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
                     total_objects += file_objects_updated
 
             except Exception as e:
-                print(f"❌ Error processing {file_path}: {e}")
-                traceback.print_exc()
+                logger.exception("MERGE_WITH_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
-    print(f"\n✅ Done! Modified {modified_count} files, {total_objects} objects.")
+    logger.info(
+        "MERGE_WITH_ATTRIBUTE_END modified_files=%d objects=%d",
+        modified_count,
+        total_objects,
+    )
 
     return {
         "status": "success",

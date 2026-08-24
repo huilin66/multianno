@@ -2,11 +2,16 @@ import os
 import tempfile
 from functools import lru_cache
 from pathlib import Path
+from time import perf_counter
 from typing import Any, Optional
 
 import cv2
 import numpy as np
 from skimage import io
+from utils.logging_config import get_logger, shorten
+
+
+logger = get_logger("image_io")
 
 try:
     import rawpy
@@ -148,24 +153,37 @@ def split_bands_param(bands: str | list[int] | tuple[int, ...] | None) -> list[i
 
 
 def find_image_path(folder_path: str, file_name: str = "") -> Optional[str]:
+    logger.info(
+        "IMAGE_FIND_START folder=%s file=%s",
+        shorten(folder_path, 1500),
+        file_name or "-",
+    )
     if not os.path.exists(folder_path):
+        logger.warning("IMAGE_FIND_MISSING_FOLDER folder=%s", shorten(folder_path, 1500))
         return None
 
     if file_name:
         target_stem = Path(file_name).stem
         for f in os.listdir(folder_path):
             if is_supported_image(f) and Path(f).stem == target_stem:
-                return os.path.join(folder_path, f)
+                result = os.path.join(folder_path, f)
+                logger.info("IMAGE_FIND_END result=%s", shorten(result, 1500))
+                return result
 
         direct_path = os.path.join(folder_path, file_name)
         if os.path.exists(direct_path):
+            logger.info("IMAGE_FIND_END result=%s", shorten(direct_path, 1500))
             return direct_path
+        logger.warning("IMAGE_FIND_NOT_FOUND folder=%s file=%s", shorten(folder_path, 1500), file_name)
         return None
 
     image_files = [f for f in os.listdir(folder_path) if is_supported_image(f)]
     if not image_files:
+        logger.warning("IMAGE_FIND_NO_SUPPORTED_FILES folder=%s", shorten(folder_path, 1500))
         return None
-    return os.path.join(folder_path, sorted(image_files)[0])
+    result = os.path.join(folder_path, sorted(image_files)[0])
+    logger.info("IMAGE_FIND_END result=%s", shorten(result, 1500))
+    return result
 
 
 def _require_rawpy() -> None:
@@ -524,10 +542,25 @@ def _can_open_with_rawpy(path: str) -> bool:
 
 @lru_cache(maxsize=20)
 def read_image_cached(image_path: str) -> np.ndarray:
-    if is_raw_image(image_path):
-        rgb, _raw_info = load_raw_image(image_path, None)
-        return rgb
-    return io.imread(image_path)
+    started = perf_counter()
+    logger.info("IMAGE_READ_START path=%s", shorten(image_path, 1500))
+    try:
+        if is_raw_image(image_path):
+            rgb, _raw_info = load_raw_image(image_path, None)
+            image = rgb
+        else:
+            image = io.imread(image_path)
+        logger.info(
+            "IMAGE_READ_END path=%s shape=%s dtype=%s duration_ms=%.1f",
+            shorten(image_path, 1500),
+            image.shape,
+            image.dtype,
+            (perf_counter() - started) * 1000,
+        )
+        return image
+    except Exception:
+        logger.exception("IMAGE_READ_ERROR path=%s", shorten(image_path, 1500))
+        raise
 
 
 @lru_cache(maxsize=10)
@@ -536,6 +569,7 @@ def _load_raw_image_cached(image_path: str) -> tuple[np.ndarray, dict[str, Any]]
 
 
 def clear_image_cache() -> None:
+    logger.info("IMAGE_CACHE_CLEAR")
     read_image_cached.cache_clear()
     _load_raw_image_cached.cache_clear()
 
@@ -740,29 +774,43 @@ def read_for_export(
 
 
 def read_metadata(image_path: str, raw_profile: Optional[dict[str, Any]] = None) -> dict[str, Any]:
-    if is_raw_image(image_path):
-        rgb, raw_info = load_raw_image(image_path, raw_profile)
-        return {
-            "width": int(rgb.shape[1]),
-            "height": int(rgb.shape[0]),
-            "bands": 1 if raw_info.get("plain_raw") else 3,
-            "dtype": f"RAW{raw_info.get('bit', 16)}",
-            "isRaw": True,
-            "raw": {
-                "bit": raw_info.get("bit", 16),
-                "pattern": raw_info.get("pattern", ""),
-                "plain_raw": bool(raw_info.get("plain_raw", False)),
-            },
-        }
-
-    img = read_image_cached(image_path)
-    return {
-        "width": int(img.shape[1]),
-        "height": int(img.shape[0]),
-        "bands": int(img.shape[2]) if img.ndim > 2 else 1,
-        "dtype": str(img.dtype),
-        "isRaw": False,
-    }
+    started = perf_counter()
+    logger.info("IMAGE_METADATA_START path=%s", shorten(image_path, 1500))
+    try:
+        if is_raw_image(image_path):
+            rgb, raw_info = load_raw_image(image_path, raw_profile)
+            result = {
+                "width": int(rgb.shape[1]),
+                "height": int(rgb.shape[0]),
+                "bands": 1 if raw_info.get("plain_raw") else 3,
+                "dtype": f"RAW{raw_info.get('bit', 16)}",
+                "isRaw": True,
+                "raw": {
+                    "bit": raw_info.get("bit", 16),
+                    "pattern": raw_info.get("pattern", ""),
+                    "plain_raw": bool(raw_info.get("plain_raw", False)),
+                },
+            }
+        else:
+            img = read_image_cached(image_path)
+            result = {
+                "width": int(img.shape[1]),
+                "height": int(img.shape[0]),
+                "bands": int(img.shape[2]) if img.ndim > 2 else 1,
+                "dtype": str(img.dtype),
+                "isRaw": False,
+            }
+        logger.info(
+            "IMAGE_METADATA_END path=%s dimensions=%sx%s duration_ms=%.1f",
+            shorten(image_path, 1500),
+            result["width"],
+            result["height"],
+            (perf_counter() - started) * 1000,
+        )
+        return result
+    except Exception:
+        logger.exception("IMAGE_METADATA_ERROR path=%s", shorten(image_path, 1500))
+        raise
 
 
 def encode_jpeg_rgb(rgb: np.ndarray, quality: int = 90) -> bytes:
@@ -825,4 +873,3 @@ def sample_pixel(
         "channel": channel,
         "dtype": str(raw.dtype),
     }
-

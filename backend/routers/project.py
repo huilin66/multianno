@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 from pathlib import Path
+from time import perf_counter
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response, StreamingResponse
@@ -25,8 +26,10 @@ from utils.image_io import (
     render_preview_rgb,
     sample_pixel,
 )
+from utils.logging_config import get_logger, shorten
 
 router = APIRouter(prefix="/api", tags=["Project"])
+logger = get_logger("project")
 
 
 def _parse_json_query(value: str | None) -> dict:
@@ -77,7 +80,16 @@ def calculate_list_stats(*lists):
 
 @router.post("/stats/project")
 async def get_project_stats(req: StatsRequest):
+    logger.info(
+        "PROJECT_STATS_REQUEST save_dirs=%d target_class=%s force_refresh=%s",
+        len(req.save_dirs),
+        req.target_class,
+        req.force_refresh,
+    )
+
     async def event_generator():
+        started = perf_counter()
+        logger.info("PROJECT_STATS_START")
         all_json_files = []
         # 1. 扫描所有目录下的 json 文件 (排除 meta.json)
         for d in req.save_dirs:
@@ -88,6 +100,11 @@ async def get_project_stats(req: StatsRequest):
                             all_json_files.append(os.path.join(root, f))
 
         total_files = len(all_json_files)
+        logger.info(
+            "PROJECT_STATS_SCAN_END files=%d save_dirs=%s",
+            total_files,
+            shorten(req.save_dirs, 1500),
+        )
         if total_files == 0:
             yield (
                 json.dumps(
@@ -135,7 +152,12 @@ async def get_project_stats(req: StatsRequest):
                             {"stem": stem, "shape": s_type, "count": count}
                         )
             except Exception:
-                pass  # 忽略损坏的 JSON 文件
+                logger.exception(
+                    "PROJECT_STATS_FILE_ERROR index=%d/%d path=%s",
+                    i + 1,
+                    total_files,
+                    shorten(file_path, 1500),
+                )
 
             # 3. 每处理 10 个文件，或者处理到最后一个时，推送一次进度
             if (i + 1) % 10 == 0 or (i + 1) == total_files:
@@ -145,6 +167,12 @@ async def get_project_stats(req: StatsRequest):
                     )
                     + "\n"
                 )
+                logger.info(
+                    "PROJECT_STATS_PROGRESS current=%d total=%d objects=%d",
+                    i + 1,
+                    total_files,
+                    total_objects,
+                )
                 await asyncio.sleep(0.01)  # 让出事件循环，确保数据实时发送
 
         # 4. 循环结束，推送最终结果
@@ -153,6 +181,12 @@ async def get_project_stats(req: StatsRequest):
             "total": total_objects,
             "fileList": file_list,
         }
+        logger.info(
+            "PROJECT_STATS_END files=%d objects=%d duration_ms=%.1f",
+            total_files,
+            total_objects,
+            (perf_counter() - started) * 1000,
+        )
         yield json.dumps({"type": "result", "data": result_data}) + "\n"
 
     # 使用 application/x-ndjson 格式返回流
@@ -161,6 +195,8 @@ async def get_project_stats(req: StatsRequest):
 
 @router.post("/project/analyze")
 async def analyze_project(request: AnalyzeRequest):
+    started = perf_counter()
+    logger.info("PROJECT_ANALYZE_START folders=%d", len(request.folders))
     analysis_results = []
     stem_list = []
     folder_files_map = {}
@@ -168,6 +204,11 @@ async def analyze_project(request: AnalyzeRequest):
     for item in request.folders:
         folder_path = item.path
         raw_suffix = item.suffix.strip() if item.suffix else ""
+        logger.info(
+            "PROJECT_ANALYZE_FOLDER_START path=%s suffix=%s",
+            shorten(folder_path, 1500),
+            item.suffix or "-",
+        )
 
         # 🌟 核心修复：智能清理用户输入的后缀！
         # 如果用户在界面上输入了带有扩展名的后缀 (比如 "_V.JPG" 或 "_T.tif")
@@ -180,6 +221,10 @@ async def analyze_project(request: AnalyzeRequest):
                 break
 
         if not os.path.exists(folder_path):
+            logger.warning(
+                "PROJECT_ANALYZE_FOLDER_MISSING path=%s",
+                shorten(folder_path, 1500),
+            )
             continue
 
         valid_stems = []
@@ -203,6 +248,10 @@ async def analyze_project(request: AnalyzeRequest):
                     first_file_path = os.path.join(folder_path, f)
 
         if not valid_stems:
+            logger.warning(
+                "PROJECT_ANALYZE_FOLDER_EMPTY path=%s",
+                shorten(folder_path, 1500),
+            )
             continue
 
         stem_list.append(valid_stems)
@@ -212,7 +261,11 @@ async def analyze_project(request: AnalyzeRequest):
         try:
             image_meta = read_metadata(first_file_path, raw_profile=raw_profile)
         except Exception as e:
-            print(f"Failed to read image metadata: {first_file_path}: {e}")
+            logger.exception(
+                "PROJECT_ANALYZE_METADATA_ERROR path=%s error=%s",
+                shorten(first_file_path, 1500),
+                e,
+            )
             image_meta = {
                 "width": 0,
                 "height": 0,
@@ -231,6 +284,13 @@ async def analyze_project(request: AnalyzeRequest):
             "fileCount": len(valid_stems),
         }
         analysis_results.append(meta)
+        logger.info(
+            "PROJECT_ANALYZE_FOLDER_END path=%s images=%d dimensions=%sx%s",
+            shorten(folder_path, 1500),
+            len(valid_stems),
+            meta["width"],
+            meta["height"],
+        )
 
     # 计算交集
     intersection_stats = calculate_list_stats(*stem_list)
@@ -256,6 +316,12 @@ async def analyze_project(request: AnalyzeRequest):
         "commonStems": common_stems,
         "sceneGroups": scene_groups,
     }
+    logger.info(
+        "PROJECT_ANALYZE_END folders=%d common_stems=%d duration_ms=%.1f",
+        len(analysis_results),
+        len(common_stems),
+        (perf_counter() - started) * 1000,
+    )
     return result
 
 
@@ -271,13 +337,25 @@ async def get_preview(
     """
     根据前端传来的文件夹绝对路径、文件名(智能忽略扩展名差异)和波段索引，读取并返回渲染用的 JPEG
     """
+    started = perf_counter()
+    logger.info(
+        "PREVIEW_START folder=%s file=%s bands=%s",
+        shorten(folderPath, 1500),
+        fileName,
+        bands or "-",
+    )
     if not os.path.exists(folderPath):
+        logger.warning("PREVIEW_FOLDER_MISSING folder=%s", shorten(folderPath, 1500))
         return Response(status_code=404)
 
     image_path = find_image_path(folderPath, fileName)
 
     if not image_path or not os.path.exists(image_path):
-        print(f"Error: Image not found for folder: {folderPath}, fileName: {fileName}")
+        logger.warning(
+            "PREVIEW_IMAGE_MISSING folder=%s file=%s",
+            shorten(folderPath, 1500),
+            fileName,
+        )
         return Response(status_code=404)
 
     try:
@@ -288,15 +366,18 @@ async def get_preview(
             raw_profile=_parse_json_query(rawProfile),
         )
         encoded_image = encode_jpeg_rgb(preview)
+        logger.info(
+            "PREVIEW_END image=%s bytes=%d duration_ms=%.1f",
+            shorten(image_path, 1500),
+            len(encoded_image),
+            (perf_counter() - started) * 1000,
+        )
         return Response(content=encoded_image, media_type="image/jpeg")
     except RawDependencyError as e:
-        print(f"RAW dependency unavailable: {e}")
+        logger.warning("PREVIEW_RAW_DEPENDENCY_ERROR image=%s error=%s", image_path, e)
         return Response(content=str(e).encode("utf-8"), status_code=503)
     except Exception as e:
-        print(f"Preview Gen Error: {e}")
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("PREVIEW_ERROR image=%s error=%s", image_path, e)
         return Response(status_code=500)
 
 
@@ -307,12 +388,21 @@ async def prefetch_images(request: dict):
     payload: { "paths": ["/data/img1.tif", "/data/img2.tif"] }
     """
     paths = request.get("paths", [])
+    started = perf_counter()
+    logger.info("PREFETCH_START paths=%d", len(paths))
     for path in paths:
         if os.path.exists(path):
             try:
                 read_image_cached(path)
             except Exception:
-                pass
+                logger.exception("PREFETCH_ERROR path=%s", shorten(path, 1500))
+        else:
+            logger.warning("PREFETCH_MISSING path=%s", shorten(path, 1500))
+    logger.info(
+        "PREFETCH_END requested=%d duration_ms=%.1f",
+        len(paths),
+        (perf_counter() - started) * 1000,
+    )
     return {"status": "ok", "cached": len(paths)}
 
 
@@ -328,13 +418,27 @@ async def get_pixel_sample(
     settings: str = "",
     rawProfile: str = "",
 ):
+    logger.info(
+        "SAMPLE_PIXEL_START folder=%s file=%s x=%d y=%d mode=%s",
+        shorten(folderPath, 1500),
+        fileName,
+        x,
+        y,
+        mode,
+    )
     if not os.path.exists(folderPath):
+        logger.warning("SAMPLE_PIXEL_FOLDER_MISSING folder=%s", shorten(folderPath, 1500))
         return Response(status_code=404)
     image_path = find_image_path(folderPath, fileName)
     if not image_path or not os.path.exists(image_path):
+        logger.warning(
+            "SAMPLE_PIXEL_IMAGE_MISSING folder=%s file=%s",
+            shorten(folderPath, 1500),
+            fileName,
+        )
         return Response(status_code=404)
     try:
-        return sample_pixel(
+        result = sample_pixel(
             image_path,
             x=x,
             y=y,
@@ -344,21 +448,32 @@ async def get_pixel_sample(
             settings=_parse_json_query(settings),
             raw_profile=_parse_json_query(rawProfile),
         )
+        logger.info("SAMPLE_PIXEL_END image=%s", shorten(image_path, 1500))
+        return result
     except RawDependencyError as e:
+        logger.warning("SAMPLE_PIXEL_RAW_DEPENDENCY_ERROR image=%s error=%s", image_path, e)
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
+        logger.exception("SAMPLE_PIXEL_ERROR image=%s error=%s", image_path, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/project/clear_cache")
 async def clear_cache():
+    logger.info("IMAGE_CACHE_CLEAR_START")
     clear_image_cache()
+    logger.info("IMAGE_CACHE_CLEAR_END")
     return {"status": "ok"}
 
 
 @router.post("/project/save_meta")
 async def save_project_meta(payload: ProjectMetaPayload):
     """静默保存 project meta 到指定完整路径"""
+    logger.info(
+        "PROJECT_META_SAVE_START path=%s keys=%s",
+        shorten(payload.file_path, 1500),
+        list(payload.content.keys()),
+    )
     # 提取目录并确保存在
     save_dir = os.path.dirname(payload.file_path)
     if save_dir and not os.path.exists(save_dir):
@@ -367,50 +482,77 @@ async def save_project_meta(payload: ProjectMetaPayload):
     try:
         with open(payload.file_path, "w", encoding="utf-8") as f:
             json.dump(payload.content, f, ensure_ascii=False, indent=2)
+        logger.info("PROJECT_META_SAVE_END path=%s", shorten(payload.file_path, 1500))
         return {"status": "success"}
     except Exception as e:
+        logger.exception("PROJECT_META_SAVE_ERROR path=%s error=%s", payload.file_path, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/project/load_meta")
 async def load_project_meta(file_path: str):
     """直接读取指定的 project meta 文件"""
+    logger.info("PROJECT_META_LOAD_START path=%s", shorten(file_path, 1500))
     if not os.path.exists(file_path):
+        logger.warning("PROJECT_META_LOAD_MISSING path=%s", shorten(file_path, 1500))
         raise HTTPException(status_code=404, detail="Meta file not found")
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+        logger.info("PROJECT_META_LOAD_END path=%s", shorten(file_path, 1500))
         return data
     except Exception as e:
+        logger.exception("PROJECT_META_LOAD_ERROR path=%s error=%s", file_path, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/workspace/check-json")
 async def check_workspace_json(req: CheckJsonRequest):
+    logger.info("WORKSPACE_CHECK_JSON_START path=%s", shorten(req.path, 1500))
     try:
         if not os.path.exists(req.path):
+            logger.info("WORKSPACE_CHECK_JSON_END path=%s has_json=False", shorten(req.path, 1500))
             return {"hasJson": False}
 
         # 递归检查目录下是否有 .json 文件
         for root, dirs, files in os.walk(req.path):
             for file in files:
                 if file.endswith(".json"):
+                    logger.info(
+                        "WORKSPACE_CHECK_JSON_END path=%s has_json=True found=%s",
+                        shorten(req.path, 1500),
+                        file,
+                    )
                     return {"hasJson": True}
 
+        logger.info("WORKSPACE_CHECK_JSON_END path=%s has_json=False", shorten(req.path, 1500))
         return {"hasJson": False}
     except Exception as e:
+        logger.exception("WORKSPACE_CHECK_JSON_ERROR path=%s error=%s", req.path, e)
         return {"hasJson": False}
 
 
 @router.post("/project/infer_suffix")
 async def infer_suffix(req: InferSuffixRequest):
+    started = perf_counter()
+    logger.info("PROJECT_INFER_SUFFIX_START folders=%d", len(req.folders))
     all_first_files = []
     valid_folders = []
 
     # 第一遍：收集有效文件夹
     for idx, folder in enumerate(req.folders):
+        logger.info(
+            "PROJECT_INFER_SUFFIX_FOLDER_START index=%d path=%s",
+            idx,
+            shorten(folder.path, 1500),
+        )
         if not os.path.exists(folder.path):
+            logger.warning(
+                "PROJECT_INFER_SUFFIX_FOLDER_MISSING index=%d path=%s",
+                idx,
+                shorten(folder.path, 1500),
+            )
             continue
         image_files = sorted(
             [
@@ -466,5 +608,9 @@ async def infer_suffix(req: InferSuffixRequest):
                 "total_files": len(image_files),
             }
         )
-    print(results)
+    logger.info(
+        "PROJECT_INFER_SUFFIX_END results=%d duration_ms=%.1f",
+        len(results),
+        (perf_counter() - started) * 1000,
+    )
     return {"results": results}

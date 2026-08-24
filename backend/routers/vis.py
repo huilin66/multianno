@@ -1,18 +1,27 @@
 import base64
 import json
 from pathlib import Path
+from time import perf_counter
 
 import cv2
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from models import VisExportRequest, VisPreviewRequest
+from utils.logging_config import get_logger, shorten
 from utils.visualizer import LocalVisualizer
 
 router = APIRouter(prefix="/api/vis", tags=["Visualization"])
+logger = get_logger("visualization")
 
 
 @router.post("/preview")
 async def vis_preview(req: VisPreviewRequest):
+    started = perf_counter()
+    logger.info(
+        "VIS_PREVIEW_START stem=%s source_type=%s",
+        req.stem,
+        req.source_type,
+    )
     try:
         # 1. 提取配置
         configs = (
@@ -58,18 +67,31 @@ async def vis_preview(req: VisPreviewRequest):
                 b64_images["fused_result"] = f"data:image/jpeg;base64,{b64_str}"
 
         # 🌟 核心修复：返回字段名统一为 preview_images
+        logger.info(
+            "VIS_PREVIEW_END stem=%s layers=%d duration_ms=%.1f",
+            req.stem,
+            len(b64_images),
+            (perf_counter() - started) * 1000,
+        )
         return JSONResponse(content={"status": "success", "preview_images": b64_images})
 
     except Exception as e:
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("VIS_PREVIEW_ERROR stem=%s error=%s", req.stem, e)
         raise HTTPException(status_code=500, detail=f"渲染引擎错误: {str(e)}")
 
 
 @router.post("/export")
 async def vis_export(req: VisExportRequest):
+    logger.info(
+        "VIS_EXPORT_REQUEST stems=%d source_type=%s export_config=%s",
+        len(req.all_stems),
+        req.source_type,
+        shorten(req.export_config, 1500),
+    )
+
     def generate_progress():
+        started = perf_counter()
+        logger.info("VIS_EXPORT_START stems=%d", len(req.all_stems))
         try:
             engine = LocalVisualizer(config=req.render_settings)
             export_config = req.export_config
@@ -92,6 +114,12 @@ async def vis_export(req: VisExportRequest):
             # 2. 批量循环处理
             total = len(req.all_stems)
             for idx, stem in enumerate(req.all_stems):
+                logger.info(
+                    "VIS_EXPORT_SCENE_START index=%d/%d stem=%s",
+                    idx + 1,
+                    total,
+                    stem,
+                )
                 # 渲染当前场景的所有独立图层
                 layers_dict = engine.render_separated_layers(
                     stem, configs, req.anno_config, req.pred_configs
@@ -127,11 +155,21 @@ async def vis_export(req: VisExportRequest):
                     )
                     + "\n"
                 )
+                logger.info(
+                    "VIS_EXPORT_SCENE_END index=%d/%d stem=%s",
+                    idx + 1,
+                    total,
+                    stem,
+                )
             yield json.dumps({"type": "complete", "percent": 100}) + "\n"
         except Exception as e:
+            logger.exception("VIS_EXPORT_ERROR error=%s", e)
             yield json.dumps({"type": "error", "message": str(e)}) + "\n"
         finally:
             # 🌟 显式清理，防止连接悬空
-            print("Export Stream Finished.")
+            logger.info(
+                "VIS_EXPORT_END duration_ms=%.1f",
+                (perf_counter() - started) * 1000,
+            )
 
     return StreamingResponse(generate_progress(), media_type="application/x-ndjson")

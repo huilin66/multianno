@@ -8,6 +8,10 @@ import numpy as np
 import torch
 import torch._dynamo
 import torch.nn as nn
+from utils.logging_config import get_logger
+
+
+logger = get_logger("ai_engine")
 
 try:
     from ultralytics.models.sam.predict import SAM3Predictor, SAM3SemanticPredictor
@@ -280,14 +284,15 @@ class UnifiedSAM3Predcitor:
                 "SAM3 requires an Ultralytics build that exposes SAM3SemanticPredictor. "
                 f"Import error: {SAM3_IMPORT_ERROR}"
             )
-        print("====== Loading Semantic Master Engine ======")
+        logger.info("AI_ENGINE_SEMANTIC_LOAD_START")
         self.semantic = SAM3SemanticPredictor(overrides=overrides)
         if self.semantic.model is None:
             self.semantic.setup_model(None)
 
-        print("====== Loading Interactive Decoder (Shared VRAM) ======")
+        logger.info("AI_ENGINE_INTERACTIVE_LOAD_START")
         self.interactive = InteractiveDecoderOnly(overrides=overrides)
         self.current_cv2_img = None
+        logger.info("AI_ENGINE_LOAD_END")
 
     def set_image(self, img_array):
         self.current_cv2_img = img_array

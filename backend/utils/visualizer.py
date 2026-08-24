@@ -5,6 +5,10 @@ import os
 import cv2
 import numpy as np
 from utils.image_io import find_image_path, is_raw_image, render_preview_rgb
+from utils.logging_config import get_logger, shorten
+
+
+logger = get_logger("visualizer")
 
 
 class LocalVisualizer:
@@ -491,7 +495,12 @@ class LocalVisualizer:
                         )
 
         except Exception as e:
-            print(f"解析标注文件失败: {str(e)}")
+            logger.exception(
+                "VISUALIZER_ANNOTATION_ERROR stem=%s path=%s error=%s",
+                stem,
+                shorten(base_path, 1500),
+                e,
+            )
             return img
 
         # ==========================================
@@ -712,9 +721,7 @@ class LocalVisualizer:
                         )
                         result_layers[f"{view_name} (GT BBox/Polygon)"] = drawn_img
             except Exception as e:
-                import traceback
-
-                traceback.print_exc()
+                logger.exception("VISUALIZER_GT_ERROR stem=%s error=%s", stem, e)
                 h, w = view_images[0].shape[:2]
                 result_layers["GT Render Error"] = self._create_error_placeholder(
                     f"GT Error: {str(e)}", w, h
@@ -748,9 +755,12 @@ class LocalVisualizer:
                             )
                             result_layers[f"{view_name} ({p_name} Result)"] = drawn_img
                 except Exception as e:
-                    import traceback
-
-                    traceback.print_exc()
+                    logger.exception(
+                        "VISUALIZER_PRED_ERROR stem=%s prediction=%s error=%s",
+                        stem,
+                        p_name,
+                        e,
+                    )
                     h, w = view_images[0].shape[:2]
                     result_layers[f"{p_name} Render Error"] = (
                         self._create_error_placeholder(f"Pred Error: {str(e)}", w, h)
