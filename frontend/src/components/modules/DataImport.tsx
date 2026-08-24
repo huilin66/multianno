@@ -224,10 +224,10 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       const emptyJsonCount = res?.empty_json_count ?? 0;
       const dimensionFallbackCount = res?.dimension_fallback_count ?? 0;
       const resultLines = [desc];
-      if (format === 'yolo' && emptyJsonCount > 0) {
+      if (emptyJsonCount > 0) {
         resultLines.push(t('dataImport.result.emptyJson', { count: emptyJsonCount }));
       }
-      if (format === 'yolo' && dimensionFallbackCount > 0) {
+      if (dimensionFallbackCount > 0) {
         resultLines.push(t('dataImport.result.dimensionFallback', { count: dimensionFallbackCount }));
       }
       const resultDescription = resultLines.join('\n');

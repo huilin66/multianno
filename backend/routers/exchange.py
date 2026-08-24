@@ -1196,6 +1196,101 @@ def apply_mirror_cleanup(target_dir: str, processed_stems: set) -> int:
 # ==========================================
 # 🌟 路由 2：导入接口 (/import)
 # ==========================================
+def _load_import_annotation(path: str) -> dict:
+    """读取目标原生标注，并保证 shapes 始终是列表。"""
+    if not os.path.exists(path):
+        return {"shapes": []}
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    if not isinstance(data, dict):
+        data = {}
+    if not isinstance(data.get("shapes"), list):
+        data["shapes"] = []
+    return data
+
+
+def _positive_dimensions(width, height):
+    try:
+        width = int(width or 0)
+        height = int(height or 0)
+    except (TypeError, ValueError):
+        return None
+    if width > 0 and height > 0:
+        return width, height
+    return None
+
+
+def _image_basename(path: str) -> str:
+    return str(path).replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+
+
+def _resolve_import_dimensions(
+    req: ImportRequest,
+    stem: str,
+    existing_data: dict,
+    preferred_dimensions=None,
+):
+    """按真实图像、格式元数据、已有 JSON、默认值的顺序确定尺寸。"""
+    image_path = (req.image_paths or {}).get(stem)
+    if not image_path:
+        image_path = (req.image_paths or {}).get(Path(stem).stem)
+
+    if not image_path:
+        for folder in (req.target_dir, req.source_path):
+            if folder and os.path.isdir(folder):
+                image_path = find_image_path(folder, stem)
+                if image_path:
+                    break
+
+    if image_path and os.path.exists(image_path):
+        try:
+            image_meta = read_metadata(
+                image_path,
+                raw_profile=req.image_raw_profile,
+            )
+            dimensions = _positive_dimensions(
+                image_meta.get("width"), image_meta.get("height")
+            )
+            if dimensions:
+                return (*dimensions, image_path, False)
+        except Exception as exc:
+            print(f"Failed to read image dimensions for {image_path}: {exc}")
+
+    dimensions = _positive_dimensions(
+        *(preferred_dimensions or (None, None))
+    )
+    if dimensions:
+        return (*dimensions, image_path, False)
+
+    dimensions = _positive_dimensions(
+        existing_data.get("imageWidth"), existing_data.get("imageHeight")
+    )
+    if dimensions:
+        return (*dimensions, image_path, False)
+
+    return 1024, 1024, image_path, True
+
+
+def _finalize_import_annotation(
+    target_path: str,
+    data: dict,
+    stem: str,
+    width: int,
+    height: int,
+    image_path: str | None = None,
+    image_name: str | None = None,
+):
+    data["stem"] = stem
+    data["imageWidth"] = width
+    data["imageHeight"] = height
+    if image_name and not data.get("imageNameMain"):
+        data["imageNameMain"] = image_name
+    elif image_path and not data.get("imageNameMain"):
+        data["imageNameMain"] = _image_basename(image_path)
+    with open(target_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+
 @router.post("/import")
 async def handle_import(req: ImportRequest):
     if not os.path.exists(req.target_dir):
@@ -1229,11 +1324,18 @@ async def import_from_yolo(req: ImportRequest):
     total_shapes = 0
     dimension_fallback_count = 0
     # 使用 stems 列表按 {stem}{custom_suffix}{extension} 规则定位文件
-    stems = req.stems or []
-    if not stems:
+    label_stems = [
+        Path(f).stem
+        for f in os.listdir(req.source_path)
+        if f.endswith(".txt") and f != "classes.txt"
+    ]
+    if req.stems:
+        stems = req.stems
+    elif req.image_paths:
+        stems = list(dict.fromkeys([*req.image_paths.keys(), *label_stems]))
+    else:
         # 回退：扫描目录
-        stems = [Path(f).stem for f in os.listdir(req.source_path)
-                 if f.endswith(".txt") and f != "classes.txt"]
+        stems = label_stems
 
     for stem in stems:
         filename = f"{stem}{req.custom_suffix}{req.extension}" if req.extension else f"{stem}{req.custom_suffix}.txt"
@@ -1248,60 +1350,25 @@ async def import_from_yolo(req: ImportRequest):
         if not label_file_exists:
             missing_label_count += 1
 
-        existing_data = {"shapes": []}
-        if os.path.exists(target_json):
-            with open(target_json, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
-
-        if not isinstance(existing_data.get("shapes"), list):
-            existing_data["shapes"] = []
+        target_exists = os.path.exists(target_json)
+        existing_data = _load_import_annotation(target_json)
 
         # 让 mirror 模式把所有项目场景视为已处理；即使某个场景没有
         # YOLO 标签文件，也会被写成空标注 JSON，而不是被后续清洗器误判。
         processed_stems.add(base_stem)
 
+        if req.merge_strategy == "skip" and target_exists and existing_data.get("shapes"):
+            continue
+
         # YOLO 坐标是相对于原图宽高归一化的。优先读取前端传来的
         # 主视图真实图像路径，避免把 workspace 中不存在图像时的旧默认值
         # 1024x1024 写入标注 JSON。
-        image_path = req.image_paths.get(base_stem) or req.image_paths.get(stem)
-        if not image_path:
-            for folder in (req.target_dir, req.source_path):
-                if not folder:
-                    continue
-                image_path = find_image_path(folder, stem)
-                if image_path:
-                    break
+        img_w, img_h, image_path, used_dimension_fallback = _resolve_import_dimensions(
+            req, base_stem, existing_data
+        )
+        if used_dimension_fallback:
+            dimension_fallback_count += 1
 
-        image_dimensions = None
-        if image_path and os.path.exists(image_path):
-            try:
-                image_meta = read_metadata(
-                    image_path,
-                    raw_profile=req.image_raw_profile,
-                )
-                width = int(image_meta.get("width") or 0)
-                height = int(image_meta.get("height") or 0)
-                if width > 0 and height > 0:
-                    image_dimensions = (width, height)
-            except Exception as exc:
-                print(f"Failed to read image dimensions for {image_path}: {exc}")
-
-        if image_dimensions:
-            img_w, img_h = image_dimensions
-        else:
-            # 兼容旧的原生 JSON；只有无法访问真实图像且 JSON 没有尺寸时，
-            # 才使用历史默认值。
-            try:
-                img_w = int(existing_data.get("imageWidth") or 0)
-                img_h = int(existing_data.get("imageHeight") or 0)
-            except (TypeError, ValueError):
-                img_w, img_h = 0, 0
-            if img_w <= 0 or img_h <= 0:
-                img_w, img_h = 1024, 1024
-                dimension_fallback_count += 1
-
-        if req.merge_strategy == "skip" and existing_data.get("shapes"):
-            continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
 
@@ -1311,15 +1378,9 @@ async def import_from_yolo(req: ImportRequest):
                 lines = f.readlines()
             new_shapes, _ = yolo_to_shapes(lines, img_w, img_h, classes_map)
 
-        existing_data["shapes"].extend(new_shapes)
-        existing_data["stem"] = base_stem
-        existing_data["imageWidth"], existing_data["imageHeight"] = img_w, img_h
-        if image_path:
-            existing_data.setdefault("imageNameMain", os.path.basename(image_path))
-
         # 无论是否有有效目标，都落盘一个完整的原生 JSON。
-        with open(target_json, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, ensure_ascii=False, indent=2)
+        existing_data["shapes"].extend(new_shapes)
+        _finalize_import_annotation(target_json, existing_data, base_stem, img_w, img_h, image_path)
         imported_count += 1
         total_shapes += len(new_shapes)
         if not existing_data["shapes"]:
@@ -1348,41 +1409,60 @@ async def import_from_coco(req: ImportRequest):
         coco_data = json.load(f)
 
     cat_map = {c["id"]: c["name"] for c in coco_data.get("categories", [])}
-    img_info = {
-        img["id"]: {
-            "stem": Path(img["file_name"]).stem,
-            "w": img.get("width", 1024),
-            "h": img.get("height", 1024),
+    img_info = {}
+    coco_stem_map = {}
+    for img in coco_data.get("images", []):
+        raw_stem = Path(img["file_name"]).stem
+        base_stem = raw_stem
+        if req.custom_suffix and raw_stem.endswith(req.custom_suffix):
+            base_stem = raw_stem[: -len(req.custom_suffix)]
+        info = {
+            "id": img["id"],
+            "stem": base_stem,
+            "raw_stem": raw_stem,
+            "w": img.get("width"),
+            "h": img.get("height"),
+            "image_name": os.path.basename(str(img["file_name"])),
         }
-        for img in coco_data.get("images", [])
-    }
+        img_info[img["id"]] = info
+        coco_stem_map.setdefault(base_stem, info)
+        coco_stem_map.setdefault(raw_stem, info)
 
     grouped_anns = {}
     for ann in coco_data.get("annotations", []):
         grouped_anns.setdefault(ann["image_id"], []).append(ann)
 
     imported_count = 0
+    empty_json_count = 0
+    missing_source_count = 0
+    dimension_fallback_count = 0
     processed_stems = set()
     total_shapes = 0
-    for img_id, anns in grouped_anns.items():
-        if img_id not in img_info:
-            continue
-        info = img_info[img_id]
-        base_stem = info["stem"]
-        if req.custom_suffix and info["stem"].endswith(req.custom_suffix):
-            base_stem = info["stem"][: -len(req.custom_suffix)]
+    if req.stems:
+        stems = req.stems
+    else:
+        stems = []
+        for info in img_info.values():
+            if info["stem"] not in stems:
+                stems.append(info["stem"])
+        stems = list(dict.fromkeys([*(req.image_paths or {}).keys(), *stems]))
+
+    for stem in stems:
+        info = coco_stem_map.get(stem)
+        base_stem = stem
+        anns = grouped_anns.get(info["id"], []) if info else []
+        if info is None:
+            missing_source_count += 1
         target_json = os.path.join(req.target_dir, f"{base_stem}.json")
 
-        existing_data = {"shapes": []}
-        if os.path.exists(target_json):
-            with open(target_json, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
+        target_exists = os.path.exists(target_json)
+        existing_data = _load_import_annotation(target_json)
+        processed_stems.add(base_stem)
 
-        if req.merge_strategy == "skip" and existing_data.get("shapes"):
+        if req.merge_strategy == "skip" and target_exists and existing_data.get("shapes"):
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
-        processed_stems.add(base_stem)
 
         scene_shape_count = 0
         for ann in anns:
@@ -1391,12 +1471,25 @@ async def import_from_coco(req: ImportRequest):
                 existing_data["shapes"].append(shape)
                 scene_shape_count += 1
 
-        existing_data["stem"] = base_stem
-        existing_data["imageWidth"], existing_data["imageHeight"] = info["w"], info["h"]
-        with open(target_json, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, ensure_ascii=False, indent=2)
+        preferred_dimensions = (info["w"], info["h"]) if info else None
+        img_w, img_h, image_path, used_dimension_fallback = _resolve_import_dimensions(
+            req, base_stem, existing_data, preferred_dimensions
+        )
+        if used_dimension_fallback:
+            dimension_fallback_count += 1
+        _finalize_import_annotation(
+            target_json,
+            existing_data,
+            base_stem,
+            img_w,
+            img_h,
+            image_path,
+            info["image_name"] if info else None,
+        )
         imported_count += 1
         total_shapes += scene_shape_count
+        if not existing_data["shapes"]:
+            empty_json_count += 1
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
@@ -1404,10 +1497,13 @@ async def import_from_coco(req: ImportRequest):
 
     return {
         "status": "success",
-        "message": f"成功合并导入 {imported_count} 个 COCO 场景。",
+        "message": f"成功合并导入 {imported_count} 个 COCO 场景，其中 {empty_json_count} 个为空标注场景。",
         "format": "COCO",
         "imported_count": imported_count,
         "shape_count": total_shapes,
+        "empty_json_count": empty_json_count,
+        "missing_source_count": missing_source_count,
+        "dimension_fallback_count": dimension_fallback_count,
     }
 
 
@@ -1422,84 +1518,101 @@ async def import_from_multianno(req: ImportRequest):
         raise HTTPException(status_code=404, detail="源目录不存在")
 
     imported_count = 0
+    empty_json_count = 0
+    missing_source_count = 0
+    dimension_fallback_count = 0
     total_shapes = 0
     processed_stems = set()
 
     # 使用 stems 列表按 {stem}{custom_suffix}.json 规则定位文件
-    stems = req.stems or []
-    if not stems:
-        stems = [Path(f).stem for f in os.listdir(req.source_path) if f.endswith(".json")]
+    source_stems = [
+        Path(f).stem for f in os.listdir(req.source_path) if f.endswith(".json")
+    ]
+    if req.stems:
+        stems = req.stems
+    elif req.image_paths:
+        stems = list(dict.fromkeys([*req.image_paths.keys(), *source_stems]))
+    else:
+        stems = source_stems
 
     for stem in stems:
         ext = req.extension or ".json"
         filename = f"{stem}{req.custom_suffix}{ext}"
         source_json_path = os.path.join(req.source_path, filename)
-        if not os.path.exists(source_json_path):
-            continue
-
         base_stem = stem
+        source_exists = os.path.exists(source_json_path)
+        if not source_exists:
+            missing_source_count += 1
 
         # 🌟 修正 3：目标路径必须是绝对纯净的 base_stem.json
         target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
+        target_exists = os.path.exists(target_json_path)
 
         # 🌟 增加一道保险：防止用户把 source 和 target 选成同一个文件夹导致死循环追加
         if (
             os.path.abspath(source_json_path) == os.path.abspath(target_json_path)
             and req.merge_strategy == "append"
         ):
+            processed_stems.add(base_stem)
             continue
 
         # 1. 读取外部 JSON
-        with open(source_json_path, "r", encoding="utf-8") as f:
-            source_data = json.load(f)
+        source_data = _load_import_annotation(source_json_path) if source_exists else {"shapes": []}
 
         # 2. 读取或初始化目标 JSON
-        existing_data = {"shapes": []}
-        if os.path.exists(target_json_path):
-            with open(target_json_path, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
+        existing_data = _load_import_annotation(target_json_path)
 
         # 3. 冲突策略拦截
-        if req.merge_strategy == "skip" and len(existing_data.get("shapes", [])) > 0:
+        processed_stems.add(base_stem)
+        if req.merge_strategy == "skip" and target_exists and existing_data.get("shapes"):
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
 
-        processed_stems.add(base_stem)
-
         # 4. 执行合并写入 (核心修复区)
         new_shapes = source_data.get("shapes", [])
-        if new_shapes:
-            # Append 模式下绝对不能直接 extend，必须遍历赋予新 ID
-            for shape in new_shapes:
-                shape["id"] = str(uuid.uuid4())  # 强制生成全新、唯一的 UUID
-                shape["stem"] = (
-                    base_stem  # 强制将图形内部归属修正为不带后缀的工作区 Stem
-                )
-                existing_data["shapes"].append(shape)
+        if not isinstance(new_shapes, list):
+            new_shapes = []
+        # Append 模式下绝对不能直接 extend，必须遍历赋予新 ID。
+        imported_shape_count = 0
+        for shape in new_shapes:
+            if not isinstance(shape, dict):
+                continue
+            normalized_shape = dict(shape)
+            normalized_shape["id"] = str(uuid.uuid4())
+            normalized_shape["stem"] = base_stem
+            existing_data["shapes"].append(normalized_shape)
+            imported_shape_count += 1
 
-            # 统一内部全局 stem 为纯净的 base_stem
-            existing_data["stem"] = base_stem
-
-            # 保留或更新宽高信息
-            existing_data["imageWidth"] = source_data.get(
-                "imageWidth", existing_data.get("imageWidth", 1024)
-            )
-            existing_data["imageHeight"] = source_data.get(
-                "imageHeight", existing_data.get("imageHeight", 1024)
-            )
-
-            with open(target_json_path, "w", encoding="utf-8") as f:
-                json.dump(existing_data, f, ensure_ascii=False, indent=2)
-                total_shapes += len(new_shapes)
-            imported_count += 1
+        preferred_dimensions = (
+            source_data.get("imageWidth"),
+            source_data.get("imageHeight"),
+        )
+        img_w, img_h, image_path, used_dimension_fallback = _resolve_import_dimensions(
+            req, base_stem, existing_data, preferred_dimensions
+        )
+        if used_dimension_fallback:
+            dimension_fallback_count += 1
+        _finalize_import_annotation(
+            target_json_path,
+            existing_data,
+            base_stem,
+            img_w,
+            img_h,
+            image_path,
+            source_data.get("imageNameMain"),
+        )
+        imported_count += 1
+        total_shapes += imported_shape_count
+        if not existing_data["shapes"]:
+            empty_json_count += 1
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
         cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
 
     # 🌟 修改：返回信息中带上清理数量
-    msg = f"成功合并导入 {imported_count} 个 MultiAnno 场景。"
+    msg = f"成功合并导入 {imported_count} 个 MultiAnno 场景，其中 {empty_json_count} 个为空标注场景。"
     if req.merge_strategy == "mirror":
         msg += f" 镜像清理了 {cleaned_count} 个场景。"
 
@@ -1509,6 +1622,9 @@ async def import_from_multianno(req: ImportRequest):
         "format": "MultiAnno",
         "imported_count": imported_count,
         "shape_count": total_shapes,
+        "empty_json_count": empty_json_count,
+        "missing_source_count": missing_source_count,
+        "dimension_fallback_count": dimension_fallback_count,
     }
 
 
@@ -1535,14 +1651,23 @@ async def import_from_images_only(req: ImportRequest):
 
     valid_exts = (".png", ".tif", ".bmp", ".jpg", ".jpeg")
     imported_count = 0
+    empty_json_count = 0
+    missing_source_count = 0
+    dimension_fallback_count = 0
     total_shapes = 0
     processed_stems = set()
 
     # 使用 stems 列表按 {stem}{custom_suffix}{ext} 规则定位文件
-    stems = req.stems or []
-    if not stems:
-        stems = [Path(f).stem for f in os.listdir(req.source_path)
-                 if f.lower().endswith(valid_exts)]
+    source_stems = [
+        Path(f).stem for f in os.listdir(req.source_path)
+        if f.lower().endswith(valid_exts)
+    ]
+    if req.stems:
+        stems = req.stems
+    elif req.image_paths:
+        stems = list(dict.fromkeys([*req.image_paths.keys(), *source_stems]))
+    else:
+        stems = source_stems
 
     for stem in stems:
         # 尝试所有有效扩展名
@@ -1553,44 +1678,55 @@ async def import_from_images_only(req: ImportRequest):
             if os.path.exists(candidate):
                 mask_path = candidate
                 break
-        if mask_path is None:
-            continue
         target_json_path = os.path.join(req.target_dir, f"{base_stem}.json")
+        target_exists = os.path.exists(target_json_path)
+        if mask_path is None:
+            missing_source_count += 1
 
         # 读取或初始化目标 JSON
-        existing_data = {"shapes": []}
-        if os.path.exists(target_json_path):
-            with open(target_json_path, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
+        existing_data = _load_import_annotation(target_json_path)
 
         # 冲突策略拦截
-        if req.merge_strategy == "skip" and existing_data.get("shapes"):
+        processed_stems.add(base_stem)
+        if req.merge_strategy == "skip" and target_exists and existing_data.get("shapes"):
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
-        processed_stems.add(base_stem)
-        # 调用逆向提取引擎
-        new_shapes, _, img_w, img_h = mask_to_shapes(
-            mask_path, classes_map, import_zero_class=req.import_zero_class
+
+        # 有掩码时先解析；没有掩码时按无标注场景处理。
+        new_shapes = []
+        preferred_dimensions = None
+        if mask_path:
+            new_shapes, _, mask_w, mask_h = mask_to_shapes(
+                mask_path, classes_map, import_zero_class=req.import_zero_class
+            )
+            preferred_dimensions = (mask_w, mask_h)
+        existing_data["shapes"].extend(new_shapes)
+
+        img_w, img_h, image_path, used_dimension_fallback = _resolve_import_dimensions(
+            req, base_stem, existing_data, preferred_dimensions
         )
-
-        if new_shapes:
-            existing_data["shapes"].extend(new_shapes)
-            existing_data["stem"] = base_stem
-            existing_data["imageWidth"] = img_w
-            existing_data["imageHeight"] = img_h
-
-            with open(target_json_path, "w", encoding="utf-8") as f:
-                json.dump(existing_data, f, ensure_ascii=False, indent=2)
-            total_shapes += len(new_shapes)
-            imported_count += 1
+        if used_dimension_fallback:
+            dimension_fallback_count += 1
+        _finalize_import_annotation(
+            target_json_path,
+            existing_data,
+            base_stem,
+            img_w,
+            img_h,
+            image_path,
+        )
+        total_shapes += len(new_shapes)
+        imported_count += 1
+        if not existing_data["shapes"]:
+            empty_json_count += 1
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
         cleaned_count = apply_mirror_cleanup(req.target_dir, processed_stems)
 
     # 🌟 修改：返回信息中带上清理数量
-    msg = f"成功逆向提取并导入 {imported_count} 个掩码图标注。"
+    msg = f"成功逆向提取并导入 {imported_count} 个掩码场景，其中 {empty_json_count} 个为空标注场景。"
     if req.merge_strategy == "mirror":
         msg += f" 镜像清理了 {cleaned_count} 个场景。"
 
@@ -1600,6 +1736,9 @@ async def import_from_images_only(req: ImportRequest):
         "format": "Mask",
         "imported_count": imported_count,
         "shape_count": total_shapes,
+        "empty_json_count": empty_json_count,
+        "missing_source_count": missing_source_count,
+        "dimension_fallback_count": dimension_fallback_count,
     }
 
 
