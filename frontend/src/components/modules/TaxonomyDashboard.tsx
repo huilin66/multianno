@@ -500,6 +500,275 @@ const PreviewOverlayShape = ({
   );
 };
 
+type PreviewValueOption = {
+  value: string;
+  objectCount: number;
+  sceneCount: number;
+};
+
+interface ScenePreviewPanelProps {
+  sceneStems: string[];
+  previewCounts: Record<string, number>;
+  previewStem: string | null;
+  onPreviewStemChange: (stem: string) => void;
+  onOpenScene: (stem: string) => void;
+  views: any[];
+  previewView: any;
+  onPreviewViewChange: (viewId: string) => void;
+  previewLoading: boolean;
+  previewError: string;
+  previewImageUrl: string;
+  previewDimensions: { width: number; height: number };
+  previewDisplayObjects: PreviewObject[];
+  previewViewBox: string;
+  previewObjectIndex: number | null;
+  onPreviewObjectChange: (index: number | null) => void;
+  color: string;
+  contextLabel: string;
+  valueOptions?: PreviewValueOption[];
+  selectedValue?: string | null;
+  onValueChange?: (value: string) => void;
+}
+
+const ScenePreviewPanel = ({
+  sceneStems,
+  previewCounts,
+  previewStem,
+  onPreviewStemChange,
+  onOpenScene,
+  views,
+  previewView,
+  onPreviewViewChange,
+  previewLoading,
+  previewError,
+  previewImageUrl,
+  previewDimensions,
+  previewDisplayObjects,
+  previewViewBox,
+  previewObjectIndex,
+  onPreviewObjectChange,
+  color,
+  contextLabel,
+  valueOptions,
+  selectedValue,
+  onValueChange,
+}: ScenePreviewPanelProps) => {
+  const { t } = useTranslation();
+  const hasValueSelector = valueOptions !== undefined;
+
+  return (
+    <div className={`bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col overflow-hidden ${hasValueSelector ? 'h-[760px]' : 'h-[680px]'}`}>
+      {hasValueSelector && (
+        <div className="h-[190px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800 shrink-0">
+          <div className="px-2 py-1.5 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <List className="w-4 h-4 text-purple-500" />
+              <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+                {t('taxonomyDashboard.attributeValues', 'Attribute Values')}
+              </h3>
+            </div>
+            <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500">
+              {valueOptions.length}
+            </span>
+          </div>
+          <div className="flex flex-col gap-1">
+            {valueOptions.map((option) => {
+              const isSelected = selectedValue === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onValueChange?.(option.value)}
+                  className={`group flex items-center justify-between p-2 rounded-lg text-left transition-all border ${
+                    isSelected
+                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                      : 'border-transparent hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-100 dark:hover:border-purple-800'
+                  }`}
+                >
+                  <span className={`text-xs font-medium truncate ${isSelected ? 'text-purple-700 dark:text-purple-300' : 'text-neutral-600 dark:text-neutral-400'}`}>
+                    {option.value}
+                  </span>
+                  <span className="flex items-center gap-1.5 shrink-0 text-[9px] font-mono text-neutral-500">
+                    <span className="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800" title={t('taxonomyDashboard.objects')}>
+                      {option.objectCount}
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800" title={t('taxonomyDashboard.scenesCount', 'Scenes')}>
+                      {option.sceneCount} {t('taxonomyDashboard.files')}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+            {valueOptions.length === 0 && (
+              <div className="py-5 text-center text-neutral-400 text-xs italic">
+                {t('taxonomyDashboard.noAttributeValues', 'No values found for this attribute.')}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className={`${hasValueSelector ? 'h-[220px]' : 'h-[250px]'} overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800 shrink-0`}>
+        <div className="px-2 py-1.5 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Layers className="w-4 h-4 text-blue-500 shrink-0" />
+            <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+              {t('taxonomyDashboard.scenesInvolved')}
+            </h3>
+            {contextLabel && (
+              <span className="text-[9px] text-neutral-400 font-mono truncate" title={contextLabel}>
+                {contextLabel}
+              </span>
+            )}
+          </div>
+          <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500 shrink-0">
+            {sceneStems.length || 0} {t('taxonomyDashboard.files')}
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          {sceneStems.map((stem) => {
+            const isSelected = previewStem === stem;
+            const objectCount = previewCounts[stem];
+            return (
+              <button
+                key={stem}
+                type="button"
+                onClick={() => onPreviewStemChange(stem)}
+                onDoubleClick={() => onOpenScene(stem)}
+                title={t('taxonomyDashboard.tipClickPreview')}
+                className={`group w-full flex items-center justify-between p-2 rounded-lg text-left cursor-pointer transition-all border ${
+                  isSelected
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+                    : 'border-transparent hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-100 dark:hover:border-blue-800'
+                }`}
+              >
+                <span className={`flex items-center gap-2 min-w-0 text-xs font-medium truncate ${isSelected ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-400'}`}>
+                  <span className={`w-1 h-1 rounded-full bg-blue-400 transition-opacity shrink-0 ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`} />
+                  {stem}
+                </span>
+                <span className="flex items-center gap-2 shrink-0">
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800 text-neutral-500">
+                    {objectCount ?? '-'}
+                  </span>
+                  <ArrowRight className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
+                </span>
+              </button>
+            );
+          })}
+
+          {sceneStems.length === 0 && (
+            <div className="py-7 text-center text-neutral-400 text-xs italic">
+              {hasValueSelector
+                ? t('taxonomyDashboard.noScenesForAttributeValue', 'No scenes found for this attribute value.')
+                : t('taxonomyDashboard.noScenesFound')}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 min-h-0 flex flex-col bg-neutral-50/40 dark:bg-neutral-950/30">
+        <div className="px-3 py-2 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between gap-2 shrink-0">
+          <div className="text-[10px] font-black uppercase tracking-widest text-neutral-500">
+            {t('taxonomyDashboard.preview')}
+          </div>
+          <div className="flex gap-1 overflow-x-auto custom-scrollbar">
+            {(views || []).map((view: any, idx: number) => (
+              <button
+                key={view.id}
+                type="button"
+                onClick={() => onPreviewViewChange(view.id)}
+                className={`px-2 py-1 rounded text-[9px] font-bold whitespace-nowrap transition-colors ${
+                  previewView?.id === view.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-white dark:bg-neutral-900 text-neutral-500 border border-neutral-200 dark:border-neutral-800 hover:text-blue-600'
+                }`}
+              >
+                {view.isMain ? t('view.mainView') : `${t('view.augView')} ${idx}`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 min-h-0 flex">
+          <div className="flex-1 min-w-0 relative bg-neutral-100 dark:bg-neutral-950 flex items-center justify-center">
+            {!previewStem ? (
+              <div className="text-xs text-neutral-400 text-center px-4">{t('taxonomyDashboard.previewSelectScene')}</div>
+            ) : previewLoading ? (
+              <div className="flex items-center gap-2 text-xs text-neutral-400"><Loader2 className="w-4 h-4 animate-spin" /> {t('common.loading')}</div>
+            ) : previewError ? (
+              <div className="text-xs text-red-500 text-center px-4">{previewError}</div>
+            ) : previewImageUrl ? (
+              <>
+                <svg
+                  className="absolute inset-0 w-full h-full pointer-events-none transition-all duration-200 ease-out"
+                  viewBox={previewViewBox}
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <image
+                    href={previewImageUrl}
+                    x={0}
+                    y={0}
+                    width={previewDimensions.width}
+                    height={previewDimensions.height}
+                    preserveAspectRatio="none"
+                  />
+                  {previewDisplayObjects.map((obj, index) => (
+                    <PreviewOverlayShape
+                      key={`${obj.id}-${index}`}
+                      obj={obj}
+                      index={index}
+                      color={color}
+                      active={previewObjectIndex === index}
+                      dimmed={previewObjectIndex !== null && previewObjectIndex !== index}
+                    />
+                  ))}
+                </svg>
+                {previewDisplayObjects.length === 0 && (
+                  <div className="absolute inset-x-3 bottom-3 rounded bg-white/90 dark:bg-neutral-900/90 border border-neutral-200 dark:border-neutral-800 px-3 py-2 text-[10px] text-neutral-500 text-center">
+                    {t('taxonomyDashboard.previewNoObjects')}
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-xs text-neutral-400 text-center px-4">{t('taxonomyDashboard.previewUnavailable')}</div>
+            )}
+          </div>
+
+          <div className="w-16 border-l border-neutral-100 dark:border-neutral-800 bg-white dark:bg-neutral-900 p-1.5 flex flex-col gap-1 overflow-y-auto custom-scrollbar">
+            <button
+              type="button"
+              onClick={() => onPreviewObjectChange(null)}
+              className={`h-7 rounded text-[9px] font-black uppercase transition-colors ${
+                previewObjectIndex === null ? 'bg-blue-600 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-blue-600'
+              }`}
+            >
+              {t('taxonomyDashboard.previewFull')}
+            </button>
+            {previewDisplayObjects.map((obj, index) => (
+              <button
+                key={`${obj.id}-${index}`}
+                type="button"
+                onClick={() => onPreviewObjectChange(index)}
+                className={`h-7 rounded text-[9px] font-bold transition-colors ${
+                  previewObjectIndex === index ? 'bg-blue-600 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-blue-600'
+                }`}
+                title={`${index + 1}: ${obj.type}`}
+              >
+                #{index + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="px-3 py-1.5 border-t border-neutral-100 dark:border-neutral-800 text-[9px] text-neutral-400 font-mono truncate shrink-0">
+          {previewStem ? `${previewStem} | ${contextLabel} | ${previewDisplayObjects.length} ${t('taxonomyDashboard.objects')}` : t('taxonomyDashboard.tipClickPreview')}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ============================================================================
 // 🌟 主页面组件
 // ============================================================================
@@ -516,6 +785,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'attributes'>('overview');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
+  const [selectedAttributeValue, setSelectedAttributeValue] = useState<string | null>(null);
   const [expanded, setExpanded] = useState({ classes: true, attributes: true });
   const [isRepairing, setIsRepairing] = useState(false);
   const [repairResult, setRepairResult] = useState<{fixed?: number, scanned?: number} | null>(null);
@@ -577,18 +847,121 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       .filter((obj: PreviewObject) => obj.label === className);
   }, [getWorkspaceJsonPath]);
 
+  const loadAttributeObjectsForStem = useCallback(async (
+    stem: string,
+    attributeName: string,
+    attributeValue: string,
+  ) => {
+    const jsonPath = getWorkspaceJsonPath(stem);
+    if (!jsonPath) return [];
+    const rawData = await getFileContent(jsonPath);
+    const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
+    const expectedValue = String(attributeValue).trim();
+
+    return (data.shapes || [])
+      .filter((shape: any) => {
+        const value = shape.attributes?.[attributeName];
+        if (expectedValue === '(empty)') {
+          return value !== undefined && String(value).trim() === '';
+        }
+        return value !== undefined && String(value).trim() === expectedValue;
+      })
+      .map((shape: any, index: number) => shapeToPreviewObject(shape, index));
+  }, [getWorkspaceJsonPath]);
+
   const classSceneStems = useMemo(
     () => activeClass ? (statsData?.classes?.[activeClass.name]?.stems || []) : [],
     [activeClass, statsData]
   );
 
+  const attributeValueStems = useMemo(
+    () => activeAttribute
+      ? (statsData?.global?.attribute_value_stems?.[activeAttribute.name] || {})
+      : {},
+    [activeAttribute?.name, statsData]
+  );
+
+  const attributeValueOptions = useMemo<PreviewValueOption[]>(() => {
+    if (!activeAttribute) return [];
+
+    const attributeDetails = statsData?.global?.attribute_details?.[activeAttribute.name] || {};
+    const configuredValues = Array.isArray(activeAttribute.options)
+      ? activeAttribute.options.map((value: any) => String(value).trim()).filter(Boolean)
+      : [];
+    const values = Array.from(new Set([
+      ...configuredValues,
+      ...Object.keys(attributeDetails),
+      ...Object.keys(attributeValueStems),
+    ]));
+
+    return values.map((value) => ({
+      value,
+      objectCount: Number(attributeDetails[value] || 0),
+      sceneCount: Array.isArray(attributeValueStems[value]) ? attributeValueStems[value].length : 0,
+    }));
+  }, [activeAttribute?.name, activeAttribute?.options, attributeValueStems, statsData]);
+
+  const attributeSceneStems = useMemo(
+    () => selectedAttributeValue ? (attributeValueStems[selectedAttributeValue] || []) : [],
+    [attributeValueStems, selectedAttributeValue]
+  );
+
   useEffect(() => {
-    const firstStem = classSceneStems[0] || null;
+    const values = attributeValueOptions.map((option) => option.value);
+    if (values.length === 0) {
+      setSelectedAttributeValue(null);
+      return;
+    }
+
+    setSelectedAttributeValue((current) =>
+      current && values.includes(current) ? current : values[0]
+    );
+  }, [attributeValueOptions]);
+
+  const isClassPreview = activeTab === 'classes' && !!activeClass;
+  const isAttributePreview = activeTab === 'attributes' && !!activeAttribute && !!selectedAttributeValue;
+  const previewSceneStems = isClassPreview
+    ? classSceneStems
+    : isAttributePreview
+      ? attributeSceneStems
+      : [];
+  const previewFilterKey = isClassPreview
+    ? `class:${activeClass?.name || ''}`
+    : isAttributePreview
+      ? `attribute:${activeAttribute?.name || ''}:${selectedAttributeValue || ''}`
+      : '';
+  const previewContextLabel = isClassPreview
+    ? activeClass?.name || ''
+    : isAttributePreview
+      ? `${activeAttribute?.name || ''} = ${selectedAttributeValue || ''}`
+      : '';
+  const previewColor = isClassPreview ? (activeClass?.color || '#3b82f6') : '#8b5cf6';
+
+  const loadPreviewObjectsForStem = useCallback(async (stem: string) => {
+    if (isClassPreview && activeClass) {
+      return loadClassObjectsForStem(stem, activeClass.name);
+    }
+    if (isAttributePreview && activeAttribute && selectedAttributeValue) {
+      return loadAttributeObjectsForStem(stem, activeAttribute.name, selectedAttributeValue);
+    }
+    return [];
+  }, [
+    activeAttribute?.name,
+    activeClass?.name,
+    isAttributePreview,
+    isClassPreview,
+    loadAttributeObjectsForStem,
+    loadClassObjectsForStem,
+    selectedAttributeValue,
+  ]);
+
+  useEffect(() => {
+    const firstStem = previewSceneStems[0] || null;
     setPreviewStem(firstStem);
     setPreviewObjectIndex(null);
     setPreviewObjects([]);
     setPreviewError('');
-  }, [activeClass?.name, classSceneStems.join('|')]);
+  }, [previewFilterKey, previewSceneStems.join('|')]);
 
   useEffect(() => {
     if (!views?.length) return;
@@ -601,14 +974,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   useEffect(() => {
     let cancelled = false;
     const loadCounts = async () => {
-      if (!activeClass || !classSceneStems.length) {
+      if (!previewFilterKey || !previewSceneStems.length) {
         setPreviewCounts({});
         return;
       }
       const entries = await Promise.all(
-        classSceneStems.map(async (stem: string) => {
+        previewSceneStems.map(async (stem: string) => {
           try {
-            const objects = await loadClassObjectsForStem(stem, activeClass.name);
+            const objects = await loadPreviewObjectsForStem(stem);
             return [stem, objects.length] as const;
           } catch {
             return [stem, 0] as const;
@@ -619,12 +992,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     };
     loadCounts();
     return () => { cancelled = true; };
-  }, [activeClass?.name, classSceneStems.join('|'), loadClassObjectsForStem]);
+  }, [loadPreviewObjectsForStem, previewFilterKey, previewSceneStems.join('|')]);
 
   useEffect(() => {
     let cancelled = false;
     const loadPreview = async () => {
-      if (!activeClass || !previewStem) {
+      if (!previewFilterKey || !previewStem) {
         setPreviewObjects([]);
         setPreviewError('');
         return;
@@ -632,7 +1005,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setPreviewLoading(true);
       setPreviewError('');
       try {
-        const objects = await loadClassObjectsForStem(previewStem, activeClass.name);
+        const objects = await loadPreviewObjectsForStem(previewStem);
         if (!cancelled) {
           setPreviewObjects(objects);
           setPreviewObjectIndex(null);
@@ -650,7 +1023,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     };
     loadPreview();
     return () => { cancelled = true; };
-  }, [activeClass?.name, previewStem, loadClassObjectsForStem, t]);
+  }, [loadPreviewObjectsForStem, previewFilterKey, previewStem, t]);
 
   const previewView = useMemo(
     () => views?.find((v: any) => v.id === previewViewId) || views?.find((v: any) => v.isMain) || views?.[0],
@@ -702,6 +1075,29 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       if (workspacePath) return [workspacePath];
       return folders.map((f: any) => f.path).filter(Boolean);
   };
+
+  const handleOpenPreviewScene = useCallback((stem: string) => {
+    const storeStems = useStore.getState().stems;
+    const matchedStem = storeStems.find((candidate: string) => candidate.startsWith(stem));
+
+    if (matchedStem) {
+      onClose?.();
+      setTimeout(() => {
+        setCurrentStem(matchedStem);
+        setActiveModule('workspace');
+      }, 150);
+      return;
+    }
+
+    openDialog({
+      type: 'warning',
+      title: t('taxonomyDashboard.sceneNotFound'),
+      description: t('taxonomyDashboard.sceneNotFoundDesc', { stem }),
+      confirmText: t('taxonomyDashboard.gotIt'),
+      hideCancel: true,
+    });
+  }, [onClose, openDialog, setActiveModule, setCurrentStem, t]);
+
   const refreshStatsIfNeeded = async () => {
     if (editorSettings.autoRefreshStats) {
       await loadStatistics(true);
@@ -947,6 +1343,20 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     }
     useStore.getState().setStatsCacheValid?.(true);
   };
+
+  // 旧版 stats_cache.json 没有属性值到场景的索引。打开属性详情时补做一次
+  // 强制刷新，避免用户必须手动刷新统计才能看到 scenes involved。
+  useEffect(() => {
+    const hasAttributeDetails = !!(
+      activeTab === 'attributes'
+      && activeAttribute
+      && statsData?.global?.attribute_details?.[activeAttribute.name]
+    );
+    const hasSceneIndex = !!statsData?.global?.attribute_value_stems;
+    if (hasAttributeDetails && statsStatus === 'done' && !hasSceneIndex) {
+      void loadStatistics(true);
+    }
+  }, [activeAttribute?.name, activeTab, statsData, statsStatus]);
 
   const handleAdd = (type: 'classes' | 'attributes') => {
     if (type === 'attributes') {
@@ -2348,6 +2758,33 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   />
                 </div>
 
+              </div>
+
+              {/* 属性值 → 涉及场景 → 预览，与 Classes 详情保持一致 */}
+              <div className="shrink-0 animate-in fade-in slide-in-from-bottom-2">
+                <ScenePreviewPanel
+                  valueOptions={attributeValueOptions}
+                  selectedValue={selectedAttributeValue}
+                  onValueChange={setSelectedAttributeValue}
+                  sceneStems={attributeSceneStems}
+                  previewCounts={previewCounts}
+                  previewStem={previewStem}
+                  onPreviewStemChange={setPreviewStem}
+                  onOpenScene={handleOpenPreviewScene}
+                  views={views}
+                  previewView={previewView}
+                  onPreviewViewChange={setPreviewViewId}
+                  previewLoading={previewLoading}
+                  previewError={previewError}
+                  previewImageUrl={previewImageUrl}
+                  previewDimensions={previewDimensions}
+                  previewDisplayObjects={previewDisplayObjects}
+                  previewViewBox={previewViewBox}
+                  previewObjectIndex={previewObjectIndex}
+                  onPreviewObjectChange={setPreviewObjectIndex}
+                  color={previewColor}
+                  contextLabel={previewContextLabel}
+                />
               </div>
 
               {/* --- 下半部分：Shape Tab 切换 & Class 细分 --- */}

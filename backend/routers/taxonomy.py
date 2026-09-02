@@ -362,6 +362,7 @@ async def get_project_statistics(req: StatRequest):
             "shape_types": {},
             "attribute_counts": {},
             "attribute_details": {},
+            "attribute_value_stems": {},
             "shape_rate_distribution": {},
             "area_distribution": {},
             "box_number_distribution": {},
@@ -403,7 +404,7 @@ async def get_project_statistics(req: StatRequest):
     df["rel_area_bin"] = pd.cut(df["rel_area"], bins=AREA_RATE_BINS, right=False)
 
     # 🌟 3. 封装统计聚合函数 (升级版：加入属性深度聚合)
-    def aggregate_stats(sub_df: pd.DataFrame):
+    def aggregate_stats(sub_df: pd.DataFrame, *, include_attribute_value_stems: bool = False):
         # 1. 基础图像/框数分布
         boxes_per_img = (
             sub_df.groupby("image").size().value_counts().sort_index().to_dict()
@@ -419,17 +420,29 @@ async def get_project_statistics(req: StatRequest):
 
         # 🌟 3. 属性详情分布 (统计每个属性具体值的出现次数)
         attr_details = {}
-        if "attributes" in sub_df:
-            for attrs in sub_df["attributes"]:
+        attr_value_stems = {}
+        if include_attribute_value_stems and "attributes" in sub_df:
+            for image, attrs in zip(sub_df["image"], sub_df["attributes"]):
                 if not isinstance(attrs, dict):
                     continue
                 for k, v in attrs.items():
                     if k not in attr_details:
                         attr_details[k] = {}
+                    if k not in attr_value_stems:
+                        attr_value_stems[k] = {}
 
                     # 处理空值 (有些标签标了属性但是没选值)
                     val_str = str(v).strip() if str(v).strip() != "" else "(empty)"
                     attr_details[k][val_str] = attr_details[k].get(val_str, 0) + 1
+                    attr_value_stems[k].setdefault(val_str, set()).add(str(image))
+
+        attribute_value_stems = {
+            attribute_name: {
+                value: sorted(stems)
+                for value, stems in value_stem_map.items()
+            }
+            for attribute_name, value_stem_map in attr_value_stems.items()
+        }
 
         return {
             "total_objects": len(sub_df),
@@ -437,6 +450,7 @@ async def get_project_statistics(req: StatRequest):
             # 🌟 新增的数据结构：喂给前端的属性图表
             "attribute_counts": attr_counts,
             "attribute_details": attr_details,
+            "attribute_value_stems": attribute_value_stems,
             "shape_rate_distribution": format_bins(
                 sub_df["shape_rate_bin"].value_counts().sort_index()
             ),
@@ -453,7 +467,7 @@ async def get_project_statistics(req: StatRequest):
         }
 
     # 🌟 4. 生成 Global 与 Classes 数据
-    global_stats = aggregate_stats(df)
+    global_stats = aggregate_stats(df, include_attribute_value_stems=True)
     global_stats["total_images"] = total_images
     global_stats["class_counts"] = df["label"].value_counts().to_dict()
 
