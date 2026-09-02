@@ -53,6 +53,7 @@ export function RightPanel({
     activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta,
     updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll, addTaxonomyClass,
     hiddenClasses, setHiddenClasses, toggleClassVisibility, classOrder, viewport, setViewport,
+    pendingAnnotationFocus, setPendingAnnotationFocus,
   } = useStore() as any;
 
   const sortedClasses = React.useMemo(() => 
@@ -289,7 +290,7 @@ export function RightPanel({
     });
   };
 
-  const zoomToAnnotation = (ann: any) => {
+  const zoomToAnnotation = React.useCallback((ann: any) => {
     if (!ann.points || ann.points.length === 0) return;
     
     // 计算包围盒
@@ -322,7 +323,20 @@ export function RightPanel({
     
     setViewport(zoom, panX, panY);
     setActiveAnnotationId(ann.id);
-  };
+  }, [setActiveAnnotationId, setViewport]);
+
+  React.useEffect(() => {
+    if (!pendingAnnotationFocus || pendingAnnotationFocus.stem !== currentStem) return;
+
+    const target = currentAnnotations.find((annotation: any) =>
+      annotation.sourceIndex === pendingAnnotationFocus.index
+    ) || currentAnnotations[pendingAnnotationFocus.index];
+
+    if (!target) return;
+
+    zoomToAnnotation(target);
+    setPendingAnnotationFocus(null);
+  }, [currentAnnotations, currentStem, pendingAnnotationFocus, setPendingAnnotationFocus, zoomToAnnotation]);
   return (
     <div className="w-80 h-full border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-xl z-10">
 

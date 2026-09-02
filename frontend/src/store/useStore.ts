@@ -95,6 +95,7 @@ export interface Annotation {
   group_id?: string | number | null; // 🌟 新增：组合ID / 视觉定位ID
   track_id?: string | number | null; // 🌟 新增：追踪ID
   flags?: Record<string, any>;       // 🌟 新增：个体标志位
+  sourceIndex?: number;              // 原始 JSON shapes 中的序号，用于跨窗口定位对象
 }
 
 // 🌟 2. 新增：单张图像 (Stem) 级别的全局属性
@@ -225,6 +226,7 @@ export interface AppState {
   annotations: Annotation[];
   hiddenAnnotations: string[];
   activeAnnotationId: string | null;
+  pendingAnnotationFocus: { stem: string; index: number } | null;
   isAnnotationDirty: boolean;
   isAIPanelOpen: boolean;
   aiPrompts: { x: number, y: number, label: number }[]; 
@@ -296,6 +298,7 @@ export interface AppState {
   updateAnnotation: (id: string, data: Partial<Annotation>) => void;
   removeAnnotation: (id: string) => void;
   setActiveAnnotationId: (id: string | null) => void;
+  setPendingAnnotationFocus: (request: { stem: string; index: number } | null) => void;
   markAnnotationDirty: () => void;
   clearAnnotationDirty: () => void;
   setAIPanelOpen: (open: boolean) => void;
@@ -348,6 +351,7 @@ export const useStore = create<AppState>()(
       annotations: [],
       hiddenAnnotations: [],
       activeAnnotationId: null,
+      pendingAnnotationFocus: null,
       isAnnotationDirty: false,
       isAIPanelOpen: false,
       aiPrompts: [],
@@ -451,6 +455,7 @@ export const useStore = create<AppState>()(
           currentStem: loadedStems.length > 0 ? loadedStems[0] : null, 
 
           annotations: [],
+          pendingAnnotationFocus: null,
           stemMetadata: {}, 
           completedViews: [],
         });
@@ -470,7 +475,8 @@ export const useStore = create<AppState>()(
         projectMetadata: [],    // 类型必须是 []
         sceneGroups: {},        // 类型必须是 {}
         completedViews: [],
-        activeAnnotationId: null
+        activeAnnotationId: null,
+        pendingAnnotationFocus: null,
       }),
       addFolder: (folder) => set((state) => ({ folders: [...state.folders, folder] })),
       updateFolder: (id, data) => set((state) => ({folders: state.folders.map(f => f.id === id ? { ...f, ...data } : f)})),
@@ -519,7 +525,14 @@ export const useStore = create<AppState>()(
       // annotation function
       // setCurrentStem: (stem) => set({ currentStem: stem }),
       setCurrentStem: (stem) => {
-        set({ currentStem: stem });
+        set((state) => ({
+          currentStem: stem,
+          // A pending preview jump is valid only for its target scene.
+          // Navigating elsewhere manually cancels the one-shot request.
+          pendingAnnotationFocus: state.pendingAnnotationFocus?.stem === stem
+            ? state.pendingAnnotationFocus
+            : null,
+        }));
       },
       addTaxonomyClass: (cls) => set((state) => {
         // 检查是否已经存在相同 ID 或者相同名字（忽略大小写）的类别
@@ -727,6 +740,7 @@ export const useStore = create<AppState>()(
         isAnnotationDirty: true
       })),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
+      setPendingAnnotationFocus: (request) => set({ pendingAnnotationFocus: request }),
       markAnnotationDirty: () => set({ isAnnotationDirty: true }),
       clearAnnotationDirty: () => set({ isAnnotationDirty: false }),
       setAIPanelOpen: (open) => set({ isAIPanelOpen: open }),

@@ -50,8 +50,9 @@ const readStemAnnotations = async (
   const shapes = Array.isArray(data?.shapes) ? data.shapes : [];
 
   const annotations = shapes
-    .filter((shape: any) => Array.isArray(shape.points))
-    .map((shape: any) => ({
+    .map((shape: any, sourceIndex: number) => ({ shape, sourceIndex }))
+    .filter(({ shape }) => Array.isArray(shape.points))
+    .map(({ shape, sourceIndex }) => ({
       id: crypto.randomUUID(),
       stem,
       label: shape.label,
@@ -68,6 +69,7 @@ const readStemAnnotations = async (
       group_id: shape.group_id,
       track_id: shape.track_id,
       flags: shape.flags || {},
+      sourceIndex,
     }));
 
   return { annotations, found: true };

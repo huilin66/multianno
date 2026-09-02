@@ -408,6 +408,7 @@ type PreviewObject = {
   label: string;
   type: string;
   points: PreviewPoint[];
+  sourceIndex: number;
 };
 
 const normalizePreviewShapeType = (type?: string) => {
@@ -421,6 +422,7 @@ const shapeToPreviewObject = (shape: any, index: number): PreviewObject => ({
   id: shape.id || shape.group_id || `object-${index + 1}`,
   label: shape.label || '',
   type: normalizePreviewShapeType(shape.shape_type || shape.type),
+  sourceIndex: index,
   points: (shape.points || []).map((p: any) => ({
     x: Number(p?.[0] ?? p?.x ?? 0),
     y: Number(p?.[1] ?? p?.y ?? 0),
@@ -627,6 +629,7 @@ interface ScenePreviewPanelProps {
   previewViewBox: string;
   previewObjectIndex: number | null;
   onPreviewObjectChange: (index: number | null) => void;
+  onOpenPreviewObject: (index: number) => void;
   color: string;
 }
 
@@ -647,6 +650,7 @@ const ScenePreviewPanel = ({
   previewViewBox,
   previewObjectIndex,
   onPreviewObjectChange,
+  onOpenPreviewObject,
   color,
 }: ScenePreviewPanelProps) => {
   const { t } = useTranslation();
@@ -804,6 +808,7 @@ const ScenePreviewPanel = ({
                 key={`${obj.id}-${index}`}
                 type="button"
                 onClick={() => onPreviewObjectChange(index)}
+                onDoubleClick={() => onOpenPreviewObject(index)}
                 className={`h-7 rounded text-[9px] font-bold transition-colors ${
                   previewObjectIndex === index ? 'bg-blue-600 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-blue-600'
                 }`}
@@ -834,7 +839,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
     folders, views, sceneGroups, editorSettings, projectMetaPath, projectName, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
-    mergeTaxonomyClassesWithAttributes, stems, workspacePath 
+    mergeTaxonomyClassesWithAttributes, stems, workspacePath, setPendingAnnotationFocus
   } = useStore() as any;
 
   const openDialog = useDialogStore((s) => s.openDialog);
@@ -936,7 +941,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   }, [taxonomyViewStateKey]);
 
   const persistTaxonomyViewState = useCallback((overrides: Partial<TaxonomyDashboardViewState> = {}) => {
-    if (restoredViewStateKey !== taxonomyViewStateKey || typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return;
+    // Explicit navigation actions (scene/value/object clicks) must be saved
+    // even if the restore effect has not finished during this render.
+    if (restoredViewStateKey !== taxonomyViewStateKey && Object.keys(overrides).length === 0) return;
 
     const viewState: TaxonomyDashboardViewState = {
       activeTab,
@@ -952,6 +960,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       ...overrides,
     };
 
+    // Keep the in-memory copy in sync as well. Reopening the dialog prefers
+    // this cache over localStorage, so updating localStorage alone could bring
+    // back an older scene/value after a fast close-and-reopen.
+    latestViewStateRef.current = viewState;
+    taxonomyViewStateMemory.set(taxonomyViewStateKey, viewState);
     try {
       window.localStorage.setItem(taxonomyViewStateKey, JSON.stringify(viewState));
     } catch (error) {
@@ -1024,7 +1037,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       : String(attributeValue).trim();
 
     return (data.shapes || [])
-      .filter((shape: any) => {
+      .map((shape: any, index: number) => ({ shape, index }))
+      .filter(({ shape }: { shape: any }) => {
         const value = shape.attributes?.[attributeName];
         if (expectedValue === null) {
           return value !== undefined;
@@ -1034,7 +1048,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         }
         return value !== undefined && String(value).trim() === expectedValue;
       })
-      .map((shape: any, index: number) => shapeToPreviewObject(shape, index));
+      .map(({ shape, index }: { shape: any; index: number }) => shapeToPreviewObject(shape, index));
   }, [getWorkspaceJsonPath]);
 
   const classSceneStems = useMemo(
@@ -1389,6 +1403,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     const matchedStem = storeStems.find((candidate: string) => candidate.startsWith(stem));
 
     if (matchedStem) {
+      setPendingAnnotationFocus(null);
       // Persist synchronously before unmounting the dialog. The normal state
       // effect may not get a chance to run during the double-click transition.
       restoredPreviewStemRef.current = stem;
@@ -1418,6 +1433,55 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     selectedAttributeValue,
     setActiveModule,
     setCurrentStem,
+    setPendingAnnotationFocus,
+    t,
+  ]);
+
+  const handleOpenPreviewObject = useCallback((index: number) => {
+    if (!previewStem) return;
+
+    const targetObject = previewObjects[index];
+    if (!targetObject) return;
+
+    const storeStems = useStore.getState().stems;
+    const matchedStem = storeStems.find((candidate: string) => candidate === previewStem)
+      || storeStems.find((candidate: string) => candidate.startsWith(previewStem));
+
+    if (!matchedStem) {
+      openDialog({
+        type: 'warning',
+        title: t('taxonomyDashboard.sceneNotFound'),
+        description: t('taxonomyDashboard.sceneNotFoundDesc', { stem: previewStem }),
+        confirmText: t('taxonomyDashboard.gotIt'),
+        hideCancel: true,
+      });
+      return;
+    }
+
+    setPendingAnnotationFocus({
+      stem: matchedStem,
+      index: targetObject.sourceIndex ?? index,
+    });
+    restoredPreviewStemRef.current = previewStem;
+    persistTaxonomyViewState({
+      previewStem,
+      selectedAttributeValue,
+    });
+    onClose?.();
+    setTimeout(() => {
+      setCurrentStem(matchedStem);
+      setActiveModule('workspace');
+    }, 150);
+  }, [
+    onClose,
+    openDialog,
+    persistTaxonomyViewState,
+    previewObjects,
+    previewStem,
+    selectedAttributeValue,
+    setActiveModule,
+    setCurrentStem,
+    setPendingAnnotationFocus,
     t,
   ]);
 
@@ -2849,6 +2913,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <button
                       key={`${obj.id}-${index}`}
                       onClick={() => setPreviewObjectIndex(index)}
+                      onDoubleClick={() => handleOpenPreviewObject(index)}
                       className={`h-7 rounded text-[9px] font-bold transition-colors ${
                         previewObjectIndex === index ? 'bg-blue-600 text-white' : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-500 hover:text-blue-600'
                       }`}
@@ -3207,6 +3272,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     previewViewBox={previewViewBox}
                     previewObjectIndex={previewObjectIndex}
                     onPreviewObjectChange={setPreviewObjectIndex}
+                    onOpenPreviewObject={handleOpenPreviewObject}
                     color={previewColor}
                   />
                 </div>
