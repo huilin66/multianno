@@ -777,7 +777,10 @@ export function RightPanel({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                setActiveModule('taxonomy');
+                void handleSave().then(
+                  () => setActiveModule('taxonomy'),
+                  () => setActiveModule('taxonomy'),
+                );
               }}
               className="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all"
               title={t('menu.taxonomyManager')}

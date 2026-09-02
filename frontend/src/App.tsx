@@ -198,7 +198,12 @@ export default function App() {
               <DropdownMenuItem onClick={() => setActiveModule('extent')}>
                 <Folders className="w-4 h-4 mr-2" /> {t('menu.viewExtentCheck')}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('taxonomy')}>
+              <DropdownMenuItem onClick={() => {
+                void autoSave().then(
+                  () => setActiveModule('taxonomy'),
+                  () => setActiveModule('taxonomy'),
+                );
+              }}>
                 <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('exchange_import')}>

@@ -644,10 +644,21 @@ const ScenePreviewPanel = ({
   color,
 }: ScenePreviewPanelProps) => {
   const { t } = useTranslation();
+  const sceneListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!previewStem || !sceneListRef.current) return;
+
+    const target = Array.from(
+      sceneListRef.current.querySelectorAll('[data-scene-stem]')
+    ).find((element) => (element as HTMLElement).dataset.sceneStem === previewStem) as HTMLElement | undefined;
+
+    target?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+  }, [previewStem, sceneStems.join('|')]);
 
   return (
     <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-[680px]">
-      <div className="h-[250px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800 shrink-0">
+      <div ref={sceneListRef} className="h-[250px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800 shrink-0">
         <div className="px-2 py-1.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Layers className="w-4 h-4 text-blue-500 shrink-0" />
@@ -668,6 +679,7 @@ const ScenePreviewPanel = ({
               <button
                 key={stem}
                 type="button"
+                data-scene-stem={stem}
                 onClick={() => onPreviewStemChange(stem)}
                 onDoubleClick={() => onOpenScene(stem)}
                 title={t('taxonomyDashboard.tipClickPreview')}
@@ -822,6 +834,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   );
   const [restoredViewStateKey, setRestoredViewStateKey] = useState<string | null>(null);
   const restoredPreviewStemRef = useRef<string | null>(null);
+  const restorePreviewPositionRef = useRef(false);
   const restoredAttributeValueRef = useRef<string | null>(null);
   const restoredAttributeIdRef = useRef<string | null>(null);
   const [activeTab, setActiveTab] = useState<TaxonomyDashboardTab>('overview');
@@ -845,6 +858,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
   const activeAttribute = taxonomyAttributes.find((a: any) => a.id === selectedAttributeId);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const classSceneListRef = useRef<HTMLDivElement>(null);
   const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0); 
   const [mergeStage, setMergeStage] = useState<0 | 1>(0); // Merge 比较安全，两段即可
   const [attrDraft, setAttrDraft] = useState<{options: string[], defaultValue: string} | null>(null);
@@ -883,7 +897,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     restoredAttributeIdRef.current = selectedAttributeId;
     restoredAttributeValueRef.current = selectedAttributeValue;
     setPreviewViewId(typeof saved?.previewViewId === 'string' ? saved.previewViewId : '');
-    restoredPreviewStemRef.current = typeof saved?.previewStem === 'string' ? saved.previewStem : null;
+    const savedPreviewStem = typeof saved?.previewStem === 'string' ? saved.previewStem : null;
+    restorePreviewPositionRef.current = Boolean(savedPreviewStem);
+    restoredPreviewStemRef.current = savedPreviewStem;
     setPreviewStem(restoredPreviewStemRef.current);
     setExpanded({
       classes: saved?.expanded?.classes ?? true,
@@ -1079,25 +1095,61 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   ]);
 
   const handlePreviewStemChange = useCallback((stem: string) => {
+    restorePreviewPositionRef.current = false;
     restoredPreviewStemRef.current = stem;
     setPreviewStem(stem);
     persistTaxonomyViewState({ previewStem: stem });
   }, [persistTaxonomyViewState]);
 
   const handleAttributeValueChange = useCallback((value: string) => {
+    restorePreviewPositionRef.current = false;
     restoredAttributeValueRef.current = value;
     setSelectedAttributeValue(value);
-  }, []);
+    persistTaxonomyViewState({ selectedAttributeValue: value });
+
+    const nextSceneStems = Array.isArray(attributeValueStems[value])
+      ? attributeValueStems[value]
+      : [];
+    setPreviewStem((currentStem) => {
+      const nextStem = currentStem && nextSceneStems.includes(currentStem)
+        ? currentStem
+        : nextSceneStems[0] || null;
+      restoredPreviewStemRef.current = nextStem;
+      return nextStem;
+    });
+  }, [attributeValueStems, persistTaxonomyViewState]);
 
   useEffect(() => {
     const firstStem = previewSceneStems[0] || null;
     setPreviewStem((currentStem) => {
-      if (previewSceneStems.length === 0) {
+      // Keep the scene selected before leaving the Manager even when an
+      // attribute edit moves it out of the current value-filtered list.
+      const rememberedStem = restoredPreviewStemRef.current;
+      const rememberedStemExists = Boolean(
+        rememberedStem && stems.some((storeStem: string) =>
+          storeStem === rememberedStem || storeStem.startsWith(rememberedStem)
+        )
+      );
+
+      if (!previewFilterKey) {
         return null;
       }
 
-      const rememberedStem = restoredPreviewStemRef.current;
-      const nextStem = rememberedStem && previewSceneStems.includes(rememberedStem)
+      if (previewSceneStems.length === 0) {
+        return rememberedStemExists ? rememberedStem : null;
+      }
+
+      const rememberedStemInCurrentList = Boolean(
+        rememberedStem && previewSceneStems.includes(rememberedStem)
+      );
+      if (rememberedStemInCurrentList) {
+        restorePreviewPositionRef.current = false;
+      }
+
+      const nextStem = rememberedStem && (
+        rememberedStemInCurrentList
+        || (restorePreviewPositionRef.current && rememberedStemExists)
+      )
         ? rememberedStem
         : currentStem && previewSceneStems.includes(currentStem)
           ? currentStem
@@ -1109,7 +1161,64 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setPreviewObjectIndex(null);
     setPreviewObjects([]);
     setPreviewError('');
-  }, [previewFilterKey, previewSceneStems.join('|')]);
+  }, [previewFilterKey, previewSceneStems.join('|'), stems.join('|')]);
+
+  // 如果上次浏览的 scene 在工作区中修改了 attribute value，它会从旧 value
+  // 的场景列表移动到新 value。恢复 Manager 时先切换到新 value，再让列表定位该 scene。
+  useEffect(() => {
+    if (
+      !restorePreviewPositionRef.current
+      || !isAttributePreview
+      || !activeAttribute
+      || !previewStem
+      || statsStatus !== 'done'
+    ) return;
+
+    const stemMatches = (candidate: string, target: string) => (
+      candidate === target
+      || candidate.startsWith(target)
+      || target.startsWith(candidate)
+    );
+    const selectedValueStems = selectedAttributeValue
+      ? attributeValueStems[selectedAttributeValue]
+      : [];
+
+    if (Array.isArray(selectedValueStems) && selectedValueStems.some((stem) => stemMatches(stem, previewStem))) {
+      restorePreviewPositionRef.current = false;
+      return;
+    }
+
+    const matchingValue = Object.entries(attributeValueStems).find(([, stemsForValue]) => (
+      Array.isArray(stemsForValue)
+      && stemsForValue.some((stem) => stemMatches(stem, previewStem))
+    ));
+
+    if (!matchingValue) return;
+
+    const [nextValue] = matchingValue;
+    restorePreviewPositionRef.current = false;
+    if (nextValue !== selectedAttributeValue) {
+      restoredAttributeValueRef.current = nextValue;
+      setSelectedAttributeValue(nextValue);
+    }
+  }, [
+    activeAttribute?.id,
+    attributeValueStems,
+    isAttributePreview,
+    previewStem,
+    selectedAttributeValue,
+    statsStatus,
+  ]);
+
+  useEffect(() => {
+    if (activeTab !== 'classes' || !previewStem || !classSceneListRef.current) return;
+
+    const target = Array.from(
+      classSceneListRef.current.querySelectorAll('[data-scene-stem]')
+    ).find((element) => (element as HTMLElement).dataset.sceneStem === previewStem) as HTMLElement | undefined;
+
+    target?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+  }, [activeTab, classSceneStems.join('|'), previewStem]);
 
   useEffect(() => {
     if (!views?.length) return;
@@ -1392,6 +1501,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     if (activeAttribute?.id === restoredAttributeIdRef.current) {
       restoredAttributeIdRef.current = null;
     } else if (activeAttribute?.id) {
+      restorePreviewPositionRef.current = false;
       restoredAttributeValueRef.current = null;
       setSelectedAttributeValue(null);
     }
@@ -1774,6 +1884,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       const nextOptions = attrDraft.options.map((value) => String(value).trim());
       const nextDefault = String(attrDraft.defaultValue || '').trim();
       const valueReplacements = buildAttributeValueReplacements(oldOptions, nextOptions);
+      const selectedValueReplacement = selectedAttributeValue
+        && Object.prototype.hasOwnProperty.call(valueReplacements, selectedAttributeValue)
+        ? valueReplacements[selectedAttributeValue]
+        : selectedAttributeValue;
       
       // 1. 同步到所有后端的 JSON 文件
       await batchApplyAttribute({
@@ -1815,6 +1929,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       // 强行把洗过一遍的标注数据塞回 Store
       useStore.setState({ annotations: updatedAnnotations }); 
       useStore.getState().setStatsCacheValid?.(false);
+      if (selectedValueReplacement !== selectedAttributeValue) {
+        restoredAttributeValueRef.current = selectedValueReplacement || null;
+        setSelectedAttributeValue(selectedValueReplacement || null);
+      }
+      // 属性值定义修改后，当前 preview scene 可能已经移动到另一个 value；
+      // 让恢复逻辑在统计更新后重新找到它并定位列表。
+      restorePreviewPositionRef.current = Boolean(previewStem);
       await loadStatistics(true);
       setAttrDraft(null); // 清空草稿，退出编辑状态
       alert(t('taxonomyDashboard.attributeSyncSuccess'));
@@ -2544,7 +2665,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               </span>
             </div>
 
-            <div className="h-[250px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800">
+            <div ref={classSceneListRef} className="h-[250px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800">
               <div className="flex flex-col gap-1">
                 {classSceneStems.map((stem: string) => {
                   const isSelected = previewStem === stem;
@@ -2552,6 +2673,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   return (
                     <div
                       key={stem}
+                      data-scene-stem={stem}
                       onClick={() => handlePreviewStemChange(stem)}
                       onDoubleClick={() => handleOpenPreviewScene(stem)}
                       title={t('taxonomyDashboard.tipClickPreview')}
