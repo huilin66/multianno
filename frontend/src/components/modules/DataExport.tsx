@@ -123,6 +123,10 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const [classSource, setClassSource] = useState<'panel' | 'file'>('panel');
   const [classFilePath, setClassFilePath] = useState('');
 
+  // --- YOLO 多属性检测 (mdet) 导出 ---
+  const [includeAttributes, setIncludeAttributes] = useState(false);
+  const [attributeExportFile, setAttributeExportFile] = useState('');
+
   // --- Card 6: Target Folder ---
   const [targetDir, setTargetDir] = useState('');
   const [generateReport, setGenerateReport] = useState(true);
@@ -135,7 +139,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const [explorerConfig, setExplorerConfig] = useState<{
     open: boolean;
     type: 'dir' | 'file';
-    target: 'target_dir' | 'class_file';
+    target: 'target_dir' | 'class_file' | 'attributes_file';
     initialPath?: string;
   }>({ open: false, type: 'dir', target: 'target_dir' });
 
@@ -220,6 +224,13 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       setAnnoExtension(detail.defaultExtension);
     }
   }, [format]);
+
+  useEffect(() => {
+    if (format !== 'yolo' || taskType !== 'object_detection') {
+      setIncludeAttributes(false);
+      setAttributeExportFile('');
+    }
+  }, [format, taskType]);
 
   useEffect(() => {
     const mapping = TASK_SHAPE_MAPPINGS[taskType];
@@ -364,6 +375,8 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           is_main: view?.isMain || false,
         };
       });
+      const mdetExportEnabled =
+        format === 'yolo' && taskType === 'object_detection' && includeAttributes;
 
       if (exportMode === 'dataset') {
         const result = await exportDataStream({
@@ -386,6 +399,8 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           split_content_mode: splitContentMode,
           overwrite_target: overwriteTarget,
           include_unlabeled_images: includeUnlabeledImages,
+          export_attributes: mdetExportEnabled,
+          attributes_file: mdetExportEnabled ? (attributeExportFile || undefined) : undefined,
         }, (current, total) => {
           setExportProgress(Math.round((current / total) * 100));
         }, signal);
@@ -401,6 +416,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
             t('dataExport.result.scenes', { count: exported, total: stems.length }),
             t('dataExport.result.classes', { count: selectedClassNames.length }),
           ];
+          if (mdetExportEnabled) {
+            lines.push(t('dataExport.result.attributes'));
+          }
           if (splitInfo.train !== undefined) {
             lines.push(t('dataExport.result.split', { train: splitInfo.train, val: splitInfo.val ?? 0, test: splitInfo.test ?? 0 }));
           }
@@ -426,6 +444,8 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           export_mode: 'annotation',
           split_content_mode: splitContentMode,
           include_unlabeled_images: includeUnlabeledImages,
+          export_attributes: mdetExportEnabled,
+          attributes_file: mdetExportEnabled ? (attributeExportFile || undefined) : undefined,
         }, (current, total) => {
           setExportProgress(Math.round((current / total) * 100));
         }, signal);
@@ -439,6 +459,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
             t('dataExport.result.scenes', { count: stems.length, total: stems.length }),
             t('dataExport.result.classes', { count: selectedClassNames.length }),
           ];
+          if (mdetExportEnabled) {
+            lines.push(t('dataExport.result.attributes'));
+          }
           const exported = result?.exported;
           if (exported !== undefined) {
             lines[2] = t('dataExport.result.scenes', { count: exported, total: stems.length });
@@ -1064,6 +1087,37 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                 </div>
               </div>
             </div>
+
+            {/* YOLO 多属性检测 (mdet) 导出 */}
+            {format === 'yolo' && taskType === 'object_detection' && (
+              <div className="p-5 rounded-xl border bg-muted/20 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={includeAttributes}
+                    onCheckedChange={(checked) => setIncludeAttributes(Boolean(checked))}
+                  />
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold">
+                      {t('dataExport.stepShapes.includeAttributes')}
+                    </Label>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      {t('dataExport.stepShapes.includeAttributesDesc')}
+                    </p>
+                  </div>
+                </div>
+                {includeAttributes && (
+                  <div className="relative pt-1">
+                    <Input value={attributeExportFile} readOnly
+                      placeholder={t('dataExport.stepShapes.selectAttributesFile')}
+                      className="h-8 text-[10px] pr-8 font-mono cursor-pointer"
+                      onClick={() => setExplorerConfig({
+                        open: true, type: 'file', target: 'attributes_file', initialPath: attributeExportFile,
+                      })} />
+                    <FileText className="absolute right-2.5 bottom-2.5 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
 
@@ -1213,6 +1267,8 @@ useEffect(() => {
                         ALL_SHAPES.forEach(s => { sel[s] = mapping[s] !== 'incompatible'; });
                         setShapeSelection(sel);
                         resetClasses();
+                        setIncludeAttributes(false);
+                        setAttributeExportFile('');
                       }
                     }}
                     className="h-7 text-[10px]"
@@ -1289,6 +1345,7 @@ useEffect(() => {
         onConfirm={(paths) => {
           if (explorerConfig.target === 'target_dir' && paths.length > 0) setTargetDir(paths[0]);
           else if (explorerConfig.target === 'class_file' && paths.length > 0) handleLoadClassFile(paths);
+          else if (explorerConfig.target === 'attributes_file' && paths.length > 0) setAttributeExportFile(paths[0]);
           setExplorerConfig(prev => ({ ...prev, open: false }));
         }}
       />

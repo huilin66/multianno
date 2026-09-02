@@ -9,3 +9,4 @@ imagecodecs==2025.3.30
 # data processing
 numpy==2.2.6
 pandas==2.3.3
+PyYAML==6.0.2

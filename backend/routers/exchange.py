@@ -24,6 +24,7 @@ from utils.format_converters import (
     ma_to_voc,
     ma_to_yolo,
     mask_to_shapes,
+    parse_attributes_config,
     render_mask_array,
     yolo_to_shapes,
 )
@@ -183,6 +184,68 @@ def _write_classes_file(target_dir: str, selected_classes: list[str]):
         cf.write("\n".join(selected_classes))
 
 
+def _write_attribute_config_file(target_dir: str, attributes_map: dict):
+    """把属性配置写为 attributes.yaml（与 classes.txt 同级），便于回灌 ultralytics。
+
+    这是可合并到 Ultralytics data.yaml 的属性片段，不是包含 path/train/val/names
+    的完整数据集配置。
+
+    属性名/级别名一律加引号写出：避免 ``yes/no/on/off``、数字等被 YAML 1.1 把
+    ``yes`` 解析成布尔、``2`` 解析成整数，从而保证任意读取方（含 ultralytics）获得原文。
+    """
+    if not attributes_map:
+        return
+    path = os.path.join(target_dir, "attributes.yaml")
+    nal = max((len(levels) for levels in attributes_map.values()), default=0)
+    lines = [
+        "# MultiAnno 属性配置片段 (ultralytics mdet 兼容)",
+        "# 请将本文件的 attributes/na/nal 合并到完整的 data.yaml。",
+        f"na: {len(attributes_map)}",
+        f"nal: {nal}",
+        "attributes:",
+    ]
+    for name, levels in attributes_map.items():
+        lines.append(f"  {json.dumps(name, ensure_ascii=False)}:")
+        for level in levels:
+            lines.append(f"    - {json.dumps(level, ensure_ascii=False)}")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+
+
+def _resolve_attributes_map(attributes_file, *, for_export: bool = False, export_attributes: bool = False):
+    """解析可选的属性配置文件，返回有序 {属性名: [级别名...]}；未提供时返回 None。
+
+    - 已提供文件但解析失败：无论导入/导出都返回 400（用户显式选择了文件）。
+    - for_export 且开启 export_attributes 但未提供文件：拒绝（避免静默回退成标准 YOLO）。
+    """
+    if for_export and not export_attributes:
+        return None
+    if not attributes_file:
+        if for_export and export_attributes:
+            raise HTTPException(
+                status_code=400, detail="已开启属性导出，但未提供属性配置文件 (attributes.yaml)"
+            )
+        return None
+    try:
+        return parse_attributes_config(attributes_file)
+    except Exception as e:
+        logger.warning(
+            "ATTRIBUTES_PARSE_ERROR file=%s error=%s", shorten(attributes_file, 1500), e
+        )
+        raise HTTPException(
+            status_code=400, detail=f"属性配置文件解析失败: {e}"
+        ) from e
+
+
+def _mdet_export_enabled(req: ExportRequest) -> bool:
+    """仅允许 YOLO 目标检测分支启用 mdet，防止前端隐藏状态污染其他导出格式。"""
+    return bool(
+        req.format == "yolo"
+        and req.task_type == "object_detection"
+        and req.export_attributes
+    )
+
+
 @router.get("/read_text")
 async def read_text_file(path: str):
     # Keep this START record immediately before filesystem calls.  If a
@@ -237,6 +300,15 @@ async def handle_export(req: ExportRequest):
     # results are written or skipped.
     _apply_unlabeled_filter(req)
 
+    # Validate mdet configuration before creating a streaming response so
+    # missing/invalid attribute files remain an actual HTTP 400 response.
+    if req.format == "yolo":
+        _resolve_attributes_map(
+            req.attributes_file,
+            for_export=True,
+            export_attributes=_mdet_export_enabled(req),
+        )
+
     if req.export_mode == "dataset":
         _ensure_dataset_target_safe(req)
         if req.format == "yolo":
@@ -289,6 +361,9 @@ async def export_yolo_dataset_stream(req: ExportRequest):
     )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
+        attributes_map = _resolve_attributes_map(
+            req.attributes_file, for_export=True, export_attributes=_mdet_export_enabled(req)
+        )
         stems = req.stems
         if not stems:
             yield json.dumps({"type": "error", "message": "未找到任何场景"}) + "\n"
@@ -338,6 +413,8 @@ async def export_yolo_dataset_stream(req: ExportRequest):
                 req.allowed_shapes,
                 req.task_type,
                 include_empty=req.include_unlabeled_images,
+                attributes_map=attributes_map,
+                include_attributes=_mdet_export_enabled(req),
             )
             exported_count += int(result_yolo)
 
@@ -373,6 +450,9 @@ async def export_yolo_dataset_stream(req: ExportRequest):
         # classes.txt
         with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
             f.write("\n".join(req.selected_classes))
+
+        # attributes.yaml (多属性导出配套)
+        _write_attribute_config_file(req.target_dir, attributes_map)
 
         reporter.save_report(req.task_type, req.format)
 
@@ -993,6 +1073,9 @@ async def export_yolo_annotation_stream(req: ExportRequest):
     )
     try:
         reporter = ExportReporter(req.target_dir, req.generate_report)
+        attributes_map = _resolve_attributes_map(
+            req.attributes_file, for_export=True, export_attributes=_mdet_export_enabled(req)
+        )
         source_dir = req.source_dirs[0] if req.source_dirs else ""
         if req.stems:
             export_stems = list(dict.fromkeys(req.stems))
@@ -1020,6 +1103,8 @@ async def export_yolo_annotation_stream(req: ExportRequest):
                 req.selected_classes,
                 req.allowed_shapes,
                 req.task_type,
+                attributes_map=attributes_map,
+                include_attributes=_mdet_export_enabled(req),
             )
             should_write = bool(yolo_lines) or req.include_unlabeled_images
             if should_write:
@@ -1044,6 +1129,7 @@ async def export_yolo_annotation_stream(req: ExportRequest):
 
         reporter.save_report(req.task_type, req.format)
         _write_classes_file(req.target_dir, req.selected_classes)
+        _write_attribute_config_file(req.target_dir, attributes_map)
         yield _complete_event(exported_count, empty_annotations=empty_count)
     except asyncio.CancelledError:
         logger.warning("EXPORT_CANCELLED client_disconnected")
@@ -1227,6 +1313,9 @@ async def export_to_multianno(req: ExportRequest):
 
 async def export_to_yolo(req: ExportRequest):
     reporter = ExportReporter(req.target_dir, req.generate_report)
+    attributes_map = _resolve_attributes_map(
+        req.attributes_file, for_export=True, export_attributes=_mdet_export_enabled(req)
+    )
     exported_count = 0
     for j_path in get_native_jsons(req.source_dirs):
         with open(j_path, "r", encoding="utf-8") as f:
@@ -1239,6 +1328,8 @@ async def export_to_yolo(req: ExportRequest):
             req.selected_classes,
             req.allowed_shapes,
             req.task_type,
+            attributes_map=attributes_map,
+            include_attributes=_mdet_export_enabled(req),
         )
         if yolo_lines:
             with open(
@@ -1252,6 +1343,7 @@ async def export_to_yolo(req: ExportRequest):
         reporter.log_scene(base_stem, stats)
     reporter.save_report(req.task_type, req.format)
     _write_classes_file(req.target_dir, req.selected_classes)
+    _write_attribute_config_file(req.target_dir, attributes_map)
     return {"status": "success", "message": f"YOLO: 生成 {exported_count} 个 txt。"}
 
 
@@ -1553,11 +1645,22 @@ async def import_from_yolo(req: ImportRequest):
         with open(req.classes_file, "r", encoding="utf-8") as f:
             classes_map = [line.strip() for line in f if line.strip()]
 
+    # 多属性检测 (mdet):提供了属性配置文件时才启用属性行解析。
+    attributes_map = _resolve_attributes_map(req.attributes_file)
+    if attributes_map:
+        logger.info(
+            "IMPORT_YOLO_ATTRIBUTES enabled na=%d names=%s",
+            len(attributes_map),
+            list(attributes_map.keys()),
+        )
+
     imported_count = 0
     empty_json_count = 0
     missing_label_count = 0
     processed_stems = set()
     total_shapes = 0
+    total_attribute_bboxes = 0
+    total_attribute_dropped = 0
     dimension_fallback_count = 0
     # 使用 stems 列表按 {stem}{custom_suffix}{extension} 规则定位文件
     label_stems = [
@@ -1636,7 +1739,11 @@ async def import_from_yolo(req: ImportRequest):
         if label_file_exists:
             with open(txt_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-            new_shapes, _ = yolo_to_shapes(lines, img_w, img_h, classes_map)
+            new_shapes, yolo_stats = yolo_to_shapes(
+                lines, img_w, img_h, classes_map, attributes_map=attributes_map
+            )
+            total_attribute_bboxes += yolo_stats.get("imported_attribute_bboxes", 0)
+            total_attribute_dropped += yolo_stats.get("attribute_dropped", 0)
 
         # 无论是否有有效目标，都落盘一个完整的原生 JSON。
         existing_data["shapes"].extend(new_shapes)
@@ -1666,13 +1773,15 @@ async def import_from_yolo(req: ImportRequest):
 
     logger.info(
         "IMPORT_YOLO_END imported=%d shapes=%d empty=%d missing_labels=%d "
-        "dimension_fallback=%d mirror_cleaned=%d",
+        "dimension_fallback=%d mirror_cleaned=%d attribute_bboxes=%d attribute_dropped=%d",
         imported_count,
         total_shapes,
         empty_json_count,
         missing_label_count,
         dimension_fallback_count,
         cleaned_count,
+        total_attribute_bboxes,
+        total_attribute_dropped,
     )
 
     return {
@@ -1684,6 +1793,8 @@ async def import_from_yolo(req: ImportRequest):
         "empty_json_count": empty_json_count,
         "missing_label_count": missing_label_count,
         "dimension_fallback_count": dimension_fallback_count,
+        "attribute_bbox_count": total_attribute_bboxes,
+        "attribute_dropped_count": total_attribute_dropped,
     }
 
 
@@ -2185,6 +2296,9 @@ async def import_from_images_only(req: ImportRequest):
 
 async def export_dataset(req: ExportRequest):
     reporter = ExportReporter(req.target_dir, req.generate_report)
+    attributes_map = _resolve_attributes_map(
+        req.attributes_file, for_export=True, export_attributes=_mdet_export_enabled(req)
+    )
 
     stems = req.stems
     if not stems or len(stems) == 0:
@@ -2225,6 +2339,8 @@ async def export_dataset(req: ExportRequest):
             req.allowed_shapes,
             req.task_type,
             include_empty=req.include_unlabeled_images,
+            attributes_map=attributes_map,
+            include_attributes=_mdet_export_enabled(req),
         )
         exported_count += int(result_yolo)
 
@@ -2239,6 +2355,9 @@ async def export_dataset(req: ExportRequest):
     # 5. classes.txt
     with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
         f.write("\n".join(req.selected_classes))
+
+    # attributes.yaml (多属性导出配套)
+    _write_attribute_config_file(req.target_dir, attributes_map)
 
     reporter.save_report(req.task_type, req.format)
 

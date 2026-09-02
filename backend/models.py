@@ -133,6 +133,10 @@ class ExportRequest(BaseModel):
     overwrite_target: bool = False
     include_unlabeled_images: bool = True
 
+    # 多属性检测 (mdet) 导出:开启后检测分支写出 `cls na a1..ana cx cy w h` 标签。
+    export_attributes: bool = False
+    attributes_file: Optional[str] = None
+
 
 class ImportRequest(BaseModel):
     source_path: str
@@ -148,6 +152,8 @@ class ImportRequest(BaseModel):
     # 主视图图像路径，用于在导入归一化标注前读取每张图像的真实尺寸。
     image_paths: Dict[str, str] = Field(default_factory=dict)
     image_raw_profile: Optional[Dict[str, Any]] = None
+    # 多属性检测 (mdet) 导入:提供属性配置文件时按 `cls na attrs cx cy w h` 解析。
+    attributes_file: Optional[str] = None
 
 
 class ProjectMetaPayload(BaseModel):

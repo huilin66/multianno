@@ -67,6 +67,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   // --- Card 2: Source ---
   const [sourceDataPath, setSourceDataPath] = useState('');
   const [externalClassFile, setExternalClassFile] = useState('');
+  const [attributeFile, setAttributeFile] = useState('');
   const [importZeroClass, setImportZeroClass] = useState(false);
   const [cocoMode, setCocoMode] = useState<'polygon' | 'bbox'>('polygon');
 
@@ -82,7 +83,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [explorerConfig, setExplorerConfig] = useState<{
     open: boolean;
     type: 'dir' | 'file';
-    target: 'source' | 'class_file';
+    target: 'source' | 'class_file' | 'attributes_file';
     initialPath?: string;
   }>({ open: false, type: 'dir', target: 'source' });
 
@@ -100,6 +101,12 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       setExtension(detail.defaultExtension);
     }
   }, [format]);
+
+  useEffect(() => {
+    if (format !== 'yolo' || taskType !== 'object_detection') {
+      setAttributeFile('');
+    }
+  }, [format, taskType]);
 
   // ==========================================
   // 步骤定义
@@ -175,6 +182,10 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         stems: stems,
         image_paths: imagePaths,
         image_raw_profile: mainViewFolder?.rawProfile,
+        attributes_file:
+          format === 'yolo' && taskType === 'object_detection'
+            ? (attributeFile || undefined)
+            : undefined,
       });
 
       clearInterval(progressTimer);
@@ -229,6 +240,14 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       }
       if (dimensionFallbackCount > 0) {
         resultLines.push(t('dataImport.result.dimensionFallback', { count: dimensionFallbackCount }));
+      }
+      const attributeBboxCount = res?.attribute_bbox_count ?? 0;
+      if (attributeBboxCount > 0) {
+        resultLines.push(t('dataImport.result.attributeBboxes', { count: attributeBboxCount }));
+      }
+      const attributeDroppedCount = res?.attribute_dropped_count ?? 0;
+      if (attributeDroppedCount > 0) {
+        resultLines.push(t('dataImport.result.attributeDropped', { count: attributeDroppedCount }));
       }
       const resultDescription = resultLines.join('\n');
       await showDialog({
@@ -445,6 +464,30 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                 </div>
               )}
 
+              {format === 'yolo' && taskType === 'object_detection' && (
+                <div className="pt-3 border-t border-border">
+                  <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-2">
+                    <AlertCircle className="w-3 h-3" />
+                    {t('dataImport.source.attributesFileHint')}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      value={attributeFile}
+                      readOnly
+                      placeholder={t('dataImport.source.selectAttributesFile')}
+                      className="h-9 text-xs pr-9 font-mono cursor-pointer"
+                      onClick={() => setExplorerConfig({
+                        open: true,
+                        type: 'file',
+                        target: 'attributes_file',
+                        initialPath: attributeFile,
+                      })}
+                    />
+                    <FileText className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  </div>
+                </div>
+              )}
+
               {format === 'images_only' && (
                 <div className="flex items-center gap-3 pt-2">
                   <Label className="text-[10px] text-muted-foreground">{t('dataImport.source.importZero')}</Label>
@@ -584,6 +627,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                     } else if (activeStep === 'source') {
                       setSourceDataPath('');
                       setExternalClassFile('');
+                      setAttributeFile('');
                       setImportZeroClass(false);
                       setCocoMode('polygon');
                     } else if (activeStep === 'target') {
@@ -645,6 +689,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         onConfirm={(paths) => {
           if (explorerConfig.target === 'source') setSourceDataPath(paths[0]);
           else if (explorerConfig.target === 'class_file') setExternalClassFile(paths[0]);
+          else if (explorerConfig.target === 'attributes_file') setAttributeFile(paths[0]);
           setExplorerConfig(prev => ({ ...prev, open: false }));
         }}
       />

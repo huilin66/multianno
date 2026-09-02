@@ -390,7 +390,10 @@
       "panel": "面板",
       "file": "文件",
       "convert": "转换",
-      "classId": "ID"
+      "classId": "ID",
+      "includeAttributes": "导出属性 (mdet)",
+      "includeAttributesDesc": "开启后，YOLO 检测标注行将写为 `类别 na 属性值... 中心x 中心y 宽 高`。目标目录生成的 attributes.yaml 是属性配置片段，训练时请合并到完整的 Ultralytics data.yaml。",
+      "selectAttributesFile": "选择属性配置文件 (attributes.yaml / data.yaml)..."
     },
     "legend": {
       "required": "必需",
@@ -423,6 +426,7 @@
       "mode": "导出模式: {{mode}}",
       "scenes": "导出场景数: {{count}}/{{total}}",
       "classes": "类别数: {{count}}",
+      "attributes": "已启用属性导出 (mdet)",
       "split": "数据集分割: Train {{train}} / Val {{val}} / Test {{test}}"
     }
   },
@@ -454,6 +458,8 @@
       "placeholder": "请输入或选择源数据路径...",
       "classFileRequired": "需要提供 classes.txt 文件",
       "selectClassFile": "选择 classes.txt 文件",
+      "attributesFileHint": "属性配置文件(可选) — 提供后按多属性检测 (mdet) 格式解析标签行",
+      "selectAttributesFile": "选择属性配置文件 (attributes.yaml / data.yaml)...",
       "importZero": "导入背景 (class 0)",
       "cocoMode": "导入模式",
       "polygon": "多边形",
@@ -483,7 +489,9 @@
       "shapes": "导入 shape 总数: {{count}}",
       "images": "修改涉及图像数: {{imported}}/{{total}}",
       "emptyJson": "已为无标注场景生成空 JSON：{{count}} 个",
-      "dimensionFallback": "有 {{count}} 个场景未能读取原图尺寸，使用了默认尺寸，请检查图像路径。"
+      "dimensionFallback": "有 {{count}} 个场景未能读取原图尺寸，使用了默认尺寸，请检查图像路径。",
+      "attributeBboxes": "多属性检测框导入: {{count}} 个",
+      "attributeDropped": "已跳过无效的多属性标签行: {{count}} 行"
     }
   },
   "localVis": {

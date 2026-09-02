@@ -390,7 +390,10 @@
       "panel": "Panel",
       "file": "File",
       "convert": "Convert",
-      "classId": "ID"
+      "classId": "ID",
+      "includeAttributes": "Export attributes (mdet)",
+      "includeAttributesDesc": "When enabled, YOLO detection lines are written as `class na attr... cx cy w h`. The exported attributes.yaml is an attribute-config fragment; merge it into a complete Ultralytics data.yaml for training.",
+      "selectAttributesFile": "Select attribute config file (attributes.yaml / data.yaml)..."
     },
     "legend": {
       "required": "Required",
@@ -423,6 +426,7 @@
       "mode": "Mode: {{mode}}",
       "scenes": "Scenes: {{count}}/{{total}}",
       "classes": "Classes: {{count}}",
+      "attributes": "Attribute export enabled (mdet)",
       "split": "Split: Train {{train}} / Val {{val}} / Test {{test}}"
     }
   },
@@ -454,6 +458,8 @@
       "placeholder": "Enter or select source path...",
       "classFileRequired": "A classes.txt file is required",
       "selectClassFile": "Select classes.txt file",
+      "attributesFileHint": "Attribute config file (optional) — when provided, label lines are parsed in multi-attribute (mdet) format",
+      "selectAttributesFile": "Select attribute config file (attributes.yaml / data.yaml)...",
       "importZero": "Import background (class 0)",
       "cocoMode": "Import Mode",
       "polygon": "Polygon",
@@ -483,7 +489,9 @@
       "shapes": "Shapes imported: {{count}}",
       "images": "Images modified: {{imported}}/{{total}}",
       "emptyJson": "Empty JSON files created for unlabeled scenes: {{count}}",
-      "dimensionFallback": "Image dimensions could not be read for {{count}} scene(s); default dimensions were used. Check image paths."
+      "dimensionFallback": "Image dimensions could not be read for {{count}} scene(s); default dimensions were used. Check image paths.",
+      "attributeBboxes": "Multi-attribute detections imported: {{count}}",
+      "attributeDropped": "Invalid multi-attribute label lines skipped: {{count}}"
     }
   },
   "localVis": {

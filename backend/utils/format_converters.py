@@ -119,6 +119,8 @@ def ma_to_yolo(
     allowed_shapes,
     task_type,
     include_empty: bool = False,
+    attributes_map: dict = None,
+    include_attributes: bool = False,
 ):
     """将 MultiAnno 格式的标注文件转换为 YOLO 格式"""
     if not os.path.exists(ma_path):
@@ -137,6 +139,8 @@ def ma_to_yolo(
         selected_classes,
         allowed_shapes,
         task_type,
+        attributes_map=attributes_map,
+        include_attributes=include_attributes,
     )
     if yolo_lines or include_empty:
         with open(yolo_path, "w", encoding="utf-8") as f:
@@ -274,10 +278,17 @@ def convert_to_yolo(
     selected_classes: list,
     allowed_shapes: list,
     task_type: str,
+    attributes_map: dict = None,
+    include_attributes: bool = False,
 ) -> tuple:
     yolo_lines = []
     stats = {"native": 0, "converted": 0, "discarded": 0}
     img_w, img_h = max(1, img_w), max(1, img_h)
+
+    # 多属性检测 (mdet) 导出开关:开启时检测分支写 `cls na a1..ana cx cy w h`。
+    mdet_enabled = bool(include_attributes and attributes_map)
+    na = len(attributes_map) if attributes_map else 0
+
     for shape in shapes:
         label = shape.get("label")
         shape_type = normalize_shape_type(shape.get("shape_type", "unknown"))
@@ -327,9 +338,23 @@ def convert_to_yolo(
             box_w = max(0, min(1, (xmax - xmin) / img_w))
             box_h = max(0, min(1, (ymax - ymin) / img_h))
 
-            yolo_lines.append(
-                f"{class_id} {x_center:.6f} {y_center:.6f} {box_w:.6f} {box_h:.6f}"
-            )
+            if mdet_enabled:
+                # `cls na a1..ana cx cy w h` —— 属性按配置顺序编码为级别索引(缺值落 0)。
+                shape_attrs = shape.get("attributes") or {}
+                enc = [
+                    _encode_attribute_value(
+                        shape_attrs.get(name), attributes_map[name]
+                    )
+                    for name in attributes_map
+                ]
+                yolo_lines.append(
+                    f"{class_id} {na} {' '.join(str(x) for x in enc)} "
+                    f"{x_center:.6f} {y_center:.6f} {box_w:.6f} {box_h:.6f}"
+                )
+            else:
+                yolo_lines.append(
+                    f"{class_id} {x_center:.6f} {y_center:.6f} {box_w:.6f} {box_h:.6f}"
+                )
 
             if shape_type == "bbox":
                 stats["native"] += 1
@@ -459,18 +484,165 @@ def render_mask_array(
     return mask, stats
 
 
+def parse_attributes_config(path) -> dict:
+    """
+    解析属性配置文件，返回有序字典 {属性名: [级别名...]}。
+
+    兼容 ultralytics 的 data.yaml（含 `attributes:` 块）或裸的 ``{属性名: [级别...]}``
+    字典（YAML/JSON 均可）。na = 键数，nal = 级别列表的最大长度。
+
+    YAML 1.1 会把 ``no/yes/on/off`` 当作布尔值解析，而属性级别名常是这类短词
+    （如 surface_missing: [no, yes]）。这里用保留原始拼写的字符串加载器读取，
+    避免级别名被静默改写成 False/True。
+    """
+    import yaml
+
+    if not path or not os.path.exists(path):
+        raise FileNotFoundError(f"属性配置文件不存在: {path}")
+
+    class _StringLoader(yaml.SafeLoader):
+        pass
+
+    # SafeLoader 默认解析 bool/int/float/null 等标量标签；全部按原始字符串读取。
+    for _tag in (
+        "tag:yaml.org,2002:str",
+        "tag:yaml.org,2002:int",
+        "tag:yaml.org,2002:float",
+        "tag:yaml.org,2002:bool",
+        "tag:yaml.org,2002:timestamp",
+    ):
+        _StringLoader.add_constructor(
+            _tag, lambda loader, node: loader.construct_scalar(node)
+        )
+    _StringLoader.add_constructor("tag:yaml.org,2002:null", lambda loader, node: "")
+
+    def _safe_load(raw_text):
+        return yaml.load(raw_text, Loader=_StringLoader)
+
+    suffix = os.path.splitext(path)[1].lower()
+    with open(path, "r", encoding="utf-8") as f:
+        raw = f.read()
+    try:
+        if suffix == ".json":
+            data = json.loads(raw)
+        elif suffix in (".yaml", ".yml"):
+            data = _safe_load(raw)
+        else:
+            # 无扩展名时按 YAML 兼容格式尝试
+            data = _safe_load(raw)
+    except Exception as e:
+        raise ValueError(f"属性配置文件解析失败 ({path}): {e}")
+
+    if data is None:
+        raise ValueError(f"属性配置文件为空: {path}")
+    if isinstance(data, dict) and "attributes" in data:
+        attributes = data["attributes"]
+    else:
+        attributes = data  # 裸 `{属性名: [级别...]}` 字典
+
+    if not isinstance(attributes, dict) or not attributes:
+        raise ValueError(f"属性配置中未找到有效的 attributes 块: {path}")
+
+    attributes_map = {}
+    for name, levels in attributes.items():
+        if not isinstance(levels, (list, tuple)) or not levels:
+            raise ValueError(f"属性 '{name}' 的级别列表为空或无效: {path}")
+        attributes_map[str(name)] = [str(x) for x in levels]
+    return attributes_map
+
+
+def _encode_attribute_value(value, levels: list) -> int:
+    """将标注中的属性值编码为级别索引（缺值/未知值回退到 0，0 恒为合法索引）。"""
+    if value is None:
+        return 0
+    try:
+        idx = levels.index(str(value))
+        return idx
+    except (ValueError, TypeError):
+        pass
+    try:
+        idx = int(value)
+        if 0 <= idx < len(levels):
+            return idx
+    except (ValueError, TypeError):
+        pass
+    return 0
+
+
+def _decode_mdet_attributes(
+    values: list[float],
+    attributes_map: dict,
+    *,
+    probability_layout: bool,
+    nal: int,
+) -> dict:
+    """将 mdet 行中的离散索引或概率通道转换为 MultiAnno 属性字典。"""
+    attribute_names = list(attributes_map)
+    if probability_layout:
+        # Ultralytics 的多分类输出按属性连续排列为 [na, nal]，每个属性
+        # 取 argmax；属性级别不足全局 nal 时，行为与其 Results 解码保持一致。
+        attributes = {}
+        for index, name in enumerate(attribute_names):
+            levels = attributes_map[name]
+            start = index * nal
+            probabilities = values[start : start + nal]
+            if len(probabilities) != nal:
+                raise ValueError("属性概率通道数量不足")
+            level_index = max(range(nal), key=probabilities.__getitem__)
+            level_index = min(level_index, len(levels) - 1)
+            attributes[name] = levels[level_index]
+        return attributes
+
+    attributes = {}
+    for name, value in zip(attribute_names, values):
+        if not math.isfinite(value):
+            raise ValueError("属性索引不是有限数值")
+        level_index = int(round(value))
+        levels = attributes_map[name]
+        attributes[name] = (
+            levels[level_index]
+            if 0 <= level_index < len(levels)
+            else str(level_index)
+        )
+    return attributes
+
+
 def yolo_to_shapes(
-    yolo_lines: list, img_w: int, img_h: int, classes_map: list
+    yolo_lines: list,
+    img_w: int,
+    img_h: int,
+    classes_map: list,
+    attributes_map: dict = None,
 ) -> tuple:
     """
     将 YOLO txt 行逆向解析为系统的 shapes
     返回: (解析后的 shapes 列表, 统计字典)
+
+    提供 ``attributes_map`` 时，支持以下多属性检测 (mdet) 格式：
+
+    - 离散标签：`cls na a1..ana cx cy w h [score]`
+    - 多分类概率：`cls (na*nal) p1..p(na*nal) cx cy w h [score]`
+
+    其余行行为不变（向后兼容标准 YOLO 与多边形 YOLO）。
     """
     shapes = []
-    stats = {"imported_bboxes": 0, "imported_polygons": 0, "dropped": 0}
+    stats = {
+        "imported_bboxes": 0,
+        "imported_attribute_bboxes": 0,
+        "imported_attribute_probability_bboxes": 0,
+        "imported_polygons": 0,
+        "attribute_dropped": 0,
+        "dropped": 0,
+    }
 
     img_w = max(1, img_w)
     img_h = max(1, img_h)
+
+    na = len(attributes_map) if attributes_map else 0
+    nal = max(
+        (len(levels) for levels in attributes_map.values()), default=0
+    ) if attributes_map else 0
+    mdet_channel_counts = {na, na * nal} if na and nal else set()
 
     for line in yolo_lines:
         parts = line.strip().split()
@@ -484,6 +656,70 @@ def yolo_to_shapes(
             if class_id < len(classes_map)
             else f"Class_{class_id}"
         )
+
+        # 🌟 多属性检测 (mdet): 仅在显式提供属性配置时识别，必须在 polygon
+        # 判定之前处理，避免概率通道被误当作多边形坐标。
+        line_na = None
+        if na > 0:
+            try:
+                line_na = int(parts[1])
+            except (IndexError, ValueError):
+                line_na = None
+
+        mdet_candidate = line_na in mdet_channel_counts
+        mdet_layout = mdet_candidate and len(parts) in (
+            6 + line_na,
+            7 + line_na,
+        )
+        if mdet_candidate and not mdet_layout:
+            # 属性配置已明确表明这是 mdet 导入；不要静默回退为 polygon。
+            stats["attribute_dropped"] += 1
+            stats["dropped"] += 1
+            continue
+        if mdet_layout:
+            try:
+                attribute_values = [
+                    float(x) for x in parts[2 : 2 + line_na]
+                ]
+                coord_start = 2 + line_na
+                xc, yc, w, h = map(float, parts[coord_start : coord_start + 4])
+                score = (
+                    float(parts[coord_start + 4])
+                    if len(parts) == 7 + line_na
+                    else 1.0
+                )
+                probability_layout = line_na == na * nal and nal > 1
+                attributes = _decode_mdet_attributes(
+                    attribute_values,
+                    attributes_map,
+                    probability_layout=probability_layout,
+                    nal=nal,
+                )
+            except (TypeError, ValueError, IndexError):
+                stats["attribute_dropped"] += 1
+                stats["dropped"] += 1
+                continue
+
+            abs_xc, abs_yc = xc * img_w, yc * img_h
+            abs_w, abs_h = w * img_w, h * img_h
+            xmin, ymin = abs_xc - abs_w / 2, abs_yc - abs_h / 2
+            xmax, ymax = abs_xc + abs_w / 2, abs_yc + abs_h / 2
+
+            shapes.append(
+                {
+                    "label": label,
+                    "class_id": class_id,
+                    "type": "bbox",
+                    "score": score,
+                    "shape_type": "bbox",
+                    "points": [[xmin, ymin], [xmax, ymax]],
+                    "attributes": attributes,
+                }
+            )
+            stats["imported_attribute_bboxes"] += 1
+            if probability_layout:
+                stats["imported_attribute_probability_bboxes"] += 1
+            continue
 
         is_bbox = len(parts) == 5 or len(parts) == 6
         is_polygon = len(parts) > 6
