@@ -35,7 +35,7 @@ export function ObjectEditorForm({
       <div className="flex items-center gap-2">
         <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.class')}</Label>
         <Select value={label} onValueChange={onLabelChange}>
-          <SelectTrigger className="h-7 text-xs flex-1 bg-neutral-50 dark:bg-black border-neutral-200 dark:border-neutral-800">
+          <SelectTrigger className="h-6 text-xs flex-1 bg-neutral-50 dark:bg-black border-neutral-200 dark:border-neutral-800">
             <div className="flex items-center gap-1.5">
               <div className="w-2 h-2 rounded-full shadow-sm" style={{ backgroundColor: activeColor }} />
               <SelectValue />
@@ -57,17 +57,17 @@ export function ObjectEditorForm({
       {/* Group ID + Track ID 同行 */}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 flex-1">
-          <Label className="text-[11px] text-neutral-500 shrink-0">{t('objectEditor.groupID')}</Label>
+          <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.groupID')}</Label>
           <Input
             type="number" value={groupId || ''} onChange={(e) => onGroupIdChange(e.target.value)}
-            placeholder="-" className="h-7 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
+            placeholder="-" className="h-6 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
           />
         </div>
         <div className="flex items-center gap-2 flex-1">
-          <Label className="text-[11px] text-neutral-500 shrink-0">{t('objectEditor.trackID')}</Label>
+          <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.trackID')}</Label>
           <Input
             type="number" value={trackId || ''} onChange={(e) => onTrackIdChange(e.target.value)}
-            placeholder="-" className="h-7 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
+            placeholder="-" className="h-6 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
           />
         </div>
       </div>
@@ -78,27 +78,27 @@ export function ObjectEditorForm({
         <Input
           value={text} onChange={(e) => onTextChange(e.target.value)}
           placeholder={t('objectEditor.description')}
-          className="h-7 text-xs flex-1 bg-neutral-50 dark:bg-black border-neutral-200 dark:border-neutral-800"
+          className="h-6 text-[11px] md:text-[11px] placeholder:text-[11px] flex-1 bg-neutral-50 dark:bg-black border-neutral-200 dark:border-neutral-800"
         />
       </div>
 
       {/* Attributes */}
-      <div className="pt-2 border-t border-neutral-100 dark:border-neutral-800">
-        <Label className="text-[10px] text-neutral-400 mb-2 block uppercase tracking-wider">{t('objectEditor.attributes')}</Label>
+      <div className="pt-1.5 border-t border-neutral-100 dark:border-neutral-800">
+        <Label className="text-[10px] text-neutral-400 mb-1 block uppercase tracking-wider">{t('objectEditor.attributes')}</Label>
           {taxonomyAttributes && taxonomyAttributes.length > 0 ? (
-            <div className="space-y-1.5 max-h-[100px] overflow-y-auto custom-scrollbar pr-1">
+            <div className="space-y-0.5 max-h-[128px] overflow-y-auto custom-scrollbar pr-1">
               {taxonomyAttributes.map((attr: any) => (
-                <div key={attr.id} className="flex items-center gap-2 bg-neutral-50 dark:bg-black/40 px-2 py-1 rounded border border-neutral-100 dark:border-neutral-800/50">
-                  <span className="text-[11px] text-neutral-500 truncate w-16 shrink-0">{attr.name}</span>
+                <div key={attr.id} className="flex items-center gap-1.5 bg-neutral-50 dark:bg-black/40 px-1.5 py-0.5 rounded border border-neutral-100 dark:border-neutral-800/50">
+                  <span className="text-[10px] text-neutral-500 truncate w-2/5 min-w-0 shrink-0" title={attr.name}>{attr.name}</span>
                   {attr.options ? (
                     <Select value={attributes[attr.name] || ''} onValueChange={(val) => onAttributesChange({ ...attributes, [attr.name]: val })}>
-                      <SelectTrigger className="h-6 text-[10px] flex-1 bg-white dark:bg-neutral-900"><SelectValue placeholder={t('common.select', 'Select...')} /></SelectTrigger>
+                      <SelectTrigger className="h-5 text-[9px] flex-1 min-w-0 bg-white dark:bg-neutral-900"><SelectValue placeholder={t('common.select', 'Select...')} /></SelectTrigger>
                       <SelectContent>
                         {attr.options.map((opt: string) => <SelectItem key={opt} value={opt} className="text-[10px]">{opt}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Input value={attributes[attr.name] || ''} onChange={(e) => onAttributesChange({ ...attributes, [attr.name]: e.target.value })} className="h-6 text-[10px] flex-1 bg-white dark:bg-neutral-900" />
+                    <Input value={attributes[attr.name] || ''} onChange={(e) => onAttributesChange({ ...attributes, [attr.name]: e.target.value })} className="h-5 text-[9px] flex-1 min-w-0 bg-white dark:bg-neutral-900" />
                   )}
                 </div>
             ))}

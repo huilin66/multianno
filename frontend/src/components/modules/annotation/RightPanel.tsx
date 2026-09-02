@@ -896,7 +896,7 @@ export function RightPanel({
 
             {/* === Attributes Tab === */}
             {taxonomyTab === 'attributes' && (
-              <div className="max-h-[40vh] overflow-y-auto custom-scrollbar p-2 space-y-2 max-h-[228px]">
+              <div className="max-h-[40vh] overflow-y-auto custom-scrollbar p-1.5 space-y-1 max-h-[228px]">
                 {taxonomyAttributes?.map((attr: any) => {
                   // Calculate value distribution for current scene
                   const valueCounts: Record<string, number> = {};
@@ -911,13 +911,13 @@ export function RightPanel({
                       className="bg-white dark:bg-neutral-900 rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden"
                     >
                       {/* Attribute Header */}
-                      <div className="flex items-center gap-2 p-2.5 bg-neutral-50 dark:bg-black/20 border-b border-neutral-100 dark:border-neutral-800/50">
-                        <Type className="w-3.5 h-3.5 text-amber-500" />
+                      <div className="flex items-center gap-1.5 px-2 py-1.5 bg-neutral-50 dark:bg-black/20 border-b border-neutral-100 dark:border-neutral-800/50">
+                        <Type className="w-3 h-3 text-amber-500" />
                         <div className="flex-1 min-w-0">
-                          <div className="text-[11px] font-bold text-neutral-700 dark:text-neutral-300 truncate">
+                          <div className="text-[10px] font-bold text-neutral-700 dark:text-neutral-300 truncate">
                             {attr.name}
                           </div>
-                          <div className="text-[9px] text-neutral-400 uppercase">
+                          <div className="text-[8px] text-neutral-400 uppercase">
                             {attr.type}
                             {attr.applyToAll && ` · ${t('rightPanel.applyToAll')}`}
                           </div>
@@ -928,26 +928,26 @@ export function RightPanel({
                       </div>
 
                       {/* Value Tree */}
-                      <div className="p-1">
+                      <div className="p-0.5">
                         {Object.entries(valueCounts)
                           .sort(([, a], [, b]) => b - a)
                           .map(([value, count]) => (
                             <div
                               key={value}
-                              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors"
+                              className="flex items-center gap-1.5 px-1.5 py-0.5 rounded hover:bg-neutral-50 dark:hover:bg-neutral-800/30 transition-colors"
                             >
                               {/* Tree line */}
-                              <div className="w-3 flex justify-center">
-                                <div className="w-px h-3 bg-neutral-300 dark:bg-neutral-700" />
+                              <div className="w-2 flex justify-center">
+                                <div className="w-px h-2 bg-neutral-300 dark:bg-neutral-700" />
                               </div>
                               
                               {/* Value name */}
-                              <span className="text-[10px] text-neutral-600 dark:text-neutral-400 truncate flex-1">
+                              <span className="text-[9px] text-neutral-600 dark:text-neutral-400 truncate flex-1">
                                 {value}
                               </span>
                               
                               {/* Count badge */}
-                              <span className="text-[9px] font-mono text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded-full">
+                              <span className="text-[8px] font-mono text-neutral-500 bg-neutral-100 dark:bg-neutral-800 px-1 py-0 rounded-full">
                                 {count}
                               </span>
                             </div>
@@ -955,7 +955,7 @@ export function RightPanel({
                       </div>
 
                       {Object.keys(valueCounts).length === 0 && (
-                        <div className="text-center py-3 text-[10px] text-neutral-400">
+                        <div className="text-center py-2 text-[9px] text-neutral-400">
                           {t('rightPanel.noInstancesInScene')}
                         </div>
                       )}
