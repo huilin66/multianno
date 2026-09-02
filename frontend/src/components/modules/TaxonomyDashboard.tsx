@@ -28,6 +28,7 @@ interface TaxonomyDashboardViewState {
   selectedAttributeId?: string | null;
   selectedAttributeValue?: string | null;
   previewStem?: string | null;
+  previousPreviewStem?: string | null;
   previewViewId?: string;
   expanded?: {
     classes?: boolean;
@@ -443,6 +444,13 @@ const getPreviewObjectBounds = (obj: PreviewObject) => {
 
 const formatPreviewNumber = (value: number) => Number(value.toFixed(2));
 
+const findMatchingSceneStem = (sceneStems: string[], target?: string | null) => {
+  if (!target) return null;
+  return sceneStems.find((candidate) => candidate === target)
+    || sceneStems.find((candidate) => candidate.startsWith(target) || target.startsWith(candidate))
+    || null;
+};
+
 const getPreviewViewBox = (
   obj: PreviewObject | undefined,
   dimensions: { width: number; height: number }
@@ -614,6 +622,7 @@ const buildAttributeValueReplacements = (oldOptions: string[], newOptions: strin
 
 interface ScenePreviewPanelProps {
   sceneStems: string[];
+  sceneSelectionKey: string;
   previewCounts: Record<string, number>;
   previewStem: string | null;
   onPreviewStemChange: (stem: string) => void;
@@ -635,6 +644,7 @@ interface ScenePreviewPanelProps {
 
 const ScenePreviewPanel = ({
   sceneStems,
+  sceneSelectionKey,
   previewCounts,
   previewStem,
   onPreviewStemChange,
@@ -656,9 +666,21 @@ const ScenePreviewPanel = ({
   const { t } = useTranslation();
   const sceneListRef = useRef<HTMLDivElement>(null);
   const shouldScrollOnMountRef = useRef(true);
+  const previousSceneListKeyRef = useRef<string | null>(null);
+  const previousSceneSelectionKeyRef = useRef<string | null>(null);
+  const sceneListKey = sceneStems.join('|');
 
   useEffect(() => {
-    if (!shouldScrollOnMountRef.current || !previewStem || !sceneListRef.current) return;
+    const sceneListChanged = previousSceneListKeyRef.current !== sceneListKey;
+    const selectionContextChanged = previousSceneSelectionKeyRef.current !== sceneSelectionKey;
+    previousSceneListKeyRef.current = sceneListKey;
+    previousSceneSelectionKeyRef.current = sceneSelectionKey;
+
+    if (
+      (!shouldScrollOnMountRef.current && !sceneListChanged && !selectionContextChanged)
+      || !previewStem
+      || !sceneListRef.current
+    ) return;
 
     const target = Array.from(
       sceneListRef.current.querySelectorAll('[data-scene-stem]')
@@ -668,7 +690,7 @@ const ScenePreviewPanel = ({
       target.scrollIntoView({ behavior: 'auto', block: 'start' });
       shouldScrollOnMountRef.current = false;
     }
-  }, [previewStem, sceneStems.join('|')]);
+  }, [previewStem, sceneListKey, sceneSelectionKey]);
 
   return (
     <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-[680px]">
@@ -849,7 +871,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   );
   const [restoredViewStateKey, setRestoredViewStateKey] = useState<string | null>(null);
   const restoredPreviewStemRef = useRef<string | null>(null);
-  const restorePreviewPositionRef = useRef(false);
+  const previousPreviewStemRef = useRef<string | null>(null);
   const restoredAttributeValueRef = useRef<string | null>(null);
   const restoredAttributeIdRef = useRef<string | null>(null);
   const latestViewStateRef = useRef<TaxonomyDashboardViewState | null>(null);
@@ -863,6 +885,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
   const [statsStatus, setStatsStatus] = useState<'idle' | 'loading' | 'done'>('idle');
   const [statsData, setStatsData] = useState<any>(null); 
+  const statsRequestIdRef = useRef(0);
+  const attributeEditRestoreRef = useRef<{ value: string | null } | null>(null);
   const [activeShapeTab, setActiveShapeTab] = useState<'bbox' | 'polygon'>('polygon'); // Overview 下方的 Shape Tab
   const [activeClassShapeTab, setActiveClassShapeTab] = useState<string>('polygon'); // 🌟 新增：单类别的 Shape 切换状态
   const [isProcessing, setIsProcessing] = useState(false);
@@ -908,6 +932,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     selectedAttributeId,
     selectedAttributeValue: selectedAttributeValue ?? restoredAttributeValueRef.current,
     previewStem: previewStem ?? restoredPreviewStemRef.current,
+    previousPreviewStem: previousPreviewStemRef.current,
     previewViewId,
     expanded: {
       classes: expanded.classes,
@@ -930,8 +955,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     restoredAttributeValueRef.current = selectedAttributeValue;
     setPreviewViewId(typeof saved?.previewViewId === 'string' ? saved.previewViewId : '');
     const savedPreviewStem = typeof saved?.previewStem === 'string' ? saved.previewStem : null;
-    restorePreviewPositionRef.current = Boolean(savedPreviewStem);
+    const savedPreviousPreviewStem = typeof saved?.previousPreviewStem === 'string'
+      ? saved.previousPreviewStem
+      : null;
     restoredPreviewStemRef.current = savedPreviewStem;
+    previousPreviewStemRef.current = savedPreviousPreviewStem;
     setPreviewStem(restoredPreviewStemRef.current);
     setExpanded({
       classes: saved?.expanded?.classes ?? true,
@@ -952,6 +980,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       selectedAttributeId,
       selectedAttributeValue: selectedAttributeValue ?? restoredAttributeValueRef.current,
       previewStem: previewStem ?? restoredPreviewStemRef.current,
+      previousPreviewStem: previousPreviewStemRef.current,
       previewViewId,
       expanded: {
         classes: expanded.classes,
@@ -1098,7 +1127,16 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     if (!activeAttribute) return;
 
     const values = attributeValueOptions.map((option) => option.value);
+    // Applying a value edit invalidates the statistics for a short period.
+    // Keep the explicitly selected value during that period; otherwise the
+    // transient empty/partial option list can select its first item again.
+    const editValue = attributeEditRestoreRef.current?.value;
     if (values.length === 0) {
+      if (editValue !== undefined) {
+        restoredAttributeValueRef.current = editValue;
+        setSelectedAttributeValue(editValue);
+        return;
+      }
       if (statsStatus === 'done') {
         restoredAttributeValueRef.current = null;
         setSelectedAttributeValue(null);
@@ -1107,8 +1145,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     }
 
     setSelectedAttributeValue((current) => {
-      const preferredValue = current || restoredAttributeValueRef.current;
-      if (preferredValue && (values.includes(preferredValue) || statsStatus !== 'done')) {
+      const preferredValue = editValue ?? current ?? restoredAttributeValueRef.current;
+      if (preferredValue && (
+        values.includes(preferredValue)
+        || statsStatus !== 'done'
+        || editValue !== undefined
+      )) {
         restoredAttributeValueRef.current = preferredValue;
         return preferredValue;
       }
@@ -1152,119 +1194,95 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   ]);
 
   const handlePreviewStemChange = useCallback((stem: string) => {
-    restorePreviewPositionRef.current = false;
+    const currentStem = previewStem ?? restoredPreviewStemRef.current;
+    if (currentStem && currentStem !== stem) {
+      previousPreviewStemRef.current = currentStem;
+    }
     restoredPreviewStemRef.current = stem;
     setPreviewStem(stem);
-    persistTaxonomyViewState({ previewStem: stem });
-  }, [persistTaxonomyViewState]);
+    persistTaxonomyViewState({
+      previewStem: stem,
+      previousPreviewStem: previousPreviewStemRef.current,
+    });
+  }, [persistTaxonomyViewState, previewStem]);
 
   const handleAttributeValueChange = useCallback((value: string) => {
-    restorePreviewPositionRef.current = false;
-    restoredAttributeValueRef.current = value;
-    setSelectedAttributeValue(value);
-    persistTaxonomyViewState({ selectedAttributeValue: value });
-
+    const currentStem = previewStem ?? restoredPreviewStemRef.current;
+    const previousStem = previousPreviewStemRef.current;
     const nextSceneStems = Array.isArray(attributeValueStems[value])
       ? attributeValueStems[value]
       : [];
-    setPreviewStem((currentStem) => {
-      const nextStem = currentStem && nextSceneStems.includes(currentStem)
-        ? currentStem
-        : nextSceneStems[0] || null;
-      restoredPreviewStemRef.current = nextStem;
-      return nextStem;
+    const sceneListIsReady = statsStatus === 'done' && !attributeEditRestoreRef.current;
+    const nextStem = nextSceneStems.length === 0
+      ? sceneListIsReady
+        ? null
+        : currentStem || previousStem || null
+      : findMatchingSceneStem(nextSceneStems, currentStem)
+        || findMatchingSceneStem(nextSceneStems, previousStem)
+        || nextSceneStems[0]
+        || null;
+
+    if (nextStem && nextStem !== currentStem) {
+      previousPreviewStemRef.current = currentStem || previousStem || null;
+    }
+    restoredAttributeValueRef.current = value;
+    restoredPreviewStemRef.current = nextStem;
+    setSelectedAttributeValue(value);
+    setPreviewStem(nextStem);
+    persistTaxonomyViewState({
+      selectedAttributeValue: value,
+      previewStem: nextStem,
+      previousPreviewStem: previousPreviewStemRef.current,
     });
-  }, [attributeValueStems, persistTaxonomyViewState]);
+  }, [attributeValueStems, persistTaxonomyViewState, previewStem, statsStatus]);
 
   useEffect(() => {
-    const firstStem = previewSceneStems[0] || null;
-    setPreviewStem((currentStem) => {
-      // Keep the scene selected before leaving the Manager even when an
-      // attribute edit moves it out of the current value-filtered list.
-      const rememberedStem = restoredPreviewStemRef.current;
-      const rememberedStemExists = Boolean(
-        rememberedStem && stems.some((storeStem: string) =>
-          storeStem === rememberedStem || storeStem.startsWith(rememberedStem)
-        )
-      );
+    const rememberedCurrentStem = previewStem ?? restoredPreviewStemRef.current;
+    const rememberedPreviousStem = previousPreviewStemRef.current;
 
-      if (!previewFilterKey) {
-        return null;
-      }
-
-      if (previewSceneStems.length === 0) {
-        return rememberedStemExists ? rememberedStem : null;
-      }
-
-      const rememberedStemInCurrentList = Boolean(
-        rememberedStem && previewSceneStems.includes(rememberedStem)
-      );
-      if (rememberedStemInCurrentList) {
-        restorePreviewPositionRef.current = false;
-      }
-
-      const nextStem = rememberedStem && (
-        rememberedStemInCurrentList
-        || (restorePreviewPositionRef.current && rememberedStemExists)
-      )
-        ? rememberedStem
-        : currentStem && previewSceneStems.includes(currentStem)
-          ? currentStem
-          : firstStem;
-
-      restoredPreviewStemRef.current = nextStem;
-      return nextStem;
-    });
-    setPreviewObjectIndex(null);
-    setPreviewObjects([]);
-    setPreviewError('');
-  }, [previewFilterKey, previewSceneStems.join('|'), stems.join('|')]);
-
-  // 如果上次浏览的 scene 在工作区中修改了 attribute value，它会从旧 value
-  // 的场景列表移动到新 value。恢复 Manager 时先切换到新 value，再让列表定位该 scene。
-  useEffect(() => {
-    if (
-      !restorePreviewPositionRef.current
-      || !isAttributePreview
-      || !activeAttribute
-      || !previewStem
-      || statsStatus !== 'done'
-    ) return;
-
-    const stemMatches = (candidate: string, target: string) => (
-      candidate === target
-      || candidate.startsWith(target)
-      || target.startsWith(candidate)
-    );
-    const selectedValueStems = selectedAttributeValue
-      ? attributeValueStems[selectedAttributeValue]
-      : [];
-
-    if (Array.isArray(selectedValueStems) && selectedValueStems.some((stem) => stemMatches(stem, previewStem))) {
-      restorePreviewPositionRef.current = false;
+    if (!previewFilterKey) {
+      setPreviewStem(null);
+      setPreviewObjectIndex(null);
+      setPreviewObjects([]);
+      setPreviewError('');
       return;
     }
 
-    const matchingValue = Object.entries(attributeValueStems).find(([, stemsForValue]) => (
-      Array.isArray(stemsForValue)
-      && stemsForValue.some((stem) => stemMatches(stem, previewStem))
-    ));
+    const currentMatch = findMatchingSceneStem(previewSceneStems, rememberedCurrentStem);
+    const previousMatch = findMatchingSceneStem(previewSceneStems, rememberedPreviousStem);
+    const sceneListIsReady = statsStatus === 'done' && !attributeEditRestoreRef.current;
+    const nextStem = previewSceneStems.length === 0
+      ? sceneListIsReady
+        ? null
+        : rememberedCurrentStem || rememberedPreviousStem || null
+      : currentMatch || previousMatch || previewSceneStems[0] || null;
 
-    if (!matchingValue) return;
+    // If the current scene disappeared from the selected value, move to the
+    // previously browsed scene when it is still available. Keep the old
+    // current scene as history so the next navigation remains predictable.
+    if (nextStem && nextStem !== rememberedCurrentStem) {
+      previousPreviewStemRef.current = rememberedCurrentStem || rememberedPreviousStem || null;
+    }
+    restoredPreviewStemRef.current = nextStem;
+    setPreviewStem(nextStem);
+    setPreviewObjectIndex(null);
+    setPreviewObjects([]);
+    setPreviewError('');
+  }, [previewFilterKey, previewSceneStems.join('|'), previewStem, statsStatus, stems.join('|')]);
 
-    const [nextValue] = matchingValue;
-    restorePreviewPositionRef.current = false;
-    if (nextValue !== selectedAttributeValue) {
-      restoredAttributeValueRef.current = nextValue;
-      setSelectedAttributeValue(nextValue);
+  // 编辑 attribute value 时只恢复 value 选择；scene 是否仍属于该 value
+  // 交给上面的 current/previous scene 选择逻辑处理。
+  useEffect(() => {
+    const editRestore = attributeEditRestoreRef.current;
+    if (!editRestore || !isAttributePreview || !activeAttribute) return;
+    if (editRestore.value !== selectedAttributeValue) {
+      restoredAttributeValueRef.current = editRestore.value;
+      setSelectedAttributeValue(editRestore.value);
     }
   }, [
     activeAttribute?.id,
-    attributeValueStems,
     isAttributePreview,
-    previewStem,
     selectedAttributeValue,
-    statsStatus,
   ]);
 
   useEffect(() => {
@@ -1627,7 +1645,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     if (activeAttribute?.id === restoredAttributeIdRef.current) {
       restoredAttributeIdRef.current = null;
     } else if (activeAttribute?.id) {
-      restorePreviewPositionRef.current = false;
       restoredAttributeValueRef.current = null;
       setSelectedAttributeValue(null);
     }
@@ -1701,11 +1718,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setStatsStatus('done');
       return;
     }
-  
+
+    const requestId = ++statsRequestIdRef.current;
+
     setStatsStatus('loading');
     try {
       const saveDirs = getSaveDirs();
       const rawData = await fetchProjectStatistics(saveDirs, forceRefresh);
+      if (requestId !== statsRequestIdRef.current) return;
       
       // 🌟 核心修复 1：拦截后端数据，把不兼容的 'rectangle' 或 'Rectangle' 强制转为引擎识别的 'bbox'
       const dataStr = JSON.stringify(rawData).replace(/"rectangle"/gi, '"bbox"').replace(/"Rectangle"/g, '"bbox"');
@@ -1731,10 +1751,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       useStore.getState().setStatsCacheValid?.(false);
       setStatsStatus('done');
     } catch (e: any) { 
+      if (requestId !== statsRequestIdRef.current) return;
       console.error(e); 
       setStatsStatus('idle'); 
     }
-    useStore.getState().setStatsCacheValid?.(true);
+    if (requestId === statsRequestIdRef.current) {
+      useStore.getState().setStatsCacheValid?.(true);
+    }
   };
 
   // 旧版 stats_cache.json 没有属性值到场景的索引。打开属性详情时补做一次
@@ -2004,16 +2027,38 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setIsProcessing(true);
     try {
       const safeSaveDirs = getSaveDirs();
+      const currentPreviewStemBeforeEdit = previewStem ?? restoredPreviewStemRef.current;
+      const currentValueBeforeEdit = selectedAttributeValue ?? restoredAttributeValueRef.current;
       const oldOptions = Array.isArray(activeAttribute.options)
         ? activeAttribute.options.map((value: any) => String(value).trim())
         : [];
       const nextOptions = attrDraft.options.map((value) => String(value).trim());
       const nextDefault = String(attrDraft.defaultValue || '').trim();
       const valueReplacements = buildAttributeValueReplacements(oldOptions, nextOptions);
-      const selectedValueReplacement = selectedAttributeValue
-        && Object.prototype.hasOwnProperty.call(valueReplacements, selectedAttributeValue)
-        ? valueReplacements[selectedAttributeValue]
-        : selectedAttributeValue;
+      const selectedValueWasConfigured = Boolean(
+        currentValueBeforeEdit && oldOptions.includes(currentValueBeforeEdit),
+      );
+      const selectedValueReplacement = currentValueBeforeEdit
+        && Object.prototype.hasOwnProperty.call(valueReplacements, currentValueBeforeEdit)
+        ? valueReplacements[currentValueBeforeEdit]
+        : currentValueBeforeEdit;
+      const selectedValueStillAvailable = Boolean(
+        selectedValueReplacement
+        && (!selectedValueWasConfigured || nextOptions.includes(selectedValueReplacement)),
+      );
+      const nextSelectedAttributeValue = selectedValueStillAvailable
+        ? selectedValueReplacement
+        : nextOptions[0] || null;
+
+      // Keep the selected value stable while the backend/statistics refresh is
+      // running. The scene is intentionally not pinned: the current scene may
+      // no longer belong to the edited value, so the scene list will resolve
+      // current -> previous -> first.
+      attributeEditRestoreRef.current = {
+        value: nextSelectedAttributeValue,
+      };
+      restoredAttributeValueRef.current = nextSelectedAttributeValue;
+      restoredPreviewStemRef.current = currentPreviewStemBeforeEdit;
       
       // 1. 同步到所有后端的 JSON 文件
       await batchApplyAttribute({
@@ -2055,17 +2100,27 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       // 强行把洗过一遍的标注数据塞回 Store
       useStore.setState({ annotations: updatedAnnotations }); 
       useStore.getState().setStatsCacheValid?.(false);
-      if (selectedValueReplacement !== selectedAttributeValue) {
-        restoredAttributeValueRef.current = selectedValueReplacement || null;
-        setSelectedAttributeValue(selectedValueReplacement || null);
-      }
-      // 属性值定义修改后，当前 preview scene 可能已经移动到另一个 value；
-      // 让恢复逻辑在统计更新后重新找到它并定位列表。
-      restorePreviewPositionRef.current = Boolean(previewStem);
+      setSelectedAttributeValue(nextSelectedAttributeValue);
+      persistTaxonomyViewState({
+        selectedAttributeValue: nextSelectedAttributeValue,
+        previewStem: currentPreviewStemBeforeEdit,
+        previousPreviewStem: previousPreviewStemRef.current,
+      });
       await loadStatistics(true);
+      // Keep the explicit value as the final state after the refresh. The
+      // scene state is owned by the current/previous scene resolver above.
+      restoredAttributeValueRef.current = nextSelectedAttributeValue;
+      setSelectedAttributeValue(nextSelectedAttributeValue);
+      persistTaxonomyViewState({
+        selectedAttributeValue: nextSelectedAttributeValue,
+        previewStem: restoredPreviewStemRef.current,
+        previousPreviewStem: previousPreviewStemRef.current,
+      });
+      attributeEditRestoreRef.current = null;
       setAttrDraft(null); // 清空草稿，退出编辑状态
       alert(t('taxonomyDashboard.attributeSyncSuccess'));
     } catch (err: any) {
+      attributeEditRestoreRef.current = null;
       alert(t('taxonomyDashboard.syncFailed', { message: err.message }));
     } finally {
       setIsProcessing(false);
@@ -3257,6 +3312,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 <div className="w-full min-w-0 shrink-0 order-last lg:order-first">
                   <ScenePreviewPanel
                     sceneStems={attributeSceneStems}
+                    sceneSelectionKey={previewFilterKey}
                     previewCounts={previewCounts}
                     previewStem={previewStem}
                     onPreviewStemChange={handlePreviewStemChange}
