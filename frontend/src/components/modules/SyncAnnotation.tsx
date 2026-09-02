@@ -1894,6 +1894,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   onImageLoaded={handleImageLoaded}
                   activeAnnotationId={activeAnnotationId}
                   taxonomyClasses={sortedClasses}
+                  taxonomyAttributes={taxonomyAttributes}
                   currentPoints={currentPoints}
                   tool={(tool === 'ai_anno' && activeAITab !== 'semi') ? 'pan' : tool}
                   theme={theme}

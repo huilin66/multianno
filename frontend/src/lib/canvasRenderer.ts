@@ -1,4 +1,5 @@
 import { UI_THEMES } from '../config/colors';
+import { getAnnotationAttributeEntries } from './annotationAttributeUtils';
 
 export interface RenderParams {
   canvas: HTMLCanvasElement;
@@ -13,6 +14,7 @@ export interface RenderParams {
   annotations: any[];
   activeAnnotationId: string | null;
   taxonomyClasses: any[];
+  taxonomyAttributes?: any[];
   currentPoints: { x: number, y: number }[];
   tool: string;
   formLabel: string;
@@ -138,9 +140,143 @@ function drawCuboidEngine(ctx: CanvasRenderingContext2D, p1: any, p2: any, p3: a
 }
 
 // 2. 绘制已保存的标注对象
+function getCanvasTextColor(hexColor: string) {
+  if (!/^#[0-9a-f]{6}$/i.test(hexColor)) return '#FFFFFF';
+  const red = parseInt(hexColor.slice(1, 3), 16);
+  const green = parseInt(hexColor.slice(3, 5), 16);
+  const blue = parseInt(hexColor.slice(5, 7), 16);
+  return (red * 299 + green * 587 + blue * 114) / 1000 > 150 ? '#111827' : '#FFFFFF';
+}
+
+function drawAnnotationLabel(
+  ctx: CanvasRenderingContext2D,
+  annotation: any,
+  x: number,
+  y: number,
+  color: string,
+  zoom: number,
+  editorSettings: any,
+  taxonomyAttributes: any[] | undefined,
+  imageWidth?: number,
+  imageHeight?: number,
+) {
+  const label = String(annotation.label ?? '');
+  const showAttributes = editorSettings?.att_show === true;
+  const attributeEntries = showAttributes
+    ? getAnnotationAttributeEntries(
+      annotation,
+      editorSettings?.att_hide_no === true,
+      taxonomyAttributes,
+    )
+    : [];
+
+  ctx.save();
+  ctx.font = `bold ${14 / zoom}px Arial`;
+
+  // Keep the original lightweight class label when attribute display is off.
+  if (!showAttributes) {
+    ctx.fillStyle = color;
+    ctx.fillText(label, x, y);
+    ctx.restore();
+    return;
+  }
+
+  const attributeLines = attributeEntries.map(([name, value]) => `${name}: ${value}`);
+  const labelFontSize = 14 / zoom;
+  const attributeFontSize = 12 / zoom;
+  const labelLineHeight = 16 / zoom;
+  const attributeLineHeight = 14 / zoom;
+  const padX = 4 / zoom;
+  const padY = 2 / zoom;
+
+  const labelWidth = ctx.measureText(label).width;
+  ctx.font = `${attributeFontSize}px Arial`;
+  const attributesWidth = attributeLines.reduce(
+    (maxWidth, line) => Math.max(maxWidth, ctx.measureText(line).width),
+    0,
+  );
+  const contentWidth = Math.max(labelWidth, attributesWidth);
+  const labelBoxWidth = contentWidth + padX * 2;
+  const labelBoxHeight = labelLineHeight + padY * 2;
+  const attributesBoxHeight = attributeLines.length > 0
+    ? attributeLines.length * attributeLineHeight + padY * 2
+    : 0;
+
+  // Keep the label block within the image, matching the reference renderer's
+  // edge handling for objects close to the top or right border.
+  const blockBottomWithoutShift = attributeLines.length > 0
+    ? y + padY + attributesBoxHeight
+    : y - labelFontSize - padY + labelBoxHeight;
+  let labelX = x;
+  let labelY = y;
+  if (Number.isFinite(imageWidth) && imageWidth !== undefined) {
+    labelX = Math.max(0, Math.min(x, Math.max(0, imageWidth - labelBoxWidth)));
+  }
+  if (Number.isFinite(imageHeight) && imageHeight !== undefined) {
+    const labelTop = labelY - labelFontSize - padY;
+    if (labelTop < 0) labelY += -labelTop;
+    const blockBottom = labelY + (blockBottomWithoutShift - y);
+    if (blockBottom > imageHeight) labelY -= blockBottom - imageHeight;
+  }
+
+  // Match yolo_data_manager: the class gets a colored label box and each
+  // attribute is rendered on its own line in a readable secondary panel.
+  ctx.fillStyle = color;
+  ctx.globalAlpha = 0.9;
+  ctx.fillRect(labelX - padX, labelY - labelFontSize - padY, labelBoxWidth, labelBoxHeight);
+  ctx.globalAlpha = 1;
+  ctx.font = `bold ${labelFontSize}px Arial`;
+  ctx.fillStyle = getCanvasTextColor(color);
+  ctx.fillText(label, labelX, labelY);
+
+  if (attributeLines.length > 0) {
+    const attributesTop = labelY + padY;
+    ctx.fillStyle = '#FFFFFF';
+    ctx.globalAlpha = 0.78;
+    ctx.fillRect(labelX - padX, attributesTop, labelBoxWidth, attributesBoxHeight);
+    ctx.globalAlpha = 1;
+    ctx.font = `${attributeFontSize}px Arial`;
+    ctx.fillStyle = '#111827';
+    attributeLines.forEach((line, index) => {
+      ctx.fillText(
+        line,
+        labelX,
+        attributesTop + padY + attributeFontSize + index * attributeLineHeight,
+      );
+    });
+  }
+
+  ctx.restore();
+}
+
 function drawSavedObjects(params: RenderParams, colors: any) {
-  const { ctx, annotations, activeAnnotationId, taxonomyClasses, tool, viewport, editorSettings } = params;
+  const {
+    ctx,
+    annotations,
+    activeAnnotationId,
+    taxonomyClasses,
+    taxonomyAttributes,
+    tool,
+    viewport,
+    editorSettings,
+  } = params;
   const fillShapes = editorSettings?.fillAnnotationShapes !== false;
+  const imageWidth = params.imageObj?.width || params.mainWidth;
+  const imageHeight = params.imageObj?.height || params.mainHeight;
+  const drawLabel = (annotation: any, x: number, y: number, color: string) => (
+    drawAnnotationLabel(
+      ctx,
+      annotation,
+      x,
+      y,
+      color,
+      viewport.zoom,
+      editorSettings,
+      taxonomyAttributes,
+      imageWidth,
+      imageHeight,
+    )
+  );
 
   annotations.forEach((ann: any) => {
     const clsDef = taxonomyClasses?.find((c: any) => c.name === ann.label);
@@ -157,8 +293,7 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
       ctx.strokeRect(x, y, w, h); 
       if (fillShapes) ctx.fillRect(x, y, w, h);
-      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
-      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
+      drawLabel(ann, x, y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
     } else if (ann.type === 'polygon' && ann.points.length > 0) {
       ctx.save();
 
@@ -221,15 +356,12 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       ctx.restore(); // 释放全部裁剪魔法
 
       // 绘制 Label 文字
-      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
-      ctx.font = `bold ${14 / viewport.zoom}px Arial`; 
-      ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom);
+      drawLabel(ann, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
     } else if (ann.type === 'line' && ann.points.length > 0) {
       ctx.beginPath(); ctx.moveTo(ann.points[0].x, ann.points[0].y);
       for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
       ctx.stroke();
-      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; 
-      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom);
+      drawLabel(ann, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
     } else if ((ann.type === 'ellipse' || ann.type === 'circle') && ann.points.length === 2) {
       const [p1, p2] = ann.points;
       const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
@@ -242,13 +374,12 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       }
       if (fillShapes) ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; 
-      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, x, y - 6 / viewport.zoom);
+      drawLabel(ann, x, y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
     } else if (ann.type === 'point' && ann.points.length > 0) {
       const p = ann.points[0];
       ctx.beginPath(); ctx.arc(p.x, p.y, 3 / viewport.zoom, 0, Math.PI * 2);
       ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; ctx.fill(); ctx.stroke();
-      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, p.x + 8 / viewport.zoom, p.y - 8 / viewport.zoom);
+      drawLabel(ann, p.x + 8 / viewport.zoom, p.y - 8 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
     } else if (ann.type === 'oriented_bbox' && ann.points.length >= 2) {
       const pts = getRbboxPoints(ann.points[0], ann.points[1], ann.points[2]);
       ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
@@ -256,15 +387,13 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       ctx.closePath(); 
       if (fillShapes) ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
-      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, pts[0].x, pts[0].y - 6 / viewport.zoom);
+      drawLabel(ann, pts[0].x, pts[0].y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
 
     } else if (ann.type === 'cuboid' && ann.points.length >= 2) {
       drawCuboidEngine(ctx, ann.points[0], ann.points[1], ann.points[2]);
       const f1x = Math.min(ann.points[0].x, ann.points[1].x);
       const f1y = Math.min(ann.points[0].y, ann.points[1].y);
-      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor;
-      ctx.font = `bold ${14 / viewport.zoom}px Arial`; ctx.fillText(ann.label, f1x, f1y - 6 / viewport.zoom);
+      drawLabel(ann, f1x, f1y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
     }
 
     // 绘制 Select 模式下的控制点

@@ -79,7 +79,7 @@ function PixelInfoBadge({ hoverPos, imageObj, view, mouseQuad }: any) {
 
 // 2. 把 CanvasView 移过来，并 export 暴露出去
 const CanvasViewInner=({ 
-  view, annotations, activeAnnotationId, taxonomyClasses, currentPoints, 
+  view, annotations, activeAnnotationId, taxonomyClasses, taxonomyAttributes, currentPoints,
   tool, theme, folders, currentStem, isPanning,
   mainWidth, mainHeight, isFullExtent,
   onMouseDown, onMouseMove, onMouseUp,
@@ -356,7 +356,8 @@ const CanvasViewInner=({
     renderCanvasScene({
       canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 
       imageObj, theme, annotations, activeAnnotationId, taxonomyClasses, 
-      currentPoints, tool, formLabel, pendingAnnotation: safePendingAnnotation, hoverPos, editorSettings
+      currentPoints, tool, formLabel, pendingAnnotation: safePendingAnnotation, hoverPos, editorSettings,
+      taxonomyAttributes,
     });
 
     // ==========================================
@@ -654,6 +655,7 @@ export const CanvasView = React.memo(CanvasViewInner, (prev, next) => {
         prev.isPanning === next.isPanning &&
         prev.formLabel === next.formLabel &&
         prev.editorSettings === next.editorSettings &&
+        prev.taxonomyAttributes === next.taxonomyAttributes &&
         prev.mainWidth === next.mainWidth &&
         prev.mainHeight === next.mainHeight
     );

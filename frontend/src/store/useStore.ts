@@ -157,6 +157,8 @@ export interface EditorSettings {
   showToolLabels: boolean; 
   autoRefreshStats: boolean; 
   fillAnnotationShapes: boolean;
+  att_show: boolean;
+  att_hide_no: boolean;
   maxViews: number;
   gridLayout: { rows: number; cols: number };
 }
@@ -362,6 +364,8 @@ export const useStore = create<AppState>()(
         showToolLabels: false, 
         autoRefreshStats: true,
         fillAnnotationShapes: true,
+        att_show: false,
+        att_hide_no: true,
         maxViews: 9,
         gridLayout: { rows: 0, cols: 0 },
       },
@@ -818,6 +822,39 @@ export const useStore = create<AppState>()(
         activeModule: state.activeModule,       
         tempViewSettings: state.tempViewSettings,
       }),
+      // att_hide_no was introduced with a disabled default. Migrate existing
+      // caches once so the new default also applies after a restart.
+      version: 2,
+      migrate: (persistedState) => {
+        const persisted = (persistedState || {}) as Partial<AppState>;
+        return {
+          ...persisted,
+          editorSettings: {
+            ...(persisted.editorSettings || {}),
+            att_hide_no: true,
+          },
+        };
+      },
+      // Keep newly added nested settings when restoring an older workspace
+      // cache. Zustand's default merge is shallow, so an old editorSettings
+      // object could otherwise replace the complete set of current defaults.
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState || {}) as Partial<AppState>;
+        const persistedEditorSettings = (persisted.editorSettings || {}) as Partial<EditorSettings>;
+
+        return {
+          ...currentState,
+          ...persisted,
+          editorSettings: {
+            ...currentState.editorSettings,
+            ...persistedEditorSettings,
+            gridLayout: {
+              ...currentState.editorSettings.gridLayout,
+              ...(persistedEditorSettings.gridLayout || {}),
+            },
+          },
+        };
+      },
     }
   )
 );

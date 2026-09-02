@@ -58,7 +58,10 @@ const readStemAnnotations = async (
       text: shape.text || '',
       type: mapDiskTypeToFrontend(shape.shape_type ?? shape.type),
       points: shape.points.map((p: any) => ({ x: p[0] ?? p.x, y: p[1] ?? p.y })),
-      attributes: shape.attributes || {},
+      // Keep the raw attribute container intact. Some YOLO-family exporters
+      // use `attributes`, `attrs`, or an ordered attribute vector; the canvas
+      // renderer resolves all of these forms against the loaded taxonomy.
+      attributes: shape.attributes ?? shape.attrs ?? shape.attribute ?? {},
       difficult: shape.difficult || false,
       occluded: shape.occluded || false,
       truncated: shape.truncated || false,

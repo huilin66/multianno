@@ -1,6 +1,6 @@
 import './i18n';
 import { useTranslation } from 'react-i18next';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from './store/useStore';
 import {
   LoadProject,
@@ -30,13 +30,35 @@ import { ViewLayoutSettingsModal } from './components/modals/settings/ViewLayout
 import { ToastContainer } from './components/ui/toast';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { loadAllProjectAnnotations } from './lib/annotationUtils';
+import { hasAnnotationAttributeContent } from './lib/annotationAttributeUtils';
 import { showDialog } from './store/useDialogStore';
 import { toast } from './store/useToastStore';
 
 export default function App() {
   const { t, i18n } = useTranslation();
-  const { folders, activeModule, setActiveModule, currentStem, projectName, theme, setTheme, language, setLanguage, editorSettings, updateEditorSettings, projectMetaPath } = useStore();
+  const {
+    folders,
+    activeModule,
+    setActiveModule,
+    currentStem,
+    projectName,
+    theme,
+    setTheme,
+    language,
+    setLanguage,
+    editorSettings,
+    updateEditorSettings,
+    projectMetaPath,
+    annotations,
+    taxonomyAttributes,
+    workspacePath,
+    stems,
+    views,
+  } = useStore();
   const annotationLastSavedTime = useStore((s) => s.annotationLastSavedTime);
+  const hasAttributeContent = hasAnnotationAttributeContent(annotations, taxonomyAttributes);
+  const attributeDisplayEnabled = editorSettings.att_show === true && hasAttributeContent;
+  const startupAnnotationReloadKey = useRef<string | null>(null);
   const { annotationSaveStatus, autoSave } = useAnnotationAutoSave();
   const { metaSaveStatus, metaLastSavedTime, isDirty: isMetaDirty } = useMetaAutoSave();
   
@@ -46,6 +68,46 @@ export default function App() {
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
   const [isReloadingAll, setIsReloadingAll] = useState(false);
   const [reloadProgress, setReloadProgress] = useState({ current: 0, total: 0 });
+
+  // A persisted workspace can contain an incomplete annotation cache when a
+  // previous import was interrupted. Reconcile that cache once on startup if
+  // the project has an attribute taxonomy but the restored annotations have
+  // no attribute values. Projects with a valid cached attribute payload are
+  // left untouched, so local edits are not replaced on every restart.
+  useEffect(() => {
+    if (
+      activeModule !== 'workspace'
+      || !projectMetaPath
+      || stems.length === 0
+      || taxonomyAttributes.length === 0
+      || hasAttributeContent
+    ) {
+      return;
+    }
+
+    const mainFolder = folders.find(
+      (folder) => folder.id === views.find((view) => view.isMain)?.folderId,
+    ) || folders[0];
+    const saveDir = workspacePath || mainFolder?.path || '';
+    if (!saveDir) return;
+
+    const reloadKey = `${projectMetaPath}|${saveDir}|${stems.length}`;
+    if (startupAnnotationReloadKey.current === reloadKey) return;
+    startupAnnotationReloadKey.current = reloadKey;
+
+    void loadAllProjectAnnotations(stems, saveDir, undefined, 10).catch((error) => {
+      console.warn('Startup annotation reconciliation failed:', error);
+    });
+  }, [
+    activeModule,
+    projectMetaPath,
+    folders,
+    views,
+    workspacePath,
+    stems,
+    taxonomyAttributes,
+    hasAttributeContent,
+  ]);
 
   const handleReloadAll = async () => {
     if (isReloadingAll) return;
@@ -337,6 +399,29 @@ export default function App() {
                   <Switch
                     checked={editorSettings.showToolLabels}
                     onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })}
+                  />
+                </div>
+                <div className={`space-y-1 ${!hasAttributeContent ? 'opacity-60' : ''}`}>
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs">{t('headerSetting.attShow')}</Label>
+                    <Switch
+                      checked={editorSettings.att_show === true}
+                      disabled={!hasAttributeContent}
+                      onCheckedChange={(v) => updateEditorSettings({ att_show: v })}
+                    />
+                  </div>
+                  {!hasAttributeContent && (
+                    <p className="text-[10px] leading-tight text-neutral-500 dark:text-neutral-400">
+                      {t('headerSetting.attShowUnavailable')}
+                    </p>
+                  )}
+                </div>
+                <div className={`flex items-center justify-between ${!attributeDisplayEnabled ? 'opacity-60' : ''}`}>
+                  <Label className="text-xs">{t('headerSetting.attHideNo')}</Label>
+                  <Switch
+                    checked={editorSettings.att_hide_no === true}
+                    disabled={!editorSettings.att_show || !hasAttributeContent}
+                    onCheckedChange={(v) => updateEditorSettings({ att_hide_no: v })}
                   />
                 </div>
                 <div className="flex items-center justify-between">
