@@ -222,6 +222,15 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         }
       }
 
+      // 属性配置由后端按实际导入的 attributes.yaml 解析后返回。
+      // 必须在 project meta 热重载之后注册，否则热重载会覆盖刚导入的定义。
+      const importedAttributeDefinitions = Array.isArray(res?.attribute_definitions)
+        ? res.attribute_definitions
+        : [];
+      if (importedAttributeDefinitions.length > 0) {
+        useStore.getState().upsertTaxonomyAttributes(importedAttributeDefinitions);
+      }
+
       setImportStatus('done');
       const fmt = res?.format || format.toUpperCase();
       const shapeCount = res?.shape_count ?? 0;
@@ -248,6 +257,11 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       const attributeDroppedCount = res?.attribute_dropped_count ?? 0;
       if (attributeDroppedCount > 0) {
         resultLines.push(t('dataImport.result.attributeDropped', { count: attributeDroppedCount }));
+      }
+      if (importedAttributeDefinitions.length > 0) {
+        resultLines.push(t('dataImport.result.attributesRegistered', {
+          count: importedAttributeDefinitions.length,
+        }));
       }
       const resultDescription = resultLines.join('\n');
       await showDialog({

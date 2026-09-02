@@ -111,6 +111,7 @@ export interface ProjectMetaContract {
     name: string;
     type: 'boolean' | 'select' | 'text';
     options?: string[];
+    defaultValue?: string;
     applyToAll: boolean;
   }[];
 }

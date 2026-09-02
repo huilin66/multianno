@@ -491,7 +491,8 @@
       "emptyJson": "已为无标注场景生成空 JSON：{{count}} 个",
       "dimensionFallback": "有 {{count}} 个场景未能读取原图尺寸，使用了默认尺寸，请检查图像路径。",
       "attributeBboxes": "多属性检测框导入: {{count}} 个",
-      "attributeDropped": "已跳过无效的多属性标签行: {{count}} 行"
+      "attributeDropped": "已跳过无效的多属性标签行: {{count}} 行",
+      "attributesRegistered": "已注册属性定义: {{count}} 个"
     }
   },
   "localVis": {

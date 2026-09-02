@@ -237,6 +237,23 @@ def _resolve_attributes_map(attributes_file, *, for_export: bool = False, export
         ) from e
 
 
+def _build_attribute_definitions(attributes_map: dict | None) -> list[dict]:
+    """将属性配置转换成前端可注册的 taxonomy 定义。"""
+    if not attributes_map:
+        return []
+
+    return [
+        {
+            "name": str(name),
+            "type": "select",
+            "options": [str(level) for level in levels],
+            "defaultValue": str(levels[0]) if levels else "",
+            "applyToAll": True,
+        }
+        for name, levels in attributes_map.items()
+    ]
+
+
 def _mdet_export_enabled(req: ExportRequest) -> bool:
     """仅允许 YOLO 目标检测分支启用 mdet，防止前端隐藏状态污染其他导出格式。"""
     return bool(
@@ -1647,6 +1664,7 @@ async def import_from_yolo(req: ImportRequest):
 
     # 多属性检测 (mdet):提供了属性配置文件时才启用属性行解析。
     attributes_map = _resolve_attributes_map(req.attributes_file)
+    attribute_definitions = _build_attribute_definitions(attributes_map)
     if attributes_map:
         logger.info(
             "IMPORT_YOLO_ATTRIBUTES enabled na=%d names=%s",
@@ -1795,6 +1813,7 @@ async def import_from_yolo(req: ImportRequest):
         "dimension_fallback_count": dimension_fallback_count,
         "attribute_bbox_count": total_attribute_bboxes,
         "attribute_dropped_count": total_attribute_dropped,
+        "attribute_definitions": attribute_definitions,
     }
 
 

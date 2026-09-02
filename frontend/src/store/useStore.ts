@@ -144,6 +144,7 @@ export interface TaxonomyAttribute {
   name: string;        
   type: 'boolean' | 'select' | 'text'; 
   options?: string[];  
+  defaultValue?: string;
   applyToAll: boolean; 
 }
 
@@ -281,6 +282,7 @@ export interface AppState {
   mergeTaxonomyClasses: (sourceIds: string[], targetId: string) => void;
   mergeTaxonomyClassesWithAttributes: (merges: { old_name: string; new_name: string; attribute_name: string; attribute_value: string }[]) => void;
   addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
+  upsertTaxonomyAttributes: (attrs: Array<Partial<TaxonomyAttribute> & { name: string }>) => void;
   updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
   deleteTaxonomyAttribute: (id: string) => void;
   setClassOrder: (order: string[]) => void;
@@ -618,6 +620,64 @@ export const useStore = create<AppState>()(
         taxonomyAttributes: [...state.taxonomyAttributes, attr], 
         attributeOrder: [...state.attributeOrder, attr.id] 
       })),
+      upsertTaxonomyAttributes: (attrs) => set((state) => {
+        if (!Array.isArray(attrs) || attrs.length === 0) return state;
+
+        const nextAttributes = [...state.taxonomyAttributes];
+        const nextOrder = [...state.attributeOrder];
+
+        attrs.forEach((incoming, index) => {
+          const name = String(incoming.name || '').trim();
+          if (!name) return;
+
+          const options = Array.from(new Set(
+            (Array.isArray(incoming.options) ? incoming.options : [])
+              .map((option) => String(option).trim())
+              .filter(Boolean)
+          ));
+          const existingIndex = nextAttributes.findIndex((attribute) =>
+            String(attribute.name || '').trim().toLowerCase() === name.toLowerCase()
+          );
+
+          if (existingIndex >= 0) {
+            const existing = nextAttributes[existingIndex];
+            const mergedOptions = options.length > 0 ? options : existing.options;
+            const defaultValue = incoming.defaultValue !== undefined
+              ? String(incoming.defaultValue)
+              : existing.defaultValue !== undefined
+                ? String(existing.defaultValue)
+                : mergedOptions?.[0] || '';
+
+            nextAttributes[existingIndex] = {
+              ...existing,
+              type: incoming.type || existing.type || 'select',
+              options: mergedOptions,
+              defaultValue,
+              applyToAll: incoming.applyToAll ?? existing.applyToAll ?? true,
+            };
+            if (existing.id && !nextOrder.includes(existing.id)) nextOrder.push(existing.id);
+            return;
+          }
+
+          const id = String(incoming.id || `attr-import-${Date.now()}-${index}`);
+          nextAttributes.push({
+            id,
+            name,
+            type: incoming.type || 'select',
+            options,
+            defaultValue: incoming.defaultValue !== undefined
+              ? String(incoming.defaultValue)
+              : options[0] || '',
+            applyToAll: incoming.applyToAll ?? true,
+          });
+          if (!nextOrder.includes(id)) nextOrder.push(id);
+        });
+
+        return {
+          taxonomyAttributes: nextAttributes,
+          attributeOrder: nextOrder,
+        };
+      }),
       updateTaxonomyAttribute: (id, updates) => set((state) => ({ 
         taxonomyAttributes: state.taxonomyAttributes.map(a => a.id === id ? { ...a, ...updates } : a) 
       })),
