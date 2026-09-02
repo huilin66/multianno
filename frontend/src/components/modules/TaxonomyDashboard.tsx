@@ -36,6 +36,7 @@ interface TaxonomyDashboardViewState {
 }
 
 const TAXONOMY_VIEW_STATE_PREFIX = 'multiAnno_taxonomy_dashboard_view';
+const taxonomyViewStateMemory = new Map<string, TaxonomyDashboardViewState>();
 
 const getTaxonomyViewStateKey = (
   projectMetaPath?: unknown,
@@ -50,11 +51,16 @@ const getTaxonomyViewStateKey = (
 const readTaxonomyViewState = (key: string): TaxonomyDashboardViewState | null => {
   if (typeof window === 'undefined') return null;
 
+  const remembered = taxonomyViewStateMemory.get(key);
+  if (remembered) return remembered;
+
   try {
     const raw = window.localStorage.getItem(key);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    taxonomyViewStateMemory.set(key, parsed);
+    return parsed;
   } catch (error) {
     console.warn('Failed to restore Taxonomy Manager view state:', error);
     return null;
@@ -645,15 +651,19 @@ const ScenePreviewPanel = ({
 }: ScenePreviewPanelProps) => {
   const { t } = useTranslation();
   const sceneListRef = useRef<HTMLDivElement>(null);
+  const shouldScrollOnMountRef = useRef(true);
 
   useEffect(() => {
-    if (!previewStem || !sceneListRef.current) return;
+    if (!shouldScrollOnMountRef.current || !previewStem || !sceneListRef.current) return;
 
     const target = Array.from(
       sceneListRef.current.querySelectorAll('[data-scene-stem]')
     ).find((element) => (element as HTMLElement).dataset.sceneStem === previewStem) as HTMLElement | undefined;
 
-    target?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+    if (target) {
+      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+      shouldScrollOnMountRef.current = false;
+    }
   }, [previewStem, sceneStems.join('|')]);
 
   return (
@@ -837,6 +847,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const restorePreviewPositionRef = useRef(false);
   const restoredAttributeValueRef = useRef<string | null>(null);
   const restoredAttributeIdRef = useRef<string | null>(null);
+  const latestViewStateRef = useRef<TaxonomyDashboardViewState | null>(null);
   const [activeTab, setActiveTab] = useState<TaxonomyDashboardTab>('overview');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
@@ -859,6 +870,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const activeAttribute = taxonomyAttributes.find((a: any) => a.id === selectedAttributeId);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const classSceneListRef = useRef<HTMLDivElement>(null);
+  const shouldScrollClassSceneOnMountRef = useRef(true);
   const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0); 
   const [mergeStage, setMergeStage] = useState<0 | 1>(0); // Merge 比较安全，两段即可
   const [attrDraft, setAttrDraft] = useState<{options: string[], defaultValue: string} | null>(null);
@@ -882,6 +894,21 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [previewCounts, setPreviewCounts] = useState<Record<string, number>>({});
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+
+  // Keep a render-time snapshot so a dialog unmount can persist the latest
+  // browsing position even when React effects have not run yet.
+  latestViewStateRef.current = {
+    activeTab,
+    selectedClassId,
+    selectedAttributeId,
+    selectedAttributeValue: selectedAttributeValue ?? restoredAttributeValueRef.current,
+    previewStem: previewStem ?? restoredPreviewStemRef.current,
+    previewViewId,
+    expanded: {
+      classes: expanded.classes,
+      attributes: expanded.attributes,
+    },
+  };
 
   // Taxonomy Manager is opened as a dialog, so keep its browsing position
   // separately from the project data and restore it when the dialog reopens.
@@ -946,6 +973,22 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   useEffect(() => {
     persistTaxonomyViewState();
   }, [persistTaxonomyViewState]);
+
+  useEffect(() => () => {
+    if (
+      restoredViewStateKey !== taxonomyViewStateKey
+      || typeof window === 'undefined'
+      || !latestViewStateRef.current
+    ) return;
+
+    const viewState = latestViewStateRef.current;
+    taxonomyViewStateMemory.set(taxonomyViewStateKey, viewState);
+    try {
+      window.localStorage.setItem(taxonomyViewStateKey, JSON.stringify(viewState));
+    } catch (error) {
+      console.warn('Failed to save Taxonomy Manager view state on close:', error);
+    }
+  }, [restoredViewStateKey, taxonomyViewStateKey]);
 
   const resolveStoreStem = useCallback((stem: string) => {
     return stems.find((s: string) => s === stem || s.startsWith(stem)) || stem;
@@ -1211,13 +1254,21 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   ]);
 
   useEffect(() => {
-    if (activeTab !== 'classes' || !previewStem || !classSceneListRef.current) return;
+    if (
+      !shouldScrollClassSceneOnMountRef.current
+      || activeTab !== 'classes'
+      || !previewStem
+      || !classSceneListRef.current
+    ) return;
 
     const target = Array.from(
       classSceneListRef.current.querySelectorAll('[data-scene-stem]')
     ).find((element) => (element as HTMLElement).dataset.sceneStem === previewStem) as HTMLElement | undefined;
 
-    target?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+    if (target) {
+      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+      shouldScrollClassSceneOnMountRef.current = false;
+    }
   }, [activeTab, classSceneStems.join('|'), previewStem]);
 
   useEffect(() => {
@@ -1341,7 +1392,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       // Persist synchronously before unmounting the dialog. The normal state
       // effect may not get a chance to run during the double-click transition.
       restoredPreviewStemRef.current = stem;
-      persistTaxonomyViewState({ previewStem: stem });
+      persistTaxonomyViewState({
+        previewStem: stem,
+        selectedAttributeValue,
+      });
       onClose?.();
       setTimeout(() => {
         setCurrentStem(matchedStem);
@@ -1357,7 +1411,15 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       confirmText: t('taxonomyDashboard.gotIt'),
       hideCancel: true,
     });
-  }, [onClose, openDialog, persistTaxonomyViewState, setActiveModule, setCurrentStem, t]);
+  }, [
+    onClose,
+    openDialog,
+    persistTaxonomyViewState,
+    selectedAttributeValue,
+    setActiveModule,
+    setCurrentStem,
+    t,
+  ]);
 
   const refreshStatsIfNeeded = async () => {
     if (editorSettings.autoRefreshStats) {
