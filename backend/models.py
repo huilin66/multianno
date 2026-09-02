@@ -41,6 +41,12 @@ class BatchDeleteAttributeRequest(BaseModel):
     attribute_name: str
 
 
+class BatchRenameAttributeRequest(BaseModel):
+    save_dirs: List[str]
+    old_name: str
+    new_name: str
+
+
 class SAMInitRequest(BaseModel):
     image_path: Optional[str] = None
     image_data: Optional[str] = None

@@ -92,6 +92,12 @@ export const batchDeleteAttribute = (payload: {
   attribute_name: string;
 }) => post(`${API_BASE_URL}/taxonomy/delete_attribute`, payload);
 
+export const batchRenameAttribute = (payload: {
+  save_dirs: string[];
+  old_name: string;
+  new_name: string;
+}) => post(`${API_BASE_URL}/taxonomy/rename_attribute`, payload);
+
 export const repairData = (
   saveDirs: string[],
   stems: string[],

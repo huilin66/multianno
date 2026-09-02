@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '..
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
+import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, batchRenameAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 import { useDialogStore } from '../../store/useDialogStore';
@@ -63,9 +63,8 @@ const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
                  {entries.map(([k]: any) => (
                     <div key={k} className="flex-1 max-w-[60px] text-center text-[8px] text-neutral-500 truncate min-w-[28px]" title={k}>{k}</div>
                  ))}
-               </div>
-
-             </div>
+              </div>
+            </div>
            </div>
 
            {/* X 轴全局标题 (固定在底部正中央) */}
@@ -352,7 +351,6 @@ const AttributeAnalysisCard = ({ title, icon: Icon, totalTags, densityData, deta
     </div>
   );
 };
-
 type PreviewPoint = { x: number; y: number };
 type PreviewObject = {
   id: string;
@@ -524,10 +522,6 @@ interface ScenePreviewPanelProps {
   previewObjectIndex: number | null;
   onPreviewObjectChange: (index: number | null) => void;
   color: string;
-  contextLabel: string;
-  valueOptions?: PreviewValueOption[];
-  selectedValue?: string | null;
-  onValueChange?: (value: string) => void;
 }
 
 const ScenePreviewPanel = ({
@@ -548,78 +542,18 @@ const ScenePreviewPanel = ({
   previewObjectIndex,
   onPreviewObjectChange,
   color,
-  contextLabel,
-  valueOptions,
-  selectedValue,
-  onValueChange,
 }: ScenePreviewPanelProps) => {
   const { t } = useTranslation();
-  const hasValueSelector = valueOptions !== undefined;
 
   return (
-    <div className={`bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col overflow-hidden ${hasValueSelector ? 'h-[760px]' : 'h-[680px]'}`}>
-      {hasValueSelector && (
-        <div className="h-[190px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800 shrink-0">
-          <div className="px-2 py-1.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <List className="w-4 h-4 text-purple-500" />
-              <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
-                {t('taxonomyDashboard.attributeValues', 'Attribute Values')}
-              </h3>
-            </div>
-            <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500">
-              {valueOptions.length}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            {valueOptions.map((option) => {
-              const isSelected = selectedValue === option.value;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => onValueChange?.(option.value)}
-                  className={`group flex items-center justify-between p-2 rounded-lg text-left transition-all border ${
-                    isSelected
-                      ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
-                      : 'border-transparent hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-100 dark:hover:border-purple-800'
-                  }`}
-                >
-                  <span className={`text-xs font-medium truncate ${isSelected ? 'text-purple-700 dark:text-purple-300' : 'text-neutral-600 dark:text-neutral-400'}`}>
-                    {option.value}
-                  </span>
-                  <span className="flex items-center gap-1.5 shrink-0 text-[9px] font-mono text-neutral-500">
-                    <span className="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800" title={t('taxonomyDashboard.objects')}>
-                      {option.objectCount}
-                    </span>
-                    <span className="px-1.5 py-0.5 rounded bg-neutral-100 dark:bg-neutral-800" title={t('taxonomyDashboard.scenesCount', 'Scenes')}>
-                      {option.sceneCount} {t('taxonomyDashboard.files')}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-            {valueOptions.length === 0 && (
-              <div className="py-5 text-center text-neutral-400 text-xs italic">
-                {t('taxonomyDashboard.noAttributeValues', 'No values found for this attribute.')}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      <div className={`${hasValueSelector ? 'h-[220px]' : 'h-[250px]'} overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800 shrink-0`}>
+    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-[680px]">
+      <div className="h-[250px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800 shrink-0">
         <div className="px-2 py-1.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Layers className="w-4 h-4 text-blue-500 shrink-0" />
             <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
               {t('taxonomyDashboard.scenesInvolved')}
             </h3>
-            {contextLabel && (
-              <span className="text-[9px] text-neutral-400 font-mono truncate" title={contextLabel}>
-                {contextLabel}
-              </span>
-            )}
           </div>
           <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500 shrink-0">
             {sceneStems.length || 0} {t('taxonomyDashboard.files')}
@@ -659,9 +593,7 @@ const ScenePreviewPanel = ({
 
           {sceneStems.length === 0 && (
             <div className="py-7 text-center text-neutral-400 text-xs italic">
-              {hasValueSelector
-                ? t('taxonomyDashboard.noScenesForAttributeValue', 'No scenes found for this attribute value.')
-                : t('taxonomyDashboard.noScenesFound')}
+              {t('taxonomyDashboard.noScenesForAttributeValue', 'No scenes found for this attribute value.')}
             </div>
           )}
         </div>
@@ -762,7 +694,9 @@ const ScenePreviewPanel = ({
         </div>
 
         <div className="px-3 py-1.5 border-t border-neutral-100 dark:border-neutral-800 text-[9px] text-neutral-400 font-mono truncate shrink-0">
-          {previewStem ? `${previewStem} | ${contextLabel} | ${previewDisplayObjects.length} ${t('taxonomyDashboard.objects')}` : t('taxonomyDashboard.tipClickPreview')}
+          {previewStem
+            ? `${previewStem} | ${previewDisplayObjects.length} ${t('taxonomyDashboard.objects')}`
+            : t('taxonomyDashboard.tipClickPreview')}
         </div>
       </div>
     </div>
@@ -794,10 +728,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [statsData, setStatsData] = useState<any>(null); 
   const [activeShapeTab, setActiveShapeTab] = useState<'bbox' | 'polygon'>('polygon'); // Overview 下方的 Shape Tab
   const [activeClassShapeTab, setActiveClassShapeTab] = useState<string>('polygon'); // 🌟 新增：单类别的 Shape 切换状态
-  const [activeAttrShapeTab, setActiveAttrShapeTab] = useState<string>('polygon'); // 🌟 新增：Attribute 页面的 Shape 切换
   const [isProcessing, setIsProcessing] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState<string>('');
   const [renameValue, setRenameValue] = useState('');
+  const [attributeRenameValue, setAttributeRenameValue] = useState('');
   const [showClassDeleteConfirm, setShowClassDeleteConfirm] = useState(false);
   const initRef = useRef(false);
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
@@ -850,17 +784,22 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const loadAttributeObjectsForStem = useCallback(async (
     stem: string,
     attributeName: string,
-    attributeValue: string,
+    attributeValue?: string | null,
   ) => {
     const jsonPath = getWorkspaceJsonPath(stem);
     if (!jsonPath) return [];
     const rawData = await getFileContent(jsonPath);
     const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
-    const expectedValue = String(attributeValue).trim();
+    const expectedValue = attributeValue === null || attributeValue === undefined
+      ? null
+      : String(attributeValue).trim();
 
     return (data.shapes || [])
       .filter((shape: any) => {
         const value = shape.attributes?.[attributeName];
+        if (expectedValue === null) {
+          return value !== undefined;
+        }
         if (expectedValue === '(empty)') {
           return value !== undefined && String(value).trim() === '';
         }
@@ -902,7 +841,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   }, [activeAttribute?.name, activeAttribute?.options, attributeValueStems, statsData]);
 
   const attributeSceneStems = useMemo(
-    () => selectedAttributeValue ? (attributeValueStems[selectedAttributeValue] || []) : [],
+    () => {
+      if (selectedAttributeValue) return attributeValueStems[selectedAttributeValue] || [];
+
+      const stemsForAllValues = Object.values(attributeValueStems as Record<string, string[]>)
+        .flatMap((stems) => Array.isArray(stems) ? stems : []);
+      return Array.from(new Set(stemsForAllValues)).sort();
+    },
     [attributeValueStems, selectedAttributeValue]
   );
 
@@ -913,13 +858,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       return;
     }
 
-    setSelectedAttributeValue((current) =>
-      current && values.includes(current) ? current : values[0]
-    );
+    setSelectedAttributeValue((current) => current && values.includes(current) ? current : values[0] || null);
   }, [attributeValueOptions]);
 
   const isClassPreview = activeTab === 'classes' && !!activeClass;
-  const isAttributePreview = activeTab === 'attributes' && !!activeAttribute && !!selectedAttributeValue;
+  const isAttributePreview = activeTab === 'attributes' && !!activeAttribute;
   const previewSceneStems = isClassPreview
     ? classSceneStems
     : isAttributePreview
@@ -928,12 +871,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const previewFilterKey = isClassPreview
     ? `class:${activeClass?.name || ''}`
     : isAttributePreview
-      ? `attribute:${activeAttribute?.name || ''}:${selectedAttributeValue || ''}`
-      : '';
-  const previewContextLabel = isClassPreview
-    ? activeClass?.name || ''
-    : isAttributePreview
-      ? `${activeAttribute?.name || ''} = ${selectedAttributeValue || ''}`
+      ? `attribute:${activeAttribute?.name || ''}:${selectedAttributeValue || '__all__'}`
       : '';
   const previewColor = isClassPreview ? (activeClass?.color || '#3b82f6') : '#8b5cf6';
 
@@ -941,7 +879,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     if (isClassPreview && activeClass) {
       return loadClassObjectsForStem(stem, activeClass.name);
     }
-    if (isAttributePreview && activeAttribute && selectedAttributeValue) {
+    if (isAttributePreview && activeAttribute) {
       return loadAttributeObjectsForStem(stem, activeAttribute.name, selectedAttributeValue);
     }
     return [];
@@ -1237,6 +1175,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   useEffect(() => {
     setAttrDraft(null);
     setShowAttrDeleteConfirm(false);
+    setSelectedAttributeValue(null);
+    setAttributeRenameValue(activeAttribute?.name || '');
   }, [activeAttribute?.id]);
 
   useEffect(() => {
@@ -1327,11 +1267,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         if (polyCount === 0 && bboxCount > 0) {
           setActiveShapeTab('bbox');
           setActiveClassShapeTab('bbox');
-          setActiveAttrShapeTab('bbox');
         } else {
           setActiveShapeTab('polygon');
           setActiveClassShapeTab('polygon');
-          setActiveAttrShapeTab('polygon');
         }
       }
 
@@ -1538,6 +1476,69 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       alert(t('taxonomyDashboard.cleanFailed', { message: err.message }));
     } finally { 
       setIsProcessing(false); 
+    }
+  };
+
+  const executeRenameAttribute = async () => {
+    if (!activeAttribute) return;
+
+    const oldName = activeAttribute.name;
+    const newName = attributeRenameValue.trim();
+    if (!newName) {
+      openDialog({
+        type: 'warning',
+        title: t('taxonomyDashboard.attributeNameRequired', 'Attribute name required'),
+        description: t('taxonomyDashboard.attributeNameRequiredDesc', 'Please enter an attribute name before confirming.'),
+        confirmText: t('taxonomyDashboard.gotIt'),
+        hideCancel: true,
+      });
+      return;
+    }
+    if (newName === oldName) return;
+
+    const hasNameConflict = taxonomyAttributes.some(
+      (attribute: any) => attribute.id !== activeAttribute.id
+        && String(attribute.name).trim().toLowerCase() === newName.toLowerCase(),
+    );
+    if (hasNameConflict) {
+      openDialog({
+        type: 'warning',
+        title: t('taxonomyDashboard.attributeNameExists', 'Attribute name already exists'),
+        description: t('taxonomyDashboard.attributeNameExistsDesc', { name: newName }),
+        confirmText: t('taxonomyDashboard.gotIt'),
+        hideCancel: true,
+      });
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const result = await batchRenameAttribute({
+        save_dirs: getSaveDirs(),
+        old_name: oldName,
+        new_name: newName,
+      });
+
+      const state = useStore.getState() as any;
+      const updatedAnnotations = (state.annotations || []).map((annotation: any) => {
+        if (!annotation.attributes || !(oldName in annotation.attributes)) return annotation;
+        const nextAttributes = { ...annotation.attributes };
+        if (!(newName in nextAttributes)) nextAttributes[newName] = nextAttributes[oldName];
+        delete nextAttributes[oldName];
+        return { ...annotation, attributes: nextAttributes };
+      });
+      useStore.setState({ annotations: updatedAnnotations });
+      updateTaxonomyAttribute(activeAttribute.id, { name: newName });
+      setAttributeRenameValue(newName);
+      useStore.getState().setStatsCacheValid?.(false);
+      await loadStatistics(true);
+
+      alert(t('taxonomyDashboard.attributeRenameSuccess', { count: result.modified_files }));
+    } catch (err: any) {
+      setAttributeRenameValue(oldName);
+      alert(t('taxonomyDashboard.attributeRenameFailed', { message: err.message }));
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -2593,294 +2594,291 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         )}
 
         {/* 🌟 模式 C：Attributes 详情与统计看板 */}
-        {/* 🌟 模式 C：Attributes 详情与统计看板 */}
         {activeTab === 'attributes' && activeAttribute && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
             
-            {/* 1. 顶部：内联编辑工具栏 */}
-            <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center justify-between shrink-0 shadow-sm z-10">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-lg bg-purple-50 dark:bg-purple-900/30 flex items-center justify-center border border-purple-100 dark:border-purple-800">
-                  <Settings className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div className="flex flex-col">
-                  <Input 
-                    value={activeAttribute.name}
-                    onChange={e => updateTaxonomyAttribute(activeAttribute.id, { name: e.target.value })}
-                    className="text-xl font-black border-transparent hover:border-neutral-200 focus:border-blue-500 bg-transparent px-1 h-8 w-64 shadow-none"
-                    placeholder={t('workspace.attributeName', 'Attribute Name')}
-                  />
-                  <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest px-1">{t('workspace.globalSemanticAttribute', 'Global Semantic Attribute')}</span>
-                </div>
-              </div>
+            {/* 1. 顶部：名称、属性值标题与编辑操作 */}
+            <div className="px-3 pt-2 pb-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0 shadow-sm z-10">
+              {(() => {
+                const savedOptions = Array.isArray(activeAttribute.options) ? activeAttribute.options : [];
+                const savedDefault = activeAttribute.defaultValue || '';
+                const currentOptions = attrDraft?.options ?? savedOptions;
+                const currentDefault = attrDraft?.defaultValue ?? (activeAttribute.defaultValue || '');
+                const isValueDirty = attrDraft !== null && (
+                  currentDefault !== savedDefault
+                  || currentOptions.length !== savedOptions.length
+                  || currentOptions.some((option: string, index: number) => option !== savedOptions[index])
+                );
 
-              {/* 🌟 删除按钮：引入内联二次确认 */}
-              {showAttrDeleteConfirm ? (
-                <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in slide-in-from-right-2">
-                  <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">{t('workspace.deleteFromAllFiles', 'Delete from all files?')}</span>
-                  <Button size="sm" className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold" onClick={executeDeleteAttribute} disabled={isProcessing}>
-                    {t('common.confirm')}
+                const renderAddButton = () => (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-[9px] font-bold border-purple-200 text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-900/30 shrink-0"
+                    onClick={() => {
+                      const nextOptions = [...currentOptions, `new_option_${currentOptions.length + 1}`];
+                      setAttrDraft({ options: nextOptions, defaultValue: currentDefault || nextOptions[0] });
+                    }}
+                  >
+                    <Plus className="w-3 h-3 mr-1" /> {t('common.add')}
                   </Button>
-                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500" onClick={() => setShowAttrDeleteConfirm(false)} disabled={isProcessing}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-              ) : (
-                <Button variant="destructive" size="sm" className="h-9 px-4 font-bold shadow-sm" onClick={() => setShowAttrDeleteConfirm(true)}>
-                  <Trash2 className="w-4 h-4 mr-2" /> {t('workspace.deleteAttribute', 'Delete Attribute')}
-                </Button>
-              )}
+                );
+
+                return (
+                  <div className="grid grid-cols-[minmax(150px,180px)_minmax(0,1fr)] xl:grid-cols-[minmax(160px,180px)_minmax(0,1fr)_auto] gap-x-3 gap-y-2 items-start">
+                    <div className="min-w-0">
+                      <div className="h-7 flex items-center gap-2">
+                        <span className="text-[10px] text-neutral-400 font-black uppercase tracking-widest">
+                          {t('workspace.attributeName', 'Attribute Name')}
+                        </span>
+                        {attributeRenameValue.trim() !== activeAttribute.name && (
+                          <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-950/30 p-1 rounded-lg border border-blue-200 dark:border-blue-900/50 animate-in slide-in-from-left-2 shrink-0">
+                            <Button
+                              size="sm"
+                              disabled={isProcessing}
+                              className="h-6 px-2 text-[9px] font-black bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+                              onClick={() => void executeRenameAttribute()}
+                            >
+                              {isProcessing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Check className="w-3 h-3 mr-1" />}
+                              {t('common.confirm')}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={isProcessing}
+                              className="h-6 w-6 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                              onClick={() => setAttributeRenameValue(activeAttribute.name)}
+                              title={t('common.cancel')}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2 flex items-center gap-1.5 min-w-0">
+                        <Input
+                          value={attributeRenameValue}
+                          onChange={e => setAttributeRenameValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') void executeRenameAttribute();
+                          }}
+                          className="text-base font-black border-transparent hover:border-neutral-200 focus:border-blue-500 bg-transparent px-1 h-7 flex-1 min-w-0 shadow-none"
+                          placeholder={t('workspace.attributeName', 'Attribute Name')}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="h-7 flex items-center gap-2">
+                        <span className="text-[10px] text-neutral-400 font-black uppercase tracking-widest">
+                          {t('taxonomyDashboard.attributeValues', 'Attribute Values')}
+                        </span>
+                        {isValueDirty && (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={isProcessing}
+                              className="h-7 px-2 text-[9px] font-bold bg-blue-600 hover:bg-blue-700 text-white"
+                              onClick={() => void executeApplyAttribute()}
+                            >
+                              {isProcessing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Check className="w-3 h-3 mr-1" />}
+                              {t('workspace.syncToFiles', 'Confirm')}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              disabled={isProcessing}
+                              className="h-7 w-7 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                              onClick={() => setAttrDraft(null)}
+                              title={t('common.cancel')}
+                            >
+                              <X className="w-4 h-4" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+
+                      <div className="mt-1 pt-1 border-t border-neutral-100 dark:border-neutral-800">
+                        <div className="flex flex-wrap items-center gap-1">
+                          {currentOptions.length === 0 && (
+                            <span className="text-[10px] text-neutral-400 italic">
+                              {t('workspace.noOptionsDefined', 'No options defined.')}
+                            </span>
+                          )}
+                          {currentOptions.map((opt: string, index: number) => (
+                            <div
+                              key={`attribute-option-${index}`}
+                              className={`inline-flex items-center gap-0.5 min-w-0 px-1 py-0 rounded-md border transition-colors ${
+                                isValueDirty
+                                  ? 'border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-900/10'
+                                  : 'border-neutral-200 bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-950'
+                              }`}
+                            >
+                              <button
+                                type="button"
+                                title={currentDefault === opt ? t('workspace.default', 'Default') : t('workspace.setDefault', 'Set Default')}
+                                onClick={() => setAttrDraft({ options: currentOptions, defaultValue: opt })}
+                                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
+                                  currentDefault === opt
+                                    ? 'bg-purple-500 border-purple-500 text-white'
+                                    : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 hover:border-purple-400'
+                                }`}
+                              >
+                                {currentDefault === opt && <Check className="w-2 h-2" />}
+                              </button>
+                              <Input
+                                value={opt}
+                                onChange={e => {
+                                  const value = e.target.value;
+                                  const nextOptions = [...currentOptions];
+                                  nextOptions[index] = value;
+                                  setAttrDraft({
+                                    options: nextOptions,
+                                    defaultValue: currentDefault === opt ? value : currentDefault,
+                                  });
+                                }}
+                                className={`h-5 w-20 px-1 text-[10px] font-bold border-transparent focus:border-purple-400 focus:ring-0 shadow-none bg-transparent ${currentDefault === opt ? 'text-purple-700 dark:text-purple-300' : ''}`}
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                title={t('common.delete', 'Delete value')}
+                                className="h-5 w-5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 shrink-0"
+                                onClick={() => {
+                                  const nextOptions = currentOptions.filter((_: string, optionIndex: number) => optionIndex !== index);
+                                  setAttrDraft({
+                                    options: nextOptions,
+                                    defaultValue: currentDefault === opt ? (nextOptions[0] || '') : currentDefault,
+                                  });
+                                }}
+                              >
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          ))}
+                          {renderAddButton()}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="col-span-2 xl:col-span-1 xl:row-span-2 xl:justify-self-end shrink-0">
+                      {showAttrDeleteConfirm ? (
+                        <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in slide-in-from-right-2">
+                          <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">{t('workspace.deleteFromAllFiles', 'Delete from all files?')}</span>
+                          <Button size="sm" className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold" onClick={executeDeleteAttribute} disabled={isProcessing}>
+                            {t('common.confirm')}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500" onClick={() => setShowAttrDeleteConfirm(false)} disabled={isProcessing}>
+                            <X className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button variant="destructive" size="sm" className="h-8 px-3 font-bold shadow-sm" onClick={() => setShowAttrDeleteConfirm(true)}>
+                          <Trash2 className="w-4 h-4 mr-2" /> {t('workspace.deleteAttribute', 'Delete Attribute')}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
             {/* 2. 主体区 */}
             <div className="flex-1 overflow-y-auto p-6 custom-scrollbar flex flex-col gap-6">
-              
-              <div className="flex flex-col xl:flex-row gap-6 animate-in fade-in shrink-0">
-                
-                {/* 🌟 左上角：Dropdown Options 编辑器 (支持草稿与确认) */}
-                <div className="w-full xl:w-1/3 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col overflow-hidden relative">
-                  
-                  {/* 提取当前使用的渲染数据 (如果有草稿读草稿，没有草稿读原始数据) */}
-                  {(() => {
-                    const currentOptions = attrDraft ? attrDraft.options : (activeAttribute.options || []);
-                    const currentDefault = attrDraft ? attrDraft.defaultValue : (activeAttribute.defaultValue || '');
-                    const isDirty = attrDraft !== null;
-
-                    return (
-                      <>
-                        <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex items-center justify-between shrink-0">
-                          <div className="flex items-center gap-2">
-                            <List className="w-4 h-4 text-purple-500" />
-                            <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
-                              {t('workspace.dropdownOptions', 'Dropdown Options')}
-                            </h3>
-                          </div>
-                          <Button 
-                            size="sm" variant="outline" className="h-7 text-[10px] font-bold border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-900 dark:text-purple-400 dark:hover:bg-purple-900/30"
-                            onClick={() => {
-                              const newOptions = [...currentOptions, `new_option_${currentOptions.length + 1}`];
-                              setAttrDraft({ options: newOptions, defaultValue: currentDefault || newOptions[0] });
-                            }}
-                          >
-                            <Plus className="w-3 h-3 mr-1" /> {t('common.add')}
-                          </Button>
-                        </div>
-
-                        <div className="p-5 flex-1 overflow-y-auto custom-scrollbar max-h-[300px]">
-                          <div className="flex flex-col gap-3">
-                            {currentOptions.map((opt: string, idx: number) => (
-                              <div key={idx} className={`flex items-center gap-2 group p-1.5 rounded-lg border transition-all ${isDirty ? 'border-purple-300 bg-purple-50/30 dark:border-purple-800 dark:bg-purple-900/10' : 'border-neutral-100 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950'}`}>
-                                <div className="flex-1 relative flex items-center">
-                                  <div className={`w-3 h-3 rounded-full border shrink-0 ml-2 ${currentDefault === opt ? 'bg-purple-500 border-purple-500' : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800'}`} />
-                                  <Input 
-                                    value={opt}
-                                    onChange={(e) => {
-                                      const val = e.target.value;
-                                      const newOptions = [...currentOptions];
-                                      newOptions[idx] = val;
-                                      // 若修改的是 Default 选项名字，同步更新 default value
-                                      const newDefault = currentDefault === opt ? val : currentDefault;
-                                      setAttrDraft({ options: newOptions, defaultValue: newDefault });
-                                    }}
-                                    className={`pl-3 h-8 text-xs font-bold border-transparent focus:ring-0 shadow-none bg-transparent ${currentDefault === opt ? 'text-purple-700 dark:text-purple-400' : ''}`}
-                                  />
-                                  
-                                  {currentDefault === opt && (
-                                    <span className="px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400 text-[8px] font-black uppercase tracking-widest rounded-sm shrink-0 mr-2 shadow-sm select-none">
-                                      {t('workspace.default', 'Default')}
-                                    </span>
-                                  )}
-                                </div>
-                                
-                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pr-1">
-                                  <Button variant="ghost" size="sm" className={`h-6 text-[9px] font-bold px-2 ${currentDefault === opt ? 'hidden' : 'text-neutral-500 hover:text-purple-600'}`} 
-                                    onClick={() => setAttrDraft({ options: currentOptions, defaultValue: opt })}
-                                  >
-                                    {t('workspace.setDefault', 'Set Default')}
-                                  </Button>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30" 
-                                    onClick={() => {
-                                      const newOptions = currentOptions.filter((_:any, i:number) => i !== idx);
-                                      setAttrDraft({ options: newOptions, defaultValue: currentDefault === opt ? (newOptions[0] || '') : currentDefault });
-                                    }}
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
-                            {currentOptions.length === 0 && (
-                              <div className="text-center py-6 text-neutral-400 border-2 border-dashed border-neutral-100 dark:border-neutral-800 rounded-xl">
-                                <p className="text-xs">{t('workspace.noOptionsDefined', 'No options defined.')}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        
-                        {/* 🌟 核心：悬浮底部的 Confirm & Cancel 面板 (仅在有草稿时显示) */}
-                        {isDirty ? (
-                          <div className="px-4 py-3 bg-blue-50 dark:bg-blue-950/40 border-t border-blue-200 dark:border-blue-900 flex justify-between items-center shrink-0 animate-in slide-in-from-bottom-2">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-400 flex items-center">
-                              <AlertCircle className="w-3.5 h-3.5 mr-1" /> {t('workspace.unsavedChanges', 'Unsaved Changes')}
-                            </span>
-                            <div className="flex gap-2">
-                              <Button size="sm" variant="ghost" className="h-7 text-[10px] font-bold" onClick={() => setAttrDraft(null)} disabled={isProcessing}>
-                                {t('common.cancel')}
-                              </Button>
-                              <Button size="sm" className="h-7 px-3 text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold" onClick={executeApplyAttribute} disabled={isProcessing}>
-                                {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : <Check className="w-3 h-3 mr-1"/>}
-                                {t('workspace.syncToFiles', 'Sync to Files')}
-                              </Button>
-                            </div>
-                          </div>
-                        ) : (
-                          /* 如果没草稿，展示默认的全局统计数据 */
-                          <div className="px-5 py-3 border-t border-neutral-100 dark:border-neutral-800 bg-neutral-50/30 flex justify-between items-center text-[10px] text-neutral-500 font-bold uppercase tracking-wider shrink-0">
-                            <span>{t('workspace.totalTagsInProject', 'Total Tags in Project:')}</span>
-                            <span className="text-purple-600 text-sm">{Object.values(statsData?.global?.attribute_details?.[activeAttribute.name] || {}).reduce((a:any, b:any) => a + b, 0) as number}</span>
-                          </div>
-                        )}
-                      </>
-                    );
-                  })()}
-                </div>
-
-
-                {/* 🌟 极致精简：右上角全局大盘直接调用 Wrapper */}
-                <div className="w-full xl:w-2/3 flex flex-col h-fit">
-                  <AttributeAnalysisCard 
-                    title={t('taxonomyDashboard.globalOverview')}
-                    icon={Layers}
-                    totalTags={Object.values(statsData?.global?.attribute_details?.[activeAttribute.name] || {}).reduce((a:any, b:any) => a + b, 0)}
-                    densityData={{}} 
-                    detailsData={{ [activeAttribute.name]: statsData?.global?.attribute_details?.[activeAttribute.name] }}
-                    emptyMsg={`No global data found for '${activeAttribute.name}'.`}
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,1.1fr)] gap-4 lg:gap-6 items-start animate-in fade-in">
+                <div className="w-full min-w-0 shrink-0 order-last lg:order-first">
+                  <ScenePreviewPanel
+                    sceneStems={attributeSceneStems}
+                    previewCounts={previewCounts}
+                    previewStem={previewStem}
+                    onPreviewStemChange={setPreviewStem}
+                    onOpenScene={handleOpenPreviewScene}
+                    views={views}
+                    previewView={previewView}
+                    onPreviewViewChange={setPreviewViewId}
+                    previewLoading={previewLoading}
+                    previewError={previewError}
+                    previewImageUrl={previewImageUrl}
+                    previewDimensions={previewDimensions}
+                    previewDisplayObjects={previewDisplayObjects}
+                    previewViewBox={previewViewBox}
+                    previewObjectIndex={previewObjectIndex}
+                    onPreviewObjectChange={setPreviewObjectIndex}
+                    color={previewColor}
                   />
                 </div>
 
-              </div>
-
-              {/* 属性值 → 涉及场景 → 预览，与 Classes 详情保持一致 */}
-              <div className="shrink-0 animate-in fade-in slide-in-from-bottom-2">
-                <ScenePreviewPanel
-                  valueOptions={attributeValueOptions}
-                  selectedValue={selectedAttributeValue}
-                  onValueChange={setSelectedAttributeValue}
-                  sceneStems={attributeSceneStems}
-                  previewCounts={previewCounts}
-                  previewStem={previewStem}
-                  onPreviewStemChange={setPreviewStem}
-                  onOpenScene={handleOpenPreviewScene}
-                  views={views}
-                  previewView={previewView}
-                  onPreviewViewChange={setPreviewViewId}
-                  previewLoading={previewLoading}
-                  previewError={previewError}
-                  previewImageUrl={previewImageUrl}
-                  previewDimensions={previewDimensions}
-                  previewDisplayObjects={previewDisplayObjects}
-                  previewViewBox={previewViewBox}
-                  previewObjectIndex={previewObjectIndex}
-                  onPreviewObjectChange={setPreviewObjectIndex}
-                  color={previewColor}
-                  contextLabel={previewContextLabel}
-                />
-              </div>
-
-              {/* --- 下半部分：Shape Tab 切换 & Class 细分 --- */}
-              <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex overflow-hidden min-h-[500px] shrink-0 animate-in fade-in slide-in-from-bottom-4">
-
-
-                {/* 1. 左侧：Shape 垂直导航栏 */}
-                <div className="w-56 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex flex-col p-3 gap-1 shrink-0">
-                  <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-3 px-2 flex items-center gap-2">
-                    <Layers className="w-3 h-3" /> Geometry Filter
-                  </h4>
-                  
-                  {['bbox', 'polygon', 'point', 'linestrip', 'ellipse'].map((shapeId) => {
-                    const isActive = activeAttrShapeTab === shapeId;
-                    const isImplemented = ['bbox', 'polygon'].includes(shapeId);
-                    
-                    return (
-                      <button 
-                        key={shapeId}
-                        onClick={() => setActiveAttrShapeTab(shapeId)} 
-                        className={`group text-left px-3 py-2.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
-                          isActive 
-                            ? 'bg-white dark:bg-neutral-800 text-purple-600 dark:text-purple-400 shadow-sm ring-1 ring-neutral-200 dark:ring-neutral-700' 
-                            : 'text-neutral-500 hover:bg-neutral-200/50 dark:text-neutral-400 dark:hover:bg-neutral-800/50'
-                        }`}
-                      >
-                        <span className="flex items-center gap-2 capitalize">
-                          {shapeId === 'bbox' ? t('taxonomyDashboard.boundingBox') : shapeId}
-                          {!isImplemented && <span className="text-[8px] px-1 bg-neutral-200 dark:bg-neutral-800 text-neutral-400 rounded-sm font-normal">{t('taxonomyDashboard.wip')}</span>}
-                        </span>
-                        {isActive && <ChevronRight className="w-3.5 h-3.5" />}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* 🌟 极致精简：右侧明细列表直接复用 Wrapper */}
-                <div className="flex-1 p-6 overflow-y-auto custom-scrollbar bg-neutral-50/30 dark:bg-neutral-900">
-                  {['bbox', 'polygon'].includes(activeAttrShapeTab) ? (
-                    <div className="space-y-6">
-                      
-                      {/* 1. 当前 Shape 的全局大盘 */}
-                      {statsData?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name] && (
-                        <AttributeAnalysisCard 
-                          title={`${t('workspace.totalIn', 'Total in')} ${activeAttrShapeTab.toUpperCase()}`}
-                          icon={Layers}
-                          variant="purple"
-                          totalTags={Object.values(statsData.shapes[activeAttrShapeTab].attribute_details[activeAttribute.name]).reduce((a:any, b:any) => a + b, 0)}
-                          densityData={{}}
-                          detailsData={{ [activeAttribute.name]: statsData.shapes[activeAttrShapeTab].attribute_details[activeAttribute.name] }}
-                        />
-                      )}
-
-                      {/* 分割线 */}
-                      {sortedClasses.some((cls: any) => statsData?.classes?.[cls.name]?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name]) && (
-                        <div className="flex items-center gap-3 opacity-50 py-2">
-                           <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
-                           <span className="text-[9px] font-black uppercase tracking-widest text-neutral-500">{t('workspace.breakdownByClass', 'Breakdown by Class')}</span>
-                           <div className="flex-1 h-px bg-neutral-300 dark:bg-neutral-700" />
-                        </div>
-                      )}
-
-                      {/* 2. 遍历各 Class 的分布 */}
-                      {sortedClasses.map((cls: any) => {
-                        const clsData = statsData?.classes?.[cls.name]?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name];
-                        if (!clsData || Object.keys(clsData).length === 0) return null;
-
-                        return (
-                          <AttributeAnalysisCard 
-                            key={cls.id}
-                            title={`${t('workspace.classLabel', 'Class')}: ${cls.name}`}
-                            icon={cls.color} // 传颜色代码
-                            variant="class"
-                            totalTags={Object.values(clsData).reduce((a:any, b:any) => a + b, 0)}
-                            densityData={{}}
-                            detailsData={{ [activeAttribute.name]: clsData }}
-                          />
-                        );
-                      })}
-
-                      {/* 兜底状态 */}
-                      {(!statsData?.shapes?.[activeAttrShapeTab]?.attribute_details?.[activeAttribute.name]) && (
-                        <div className="h-64 flex flex-col items-center justify-center text-neutral-400 opacity-50">
-                          <Tags className="w-12 h-12 mb-4" />
-                          <p className="text-sm font-bold">{t('workspace.noTagsFound', { attr: activeAttribute.name, shape: activeAttrShapeTab })}</p>
-                        </div>
-                      )}
+                <div className="w-full min-w-0 flex flex-col gap-6 order-first lg:order-last">
+                  <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 shadow-sm">
+                    <div className="flex items-center justify-between gap-3 mb-3 pb-2 border-b border-neutral-100 dark:border-neutral-800">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <List className="w-4 h-4 text-purple-500 shrink-0" />
+                        <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+                          {t('taxonomyDashboard.valueList', 'Value List')}
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500 shrink-0">
+                        {attributeValueOptions.length}
+                      </span>
                     </div>
-                  ) : (
-                    <div className="h-full flex flex-col items-center justify-center space-y-4 opacity-50">
-                       <Settings className="w-10 h-10 text-neutral-400 animate-spin-slow" />
-                       <h3 className="text-lg font-black uppercase tracking-widest text-neutral-500">Under Development</h3>
-                    </div>
-                  )}
-                </div>
-              </div>
+
+                    {attributeValueOptions.length > 0 ? (
+                      <>
+                        <div className="grid grid-cols-[minmax(0,1fr)_72px_72px] gap-2 px-3 pb-1 text-[9px] font-black uppercase tracking-wider text-neutral-400">
+                          <span>{t('taxonomyDashboard.valueFilter', 'Value')}</span>
+                          <span className="text-right">{t('taxonomyDashboard.objects', 'Objects')}</span>
+                          <span className="text-right">{t('taxonomyDashboard.scenesCount', 'Scenes')}</span>
+                        </div>
+                        <div className="max-h-[320px] overflow-y-auto custom-scrollbar space-y-1">
+                          {attributeValueOptions.map((option) => {
+                            const isSelected = selectedAttributeValue === option.value;
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setSelectedAttributeValue(option.value)}
+                                className={`w-full grid grid-cols-[minmax(0,1fr)_72px_72px] gap-2 items-center rounded-lg border px-3 py-2 text-left transition-colors ${
+                                  isSelected
+                                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
+                                    : 'bg-neutral-50/60 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-800 hover:border-purple-200 dark:hover:border-purple-800'
+                                }`}
+                              >
+                                <span className={`text-xs font-bold truncate ${isSelected ? 'text-purple-700 dark:text-purple-300' : 'text-neutral-700 dark:text-neutral-300'}`}>
+                                  {option.value}
+                                </span>
+                                <span className="text-right text-[10px] font-mono text-neutral-500">
+                                  {option.objectCount}
+                                </span>
+                                <span className="text-right text-[10px] font-mono text-neutral-500">
+                                  {option.sceneCount}
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="py-6 text-center text-neutral-400 text-xs italic">
+                        {t('taxonomyDashboard.noAttributeValues', 'No values found for this attribute.')}
+                      </div>
+                    )}
+                  </div>
+
+                  <AttributeAnalysisCard
+                    title={t('taxonomyDashboard.attributeValuesDistribution', 'Attribute Values Distribution')}
+                    icon={Layers}
+                    totalTags={attributeValueOptions.reduce((total, option) => total + option.objectCount, 0)}
+                    densityData={{}}
+                    detailsData={{ [activeAttribute.name]: statsData?.global?.attribute_details?.[activeAttribute.name] }}
+                    emptyMsg={t('taxonomyDashboard.noDataForTitle', { title: activeAttribute.name })}
+                  />
+               </div>
+             </div>
+
             </div>
           </div>
         )}

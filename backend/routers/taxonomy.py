@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 from models import (
     ApplyAttributeRequest,
     BatchDeleteAttributeRequest,
+    BatchRenameAttributeRequest,
     BatchDeleteClassRequest,
     BatchMergeClassRequest,
     MergeWithAttributeRequest,
@@ -196,6 +197,104 @@ async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
 
     logger.info("DELETE_ATTRIBUTE_END modified_files=%d", modified_count)
     return {"status": "success", "modified_files": modified_count}
+
+
+@router.post("/rename_attribute")
+async def batch_rename_attribute(request: BatchRenameAttributeRequest):
+    old_name = request.old_name.strip()
+    new_name = request.new_name.strip()
+    logger.info(
+        "RENAME_ATTRIBUTE_START folders=%d old_name=%s new_name=%s",
+        len(request.save_dirs),
+        old_name,
+        new_name,
+    )
+
+    if not old_name or not new_name:
+        return JSONResponse(status_code=400, content={"detail": "Attribute name cannot be empty."})
+    if old_name == new_name:
+        return {"status": "success", "modified_files": 0, "renamed_shapes": 0}
+
+    import json
+
+    files: list[tuple[str, dict]] = []
+    conflicts: list[str] = []
+
+    # 先完成只读扫描，避免部分文件已修改后才发现属性键冲突。
+    for folder in request.save_dirs:
+        if not os.path.exists(folder):
+            continue
+
+        for file_name in os.listdir(folder):
+            if not file_name.endswith(".json") or file_name.endswith("_meta.json"):
+                continue
+
+            file_path = os.path.join(folder, file_name)
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    anno_data = json.load(f)
+                files.append((file_path, anno_data))
+
+                has_conflict = any(
+                    isinstance(shape.get("attributes"), dict)
+                    and old_name in shape["attributes"]
+                    and new_name in shape["attributes"]
+                    for shape in anno_data.get("shapes", [])
+                )
+                if has_conflict:
+                    conflicts.append(file_path)
+            except Exception as e:
+                logger.exception("RENAME_ATTRIBUTE_FILE_READ_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+
+    if conflicts:
+        logger.warning(
+            "RENAME_ATTRIBUTE_CONFLICT old_name=%s new_name=%s files=%d",
+            old_name,
+            new_name,
+            len(conflicts),
+        )
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": (
+                    f'Cannot rename "{old_name}" to "{new_name}": '
+                    f'{len(conflicts)} annotation file(s) already contain both attribute keys.'
+                )
+            },
+        )
+
+    modified_count = 0
+    renamed_shapes = 0
+    for file_path, anno_data in files:
+        changed = False
+        for shape in anno_data.get("shapes", []):
+            attrs = shape.get("attributes")
+            if not isinstance(attrs, dict) or old_name not in attrs:
+                continue
+            attrs[new_name] = attrs.pop(old_name)
+            changed = True
+            renamed_shapes += 1
+
+        if changed:
+            try:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    json.dump(anno_data, f, indent=2, ensure_ascii=False)
+                modified_count += 1
+            except Exception as e:
+                logger.exception("RENAME_ATTRIBUTE_FILE_WRITE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+
+    logger.info(
+        "RENAME_ATTRIBUTE_END old_name=%s new_name=%s modified_files=%d renamed_shapes=%d",
+        old_name,
+        new_name,
+        modified_count,
+        renamed_shapes,
+    )
+    return {
+        "status": "success",
+        "modified_files": modified_count,
+        "renamed_shapes": renamed_shapes,
+    }
 
 
 def calculate_shape_metrics(shape_type: str, points: list):
