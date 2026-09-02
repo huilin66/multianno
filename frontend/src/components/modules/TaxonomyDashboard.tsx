@@ -892,7 +892,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setRestoredViewStateKey(taxonomyViewStateKey);
   }, [taxonomyViewStateKey]);
 
-  useEffect(() => {
+  const persistTaxonomyViewState = useCallback((overrides: Partial<TaxonomyDashboardViewState> = {}) => {
     if (restoredViewStateKey !== taxonomyViewStateKey || typeof window === 'undefined') return;
 
     const viewState: TaxonomyDashboardViewState = {
@@ -906,6 +906,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         classes: expanded.classes,
         attributes: expanded.attributes,
       },
+      ...overrides,
     };
 
     try {
@@ -925,6 +926,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     selectedClassId,
     taxonomyViewStateKey,
   ]);
+
+  useEffect(() => {
+    persistTaxonomyViewState();
+  }, [persistTaxonomyViewState]);
 
   const resolveStoreStem = useCallback((stem: string) => {
     return stems.find((s: string) => s === stem || s.startsWith(stem)) || stem;
@@ -1076,7 +1081,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const handlePreviewStemChange = useCallback((stem: string) => {
     restoredPreviewStemRef.current = stem;
     setPreviewStem(stem);
-  }, []);
+    persistTaxonomyViewState({ previewStem: stem });
+  }, [persistTaxonomyViewState]);
 
   const handleAttributeValueChange = useCallback((value: string) => {
     restoredAttributeValueRef.current = value;
@@ -1223,6 +1229,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     const matchedStem = storeStems.find((candidate: string) => candidate.startsWith(stem));
 
     if (matchedStem) {
+      // Persist synchronously before unmounting the dialog. The normal state
+      // effect may not get a chance to run during the double-click transition.
+      restoredPreviewStemRef.current = stem;
+      persistTaxonomyViewState({ previewStem: stem });
       onClose?.();
       setTimeout(() => {
         setCurrentStem(matchedStem);
@@ -1238,7 +1248,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       confirmText: t('taxonomyDashboard.gotIt'),
       hideCancel: true,
     });
-  }, [onClose, openDialog, setActiveModule, setCurrentStem, t]);
+  }, [onClose, openDialog, persistTaxonomyViewState, setActiveModule, setCurrentStem, t]);
 
   const refreshStatsIfNeeded = async () => {
     if (editorSettings.autoRefreshStats) {
@@ -2543,26 +2553,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <div
                       key={stem}
                       onClick={() => handlePreviewStemChange(stem)}
-                      onDoubleClick={() => {
-                        const storeStems = useStore.getState().stems;
-                        const matchedStem = storeStems.find((s: string) => s.startsWith(stem));
-                        
-                        if (matchedStem) {
-                          onClose?.();
-                          setTimeout(() => {
-                            setCurrentStem(matchedStem);
-                            setActiveModule('workspace');
-                          }, 150);
-                        } else {
-                          openDialog({
-                            type: 'warning',
-                            title: t('taxonomyDashboard.sceneNotFound'),
-                            description: t('taxonomyDashboard.sceneNotFoundDesc', { stem }),
-                            confirmText: t('taxonomyDashboard.gotIt'),
-                            hideCancel: true,
-                          });
-                        }
-                      }}
+                      onDoubleClick={() => handleOpenPreviewScene(stem)}
                       title={t('taxonomyDashboard.tipClickPreview')}
                       className={`group flex items-center justify-between p-2 rounded-lg cursor-pointer transition-all border ${
                         isSelected
