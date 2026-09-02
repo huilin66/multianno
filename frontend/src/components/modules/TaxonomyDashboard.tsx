@@ -20,6 +20,51 @@ interface TaxonomyDashboardProps {
   onClose?: () => void;
 }
 
+type TaxonomyDashboardTab = 'overview' | 'classes' | 'attributes';
+
+interface TaxonomyDashboardViewState {
+  activeTab?: TaxonomyDashboardTab;
+  selectedClassId?: string | null;
+  selectedAttributeId?: string | null;
+  selectedAttributeValue?: string | null;
+  previewStem?: string | null;
+  previewViewId?: string;
+  expanded?: {
+    classes?: boolean;
+    attributes?: boolean;
+  };
+}
+
+const TAXONOMY_VIEW_STATE_PREFIX = 'multiAnno_taxonomy_dashboard_view';
+
+const getTaxonomyViewStateKey = (
+  projectMetaPath?: unknown,
+  workspacePath?: unknown,
+  projectName?: unknown,
+) => {
+  const projectIdentity = [projectMetaPath, workspacePath, projectName]
+    .find((value) => typeof value === 'string' && value.trim()) || 'default';
+  return `${TAXONOMY_VIEW_STATE_PREFIX}:${encodeURIComponent(String(projectIdentity).trim())}`;
+};
+
+const readTaxonomyViewState = (key: string): TaxonomyDashboardViewState | null => {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch (error) {
+    console.warn('Failed to restore Taxonomy Manager view state:', error);
+    return null;
+  }
+};
+
+const isTaxonomyDashboardTab = (value: unknown): value is TaxonomyDashboardTab => (
+  value === 'overview' || value === 'classes' || value === 'attributes'
+);
+
 
 // 1. 带 XY 坐标轴的直方图 (修复超宽数据遮挡，支持横向滚动)
 const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
@@ -766,12 +811,20 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
-    folders, views, sceneGroups, editorSettings, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
+    folders, views, sceneGroups, editorSettings, projectMetaPath, projectName, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
     mergeTaxonomyClassesWithAttributes, stems, workspacePath 
   } = useStore() as any;
 
   const openDialog = useDialogStore((s) => s.openDialog);
-  const [activeTab, setActiveTab] = useState<'overview' | 'classes' | 'attributes'>('overview');
+  const taxonomyViewStateKey = useMemo(
+    () => getTaxonomyViewStateKey(projectMetaPath, workspacePath, projectName),
+    [projectMetaPath, projectName, workspacePath],
+  );
+  const [restoredViewStateKey, setRestoredViewStateKey] = useState<string | null>(null);
+  const restoredPreviewStemRef = useRef<string | null>(null);
+  const restoredAttributeValueRef = useRef<string | null>(null);
+  const restoredAttributeIdRef = useRef<string | null>(null);
+  const [activeTab, setActiveTab] = useState<TaxonomyDashboardTab>('overview');
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
   const [selectedAttributeValue, setSelectedAttributeValue] = useState<string | null>(null);
@@ -815,6 +868,63 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [previewCounts, setPreviewCounts] = useState<Record<string, number>>({});
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+
+  // Taxonomy Manager is opened as a dialog, so keep its browsing position
+  // separately from the project data and restore it when the dialog reopens.
+  useEffect(() => {
+    const saved = readTaxonomyViewState(taxonomyViewStateKey);
+
+    setActiveTab(isTaxonomyDashboardTab(saved?.activeTab) ? saved.activeTab : 'overview');
+    setSelectedClassId(typeof saved?.selectedClassId === 'string' ? saved.selectedClassId : null);
+    const selectedAttributeId = typeof saved?.selectedAttributeId === 'string' ? saved.selectedAttributeId : null;
+    const selectedAttributeValue = typeof saved?.selectedAttributeValue === 'string' ? saved.selectedAttributeValue : null;
+    setSelectedAttributeId(selectedAttributeId);
+    setSelectedAttributeValue(selectedAttributeValue);
+    restoredAttributeIdRef.current = selectedAttributeId;
+    restoredAttributeValueRef.current = selectedAttributeValue;
+    setPreviewViewId(typeof saved?.previewViewId === 'string' ? saved.previewViewId : '');
+    restoredPreviewStemRef.current = typeof saved?.previewStem === 'string' ? saved.previewStem : null;
+    setPreviewStem(restoredPreviewStemRef.current);
+    setExpanded({
+      classes: saved?.expanded?.classes ?? true,
+      attributes: saved?.expanded?.attributes ?? true,
+    });
+    setRestoredViewStateKey(taxonomyViewStateKey);
+  }, [taxonomyViewStateKey]);
+
+  useEffect(() => {
+    if (restoredViewStateKey !== taxonomyViewStateKey || typeof window === 'undefined') return;
+
+    const viewState: TaxonomyDashboardViewState = {
+      activeTab,
+      selectedClassId,
+      selectedAttributeId,
+      selectedAttributeValue: selectedAttributeValue ?? restoredAttributeValueRef.current,
+      previewStem: previewStem ?? restoredPreviewStemRef.current,
+      previewViewId,
+      expanded: {
+        classes: expanded.classes,
+        attributes: expanded.attributes,
+      },
+    };
+
+    try {
+      window.localStorage.setItem(taxonomyViewStateKey, JSON.stringify(viewState));
+    } catch (error) {
+      console.warn('Failed to save Taxonomy Manager view state:', error);
+    }
+  }, [
+    activeTab,
+    expanded.attributes,
+    expanded.classes,
+    previewStem,
+    previewViewId,
+    restoredViewStateKey,
+    selectedAttributeId,
+    selectedAttributeValue,
+    selectedClassId,
+    taxonomyViewStateKey,
+  ]);
 
   const resolveStoreStem = useCallback((stem: string) => {
     return stems.find((s: string) => s === stem || s.startsWith(stem)) || stem;
@@ -907,14 +1017,29 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   );
 
   useEffect(() => {
+    if (!activeAttribute) return;
+
     const values = attributeValueOptions.map((option) => option.value);
     if (values.length === 0) {
-      setSelectedAttributeValue(null);
+      if (statsStatus === 'done') {
+        restoredAttributeValueRef.current = null;
+        setSelectedAttributeValue(null);
+      }
       return;
     }
 
-    setSelectedAttributeValue((current) => current && values.includes(current) ? current : values[0] || null);
-  }, [attributeValueOptions]);
+    setSelectedAttributeValue((current) => {
+      const preferredValue = current || restoredAttributeValueRef.current;
+      if (preferredValue && (values.includes(preferredValue) || statsStatus !== 'done')) {
+        restoredAttributeValueRef.current = preferredValue;
+        return preferredValue;
+      }
+
+      const nextValue = values[0] || null;
+      restoredAttributeValueRef.current = nextValue;
+      return nextValue;
+    });
+  }, [activeAttribute, attributeValueOptions, statsStatus]);
 
   const isClassPreview = activeTab === 'classes' && !!activeClass;
   const isAttributePreview = activeTab === 'attributes' && !!activeAttribute;
@@ -948,9 +1073,33 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     selectedAttributeValue,
   ]);
 
+  const handlePreviewStemChange = useCallback((stem: string) => {
+    restoredPreviewStemRef.current = stem;
+    setPreviewStem(stem);
+  }, []);
+
+  const handleAttributeValueChange = useCallback((value: string) => {
+    restoredAttributeValueRef.current = value;
+    setSelectedAttributeValue(value);
+  }, []);
+
   useEffect(() => {
     const firstStem = previewSceneStems[0] || null;
-    setPreviewStem(firstStem);
+    setPreviewStem((currentStem) => {
+      if (previewSceneStems.length === 0) {
+        return null;
+      }
+
+      const rememberedStem = restoredPreviewStemRef.current;
+      const nextStem = rememberedStem && previewSceneStems.includes(rememberedStem)
+        ? rememberedStem
+        : currentStem && previewSceneStems.includes(currentStem)
+          ? currentStem
+          : firstStem;
+
+      restoredPreviewStemRef.current = nextStem;
+      return nextStem;
+    });
     setPreviewObjectIndex(null);
     setPreviewObjects([]);
     setPreviewError('');
@@ -1230,7 +1379,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   useEffect(() => {
     setAttrDraft(null);
     setShowAttrDeleteConfirm(false);
-    setSelectedAttributeValue(null);
+    if (activeAttribute?.id === restoredAttributeIdRef.current) {
+      restoredAttributeIdRef.current = null;
+    } else if (activeAttribute?.id) {
+      restoredAttributeValueRef.current = null;
+      setSelectedAttributeValue(null);
+    }
     setAttributeRenameValue(activeAttribute?.name || '');
   }, [activeAttribute?.id]);
 
@@ -2388,7 +2542,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   return (
                     <div
                       key={stem}
-                      onClick={() => setPreviewStem(stem)}
+                      onClick={() => handlePreviewStemChange(stem)}
                       onDoubleClick={() => {
                         const storeStems = useStore.getState().stems;
                         const matchedStem = storeStems.find((s: string) => s.startsWith(stem));
@@ -2865,7 +3019,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     sceneStems={attributeSceneStems}
                     previewCounts={previewCounts}
                     previewStem={previewStem}
-                    onPreviewStemChange={setPreviewStem}
+                    onPreviewStemChange={handlePreviewStemChange}
                     onOpenScene={handleOpenPreviewScene}
                     views={views}
                     previewView={previewView}
@@ -2910,7 +3064,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               <button
                                 key={option.value}
                                 type="button"
-                                onClick={() => setSelectedAttributeValue(option.value)}
+                                onClick={() => handleAttributeValueChange(option.value)}
                                 className={`w-full grid grid-cols-[minmax(0,1fr)_72px_72px] gap-2 items-center rounded-lg border px-3 py-2 text-left transition-colors ${
                                   isSelected
                                     ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'

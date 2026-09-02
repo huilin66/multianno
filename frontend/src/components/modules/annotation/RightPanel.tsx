@@ -9,7 +9,7 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, EyeOff, Check, X, MapPin, Copy, RefreshCw
+  Tag, Type, Hash, EyeOff, Check, X, MapPin, Copy, RefreshCw, ExternalLink
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -108,7 +108,7 @@ export function RightPanel({
   const [expanded, setExpanded] = React.useState({
     layers: true,
     vlm: false,      // VLM 默认收起
-    classes: true,
+    taxonomy: false,
     editor: true,    // 编辑器默认展开
     objects: true,
     scenes: false    // 场景列表较长，默认收起
@@ -772,6 +772,20 @@ export function RightPanel({
           isExpanded={expanded.taxonomy} 
           onToggle={() => toggleSection('taxonomy')} 
           colorClass="text-violet-500"
+          actionNode={
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setActiveModule('taxonomy');
+              }}
+              className="w-6 h-6 flex items-center justify-center rounded text-neutral-400 hover:text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-all"
+              title={t('menu.taxonomyManager')}
+              aria-label={t('menu.taxonomyManager')}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </button>
+          }
         />
 
         {expanded.taxonomy && (
