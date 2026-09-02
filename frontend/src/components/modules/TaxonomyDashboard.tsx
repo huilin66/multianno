@@ -504,6 +504,61 @@ type PreviewValueOption = {
   sceneCount: number;
 };
 
+const buildAttributeValueReplacements = (oldOptions: string[], newOptions: string[]) => {
+  const replacements: Record<string, string> = {};
+  const commonPairs: Array<[number, number]> = [];
+  const lcs: number[][] = Array.from(
+    { length: oldOptions.length + 1 },
+    () => Array(newOptions.length + 1).fill(0),
+  );
+
+  for (let oldIndex = oldOptions.length - 1; oldIndex >= 0; oldIndex -= 1) {
+    for (let newIndex = newOptions.length - 1; newIndex >= 0; newIndex -= 1) {
+      lcs[oldIndex][newIndex] = oldOptions[oldIndex] === newOptions[newIndex]
+        ? lcs[oldIndex + 1][newIndex + 1] + 1
+        : Math.max(lcs[oldIndex + 1][newIndex], lcs[oldIndex][newIndex + 1]);
+    }
+  }
+
+  let oldIndex = 0;
+  let newIndex = 0;
+  while (oldIndex < oldOptions.length && newIndex < newOptions.length) {
+    if (oldOptions[oldIndex] === newOptions[newIndex]) {
+      commonPairs.push([oldIndex, newIndex]);
+      oldIndex += 1;
+      newIndex += 1;
+    } else if (lcs[oldIndex + 1][newIndex] >= lcs[oldIndex][newIndex + 1]) {
+      oldIndex += 1;
+    } else {
+      newIndex += 1;
+    }
+  }
+
+  const addReplacementSegment = (oldStart: number, oldEnd: number, newStart: number, newEnd: number) => {
+    const oldSegment = oldOptions.slice(oldStart, oldEnd);
+    const newSegment = newOptions.slice(newStart, newEnd);
+    if (oldSegment.length !== newSegment.length) return;
+
+    oldSegment.forEach((oldValue, index) => {
+      const newValue = newSegment[index];
+      if (oldValue !== newValue && !Object.prototype.hasOwnProperty.call(replacements, oldValue)) {
+        replacements[oldValue] = newValue;
+      }
+    });
+  };
+
+  let previousOldIndex = 0;
+  let previousNewIndex = 0;
+  commonPairs.forEach(([commonOldIndex, commonNewIndex]) => {
+    addReplacementSegment(previousOldIndex, commonOldIndex, previousNewIndex, commonNewIndex);
+    previousOldIndex = commonOldIndex + 1;
+    previousNewIndex = commonNewIndex + 1;
+  });
+  addReplacementSegment(previousOldIndex, oldOptions.length, previousNewIndex, newOptions.length);
+
+  return replacements;
+};
+
 interface ScenePreviewPanelProps {
   sceneStems: string[];
   previewCounts: Record<string, number>;
@@ -1549,30 +1604,45 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setIsProcessing(true);
     try {
       const safeSaveDirs = getSaveDirs();
+      const oldOptions = Array.isArray(activeAttribute.options)
+        ? activeAttribute.options.map((value: any) => String(value).trim())
+        : [];
+      const nextOptions = attrDraft.options.map((value) => String(value).trim());
+      const nextDefault = String(attrDraft.defaultValue || '').trim();
+      const valueReplacements = buildAttributeValueReplacements(oldOptions, nextOptions);
       
       // 1. 同步到所有后端的 JSON 文件
       await batchApplyAttribute({
         save_dirs: safeSaveDirs,
         attribute_name: activeAttribute.name,
-        new_default: attrDraft.defaultValue,
-        old_default: activeAttribute.defaultValue
+        new_default: nextDefault,
+        old_default: activeAttribute.defaultValue,
+        value_replacements: valueReplacements,
       });
 
       // 2. 更新本地 Store 中关于该 Attribute 的全局定义
       updateTaxonomyAttribute(activeAttribute.id, { 
-        options: attrDraft.options, 
-        defaultValue: attrDraft.defaultValue 
+        options: nextOptions,
+        defaultValue: nextDefault,
       });
 
       // 3. 🌟 关键修复：同步更新 Store 里当前图片所有标注的值
       // 这样你在画布上看到的框才会立刻带上新默认值，无需刷新
       const state = useStore.getState();
       const updatedAnnotations = state.annotations.map((ann: any) => {
-        const newAttrs = { ...ann.attributes };
+        const newAttrs = { ...(ann.attributes || {}) };
+        const attributeName = activeAttribute.name;
+
+        if (attributeName in newAttrs) {
+          const currentKey = String(newAttrs[attributeName]).trim();
+          if (Object.prototype.hasOwnProperty.call(valueReplacements, currentKey)) {
+            newAttrs[attributeName] = valueReplacements[currentKey];
+          }
+        }
         
         // 如果标注没有这个属性，或者属性值等于旧的默认值，则更新它
-        if (!(activeAttribute.name in newAttrs) || newAttrs[activeAttribute.name] === activeAttribute.defaultValue) {
-          newAttrs[activeAttribute.name] = attrDraft.defaultValue;
+        if (!(attributeName in newAttrs) || newAttrs[attributeName] === activeAttribute.defaultValue) {
+          newAttrs[attributeName] = nextDefault;
         }
         
         return { ...ann, attributes: newAttrs };
@@ -1581,7 +1651,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       // 强行把洗过一遍的标注数据塞回 Store
       useStore.setState({ annotations: updatedAnnotations }); 
       useStore.getState().setStatsCacheValid?.(false);
-      await refreshStatsIfNeeded();
+      await loadStatistics(true);
       setAttrDraft(null); // 清空草稿，退出编辑状态
       alert(t('taxonomyDashboard.attributeSyncSuccess'));
     } catch (err: any) {

@@ -612,19 +612,46 @@ async def get_project_statistics(req: StatRequest):
     return final_result
 
 
+def _invalidate_statistics_caches(save_dirs: list[str]) -> int:
+    """Invalidate derived taxonomy statistics after annotation files change."""
+    cache_files = {
+        os.path.join(os.path.dirname(os.path.abspath(os.path.normpath(folder))), "stats_cache.json")
+        for folder in save_dirs
+        if folder
+    }
+    invalidated = 0
+    for cache_file in cache_files:
+        try:
+            if os.path.exists(cache_file):
+                os.remove(cache_file)
+                invalidated += 1
+                logger.info("TAXONOMY_STATISTICS_CACHE_INVALIDATED path=%s", shorten(cache_file, 1500))
+        except Exception:
+            logger.exception("TAXONOMY_STATISTICS_CACHE_INVALIDATE_ERROR path=%s", shorten(cache_file, 1500))
+    return invalidated
+
+
 @router.post("/apply_attribute")
 async def batch_apply_attribute(request: ApplyAttributeRequest):
     logger.info(
-        "APPLY_ATTRIBUTE_START folders=%d attribute=%s old_default=%s new_default=%s",
+        "APPLY_ATTRIBUTE_START folders=%d attribute=%s old_default=%s new_default=%s replacements=%d",
         len(request.save_dirs),
         request.attribute_name,
         request.old_default,
         request.new_default,
+        len(request.value_replacements),
     )
 
     modified_count = 0
+    replaced_count = 0
     import json
     import os
+
+    value_replacements = {
+        str(old_value).strip(): str(new_value)
+        for old_value, new_value in request.value_replacements.items()
+        if str(old_value).strip() != str(new_value)
+    }
 
     try:
         for folder in request.save_dirs:
@@ -644,22 +671,29 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
 
                     changed = False
                     for shape in anno_data.get("shapes", []):
-                        if "attributes" not in shape:
-                            shape["attributes"] = {}
+                        attributes = shape.get("attributes")
+                        if not isinstance(attributes, dict):
+                            attributes = {}
+                            shape["attributes"] = attributes
 
-                        if request.attribute_name not in shape["attributes"]:
-                            shape["attributes"][request.attribute_name] = (
-                                request.new_default
-                            )
+                        if request.attribute_name in attributes:
+                            current_value = attributes.get(request.attribute_name)
+                            current_key = str(current_value).strip()
+                            if current_key in value_replacements:
+                                replacement = value_replacements[current_key]
+                                if current_value != replacement:
+                                    attributes[request.attribute_name] = replacement
+                                    replaced_count += 1
+                                    changed = True
+
+                        if request.attribute_name not in attributes:
+                            attributes[request.attribute_name] = request.new_default
                             changed = True
                         elif (
                             request.old_default is not None
-                            and shape["attributes"].get(request.attribute_name)
-                            == request.old_default
+                            and attributes.get(request.attribute_name) == request.old_default
                         ):
-                            shape["attributes"][request.attribute_name] = (
-                                request.new_default
-                            )
+                            attributes[request.attribute_name] = request.new_default
                             changed = True
 
                     if changed:
@@ -670,8 +704,19 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
                 except Exception as e:
                     logger.exception("APPLY_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
-        logger.info("APPLY_ATTRIBUTE_END modified_files=%d", modified_count)
-        return {"status": "success", "modified_files": modified_count}
+        invalidated_caches = _invalidate_statistics_caches(request.save_dirs) if modified_count else 0
+        logger.info(
+            "APPLY_ATTRIBUTE_END modified_files=%d replaced_values=%d invalidated_caches=%d",
+            modified_count,
+            replaced_count,
+            invalidated_caches,
+        )
+        return {
+            "status": "success",
+            "modified_files": modified_count,
+            "replaced_values": replaced_count,
+            "invalidated_caches": invalidated_caches,
+        }
 
     except Exception as e:
         # 3. 捕获一切内部致命错误

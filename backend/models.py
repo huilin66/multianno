@@ -95,6 +95,7 @@ class ApplyAttributeRequest(BaseModel):
     attribute_name: str
     new_default: str
     old_default: Optional[str] = None
+    value_replacements: Dict[str, str] = Field(default_factory=dict)
 
 
 class MkdirRequest(BaseModel):

@@ -85,6 +85,7 @@ export const batchApplyAttribute = (payload: {
   attribute_name: string;
   new_default: string;
   old_default?: string;
+  value_replacements?: Record<string, string>;
 }) => post(`${API_BASE_URL}/taxonomy/apply_attribute`, payload);
 
 export const batchDeleteAttribute = (payload: {
