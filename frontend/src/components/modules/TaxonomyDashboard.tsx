@@ -451,6 +451,12 @@ const findMatchingSceneStem = (sceneStems: string[], target?: string | null) => 
     || null;
 };
 
+const normalizeAttributeValue = (value: unknown) => {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim();
+  return normalized || null;
+};
+
 const getPreviewViewBox = (
   obj: PreviewObject | undefined,
   dimensions: { width: number; height: number }
@@ -948,7 +954,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setActiveTab(isTaxonomyDashboardTab(saved?.activeTab) ? saved.activeTab : 'overview');
     setSelectedClassId(typeof saved?.selectedClassId === 'string' ? saved.selectedClassId : null);
     const selectedAttributeId = typeof saved?.selectedAttributeId === 'string' ? saved.selectedAttributeId : null;
-    const selectedAttributeValue = typeof saved?.selectedAttributeValue === 'string' ? saved.selectedAttributeValue : null;
+    const selectedAttributeValue = normalizeAttributeValue(saved?.selectedAttributeValue);
     setSelectedAttributeId(selectedAttributeId);
     setSelectedAttributeValue(selectedAttributeValue);
     restoredAttributeIdRef.current = selectedAttributeId;
@@ -1099,8 +1105,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     const configuredValues = Array.isArray(activeAttribute.options)
       ? activeAttribute.options.map((value: any) => String(value).trim()).filter(Boolean)
       : [];
+    const defaultValue = normalizeAttributeValue(activeAttribute.defaultValue);
     const values = Array.from(new Set([
       ...configuredValues,
+      ...(defaultValue ? [defaultValue] : []),
       ...Object.keys(attributeDetails),
       ...Object.keys(attributeValueStems),
     ]));
@@ -1110,15 +1118,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       objectCount: Number(attributeDetails[value] || 0),
       sceneCount: Array.isArray(attributeValueStems[value]) ? attributeValueStems[value].length : 0,
     }));
-  }, [activeAttribute?.name, activeAttribute?.options, attributeValueStems, statsData]);
+  }, [activeAttribute?.defaultValue, activeAttribute?.name, activeAttribute?.options, attributeValueStems, statsData]);
 
   const attributeSceneStems = useMemo(
     () => {
-      if (selectedAttributeValue) return attributeValueStems[selectedAttributeValue] || [];
-
-      const stemsForAllValues = Object.values(attributeValueStems as Record<string, string[]>)
-        .flatMap((stems) => Array.isArray(stems) ? stems : []);
-      return Array.from(new Set(stemsForAllValues)).sort();
+      const selectedValue = normalizeAttributeValue(selectedAttributeValue);
+      if (!selectedValue) return [];
+      return attributeValueStems[selectedValue] || [];
     },
     [attributeValueStems, selectedAttributeValue]
   );
@@ -1155,11 +1161,19 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         return preferredValue;
       }
 
-      const nextValue = values[0] || null;
+      const defaultValue = normalizeAttributeValue(activeAttribute.defaultValue);
+      const nextValue = (defaultValue && values.includes(defaultValue)
+        ? defaultValue
+        : values[0]) || null;
       restoredAttributeValueRef.current = nextValue;
       return nextValue;
     });
   }, [activeAttribute, attributeValueOptions, statsStatus]);
+
+  // Use one canonical value for scene filtering, preview loading and the
+  // value-list highlight. This keeps whitespace-only differences from
+  // making the list look unselected while the filter is active.
+  const selectedAttributeValueKey = normalizeAttributeValue(selectedAttributeValue);
 
   const isClassPreview = activeTab === 'classes' && !!activeClass;
   const isAttributePreview = activeTab === 'attributes' && !!activeAttribute;
@@ -1172,7 +1186,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const previewFilterKey = isClassPreview
     ? `class:${activeClass?.name || ''}`
     : isAttributePreview
-      ? `attribute:${activeAttribute?.name || ''}:${selectedAttributeValue || '__all__'}`
+      ? `attribute:${activeAttribute?.name || ''}:${selectedAttributeValueKey || '__none__'}`
       : '';
   const previewColor = isClassPreview ? (activeClass?.color || '#3b82f6') : '#8b5cf6';
 
@@ -1181,7 +1195,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       return loadClassObjectsForStem(stem, activeClass.name);
     }
     if (isAttributePreview && activeAttribute) {
-      return loadAttributeObjectsForStem(stem, activeAttribute.name, selectedAttributeValue);
+      return loadAttributeObjectsForStem(stem, activeAttribute.name, selectedAttributeValueKey);
     }
     return [];
   }, [
@@ -1191,7 +1205,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     isClassPreview,
     loadAttributeObjectsForStem,
     loadClassObjectsForStem,
-    selectedAttributeValue,
+    selectedAttributeValueKey,
   ]);
 
   const handlePreviewStemChange = useCallback((stem: string) => {
@@ -1210,8 +1224,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const handleAttributeValueChange = useCallback((value: string) => {
     const currentStem = previewStem ?? restoredPreviewStemRef.current;
     const previousStem = previousPreviewStemRef.current;
-    const nextSceneStems = Array.isArray(attributeValueStems[value])
-      ? attributeValueStems[value]
+    const selectedValue = normalizeAttributeValue(value);
+    if (!selectedValue) return;
+    const nextSceneStems = Array.isArray(attributeValueStems[selectedValue])
+      ? attributeValueStems[selectedValue]
       : [];
     const sceneListIsReady = statsStatus === 'done' && !attributeEditRestoreRef.current;
     const nextStem = nextSceneStems.length === 0
@@ -1226,16 +1242,39 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     if (nextStem && nextStem !== currentStem) {
       previousPreviewStemRef.current = currentStem || previousStem || null;
     }
-    restoredAttributeValueRef.current = value;
+    restoredAttributeValueRef.current = selectedValue;
     restoredPreviewStemRef.current = nextStem;
-    setSelectedAttributeValue(value);
+    setSelectedAttributeValue(selectedValue);
     setPreviewStem(nextStem);
     persistTaxonomyViewState({
-      selectedAttributeValue: value,
+      selectedAttributeValue: selectedValue,
       previewStem: nextStem,
       previousPreviewStem: previousPreviewStemRef.current,
     });
   }, [attributeValueStems, persistTaxonomyViewState, previewStem, statsStatus]);
+
+  const handleAttributeSelection = useCallback((attributeId: string) => {
+    const nextAttribute = taxonomyAttributes.find((attribute: any) => attribute.id === attributeId);
+    if (!nextAttribute) return;
+    if (activeTab === 'attributes' && selectedAttributeId === attributeId) return;
+
+    const defaultValue = normalizeAttributeValue(nextAttribute.defaultValue);
+    const firstConfiguredValue = Array.isArray(nextAttribute.options)
+      ? nextAttribute.options
+        .map((value: any) => normalizeAttributeValue(value))
+        .find((value: string | null): value is string => Boolean(value)) || null
+      : null;
+
+    // Set the new attribute's value in the same interaction as the attribute
+    // switch. The effect below still validates it against statistics, but the
+    // first render already has a matching highlighted value-list item.
+    const nextValue = defaultValue || firstConfiguredValue;
+    restoredAttributeIdRef.current = null;
+    restoredAttributeValueRef.current = nextValue;
+    setActiveTab('attributes');
+    setSelectedAttributeId(attributeId);
+    setSelectedAttributeValue(nextValue);
+  }, [activeTab, selectedAttributeId, taxonomyAttributes]);
 
   useEffect(() => {
     if ((!isClassPreview && !isAttributePreview) || previewSceneStems.length === 0) return;
@@ -1690,7 +1729,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       restoredAttributeIdRef.current = null;
     } else if (activeAttribute?.id) {
       restoredAttributeValueRef.current = null;
-      setSelectedAttributeValue(null);
+      setSelectedAttributeValue(normalizeAttributeValue(activeAttribute.defaultValue));
     }
     setAttributeRenameValue(activeAttribute?.name || '');
   }, [activeAttribute?.id]);
@@ -2385,7 +2424,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         setAttributeOrder(newOrder);
                         setAttrSortDir('manual'); 
                       }}
-                      onClick={() => { setActiveTab('attributes'); setSelectedAttributeId(attr.id); }} 
+                      onClick={() => handleAttributeSelection(attr.id)}
                       className={`flex items-center p-2 rounded-md text-xs cursor-pointer transition-colors ${selectedAttributeId === attr.id && activeTab === 'attributes' ? 'bg-neutral-100 dark:bg-neutral-800 font-bold shadow-sm' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50 text-neutral-600 dark:text-neutral-400'}`}>
                       <List className="w-3 h-3 mr-2.5 shrink-0 text-neutral-400" />
                       <span className="truncate flex-1">{attr.name}</span>
@@ -3400,12 +3439,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                         </div>
                         <div className="max-h-[320px] overflow-y-auto custom-scrollbar space-y-1">
                           {attributeValueOptions.map((option) => {
-                            const isSelected = selectedAttributeValue === option.value;
+                            const isSelected = selectedAttributeValueKey === option.value;
                             return (
                               <button
                                 key={option.value}
                                 type="button"
                                 onClick={() => handleAttributeValueChange(option.value)}
+                                aria-pressed={isSelected}
                                 className={`w-full grid grid-cols-[minmax(0,1fr)_72px_72px] gap-2 items-center rounded-lg border px-3 py-2 text-left transition-colors ${
                                   isSelected
                                     ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
