@@ -460,6 +460,12 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
   // 🌟 全局快捷键监听引擎
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      // Taxonomy Manager and other modules have their own keyboard controls.
+      // Do not let the workspace listener consume those events underneath a
+      // dialog; otherwise the first A/D press changes the workspace scene
+      // before Taxonomy can handle it.
+      if ((useStore.getState() as any).activeModule !== 'workspace') return;
+
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
       }
