@@ -74,7 +74,7 @@ const isTaxonomyDashboardTab = (value: unknown): value is TaxonomyDashboardTab =
 
 
 // 1. 带 XY 坐标轴的直方图 (修复超宽数据遮挡，支持横向滚动)
-const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
+const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass, showValues = false }: any) => {
   const entries = Object.entries(data || {});
   if (entries.length === 0) return <div className="h-full flex items-center justify-center text-neutral-400">No data</div>;
   const maxVal = Math.max(...entries.map(e => e[1] as number), 1);
@@ -112,9 +112,12 @@ const AxisBarChart = ({ data, title, xLabel, yLabel, colorClass }: any) => {
                
                {/* X 轴刻度标签：与上方对齐 */}
                <div className="flex justify-start gap-4 pt-2 px-2">
-                 {entries.map(([k]: any) => (
-                    <div key={k} className="flex-1 max-w-[60px] text-center text-[8px] text-neutral-500 truncate min-w-[28px]" title={k}>{k}</div>
-                 ))}
+                  {entries.map(([k, v]: any) => (
+                     <div key={k} className="flex-1 max-w-[60px] min-w-[28px] text-center text-[8px] text-neutral-500" title={k}>
+                       <div className="truncate">{k}</div>
+                       {showValues && <div className="font-mono font-bold text-indigo-600 dark:text-indigo-400">{v}</div>}
+                     </div>
+                  ))}
               </div>
             </div>
            </div>
@@ -2515,6 +2518,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                            xLabel={t('taxonomyDashboard.className')}
                            yLabel={t('taxonomyDashboard.count')}
                            colorClass="bg-indigo-500"
+                           showValues
                            data={Object.fromEntries(
                              // 🌟 核心逻辑变更：不依赖后端传来的离散数据，而是遍历前端 Taxonomy 系统里的所有类！
                              // 只要是系统存在的类（包括 background），哪怕没数据也能查出 0 并显示出来。
