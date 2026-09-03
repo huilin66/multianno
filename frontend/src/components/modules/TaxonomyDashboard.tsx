@@ -1168,6 +1168,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     : isAttributePreview
       ? attributeSceneStems
       : [];
+  const previewSceneStemsKey = previewSceneStems.join('|');
   const previewFilterKey = isClassPreview
     ? `class:${activeClass?.name || ''}`
     : isAttributePreview
@@ -1308,7 +1309,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setPreviewObjectIndex(null);
     setPreviewObjects([]);
     setPreviewError('');
-  }, [previewFilterKey, previewSceneStems.join('|'), previewStem, statsStatus, stems.join('|')]);
+  }, [previewFilterKey, previewSceneStemsKey, previewStem, statsStatus, stems.join('|')]);
 
   // 编辑 attribute value 时只恢复 value 选择；scene 是否仍属于该 value
   // 交给上面的 current/previous scene 选择逻辑处理。
@@ -1379,9 +1380,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     const loadPreview = async () => {
       if (!previewFilterKey || !previewStem) {
         setPreviewObjects([]);
+        setPreviewLoading(false);
         setPreviewError('');
         return;
       }
+      setPreviewObjects([]);
+      setPreviewObjectIndex(null);
       setPreviewLoading(true);
       setPreviewError('');
       try {
@@ -1403,7 +1407,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     };
     loadPreview();
     return () => { cancelled = true; };
-  }, [loadPreviewObjectsForStem, previewFilterKey, previewStem, t]);
+  }, [loadPreviewObjectsForStem, previewFilterKey, previewSceneStemsKey, previewStem, statsStatus, t]);
 
   const previewView = useMemo(
     () => views?.find((v: any) => v.id === previewViewId) || views?.find((v: any) => v.isMain) || views?.[0],
