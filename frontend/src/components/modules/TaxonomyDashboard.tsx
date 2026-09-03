@@ -1237,6 +1237,46 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   }, [attributeValueStems, persistTaxonomyViewState, previewStem, statsStatus]);
 
   useEffect(() => {
+    if ((!isClassPreview && !isAttributePreview) || previewSceneStems.length === 0) return;
+
+    const handleSceneKeyboardNavigation = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      const tagName = target?.tagName.toLowerCase();
+      if (
+        tagName === 'input'
+        || tagName === 'textarea'
+        || tagName === 'select'
+        || target?.isContentEditable
+        || target?.closest('[role="combobox"]')
+      ) return;
+
+      const key = event.key.toLowerCase();
+      if (key !== 'a' && key !== 'd') return;
+
+      const currentIndex = previewStem
+        ? previewSceneStems.findIndex((stem) => (
+          stem === previewStem
+          || stem.startsWith(previewStem)
+          || previewStem.startsWith(stem)
+        ))
+        : -1;
+      const baseIndex = currentIndex >= 0 ? currentIndex : 0;
+      const nextIndex = key === 'a' ? baseIndex - 1 : baseIndex + 1;
+
+      // Stop at the ends instead of wrapping to the opposite side of the list.
+      if (nextIndex < 0 || nextIndex >= previewSceneStems.length) return;
+
+      event.preventDefault();
+      handlePreviewStemChange(previewSceneStems[nextIndex]);
+    };
+
+    window.addEventListener('keydown', handleSceneKeyboardNavigation);
+    return () => window.removeEventListener('keydown', handleSceneKeyboardNavigation);
+  }, [handlePreviewStemChange, isAttributePreview, isClassPreview, previewSceneStems, previewStem]);
+
+  useEffect(() => {
     const rememberedCurrentStem = previewStem ?? restoredPreviewStemRef.current;
     const rememberedPreviousStem = previousPreviewStemRef.current;
 
