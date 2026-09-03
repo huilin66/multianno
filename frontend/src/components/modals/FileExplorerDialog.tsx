@@ -23,6 +23,38 @@ interface FileExplorerDialogProps {
   defaultSaveName?: string;
 }
 
+const RECENT_PATHS_KEY = 'multiAnno_recentPaths';
+const RECENT_SELECTION_KEY = 'multiAnno_recentSelection';
+
+type RecentSelection = {
+  path: string;
+  type: 'dir' | 'file';
+};
+
+const normalizePath = (path: string) => path.replace(/\\/g, '/');
+
+const getParentPath = (path: string) => {
+  let normalized = normalizePath(path).replace(/\/+$/, '');
+  if (!normalized) return '';
+
+  // Windows drive roots must remain roots when their child is selected.
+  if (/^[a-zA-Z]:$/.test(normalized)) return `${normalized}/`;
+
+  const lastSlashIndex = normalized.lastIndexOf('/');
+  if (lastSlashIndex > 0) {
+    const parent = normalized.slice(0, lastSlashIndex);
+    return /^[a-zA-Z]:$/.test(parent) ? `${parent}/` : parent;
+  }
+  return lastSlashIndex === 0 ? '/' : '';
+};
+
+const isRecentSelection = (value: unknown): value is RecentSelection => (
+  !!value
+  && typeof value === 'object'
+  && typeof (value as RecentSelection).path === 'string'
+  && ((value as RecentSelection).type === 'dir' || (value as RecentSelection).type === 'file')
+);
+
 export function FileExplorerDialog({
   open,
   initialPath,
@@ -73,32 +105,49 @@ export function FileExplorerDialog({
     setSelectedPaths(new Set());
     if (defaultSaveName) setSaveFileName(defaultSaveName);
 
-    let staticHome = (initialPath || '').replace(/\\/g, '/');
-    if (staticHome.includes('.') && !staticHome.endsWith('/')) {
-      const lastIdx = staticHome.lastIndexOf('/');
-      staticHome = lastIdx > 0 ? staticHome.substring(0, lastIdx) : staticHome;
-      if (/^[a-zA-Z]:$/.test(staticHome)) staticHome += '/';
+    const normalizedInitialPath = normalizePath(initialPath || '');
+    const initialPathLooksLikeFile = normalizedInitialPath.includes('.') && !normalizedInitialPath.endsWith('/');
+    let staticHome = normalizedInitialPath;
+    if (initialPathLooksLikeFile) {
+      staticHome = getParentPath(staticHome);
     }
     setHomePath(staticHome);
 
     let startPath = staticHome;
-    const savedHistory = localStorage.getItem('multiAnno_recentPaths');
-    if (savedHistory) {
+    let hasRecentSelection = false;
+    const savedSelection = localStorage.getItem(RECENT_SELECTION_KEY);
+    if (savedSelection) {
       try {
-        const historyArray = JSON.parse(savedHistory);
-        if (historyArray.length > 0) {
-          let lastPath = historyArray[0].replace(/\\/g, '/');
-          if (lastPath.endsWith('/') && lastPath.length > 1) lastPath = lastPath.slice(0, -1);
-          const lastIndex = lastPath.lastIndexOf('/');
-          if (lastIndex > 0) {
-            startPath = lastPath.substring(0, lastIndex);
-            if (/^[a-zA-Z]:$/.test(startPath)) startPath += '/';
-          } else if (lastIndex === 0) {
-            startPath = '/';
-          }
+        const recentSelection = JSON.parse(savedSelection);
+        if (isRecentSelection(recentSelection)) {
+          startPath = getParentPath(recentSelection.path);
+          hasRecentSelection = true;
         }
       } catch (e) {
-        console.error('Failed to parse history', e);
+        console.error('Failed to parse recent selection', e);
+      }
+    }
+
+    // Compatibility with the old history format. Before the exact selection
+    // record was added, file selection stored its containing directory. If
+    // the current file input points into that same directory, keep it instead
+    // of moving up one extra level.
+    if (!hasRecentSelection) {
+      const savedHistory = localStorage.getItem(RECENT_PATHS_KEY);
+      if (savedHistory) {
+        try {
+          const historyArray = JSON.parse(savedHistory);
+          if (Array.isArray(historyArray) && historyArray.length > 0) {
+            const lastPath = normalizePath(String(historyArray[0])).replace(/\/+$/, '');
+            startPath = selectType === 'file'
+              && initialPathLooksLikeFile
+              && lastPath === staticHome
+              ? staticHome
+              : getParentPath(lastPath);
+          }
+        } catch (e) {
+          console.error('Failed to parse history', e);
+        }
       }
     }
 
@@ -160,20 +209,35 @@ export function FileExplorerDialog({
       finalPaths = [cleanPath + saveFileName];
     } else {
       finalPaths = Array.from(selectedPaths);
+      // 目录历史仍记录目录本身，供根目录的历史列表和其他目录选择器使用。
+      // 文件的精确路径由 RECENT_SELECTION_KEY 单独记录，避免被当成目录。
       if (selectType === 'dir' && finalPaths.length > 0) {
         pathToRecord = finalPaths[0];
       }
     }
 
+    const selectedPath = selectType === 'save'
+      ? currentPath
+      : finalPaths[0] || currentPath;
+    if (selectedPath && selectedPath !== '/' && selectedPath !== '') {
+      try {
+        localStorage.setItem(RECENT_SELECTION_KEY, JSON.stringify({
+          path: normalizePath(selectedPath),
+          type: selectType === 'file' ? 'file' : 'dir',
+        } satisfies RecentSelection));
+      } catch (e) {
+        console.error('Failed to save recent selection', e);
+      }
+    }
+
     if (pathToRecord && pathToRecord !== '/' && pathToRecord !== '') {
       try {
-        const historyKey = 'multiAnno_recentPaths';
-        const savedHistory = localStorage.getItem(historyKey);
+        const savedHistory = localStorage.getItem(RECENT_PATHS_KEY);
         let historyArray: string[] = savedHistory ? JSON.parse(savedHistory) : [];
         historyArray = historyArray.filter(p => p !== pathToRecord);
         historyArray.unshift(pathToRecord);
         historyArray = historyArray.slice(0, 5);
-        localStorage.setItem(historyKey, JSON.stringify(historyArray));
+        localStorage.setItem(RECENT_PATHS_KEY, JSON.stringify(historyArray));
       } catch (e) {
         console.error('Failed to save history', e);
       }
