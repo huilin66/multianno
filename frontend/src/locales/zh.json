@@ -70,6 +70,7 @@
     "title": "视图布局",
     "views": "视图数",
     "maxViews": "最大视图数:",
+    "maxViewsHint": "默认最多添加的视图数量，用于避免视图过多导致性能降低。可以手动修改。",
     "currentViews": "当前视图数:",
     "presets_auto": "自动",
     "quickPresets": "快速预设",

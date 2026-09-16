@@ -70,6 +70,7 @@
     "title": "View Layout",
     "views": "Views",
     "maxViews": "Max Views:",
+    "maxViewsHint": "The default maximum number of views to add. This helps prevent performance issues when too many views are open. You can edit it manually.",
     "currentViews": "Current Views:",
     "presets_auto": "Auto",
     "quickPresets": "Quick Presets",

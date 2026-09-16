@@ -232,3 +232,9 @@
     scrollbar-color: #3f3f46 transparent;
   }
 }
+
+/* Keep the native +/- controls visible in View Layout number inputs. */
+.view-layout-number-input::-webkit-inner-spin-button,
+.view-layout-number-input::-webkit-outer-spin-button {
+  opacity: 1;
+}

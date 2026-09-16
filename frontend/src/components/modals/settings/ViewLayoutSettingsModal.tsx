@@ -1,15 +1,30 @@
-// src/components/modules/settings/ViewLayoutSettingsModal.tsx
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
+import { Eye, Grid2X2, LayoutGrid, Pencil, SlidersHorizontal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+
 import { useStore } from '../../../store/useStore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 import { Button } from '../../ui/button';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
-import { useTranslation } from 'react-i18next';
 
 interface ViewLayoutSettingsModalProps {
   open: boolean;
   onClose: () => void;
+}
+
+function SectionHeading({ icon: Icon, children }: { icon: LucideIcon; children: string }) {
+  return (
+    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <Icon className="h-3.5 w-3.5 text-primary" />
+      <span>{children}</span>
+    </div>
+  );
+}
+
+function FieldLabel({ children, className = '' }: { children: string; className?: string }) {
+  return <Label className={`text-[11px] font-medium text-muted-foreground ${className}`}>{children}</Label>;
 }
 
 export function ViewLayoutSettingsModal({ open, onClose }: ViewLayoutSettingsModalProps) {
@@ -69,162 +84,171 @@ export function ViewLayoutSettingsModal({ open, onClose }: ViewLayoutSettingsMod
   ];
 
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && handleCancel()}>
-      <DialogContent className="max-w-lg sm:max-w-lg p-0 border-neutral-200 dark:border-neutral-800 overflow-hidden">
-        <DialogHeader className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0">
-          <DialogTitle>{t('viewLayout.title')}</DialogTitle>
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && handleCancel()}>
+      <DialogContent className="flex max-h-[min(88vh,760px)] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-2xl">
+        <DialogHeader className="shrink-0 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+          <div className="flex items-center gap-3">
+            <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <LayoutGrid className="h-5 w-5" />
+            </span>
+            <div>
+              <DialogTitle className="text-base">{t('viewLayout.title')}</DialogTitle>
+              <p className="mt-0.5 text-xs text-muted-foreground">{t('viewLayout.currentViews')} {currentViewCount}</p>
+            </div>
+          </div>
         </DialogHeader>
-        <div className="p-5 pt-1 space-y-5">
-          
-          {/* ========== 1. Max Views ========== */}
-          <div className="flex items-center gap-2 text-xs">
-            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider shrink-0">
-              {t('viewLayout.views')}
-            </Label>
-            <span className="text-muted-foreground">
-              {t('viewLayout.currentViews')} <span className="font-semibold">{currentViewCount}</span>
-            </span>
-            <span className="text-muted-foreground">|</span>
-            <span className="text-muted-foreground">{t('viewLayout.maxViews')}</span>
-            <Input 
-              type="number" 
-              min={1} 
-              max={99}
-              value={draftMaxViews} 
-              onChange={(e) => setDraftMaxViews(Math.max(1, Number(e.target.value)))}
-              className="h-7 w-16 text-xs font-bold text-center"
-            />
-          </div>
 
-          <div className="h-px bg-border" />
-
-          {/* ========== 2. Quick Layout Presets ========== */}
-          <div className="space-y-2">
-            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-              {t('viewLayout.quickPresets')}
-            </Label>
-            <div className="flex flex-wrap gap-2">
-              {presets.map((preset) => {
-                const isActive = draftRows === preset.rows && draftCols === preset.cols;
-                return (
-                  <button
-                    key={preset.label}
-                    onClick={() => handleApplyPreset(preset.rows, preset.cols)}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
-                      isActive 
-                        ? 'bg-primary/10 text-primary ring-1 ring-primary/20' 
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="h-px bg-border" />
-
-          {/* ========== 3. Custom Grid ========== */}
-          <div className="flex items-center gap-2 text-xs">
-            <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider shrink-0">
-              {t('viewLayout.customGrid')}
-            </Label>
-            <span className="text-muted-foreground">
-              {t('viewLayout.rows')} <span className="font-semibold"></span>
-            </span>
-            <Input 
-              type="number" 
-              min={0} 
-              max={10}
-              value={draftRows} 
-              onChange={(e) => setDraftRows(Math.max(0, Number(e.target.value)))}
-              className="h-7 w-16 text-xs font-bold text-center"
-              placeholder="0"
-            />
-            <span className="text-muted-foreground">×</span>
-            <span className="text-muted-foreground">
-              {t('viewLayout.columns')} <span className="font-semibold"></span>
-            </span>
-            <Input 
-              type="number" 
-              min={0} 
-              max={10}
-              value={draftCols} 
-              onChange={(e) => setDraftCols(Math.max(0, Number(e.target.value)))}
-              className="h-7 w-16 text-xs font-bold text-center"
-              placeholder="0"
-            />
-          </div>
-
-          {/* ========== 4. Live Preview ========== */}
-          <div className="space-y-3 p-4 bg-muted/30 rounded-xl border border-border">
-            <div className="flex items-center justify-between">
-              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                {t('viewLayout.livePreview')}
-              </Label>
-              <span className="text-[9px] font-mono text-primary">
-                {previewRows}×{previewCols} = {totalCells} {t('viewLayout.cells')}
-                {emptyCells > 0 && (
-                  <span className="text-amber-500 ml-1">
-                    ({emptyCells} {t('viewLayout.empty')})
-                  </span>
-                )}
-              </span>
-            </div>
-
-            <div 
-              className="grid gap-1.5 p-3 bg-muted/50 rounded-lg border border-dashed border-border"
-              style={{ 
-                gridTemplateColumns: `repeat(${previewCols}, 1fr)`,
-                gridTemplateRows: `repeat(${previewRows}, 1fr)`,
-                minHeight: '120px'
-              }}
-            >
-              {Array.from({ length: totalCells }).map((_, i) => {
-                const isOccupied = i < currentViewCount;
-                const isMain = i === 0;
-                return (
-                  <div 
-                    key={i} 
-                    className={`rounded-md border transition-all duration-300 flex items-center justify-center text-[9px] font-bold ${
-                      isOccupied 
-                        ? isMain 
-                          ? 'bg-primary/40 border-primary shadow-sm text-primary-foreground'
-                          : 'bg-emerald-400/40 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
-                        : 'bg-transparent border-border text-muted-foreground'
-                    }`}
-                  >
-                    {isOccupied ? (`V${i + 1}`) : ''}
+        <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+          <div className="space-y-4 p-4 sm:p-5">
+            <section className="rounded-xl border border-border bg-muted/20 p-4">
+              <SectionHeading icon={SlidersHorizontal}>{t('viewLayout.views')}</SectionHeading>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="flex min-h-[76px] flex-col justify-center rounded-lg border border-border bg-background/70 px-3 py-2.5">
+                  <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    {t('viewLayout.currentViews')}
                   </div>
-                );
-              })}
-            </div>
+                  <div className="mt-1 font-mono text-xl font-semibold leading-none text-foreground">
+                    {currentViewCount}
+                  </div>
+                </div>
+                <div
+                  className="flex min-h-[76px] items-center justify-between gap-3 rounded-lg border border-primary/35 bg-primary/[0.03] px-3 py-2.5 shadow-sm shadow-primary/5"
+                  title={t('viewLayout.maxViewsHint')}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <FieldLabel className="text-primary">{t('viewLayout.maxViews')}</FieldLabel>
+                    <Pencil className="h-3 w-3 text-primary/70" aria-hidden="true" />
+                  </div>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={draftMaxViews}
+                    onChange={(e) => setDraftMaxViews(Math.max(1, Number(e.target.value)))}
+                    aria-label={t('viewLayout.maxViews')}
+                    className="view-layout-number-input h-8 w-20 cursor-text border-primary/40 bg-background text-center text-xs font-bold hover:border-primary focus-visible:border-primary focus-visible:ring-primary/30"
+                  />
+                </div>
+              </div>
+            </section>
 
-            <div className="flex items-center gap-4 justify-center">
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded bg-primary/40 border border-primary" />
-                <span className="text-[9px] text-muted-foreground">{t('view.mainView')}</span>
+            <section className="rounded-xl border border-border bg-background p-4">
+              <div className="flex items-center justify-between gap-3">
+                <SectionHeading icon={Grid2X2}>{t('viewLayout.quickPresets')}</SectionHeading>
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  {previewRows}×{previewCols}
+                </span>
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded bg-emerald-400/40 border border-emerald-500/50" />
-                <span className="text-[9px] text-muted-foreground">{t('view.augViews')}</span>
+              <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                {presets.map((preset) => {
+                  const isActive = draftRows === preset.rows && draftCols === preset.cols;
+                  return (
+                    <button
+                      key={preset.label}
+                      type="button"
+                      aria-pressed={isActive}
+                      onClick={() => handleApplyPreset(preset.rows, preset.cols)}
+                      className={`flex h-8 items-center justify-center rounded-lg border text-[10px] font-semibold transition-colors ${
+                        isActive
+                          ? 'border-primary/40 bg-primary/10 text-primary shadow-sm'
+                          : 'border-transparent bg-muted text-muted-foreground hover:border-border hover:bg-muted/80 hover:text-foreground'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
               </div>
-              <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded border border-border bg-transparent" />
-                <span className="text-[9px] text-muted-foreground">{t('viewLayout.empty')}</span>
+            </section>
+
+            <section className="rounded-xl border border-border bg-background p-4">
+              <SectionHeading icon={SlidersHorizontal}>{t('viewLayout.customGrid')}</SectionHeading>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                  <FieldLabel>{t('viewLayout.rows')}</FieldLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={10}
+                    value={draftRows}
+                    onChange={(e) => setDraftRows(Math.max(0, Number(e.target.value)))}
+                    className="view-layout-number-input h-8 w-20 text-center text-xs font-bold"
+                    placeholder="0"
+                  />
+                </label>
+                <label className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2.5">
+                  <FieldLabel>{t('viewLayout.columns')}</FieldLabel>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={10}
+                    value={draftCols}
+                    onChange={(e) => setDraftCols(Math.max(0, Number(e.target.value)))}
+                    className="view-layout-number-input h-8 w-20 text-center text-xs font-bold"
+                    placeholder="0"
+                  />
+                </label>
               </div>
-            </div>
+            </section>
+
+            <section className="rounded-xl border border-primary/15 bg-primary/[0.03] p-4">
+              <div className="flex items-center justify-between gap-3">
+                <SectionHeading icon={Eye}>{t('viewLayout.livePreview')}</SectionHeading>
+                <span className="text-right font-mono text-[10px] text-primary">
+                  {previewRows}×{previewCols} = {totalCells} {t('viewLayout.cells')}
+                  {emptyCells > 0 && <span className="ml-1 text-amber-600 dark:text-amber-400">({emptyCells} {t('viewLayout.empty')})</span>}
+                </span>
+              </div>
+
+              <div
+                className="mt-3 grid gap-1.5 rounded-lg border border-dashed border-border bg-muted/40 p-3"
+                style={{
+                  gridTemplateColumns: `repeat(${previewCols}, 1fr)`,
+                  gridTemplateRows: `repeat(${previewRows}, 1fr)`,
+                  minHeight: '136px',
+                }}
+              >
+                {Array.from({ length: totalCells }).map((_, index) => {
+                  const isOccupied = index < currentViewCount;
+                  const isMain = index === 0;
+                  return (
+                    <div
+                      key={index}
+                      className={`flex items-center justify-center rounded-md border text-[9px] font-bold transition-colors ${
+                        isOccupied
+                          ? isMain
+                            ? 'border-primary bg-primary/40 text-primary-foreground shadow-sm'
+                            : 'border-emerald-500/50 bg-emerald-400/40 text-emerald-700 dark:text-emerald-300'
+                          : 'border-border bg-transparent text-muted-foreground'
+                      }`}
+                    >
+                      {isOccupied ? `V${index + 1}` : ''}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded border border-primary bg-primary/40" />
+                  <span className="text-[9px] text-muted-foreground">{t('view.mainView')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded border border-emerald-500/50 bg-emerald-400/40" />
+                  <span className="text-[9px] text-muted-foreground">{t('view.augViews')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="h-3 w-3 rounded border border-border bg-transparent" />
+                  <span className="text-[9px] text-muted-foreground">{t('viewLayout.empty')}</span>
+                </div>
+              </div>
+            </section>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 p-4 border-t border-border shrink-0">
-          <Button variant="outline" onClick={handleCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button onClick={handleConfirm} className="text-white">
-            {t('common.confirm')}
-          </Button>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border p-4">
+          <Button variant="outline" size="sm" onClick={handleCancel}>{t('common.cancel')}</Button>
+          <Button size="sm" onClick={handleConfirm} className="text-white">{t('common.confirm')}</Button>
         </div>
       </DialogContent>
     </Dialog>
