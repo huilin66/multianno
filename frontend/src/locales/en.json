@@ -34,7 +34,14 @@
     "switchLang": "切换为中文"
   },
   "headerSetting":{
-    "showCrosshair": "Show Crosshair",
+    "groups": {
+      "display": "Display & Cursor",
+      "annotation": "Annotation",
+      "data": "Data & Statistics",
+      "workspace": "Workspace & Input",
+      "ai": "AI Assistant"
+    },
+    "showCrosshair": "Show Cross-view Crosshair",
     "showPixelValue": "Show Pixel Value",
     "showLongCrosshair": "Show Long Crosshair",
     "continuousDrawing": "Continuous Drawing",

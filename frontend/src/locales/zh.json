@@ -34,7 +34,14 @@
     "switchLang": "Switch to English"
   },
   "headerSetting":{
-    "showCrosshair": "显示十字准星",
+    "groups": {
+      "display": "显示与光标",
+      "annotation": "标注",
+      "data": "数据与统计",
+      "workspace": "工作区与输入",
+      "ai": "AI 助手"
+    },
+    "showCrosshair": "显示跨视图十字准星",
     "showPixelValue": "显示像素值",
     "showLongCrosshair": "显示长十字准星",
     "continuousDrawing": "连续绘制",

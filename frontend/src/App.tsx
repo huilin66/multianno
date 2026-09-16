@@ -43,6 +43,18 @@ import { toast } from './store/useToastStore';
 
 const getDisplayLocale = (language: string) => language.startsWith('zh') ? 'zh-CN' : 'en-US';
 
+function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-1.5">
+      <div className="flex items-center gap-2 px-1 text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+        <span className="shrink-0">{title}</span>
+        <span className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
+      </div>
+      <div className="space-y-1">{children}</div>
+    </section>
+  );
+}
+
 const parseSavedTimestamp = (timestamp: string) => {
   const date = new Date(timestamp);
   if (!Number.isNaN(date.getTime()) && /\d{4}[-/]\d{1,2}[-/]\d{1,2}|T/.test(timestamp)) {
@@ -470,116 +482,139 @@ export default function App() {
             >
               <Settings className="w-4 h-4" />
             </PopoverTrigger>
-            <PopoverContent className="w-64 p-4 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.showCrosshair')}</Label>
-                  <Switch
-                    checked={editorSettings.showCrosshair}
-                    onCheckedChange={(v) => updateEditorSettings({ showCrosshair: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.showPixelValue')}</Label>
-                  <Switch
-                    checked={editorSettings.showPixelValue}
-                    onCheckedChange={(v) => updateEditorSettings({ showPixelValue: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.showLongCrosshair')}</Label>
-                  <Switch
-                    checked={editorSettings.showLongCrosshair}
-                    onCheckedChange={(v) => updateEditorSettings({ showLongCrosshair: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.continuousDrawing')}</Label>
-                  <Switch
-                    checked={editorSettings.continuousDrawing}
-                    onCheckedChange={(v) => updateEditorSettings({ continuousDrawing: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.fillShapes')}</Label>
-                  <Switch
-                    checked={editorSettings.fillAnnotationShapes}
-                    onCheckedChange={(v) => updateEditorSettings({ fillAnnotationShapes: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.showAnnotationToolLabel')}</Label>
-                  <Switch
-                    checked={editorSettings.showToolLabels}
-                    onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })}
-                  />
-                </div>
-                <div className={`space-y-1 ${!hasAttributeContent ? 'opacity-60' : ''}`}>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs">{t('headerSetting.attShow')}</Label>
+            <PopoverContent className="w-72 max-w-[calc(100vw-2rem)] max-h-[min(64vh,480px)] overflow-y-auto custom-scrollbar p-3 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-neutral-200 dark:border-neutral-800">
+              <div className="space-y-3">
+                <SettingsSection title={t('headerSetting.groups.display')}>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.showPixelValue')}</Label>
                     <Switch
-                      checked={editorSettings.att_show === true}
-                      disabled={!hasAttributeContent}
-                      onCheckedChange={(v) => updateEditorSettings({ att_show: v })}
+                      className="scale-90 origin-right"
+                      checked={editorSettings.showPixelValue}
+                      onCheckedChange={(v) => updateEditorSettings({ showPixelValue: v })}
                     />
                   </div>
-                  {!hasAttributeContent && (
-                    <p className="text-[10px] leading-tight text-neutral-500 dark:text-neutral-400">
-                      {t('headerSetting.attShowUnavailable')}
-                    </p>
-                  )}
-                </div>
-                <div className={`flex items-center justify-between ${!attributeDisplayEnabled ? 'opacity-60' : ''}`}>
-                  <Label className="text-xs">{t('headerSetting.attHideNo')}</Label>
-                  <Switch
-                    checked={editorSettings.att_hide_no === true}
-                    disabled={!editorSettings.att_show || !hasAttributeContent}
-                    onCheckedChange={(v) => updateEditorSettings({ att_hide_no: v })}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <Label className="text-xs">{t('headerSetting.autoRefreshStats')}</Label>
-                  <Switch
-                    checked={editorSettings.autoRefreshStats}
-                    onCheckedChange={(v) => updateEditorSettings({ autoRefreshStats: v })}
-                  />
-                </div>
-                <div className="border-t border-neutral-300 dark:border-neutral-700 pt-1" />
-                <button
-                  type="button"
-                  onClick={handleReloadAll}
-                  disabled={isReloadingAll}
-                  className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-1 transition-colors disabled:opacity-60"
-                  title={t('headerSetting.reloadAll')}
-                >
-                  <span className="text-xs cursor-pointer">
-                    {isReloadingAll && reloadProgress.total > 0
-                      ? `${t('headerSetting.reloadAll')} (${reloadProgress.current}/${reloadProgress.total})`
-                      : t('headerSetting.reloadAll')}
-                  </span>
-                  <RefreshCw className={`w-4 h-4 ${isReloadingAll ? 'animate-spin' : ''}`} />
-                </button>
-                <button
-                  onClick={() => setViewLayoutModalOpen(true)}
-                  className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-1 transition-colors"
-                >
-                  <Label className="text-xs cursor-pointer">{t('headerSetting.viewLayout')}</Label>
-                  <LayoutTemplate className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setShortcutModalOpen(true)}
-                  className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-0.5 transition-colors"
-                >
-                  <Label className="text-xs cursor-pointer">{t('headerSetting.shortcutSetting')}</Label>
-                  <Keyboard className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => setAiSettingsModalOpen(true)}
-                  className="flex items-center justify-between w-full hover:bg-neutral-100 dark:hover:bg-neutral-800 rounded-md px-0.5 py-0.5 transition-colors"
-                >
-                  <Label className="text-xs cursor-pointer">{t('headerSetting.aiSetting')}</Label>
-                  <CloudLightning className="w-4 h-4" />
-                </button>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.showCrosshair')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.showCrosshair}
+                      onCheckedChange={(v) => updateEditorSettings({ showCrosshair: v })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.showLongCrosshair')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.showLongCrosshair}
+                      onCheckedChange={(v) => updateEditorSettings({ showLongCrosshair: v })}
+                    />
+                  </div>
+                </SettingsSection>
+
+                <SettingsSection title={t('headerSetting.groups.annotation')}>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.continuousDrawing')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.continuousDrawing}
+                      onCheckedChange={(v) => updateEditorSettings({ continuousDrawing: v })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.fillShapes')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.fillAnnotationShapes}
+                      onCheckedChange={(v) => updateEditorSettings({ fillAnnotationShapes: v })}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.showAnnotationToolLabel')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.showToolLabels}
+                      onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })}
+                    />
+                  </div>
+                  <div
+                    className={`rounded-md px-1.5 py-1 ${!hasAttributeContent ? 'opacity-60' : ''}`}
+                    title={!hasAttributeContent ? t('headerSetting.attShowUnavailable') : undefined}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <Label className="text-xs">{t('headerSetting.attShow')}</Label>
+                      <Switch
+                        className="scale-90 origin-right"
+                        checked={editorSettings.att_show === true}
+                        disabled={!hasAttributeContent}
+                        onCheckedChange={(v) => updateEditorSettings({ att_show: v })}
+                      />
+                    </div>
+                  </div>
+                  <div className={`ml-3 flex items-center justify-between gap-3 rounded-md border-l-2 border-neutral-200 pl-2.5 pr-1.5 py-1 dark:border-neutral-700 ${!attributeDisplayEnabled ? 'opacity-60' : ''}`}>
+                    <Label className="text-xs">{t('headerSetting.attHideNo')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.att_hide_no === true}
+                      disabled={!editorSettings.att_show || !hasAttributeContent}
+                      onCheckedChange={(v) => updateEditorSettings({ att_hide_no: v })}
+                    />
+                  </div>
+                </SettingsSection>
+
+                <SettingsSection title={t('headerSetting.groups.data')}>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.autoRefreshStats')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.autoRefreshStats}
+                      onCheckedChange={(v) => updateEditorSettings({ autoRefreshStats: v })}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleReloadAll}
+                    disabled={isReloadingAll}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60"
+                    title={t('headerSetting.reloadAll')}
+                  >
+                    <span className="text-xs">
+                      {isReloadingAll && reloadProgress.total > 0
+                        ? `${t('headerSetting.reloadAll')} (${reloadProgress.current}/${reloadProgress.total})`
+                        : t('headerSetting.reloadAll')}
+                    </span>
+                    <RefreshCw className={`h-4 w-4 shrink-0 ${isReloadingAll ? 'animate-spin' : ''}`} />
+                  </button>
+                </SettingsSection>
+
+                <SettingsSection title={t('headerSetting.groups.workspace')}>
+                  <button
+                    type="button"
+                    onClick={() => setViewLayoutModalOpen(true)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  >
+                    <Label className="cursor-pointer text-xs">{t('headerSetting.viewLayout')}</Label>
+                    <LayoutTemplate className="h-4 w-4 shrink-0" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShortcutModalOpen(true)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  >
+                    <Label className="cursor-pointer text-xs">{t('headerSetting.shortcutSetting')}</Label>
+                    <Keyboard className="h-4 w-4 shrink-0" />
+                  </button>
+                </SettingsSection>
+
+                <SettingsSection title={t('headerSetting.groups.ai')}>
+                  <button
+                    type="button"
+                    onClick={() => setAiSettingsModalOpen(true)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  >
+                    <Label className="cursor-pointer text-xs">{t('headerSetting.aiSetting')}</Label>
+                    <CloudLightning className="h-4 w-4 shrink-0" />
+                  </button>
+                </SettingsSection>
               </div>
             </PopoverContent>
           </Popover>
