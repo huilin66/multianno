@@ -68,6 +68,7 @@ async def batch_merge_class(request: BatchMergeClassRequest):
         request.new_name,
     )
     modified_count = 0
+    modified_objects = 0
     import json
 
     for folder in request.save_dirs:
@@ -84,22 +85,35 @@ async def batch_merge_class(request: BatchMergeClassRequest):
                     anno_data = json.load(f)
 
                 changed = False
+                file_objects_updated = 0
                 # 遍历修改匹配的 label
                 for shape in anno_data.get("shapes", []):
                     if shape.get("label") in request.old_names:
                         shape["label"] = request.new_name
                         changed = True
+                        file_objects_updated += 1
 
                 # 只有发生实质修改，才重新写入，最大化节省硬盘 I/O
                 if changed:
                     with open(file_path, "w", encoding="utf-8") as f:
                         json.dump(anno_data, f, indent=2, ensure_ascii=False)
                     modified_count += 1
+                    modified_objects += file_objects_updated
             except Exception as e:
                 logger.exception("MERGE_CLASS_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
-    logger.info("MERGE_CLASS_END modified_files=%d", modified_count)
-    return {"status": "success", "modified_files": modified_count}
+    logger.info(
+        "MERGE_CLASS_END modified_files=%d modified_objects=%d",
+        modified_count,
+        modified_objects,
+    )
+    return {
+        "status": "success",
+        # 保留 modified_files 兼容已有前端，同时明确返回图像数量。
+        "modified_files": modified_count,
+        "modified_images": modified_count,
+        "modified_objects": modified_objects,
+    }
 
 
 @router.post("/delete_class")

@@ -14,7 +14,7 @@ import { Label } from '../ui/label';
 import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, batchRenameAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
-import { useDialogStore } from '../../store/useDialogStore';
+import { showDialog, useDialogStore } from '../../store/useDialogStore';
 
 interface TaxonomyDashboardProps {
   onClose?: () => void;
@@ -910,7 +910,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const classSceneListRef = useRef<HTMLDivElement>(null);
   const shouldScrollClassSceneOnMountRef = useRef(true);
   const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0); 
-  const [mergeStage, setMergeStage] = useState<0 | 1>(0); // Merge 比较安全，两段即可
   const [attrDraft, setAttrDraft] = useState<{options: string[], defaultValue: string} | null>(null);
   const [showAttrDeleteConfirm, setShowAttrDeleteConfirm] = useState(false);
   const [newClassName, setNewClassName] = useState('');
@@ -1918,7 +1917,33 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     reader.readAsText(file);
   };
 
-  // 🌟 修复：不再使用 window.confirm，且正确调用本地的 mergeTaxonomyClasses
+  // 使用全局确认弹窗执行类别合并。
+  const requestMergeClass = async () => {
+    if (!activeClass || !mergeTargetId || isProcessing) return;
+    const targetClass = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
+    if (!targetClass) return;
+
+    const sourceStats = statsData?.classes?.[activeClass.name] || {};
+    const estimatedImages = Array.isArray(sourceStats.stems) ? sourceStats.stems.length : 0;
+    const estimatedObjects = Number(sourceStats.total_objects || 0);
+
+    const confirmed = await showDialog({
+      type: 'warning',
+      title: t('taxonomyDashboard.confirmMergeTitle', 'Confirm class merge?'),
+      description: t('taxonomyDashboard.confirmMergeDesc', {
+        source: activeClass.name,
+        target: targetClass.name,
+        images: estimatedImages,
+        objects: estimatedObjects,
+      }),
+      confirmText: t('taxonomyDashboard.confirmMerge'),
+      cancelText: t('common.cancel'),
+    });
+
+    if (confirmed) await executeMergeClass();
+  };
+
+  // 执行类别合并。
   const executeMergeClass = async () => {
     if (!activeClass || !mergeTargetId) return;
     const targetClass = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
@@ -1927,9 +1952,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setIsProcessing(true);
     try {
       const safeSaveDirs = getSaveDirs();
-      
+      const sourceStats = statsData?.classes?.[activeClass.name] || {};
+      const estimatedImages = Array.isArray(sourceStats.stems) ? sourceStats.stems.length : 0;
+      const estimatedObjects = Number(sourceStats.total_objects || 0);
       // 1. 后端合并：将所有标注从 old_name 改为 new_name
-      await batchMergeClass({ 
+      const mergeResult = await batchMergeClass({
         save_dirs: safeSaveDirs, 
         old_names: [activeClass.name], 
         new_name: targetClass.name 
@@ -1966,10 +1993,29 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       
       useStore.getState().setStatsCacheValid?.(false);
       await refreshStatsIfNeeded();
-      setMergeStage(0);
-      alert(t('taxonomyDashboard.mergedSuccessfully', { target: targetClass.name }));
+      const updatedImages = Number(
+        mergeResult?.modified_images ?? mergeResult?.modified_files ?? estimatedImages,
+      );
+      const updatedObjects = Number(mergeResult?.modified_objects ?? estimatedObjects);
+      openDialog({
+        type: 'success',
+        title: t('taxonomyDashboard.mergeComplete'),
+        description: t('taxonomyDashboard.mergeSuccessDesc', {
+          target: targetClass.name,
+          images: updatedImages,
+          objects: updatedObjects,
+        }),
+        confirmText: t('taxonomyDashboard.done'),
+        hideCancel: true,
+      });
     } catch (err: any) {
-      alert(t('taxonomyDashboard.mergeFailedMsg', { message: err.message }));
+      openDialog({
+        type: 'danger',
+        title: t('taxonomyDashboard.mergeFailed'),
+        description: t('taxonomyDashboard.mergeFailedMsg', { message: err.message }),
+        confirmText: t('taxonomyDashboard.ok'),
+        hideCancel: true,
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -2775,12 +2821,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               </div>
             </div>
               {/* 右侧：Merge合并 与 删除操作 */}
-              {/* 🌟 进化版：多级内联确认菜单 */}
+              {/* 使用全局确认弹窗的合并操作 */}
                 <div className="flex items-center gap-3">
                   
                   {/* 🌟 Merge 模块：无论什么类都显示，方便 background 导出内容 */}
                   <div className="flex items-center bg-neutral-50 dark:bg-neutral-800 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <Select value={mergeTargetId} onValueChange={(v) => { setMergeTargetId(v); setMergeStage(0); }}>
+                    <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
                       <SelectTrigger className="h-7 w-32 text-xs border-none bg-transparent focus:ring-0 shadow-none">
                         {/* 🌟 修复：手动通过 ID 查找 Name 进行显示，确保选中后不显示 ID */}
                         <SelectValue placeholder={t('taxonomyDashboard.mergeInto')}>
@@ -2798,21 +2844,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                       </SelectContent>
                     </Select>
                     
-                    {mergeStage === 1 ? (
-                        <div className="flex items-center gap-1 ml-2 animate-in zoom-in-95">
-                          <Button size="sm" className="h-7 px-2 text-[10px] bg-orange-600 text-white font-bold" onClick={executeMergeClass}>{t('taxonomyDashboard.confirmMerge')}</Button>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setMergeStage(0)}><X className="w-3 h-3"/></Button>
-                        </div>
-                      ) : (
-                        <Button 
-                          size="sm" 
-                          className="h-7 px-3 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded ml-1" 
-                          disabled={!mergeTargetId || isProcessing} 
-                          onClick={() => setMergeStage(1)}
-                        >
-                          <GitMerge className="w-3.5 h-3.5 mr-1" /> {t('taxonomyDashboard.merge')}
-                        </Button>
-                      )}
+                    <Button
+                      size="sm"
+                      className="h-7 px-3 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded ml-1"
+                      disabled={!mergeTargetId || isProcessing}
+                      onClick={requestMergeClass}
+                    >
+                      <GitMerge className="w-3.5 h-3.5 mr-1" /> {t('taxonomyDashboard.merge')}
+                    </Button>
                   </div>
                   {/* 🌟 新增：带属性的合并入口 */}
                   {activeClass && (
