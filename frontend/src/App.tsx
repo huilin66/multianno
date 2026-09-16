@@ -41,6 +41,57 @@ import { hasAnnotationAttributeContent } from './lib/annotationAttributeUtils';
 import { showDialog } from './store/useDialogStore';
 import { toast } from './store/useToastStore';
 
+const getDisplayLocale = (language: string) => language.startsWith('zh') ? 'zh-CN' : 'en-US';
+
+const parseSavedTimestamp = (timestamp: string) => {
+  const date = new Date(timestamp);
+  if (!Number.isNaN(date.getTime()) && /\d{4}[-/]\d{1,2}[-/]\d{1,2}|T/.test(timestamp)) {
+    return date;
+  }
+
+  // Older cached states stored only HH:mm:ss. The original date cannot be
+  // recovered, so keep the saved time and attach today's date for display.
+  const timeMatch = timestamp.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (!timeMatch) return null;
+
+  const legacyDate = new Date();
+  legacyDate.setHours(
+    Number(timeMatch[1]),
+    Number(timeMatch[2]),
+    Number(timeMatch[3] || 0),
+    0,
+  );
+  return legacyDate;
+};
+
+const formatSavedTimestamp = (
+  timestamp: string | null,
+  language: string,
+  includeDate = false,
+) => {
+  if (!timestamp) return '';
+
+  const date = parseSavedTimestamp(timestamp);
+  if (!date) return timestamp;
+
+  const locale = getDisplayLocale(language);
+  const timeText = date.toLocaleTimeString(locale, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  if (!includeDate) return timeText;
+
+  const dateText = date.toLocaleDateString(locale, {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return `${timeText} ${dateText}`;
+};
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const {
@@ -69,6 +120,37 @@ export default function App() {
   const startupAnnotationReloadKey = useRef<string | null>(null);
   const { annotationSaveStatus, autoSave } = useAnnotationAutoSave();
   const { metaSaveStatus, metaLastSavedTime, isDirty: isMetaDirty } = useMetaAutoSave();
+
+  const metaDisplayTime = formatSavedTimestamp(metaLastSavedTime, i18n.language);
+  const metaTooltipTime = formatSavedTimestamp(metaLastSavedTime, i18n.language, true);
+  const annotationDisplayTime = formatSavedTimestamp(annotationLastSavedTime, i18n.language);
+  const annotationTooltipTime = formatSavedTimestamp(annotationLastSavedTime, i18n.language, true);
+
+  const metaStatusText = metaSaveStatus === 'error'
+    ? 'Error'
+    : metaSaveStatus === 'saving'
+      ? 'Saving...'
+      : metaSaveStatus === 'saved'
+        ? 'Saved'
+        : isMetaDirty
+          ? 'Unsaved'
+          : metaDisplayTime
+            ? `Meta ${metaDisplayTime}`
+            : 'Meta';
+  const metaCompactText = !isMetaDirty && metaSaveStatus === 'idle' && metaDisplayTime
+    ? metaDisplayTime
+    : metaStatusText;
+
+  const annotationStatusText = annotationSaveStatus === 'error'
+    ? 'Error'
+    : annotationSaveStatus === 'saving'
+      ? 'Saving...'
+      : annotationDisplayTime
+        ? `Anno ${annotationDisplayTime}`
+        : 'Anno';
+  const annotationCompactText = annotationSaveStatus === 'idle' && annotationDisplayTime
+    ? annotationDisplayTime
+    : annotationStatusText;
   
   useBackendHealth();
   const [viewLayoutModalOpen, setViewLayoutModalOpen] = useState(false);
@@ -209,9 +291,9 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
-      <header className="flex items-center justify-between px-4 py-2 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0 h-14">
+      <header className="flex items-center justify-between gap-2 px-4 py-2 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0 h-14">
         {/* Start Menu */}
-        <div className="flex items-center gap-4 w-1/3">
+        <div className="flex flex-1 min-w-0 items-center gap-4">
           <DropdownMenu>
             <DropdownMenuTrigger className="flex items-center justify-center w-9 h-9 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors outline-none cursor-pointer shrink-0 text-neutral-700 dark:text-neutral-200">
               <Menu className="w-5 h-5" />
@@ -277,45 +359,39 @@ export default function App() {
         </div>
 
         {/* Top Navigation Bar：Logo + app name + project name + scene group + 2 save status */}
-        <div className="flex items-center justify-center gap-3 w-1/2 shrink-0">
+        <div className="flex flex-[2] min-w-0 items-center justify-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-3 overflow-hidden">
           <div className="w-8 h-8 bg-blue-600 rounded-md flex items-center justify-center text-white font-bold shadow-sm cursor-default" title={t('header.appName')}>
             MA
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-neutral-900 dark:text-white transition-colors cursor-default" title={t('header.appName')}>
+          <h1 className="hidden 2xl:block shrink-0 text-xl font-bold tracking-tight text-neutral-900 dark:text-white transition-colors cursor-default" title={t('header.appName')}>
             MultiAnno
           </h1>
-          <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-2" />
-
-          <span
-            className="inline-flex items-center text-sm font-semibold text-primary tracking-wide max-w-[200px] transition-colors cursor-default"
-            title={t('header.projectName') + projectName}
-          >
-            <span className="truncate">
-              {projectName.slice(0, Math.ceil(projectName.length / 2)) + ' '}
+          <div className="hidden 2xl:flex min-w-0 items-center">
+            <div className="h-4 w-[1px] shrink-0 bg-neutral-300 dark:bg-neutral-700 transition-colors mx-2" />
+            <span
+              className="inline-flex min-w-0 max-w-[200px] shrink items-center text-sm font-semibold text-primary tracking-wide transition-colors cursor-default"
+              title={t('header.projectName') + projectName}
+            >
+              <span className="truncate min-w-0">{projectName}</span>
             </span>
-            <span className="whitespace-nowrap flex-shrink-0">
-              {' ' + projectName.slice(Math.ceil(projectName.length / 2))}
-            </span>
-          </span>
-          <div className="h-4 w-[1px] bg-neutral-100 dark:bg-neutral-900 transition-colors mx-1" />
+            <div className="h-4 w-[1px] shrink-0 bg-neutral-100 dark:bg-neutral-900 transition-colors mx-1" />
+          </div>
           {currentStem && (
             <>
+              <div className="h-4 w-[1px] shrink-0 bg-neutral-100 dark:bg-neutral-900 transition-colors mx-1" />
               <span
-                className="inline-flex items-center max-w-[200px] px-3 py-1 bg-neutral-200 dark:bg-neutral-800 rounded-full text-xs font-mono text-neutral-700 dark:text-neutral-300 transition-colors cursor-default"
+                className="inline-flex min-w-0 max-w-[200px] shrink items-center px-3 py-1 bg-neutral-200 dark:bg-neutral-800 rounded-full text-xs font-mono text-neutral-700 dark:text-neutral-300 transition-colors cursor-default"
                 title={t('header.sceneGroupName') + currentStem}
               >
-                <span className="truncate min-w-0">
-                  {currentStem.slice(0, Math.ceil(currentStem.length / 2))}
-                </span>
-                <span className="whitespace-nowrap flex-shrink-0">
-                  {currentStem.slice(Math.ceil(currentStem.length / 2))}
-                </span>
+                <span className="truncate min-w-0">{currentStem}</span>
               </span>
             </>
           )}
+          </div>
           <div className="h-4 w-[1px] bg-neutral-300 dark:bg-neutral-700 transition-colors mx-2" />
 
-          <div className="flex items-center gap-0">
+          <div className="flex h-7 shrink-0 items-center gap-1 whitespace-nowrap">
             {folders && folders.length > 0 && projectMetaPath && (
               <div
                 title={metaSaveStatus === 'error' 
@@ -323,14 +399,14 @@ export default function App() {
                   : metaSaveStatus === 'saving'
                     ? t('header.projectMetaSaving')
                     : metaSaveStatus === 'saved'
-                      ? t('header.projectMetaSaved') + metaLastSavedTime
+                      ? t('header.projectMetaSaved') + (metaTooltipTime || metaLastSavedTime || '')
                       : isMetaDirty
                         ? t('header.projectMetaUnsaved') 
-                        : metaLastSavedTime
-                          ? t('header.projectMetaSaved') + metaLastSavedTime
+                        : metaTooltipTime
+                          ? t('header.projectMetaSaved') + metaTooltipTime
                           : t('header.projectMetaMiss')
                 }
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${
+                className={`inline-flex h-6 min-w-0 max-w-[150px] shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap px-2.5 rounded-full border text-[11px] leading-none font-medium transition-all duration-300 ${
                   metaSaveStatus === 'error'
                     ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400'
                     : metaSaveStatus === 'saving'
@@ -347,20 +423,8 @@ export default function App() {
                 ) : (
                   <Database className={`w-3 h-3 ${isMetaDirty ? 'animate-pulse' : 'opacity-70'}`} />
                 )}
-                <span className="hidden sm:inline">
-                  {metaSaveStatus === 'error'
-                    ? 'Error'
-                    : metaSaveStatus === 'saving'
-                      ? 'Saving...'
-                      : metaSaveStatus === 'saved'
-                        ? 'Saved'
-                        : isMetaDirty
-                          ? 'Unsaved'
-                          : metaLastSavedTime
-                            ? 'Meta ' + metaLastSavedTime
-                            : 'Meta'
-                  }
-                </span>
+                <span className="hidden min-w-0 truncate whitespace-nowrap sm:inline xl:hidden">{metaCompactText}</span>
+                <span className="hidden min-w-0 truncate whitespace-nowrap xl:inline">{metaStatusText}</span>
               </div>
             )}
             <div className="h-4 w-[1px] bg-neutral-100 dark:bg-neutral-900 transition-colors mx-1" />
@@ -371,12 +435,12 @@ export default function App() {
                   : annotationSaveStatus === 'saving'
                     ? t('header.annotationSaving')
                     : annotationSaveStatus === 'saved'
-                      ? t('header.annotationSaved') + annotationLastSavedTime
-                      : annotationLastSavedTime
-                        ? t('header.annotationSaved') + annotationLastSavedTime
+                      ? t('header.annotationSaved') + annotationTooltipTime
+                      : annotationTooltipTime
+                        ? t('header.annotationSaved') + annotationTooltipTime
                         : t('header.annotationMiss')
                 }
-                className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-medium transition-all duration-300 ${
+                className={`inline-flex h-6 min-w-0 max-w-[150px] shrink-0 items-center gap-1.5 overflow-hidden whitespace-nowrap px-2.5 rounded-full border text-[11px] leading-none font-medium transition-all duration-300 ${
                   annotationSaveStatus === 'error'
                     ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50 text-red-600 dark:text-red-400'
                     : annotationSaveStatus === 'saving'
@@ -391,25 +455,15 @@ export default function App() {
                 ) : (
                   <Tag className={`w-3 h-3 ${annotationSaveStatus !== 'idle' ? 'animate-pulse' : 'opacity-70'}`} />
                 )}
-                <span className="hidden sm:inline">
-                  {annotationSaveStatus === 'error'
-                    ? 'Error'
-                    : annotationSaveStatus === 'saving'
-                      ? 'Saving...'
-                      : annotationSaveStatus === 'saved'
-                        ? 'Saved'
-                        : annotationLastSavedTime
-                          ? 'Anno ' + annotationLastSavedTime
-                          : 'Anno'
-                  }
-                </span>
+                <span className="hidden min-w-0 truncate whitespace-nowrap sm:inline xl:hidden">{annotationCompactText}</span>
+                <span className="hidden min-w-0 truncate whitespace-nowrap xl:inline">{annotationStatusText}</span>
               </div>
             )}
           </div>
         </div>
 
         {/* Right Menu: Settings + Theme Switch + Language Switch */}
-        <div className="w-1/3 flex justify-end items-center gap-2">
+        <div className="flex flex-1 min-w-0 justify-end items-center gap-2">
           <Popover>
             <PopoverTrigger className="inline-flex items-center justify-center w-9 h-9 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors focus:outline-none cursor-pointer text-neutral-500 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white"
               title={t('header.settings')}

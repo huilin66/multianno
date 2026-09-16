@@ -2,14 +2,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { useStore } from '../store/useStore';
 import { saveProjectMeta } from '../api/client';
-import { useTranslation } from 'react-i18next';
-import { localeMap } from '../i18n';
 import { generateProjectMetaConfig } from '../lib/projectUtils';
 
 export function useMetaAutoSave() {
   const [metaSaveStatus, setMetaSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-  const { i18n } = useTranslation();
-  
   const workspacePath = useStore((s) => s.workspacePath);
   const projectMetaPath = useStore((s) => s.projectMetaPath);
   const taxonomyClasses = useStore((s) => s.taxonomyClasses);
@@ -78,11 +74,7 @@ export function useMetaAutoSave() {
         const payload = generateProjectMetaConfig(currentWholeState);
         await saveProjectMeta({ file_path: projectMetaPath, content: payload });
         
-        const timeStr = new Date().toLocaleTimeString(
-          localeMap[i18n.language || 'en'] || undefined, 
-          { hour12: false }
-        );
-        setMetaLastSavedTime(timeStr);
+        setMetaLastSavedTime(new Date().toISOString());
         setMetaSaveStatus('saved');
         isDirtyRef.current = false;
         

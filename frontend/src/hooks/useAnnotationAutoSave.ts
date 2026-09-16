@@ -1,11 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store/useStore';
-import { useTranslation } from 'react-i18next';
-import { localeMap } from '../i18n';
 import { saveCurrentAnnotations } from '../lib/annotationSaveService';
 
 export function useAnnotationAutoSave() {
-  const { i18n } = useTranslation();
   const [annotationSaveStatus, setAnnotationSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   const currentStem = useStore((s) => s.currentStem);
   const annotations = useStore((s) => s.annotations);
@@ -16,15 +13,14 @@ export function useAnnotationAutoSave() {
     setAnnotationSaveStatus('saving');
     try {
       await saveCurrentAnnotations();
-      const timeStr = new Date().toLocaleTimeString(localeMap[i18n.language || 'en'] || undefined, { hour12: false });
-      setAnnotationLastSavedTime(timeStr);
+      setAnnotationLastSavedTime(new Date().toISOString());
       setAnnotationSaveStatus('idle');
       return true;
     } catch {
       setAnnotationSaveStatus('error');
       return false;
     }
-  }, [i18n.language, setAnnotationLastSavedTime]);
+  }, [setAnnotationLastSavedTime]);
 
   useEffect(() => {
     if (!currentStem) return;
