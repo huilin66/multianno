@@ -85,6 +85,8 @@ MultiAnno 提供一键启动器以简化启动流程。激活 Conda 环境后，
 python app.py
 ```
 
+该命令只启动服务，不会自动打开浏览器。如需自动打开前端，请使用 `python app.py --open-browser`。
+
 完整标注工作流请阅读 [标注项目快速开始](./QUICK_START_zh-CN.md)。
 
 1. **创建新项目：**

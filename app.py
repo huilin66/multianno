@@ -1,3 +1,4 @@
+import argparse
 import importlib
 import os
 import shutil
@@ -176,7 +177,7 @@ def run_preflight_checks(root_dir, backend_dir, frontend_dir):
     return npm_cmd
 
 
-def run_app():
+def run_app(open_app=False):
     print("Starting MultiAnno...")
 
     root_dir = os.path.dirname(os.path.abspath(__file__))
@@ -223,8 +224,11 @@ def run_app():
         )
         wait_for_http(FRONTEND_URL, frontend_process, "Frontend")
 
-        print(f"Opening browser: {FRONTEND_URL}")
-        webbrowser.open(FRONTEND_URL)
+        if open_app:
+            print(f"Opening browser: {FRONTEND_URL}")
+            webbrowser.open(FRONTEND_URL)
+        else:
+            print(f"MultiAnno is ready at {FRONTEND_URL} (browser auto-open disabled).")
 
         print("\nMultiAnno is running. Press Ctrl+C in this terminal to stop.\n")
 
@@ -252,4 +256,13 @@ def run_app():
 
 
 if __name__ == "__main__":
-    run_app()
+    parser = argparse.ArgumentParser(description="Start the MultiAnno backend and frontend.")
+    parser.add_argument(
+        "--open-browser",
+        "--open-app",
+        dest="open_app",
+        action="store_true",
+        help="Open the frontend in the default browser after startup.",
+    )
+    args = parser.parse_args()
+    run_app(open_app=args.open_app)

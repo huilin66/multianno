@@ -10,7 +10,13 @@ If MultiAnno is not installed or running yet, read [README.md](./README.md) firs
 python app.py
 ```
 
-By default, the browser opens:
+This starts the backend and frontend without opening a browser. To open the frontend automatically after both services are ready, use:
+
+```bash
+python app.py --open-browser
+```
+
+The frontend is available at:
 
 ```text
 http://127.0.0.1:5173
@@ -367,4 +373,3 @@ Before export, confirm:
 - Important scenes have been sampled for quality.
 - Export format, classes, and shape types are correct.
 - The target folder can be overwritten, or a new empty folder has been selected.
-

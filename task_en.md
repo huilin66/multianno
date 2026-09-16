@@ -6,7 +6,7 @@
 ### Root Directory
 | File | Description |
 |------|-------------|
-| `app.py` | One-click launcher: starts FastAPI backend (8090) + Vite frontend (5173), auto-opens browser |
+| `app.py` | One-click launcher: starts FastAPI backend (8090) + Vite frontend (5173), with optional `--open-browser` browser launch |
 | `README.md` | Project introduction, installation guide, quick start |
 | `README_zh-CN.md` | Chinese README |
 | `task.md` | Task checklist (Chinese) |

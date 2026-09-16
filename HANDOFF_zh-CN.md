@@ -30,7 +30,10 @@ python app.py
   -> FastAPI 后端：http://127.0.0.1:8090
   -> 健康检查：    http://127.0.0.1:8090/api/health
   -> Vite 前端：   http://127.0.0.1:5173
-  -> 两个服务均就绪后才打开浏览器
+  -> 默认不会自动打开浏览器
+
+python app.py --open-browser
+  -> 两个服务均就绪后自动打开前端
 ```
 
 当前持久化结构：
@@ -211,7 +214,7 @@ python app.py
 - 启动后端服务。
 - 等待 `/api/health` 可访问。
 - 启动前端 Vite 服务。
-- 打开浏览器。
+- 仅在提供 `--open-browser` 参数时打开浏览器。
 
 默认地址：
 

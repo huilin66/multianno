@@ -30,7 +30,10 @@ python app.py
   -> FastAPI backend: http://127.0.0.1:8090
   -> health gate:     http://127.0.0.1:8090/api/health
   -> Vite frontend:   http://127.0.0.1:5173
-  -> browser opens only after both services are ready
+  -> browser does not open automatically
+
+python app.py --open-browser
+  -> opens the frontend after both services are ready
 ```
 
 Current persistence:
@@ -211,7 +214,7 @@ The launcher will:
 - Start the backend.
 - Wait for `/api/health`.
 - Start the frontend Vite server.
-- Open the browser.
+- Open the browser only when `--open-browser` is provided.
 
 Default addresses:
 

@@ -93,6 +93,8 @@ MultiAnno provides an all-in-one launcher to simplify the startup process. Once 
 python app.py
 ```
 
+This starts the services without opening a browser. To open the frontend automatically, use `python app.py --open-browser`.
+
 For the full annotation workflow, see [Annotation Quick Start](./QUICK_START.md).
 
 1. **Create a new project:**
