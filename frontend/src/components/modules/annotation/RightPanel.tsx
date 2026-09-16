@@ -9,7 +9,7 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, EyeOff, Check, X, MapPin, Copy, RefreshCw, ExternalLink
+  Tag, Type, Hash, EyeOff, ListPlus, ListX, Check, X, MapPin, Copy, RefreshCw, ExternalLink
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -132,14 +132,14 @@ export function RightPanel({
   const SectionHeader = ({ title, icon: Icon, isExpanded, onToggle, badge, colorClass, actionNode }: any) => (
     <div 
       onClick={onToggle}
-      className={`p-2.5 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800 cursor-pointer hover:bg-neutral-200/50 dark:hover:bg-neutral-800 transition-colors shrink-0 ${
-        isExpanded ? 'bg-blue-50 dark:bg-blue-900/20' : 'bg-white dark:bg-neutral-950'  // ← 背景改为蓝色调
+      className={`h-10 px-2.5 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-700 cursor-pointer hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors shrink-0 ${
+        isExpanded ? 'bg-blue-50 dark:bg-blue-900/35' : 'bg-neutral-100 dark:bg-neutral-800'
       }`}
     >
       <div className="flex items-center gap-2">
-        <Icon className={`w-3.5 h-3.5 ${isExpanded ? 'text-blue-500' : 'text-neutral-400'}`} />
+        <Icon className={`w-3.5 h-3.5 ${isExpanded ? 'text-blue-500' : 'text-neutral-500 dark:text-neutral-300'}`} />
         <h3 className={`font-bold text-[10px] uppercase tracking-wider ${
-          isExpanded ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-500'  // ← 改这里
+          isExpanded ? 'text-blue-600 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'
         }`}>
           {title}
         </h3>
@@ -147,7 +147,7 @@ export function RightPanel({
           <span className={`ml-2 px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
             isExpanded 
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'  // ← badge 也变蓝
-              : 'bg-neutral-200 dark:bg-neutral-800 text-neutral-500'
+              : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-200'
           }`}>
             {badge}
           </span>
@@ -160,12 +160,14 @@ export function RightPanel({
           </div>
         )}
         <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${
-          isExpanded ? 'rotate-90 text-blue-500' : 'text-neutral-400'  // ← 箭头也变蓝
+          isExpanded ? 'rotate-90 text-blue-500' : 'text-neutral-500 dark:text-neutral-300'
         }`} />
       </div>
     </div>
   );
   const currentAnnotations = annotations.filter((a: any) => a.stem === currentStem);
+  const isObjectHidden = (annotation: any) =>
+    hiddenClasses.includes(annotation.label) || hiddenAnnotations.includes(annotation.id);
 
   const handleResetNms = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -341,10 +343,10 @@ export function RightPanel({
     <div className="w-80 h-full border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-xl z-10">
 
       {/* 1. Project Meta (固定不折叠) */}
-      <div onClick={() => setActiveModule('meta')} className="p-3 border-b border-neutral-200 dark:border-neutral-800 hover:bg-neutral-100 dark:hover:bg-neutral-800/50 cursor-pointer transition-all group flex items-center justify-between shrink-0">
+      <div onClick={() => setActiveModule('meta')} className="h-10 px-2.5 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200/70 dark:hover:bg-neutral-700 cursor-pointer transition-all group flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
-          <Database className="w-4 h-4 text-blue-500 group-hover:scale-110 transition-transform" />
-          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-400 group-hover:text-blue-500">
+          <Database className="w-4 h-4 text-neutral-500 dark:text-neutral-300 group-hover:text-blue-500 group-hover:scale-110 transition-all" />
+          <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-200 group-hover:text-blue-500">
             {t('workspace.projectMeta')}
           </span>
         </div>
@@ -1083,7 +1085,7 @@ export function RightPanel({
         <SectionHeader 
           title={t('workspace.objects')} icon={Square} 
           isExpanded={expanded.objects} onToggle={() => toggleSection('objects')} 
-          badge={currentAnnotations.filter((a: any) => !hiddenClasses.includes(a.label)).length}
+          badge={currentAnnotations.filter((a: any) => showHiddenObjects || !isObjectHidden(a)).length}
           actionNode={
             currentStem && (
               <div className="flex items-center gap-1">
@@ -1101,27 +1103,29 @@ export function RightPanel({
                 </button>
                 {currentAnnotations.length > 0 && (
                   <>
-                    {/* 🌟 显示/隐藏已隐藏的对象 */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowHiddenObjects(prev => !prev);
-                      }}
-                      className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${
-                        showHiddenObjects
-                          ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/40'
-                          : 'text-neutral-400 hover:text-amber-500'
-                      }`}
-                      title={showHiddenObjects ? t('rightPanel.hideHiddenObjects') : t('rightPanel.showHiddenObjects')}
-                    >
-                      {showHiddenObjects ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); setNmsPanelOpen(!nmsPanelOpen); }}
                       className={`w-6 h-6 flex items-center justify-center rounded transition-colors ${nmsPanelOpen || hasScanned ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40' : 'text-neutral-400 hover:text-blue-500'}`}
                       title={t('rightPanel.findOverlapping')}
                     >
                       <Copy className="w-3.5 h-3.5" /> {/* 🌟 修改为交叠矩形图标 */}
+                    </button>
+
+                    {/* 🌟 显示/隐藏已隐藏的对象 */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowHiddenObjects(prev => !prev);
+                      }}
+                      className="w-6 h-6 flex items-center justify-center rounded transition-colors text-neutral-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                      title={showHiddenObjects
+                        ? t('rightPanel.removeHiddenObjectsFromList')
+                        : t('rightPanel.showHiddenObjectsInList')}
+                      aria-label={showHiddenObjects
+                        ? t('rightPanel.removeHiddenObjectsFromList')
+                        : t('rightPanel.showHiddenObjectsInList')}
+                    >
+                      {showHiddenObjects ? <ListX className="w-3.5 h-3.5" /> : <ListPlus className="w-3.5 h-3.5" />}
                     </button>
 
                     {confirmDeleteAll ? (
@@ -1232,15 +1236,13 @@ export function RightPanel({
 
           <div className="max-h-[40vh] overflow-y-auto p-2 space-y-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900/30 custom-scrollbar max-h-[228px]">
             {currentAnnotations
-            .filter((ann: any) => showHiddenObjects || !hiddenClasses.includes(ann.label))
+            .filter((ann: any) => showHiddenObjects || !isObjectHidden(ann))
             .map((ann: any) => {
               const clsDef = taxonomyClasses.find((c: any) => c.name === ann.label);
               const color = clsDef?.color || '#3B82F6';
               const isActive = ann.id === activeAnnotationId;
 
-              const classHidden = hiddenClasses.includes(ann.label);
-              const individuallyHidden = hiddenAnnotations.includes(ann.id);
-              const isHidden = classHidden || individuallyHidden;
+              const isHidden = isObjectHidden(ann);
 
               const groupInfo = nmsGroups[ann.id];
               const isRedundant = groupInfo && !groupInfo.isMaster;
