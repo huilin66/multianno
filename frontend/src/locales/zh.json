@@ -120,7 +120,7 @@
     "infoLoadingModelPath": "加载模型中..."
   },
   "createProject": {
-    "defaultName": "multianno 项目1",
+    "defaultName": "multianno project1",
     "projectName": "项目名称",
     "namePlaceholder": "请输入项目名称...",
     "projectMetaPath": "项目元数据路径",
@@ -136,10 +136,21 @@
     "loadingAnnotations": "加载标注: "
   },
   "dataPreload": {
+    "project": {
+      "title": "项目配置",
+      "description": "选择图像文件夹后，系统会自动生成默认视图和标注工作空间。",
+      "name": "项目名称",
+      "metaSaveDir": "项目元数据保存目录",
+      "metaSaveDirPlaceholder": "选择项目元数据保存目录...",
+      "selectMetaSaveDir": "选择项目元数据保存目录",
+      "metaPathPreview": "项目元数据将保存到",
+      "metaPathNotReady": "选择图像文件夹后自动生成"
+    },
     "steps": {
-      "folders": "文件夹",
+      "folders": "图像文件夹",
       "views": "视图",
-      "workspace": "工作空间"
+      "workspace": "工作空间",
+      "project": "项目配置"
     },
     "folders": {
       "recent": "最近",
@@ -181,6 +192,7 @@
       "backendFailed": "后端连接失败",
       "noFoldersConfigured": "请配置至少一个文件夹",
       "noMainView": "请设置主视图",
+      "missingProjectDetails": "请填写项目名称和项目元数据保存目录",
       "resetViews": "重置所有视图？",
       "confirmExit": "退出前是否保存配置？",
       "saveFailed": "保存配置失败"

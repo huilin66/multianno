@@ -1,5 +1,5 @@
 // src/components/modules/DataPreload.tsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
@@ -18,9 +18,49 @@ import {
   ChevronRight, RotateCcw, Search
 } from 'lucide-react';
 
-export function DataPreload({ onClose }: { onClose: () => void }) {
+interface DataPreloadProps {
+  onClose: () => void;
+  isCreatingProject?: boolean;
+}
+
+const getParentDirectory = (path: string) => {
+  const trimmed = path.trim();
+  if (!trimmed) return '';
+
+  const normalized = trimmed.replace(/[\\/]+$/, '');
+  const lastSeparator = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'));
+  if (lastSeparator < 0) return '';
+  if (lastSeparator === 0) return normalized.slice(0, 1);
+  if (lastSeparator === 2 && /^[a-zA-Z]:[\\/]$/.test(normalized.slice(0, 3))) {
+    return normalized.slice(0, 3);
+  }
+  return normalized.slice(0, lastSeparator);
+};
+
+const joinPath = (directory: string, name: string) => {
+  const trimmedDirectory = directory.trim();
+  if (!trimmedDirectory) return name;
+
+  const separator = trimmedDirectory.includes('\\') && !trimmedDirectory.includes('/') ? '\\' : '/';
+  const normalizedDirectory = trimmedDirectory.replace(/[\\/]+$/, '');
+  return normalizedDirectory ? `${normalizedDirectory}${separator}${name}` : `${separator}${name}`;
+};
+
+const getProjectMetaFileName = (projectName: string) => {
+  const safeName = projectName
+    .trim()
+    .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '_')
+    .replace(/\s+/g, '_')
+    .replace(/[. ]+$/, '');
+  return `${safeName || 'multianno_project1'}_meta.json`;
+};
+
+const normalizeComparablePath = (path: string) => path.trim().replace(/[\\/]+$/, '').toLowerCase();
+
+export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadProps) {
   const { t } = useTranslation();
   const {
+    projectName, projectMetaPath, setProjectName, setProjectMetaPath,
     folders, views, addFolder, removeFolder, clearFolders, updateFolder,
     addView, removeView, updateView, clearViews,
     setActiveModule, editorSettings
@@ -42,6 +82,9 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
   const [isWorkspaceConfirming, setIsWorkspaceConfirming] = useState(false);
   const [workspaceHasJson, setWorkspaceHasJson] = useState(false);
   const [isCheckingWorkspace, setIsCheckingWorkspace] = useState(false);
+  const [projectNameDraft, setProjectNameDraft] = useState(() => projectName || t('createProject.defaultName'));
+  const [projectMetaSaveDir, setProjectMetaSaveDir] = useState('');
+  const [metaSaveDirExplorerOpen, setMetaSaveDirExplorerOpen] = useState(false);
 
   const [isGlobalConfirming, setIsGlobalConfirming] = useState(false);
 
@@ -54,29 +97,79 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
     return folders.find(f => f.id === mainView?.folderId);
   }, [views, folders]);
 
+  const firstImageFolder = folders[0];
+  const defaultMetaSaveDir = useMemo(
+    () => getParentDirectory(firstImageFolder?.path || ''),
+    [firstImageFolder?.path],
+  );
+  const defaultWorkspacePath = useMemo(
+    () => defaultMetaSaveDir ? joinPath(defaultMetaSaveDir, 'annos') : '',
+    [defaultMetaSaveDir],
+  );
+  const finalProjectMetaPath = useMemo(() => {
+    if (!isCreatingProject) return projectMetaPath || '';
+    const saveDir = projectMetaSaveDir.trim() || defaultMetaSaveDir;
+    if (!saveDir || !projectNameDraft.trim()) return '';
+    return joinPath(saveDir, getProjectMetaFileName(projectNameDraft));
+  }, [defaultMetaSaveDir, isCreatingProject, projectMetaPath, projectMetaSaveDir, projectNameDraft]);
+
   const workspaceStatus = isWorkspaceCustom ? 'defined' : 'default';
 
   const originalPaths = useRef<Record<string, string>>({});
+  const autoMetaSaveDirRef = useRef('');
+
+  const checkWorkspaceForJson = useCallback(async (path: string) => {
+    if (!path) return;
+    setIsCheckingWorkspace(true);
+    try {
+      const data = await checkWorkspaceJson(path);
+      setWorkspaceHasJson(data.hasJson || false);
+    } catch {
+      setWorkspaceHasJson(false);
+    } finally {
+      setIsCheckingWorkspace(false);
+    }
+  }, []);
 
   // ==========================================
   // 初始化
   // ==========================================
   useEffect(() => {
-    if (workspaceStorePath && workspaceStorePath !== mainViewFolder?.path) {
+    if (workspaceStorePath?.trim()) {
       setWorkspacePath(workspaceStorePath);
-      setIsWorkspaceCustom(true);
-      checkWorkspaceForJson(workspaceStorePath);
-    } else if (mainViewFolder?.path) {
-      checkWorkspaceForJson(mainViewFolder.path);
+      setIsWorkspaceCustom(normalizeComparablePath(workspaceStorePath) !== normalizeComparablePath(defaultWorkspacePath));
+      void checkWorkspaceForJson(workspaceStorePath);
+    } else if (defaultWorkspacePath) {
+      setWorkspacePath(defaultWorkspacePath);
+      setIsWorkspaceCustom(false);
+      void checkWorkspaceForJson(defaultWorkspacePath);
+    } else {
+      setWorkspacePath('');
+      setIsWorkspaceCustom(false);
+      setWorkspaceHasJson(false);
     }
-  }, []);
+  }, [checkWorkspaceForJson, defaultWorkspacePath, workspaceStorePath]);
 
   useEffect(() => {
-    if (!isWorkspaceCustom && mainViewFolder?.path) {
-      setWorkspacePath(mainViewFolder.path);
-      checkWorkspaceForJson(mainViewFolder.path);
+    if (isCreatingProject) {
+      setActiveStep('folders');
+      setProjectNameDraft(t('createProject.defaultName'));
+      setProjectMetaSaveDir('');
+      autoMetaSaveDirRef.current = '';
+    } else {
+      setProjectNameDraft(projectName || '');
+      setProjectMetaSaveDir(projectMetaPath ? getParentDirectory(projectMetaPath) : '');
+      autoMetaSaveDirRef.current = '';
     }
-  }, [mainViewFolder?.path, isWorkspaceCustom]);
+  }, [isCreatingProject]);
+
+  useEffect(() => {
+    if (!isCreatingProject) return;
+    setProjectMetaSaveDir((current) => (
+      !current || current === autoMetaSaveDirRef.current ? defaultMetaSaveDir : current
+    ));
+    autoMetaSaveDirRef.current = defaultMetaSaveDir;
+  }, [defaultMetaSaveDir, isCreatingProject]);
 
   useEffect(() => {
     const savedHistory = localStorage.getItem('multiAnno_recentPaths');
@@ -97,18 +190,24 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
   // ==========================================
   // 步骤定义
   // ==========================================
-  const steps = useMemo(() => [
+  const steps = useMemo(() => {
+    const baseSteps = [
     { id: 'folders', label: t('dataPreload.steps.folders'), required: true },
     { id: 'views', label: t('dataPreload.steps.views'), required: true },
     { id: 'workspace', label: t('dataPreload.steps.workspace'), required: true },
-  ], [t]);
+    ];
+    return isCreatingProject
+      ? [...baseSteps, { id: 'project', label: t('dataPreload.steps.project'), required: true }]
+      : baseSteps;
+  }, [isCreatingProject, t]);
 
   const getStepStatus = (stepId: string): 'current' | 'done' | 'pending' => {
     if (activeStep === stepId) return 'current';
     switch (stepId) {
       case 'folders': return folders.length > 0 ? 'done' : 'pending';
       case 'views': return views.length > 0 ? 'done' : 'pending';
-      case 'workspace': return workspaceHasJson || isWorkspaceCustom ? 'done' : 'pending';
+      case 'workspace': return workspaceHasJson || isWorkspaceCustom || !!defaultWorkspacePath ? 'done' : 'pending';
+      case 'project': return finalProjectMetaPath ? 'done' : 'pending';
       default: return 'pending';
     }
   };
@@ -116,16 +215,6 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
   // ==========================================
   // Folder 操作
   // ==========================================
-  const checkWorkspaceForJson = async (path: string) => {
-    if (!path) return;
-    setIsCheckingWorkspace(true);
-    try {
-      const data = await checkWorkspaceJson(path);
-      setWorkspaceHasJson(data.hasJson || false);
-    } catch { setWorkspaceHasJson(false); }
-    finally { setIsCheckingWorkspace(false); }
-  };
-
   const savePathsToHistory = (paths: string[]) => {
     setRecentPaths(prev => {
       let newHistory = [...prev];
@@ -276,6 +365,19 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
         },
       });
 
+      const currentViews = useStore.getState().views;
+      const totalBands = Number(newFolderMeta.bands || 3);
+      addView({
+        id: `view-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        folderId: newFolderId,
+        bands: totalBands >= 3 ? [1, 2, 3] : [1],
+        isMain: !currentViews.some((view) => view.isMain),
+        opacity: 1,
+        colormap: 'gray',
+        crop: { t: 0, r: 100, b: 100, l: 0 },
+        transform: { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 },
+      });
+
       backendData.forEach((meta: any) => {
         const existingFolder = folders.find(f => f.path === meta.folderPath);
         if (existingFolder) {
@@ -383,7 +485,7 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
   // Workspace 操作
   // ==========================================
   const handleWorkspaceConfirm = async () => {
-    const finalPath = isWorkspaceCustom ? workspacePath : mainViewFolder?.path || '';
+    const finalPath = isWorkspaceCustom ? workspacePath.trim() : defaultWorkspacePath;
     if (!finalPath) return;
     setIsWorkspaceConfirming(true);
     setWorkspaceStorePath(finalPath);
@@ -392,8 +494,9 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
   };
 
   const handleWorkspaceReset = () => {
-    setWorkspacePath(mainViewFolder?.path || '');
+    setWorkspacePath(defaultWorkspacePath);
     setIsWorkspaceCustom(false);
+    void checkWorkspaceForJson(defaultWorkspacePath);
   };
 
   const handleWorkspaceSelectConfirm = (paths: string[]) => {
@@ -431,12 +534,25 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
     if (folders.length === 0) { alert(t('dataPreload.alerts.noFoldersConfigured')); return; }
     if (!mainViewFolder) { alert(t('dataPreload.alerts.noMainView')); return; }
 
+    let metaPath = projectMetaPath;
+    if (isCreatingProject) {
+      const finalName = projectNameDraft.trim();
+      const finalSaveDir = (projectMetaSaveDir.trim() || defaultMetaSaveDir).trim();
+      if (!finalName || !finalSaveDir) {
+        alert(t('dataPreload.alerts.missingProjectDetails'));
+        return;
+      }
+
+      metaPath = joinPath(finalSaveDir, getProjectMetaFileName(finalName));
+      setProjectName(finalName);
+      setProjectMetaPath(metaPath);
+    }
+
     setIsGlobalConfirming(true);
     try {
-      const finalPath = isWorkspaceCustom ? workspacePath : mainViewFolder?.path || '';
+      const finalPath = isWorkspaceCustom ? workspacePath.trim() : defaultWorkspacePath;
       if (finalPath) setWorkspaceStorePath(finalPath);
       const projectMeta = generateProjectMetaConfig(useStore.getState());
-      const metaPath = useStore.getState().projectMetaPath;
       if (metaPath) await saveProjectMeta({ file_path: metaPath, content: projectMeta });
       setActiveModule('extent');
     } catch (err) {
@@ -449,9 +565,72 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
 
   const handleExit = () => {
     if (window.confirm(t('dataPreload.alerts.confirmExit'))) {
-      setActiveModule('workspace');
+      onClose();
     }
   };
+
+  const renderProjectSetup = () => (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <p className="mb-4 text-[10px] text-muted-foreground">
+          {t('dataPreload.project.description')}
+        </p>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="new-project-name" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              {t('dataPreload.project.name')}
+            </Label>
+            <Input
+              id="new-project-name"
+              value={projectNameDraft}
+              onChange={(e) => setProjectNameDraft(e.target.value)}
+              placeholder={t('createProject.defaultName')}
+              className="h-8 text-xs"
+              disabled={isGlobalConfirming}
+            />
+          </div>
+
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="project-meta-save-dir" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              {t('dataPreload.project.metaSaveDir')}
+            </Label>
+            <div className="relative">
+              <Input
+                id="project-meta-save-dir"
+                value={projectMetaSaveDir}
+                onChange={(e) => setProjectMetaSaveDir(e.target.value)}
+                placeholder={defaultMetaSaveDir || t('dataPreload.project.metaSaveDirPlaceholder')}
+                className="h-8 pr-9 font-mono text-[11px]"
+                disabled={isGlobalConfirming}
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+                onClick={() => setMetaSaveDirExplorerOpen(true)}
+                disabled={isGlobalConfirming}
+                title={t('dataPreload.project.selectMetaSaveDir')}
+              >
+                <FolderOpen />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-[10px]">
+          <Info className="mt-0.5 size-3.5 shrink-0 text-primary" />
+          <div className="min-w-0">
+            <span className="text-muted-foreground">{t('dataPreload.project.metaPathPreview')}: </span>
+            <span className="break-all font-mono text-foreground" title={finalProjectMetaPath}>
+              {finalProjectMetaPath || t('dataPreload.project.metaPathNotReady')}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   // ==========================================
   // 渲染
@@ -736,14 +915,14 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
                   <Info className="w-4 h-4" />
                   <span className="text-xs font-medium">{t('dataPreload.workspace.locked')}</span>
                 </div>
-                <div className="text-xs font-mono truncate">{workspacePath || mainViewFolder?.path}</div>
+                <div className="text-xs font-mono truncate">{workspacePath || defaultWorkspacePath}</div>
               </div>
             ) : (
               <div className="space-y-3">
                 <div className="relative">
-                  <Input value={isWorkspaceCustom ? workspacePath : (mainViewFolder?.path || '')}
-                    placeholder={mainViewFolder?.path || 'default'}
-                    onChange={e => { setWorkspacePath(e.target.value); setIsWorkspaceCustom(!!(e.target.value && e.target.value !== mainViewFolder?.path)); }}
+                  <Input value={isWorkspaceCustom ? workspacePath : defaultWorkspacePath}
+                    placeholder={defaultWorkspacePath || 'default'}
+                    onChange={e => { setWorkspacePath(e.target.value); setIsWorkspaceCustom(!!(e.target.value && e.target.value !== defaultWorkspacePath)); }}
                     className="h-9 text-xs pr-9 font-mono" disabled={isWorkspaceConfirming || isCheckingWorkspace} />
                   <button onClick={() => setWorkspaceExplorerOpen(true)} disabled={isWorkspaceConfirming || isCheckingWorkspace}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
@@ -751,12 +930,15 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
                   </button>
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {t('dataPreload.workspace.default')}: <span className="font-mono">{mainViewFolder?.path || t('dataPreload.workspace.notSet')}</span>
+                  {t('dataPreload.workspace.default')}: <span className="font-mono">{defaultWorkspacePath || t('dataPreload.workspace.notSet')}</span>
                 </div>
               </div>
             )}
           </div>
         );
+
+      case 'project':
+        return renderProjectSetup();
 
       default:
         return null;
@@ -820,6 +1002,10 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
                       if (activeStep === 'folders') { clearFolders(); setInferredData({}); }
                       else if (activeStep === 'views') clearViews();
                       else if (activeStep === 'workspace') handleWorkspaceReset();
+                      else if (activeStep === 'project') {
+                        setProjectNameDraft(t('createProject.defaultName'));
+                        setProjectMetaSaveDir(defaultMetaSaveDir);
+                      }
                     }}>
                     <RotateCcw className="w-3.5 h-3.5 mr-1.5" />{t('common.reset')}
                   </Button>
@@ -882,9 +1068,19 @@ export function DataPreload({ onClose }: { onClose: () => void }) {
       />
       <FileExplorerDialog 
         open={workspaceExplorerOpen}
-        initialPath={workspacePath || mainViewFolder?.path || ''}
+        initialPath={workspacePath || defaultWorkspacePath || ''}
         onClose={() => setWorkspaceExplorerOpen(false)}
         onConfirm={handleWorkspaceSelectConfirm}
+        selectType="dir"
+      />
+      <FileExplorerDialog
+        open={metaSaveDirExplorerOpen}
+        initialPath={projectMetaSaveDir || defaultMetaSaveDir || '/'}
+        onClose={() => setMetaSaveDirExplorerOpen(false)}
+        onConfirm={(paths) => {
+          if (paths.length > 0) setProjectMetaSaveDir(paths[0]);
+          setMetaSaveDirExplorerOpen(false);
+        }}
         selectType="dir"
       />
     </div>

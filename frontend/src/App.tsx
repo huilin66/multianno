@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from './store/useStore';
 import {
   LoadProject,
-  CreateProject,
   DataPreload,
   ViewExtentCheck,
   SyncAnnotation,
@@ -54,6 +53,7 @@ export default function App() {
     workspacePath,
     stems,
     views,
+    resetProject,
   } = useStore();
   const annotationLastSavedTime = useStore((s) => s.annotationLastSavedTime);
   const hasAttributeContent = hasAnnotationAttributeContent(annotations, taxonomyAttributes);
@@ -66,8 +66,31 @@ export default function App() {
   const [viewLayoutModalOpen, setViewLayoutModalOpen] = useState(false);
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isReloadingAll, setIsReloadingAll] = useState(false);
   const [reloadProgress, setReloadProgress] = useState({ current: 0, total: 0 });
+
+  const handleCreateProject = () => {
+    resetProject();
+    setIsCreatingProject(true);
+    setActiveModule('preload');
+  };
+
+  const handleOpenPreload = () => {
+    setIsCreatingProject(false);
+    setActiveModule('preload');
+  };
+
+  const handleClosePreload = () => {
+    setIsCreatingProject(false);
+    setActiveModule('workspace');
+  };
+
+  useEffect(() => {
+    if (activeModule !== 'preload') {
+      setIsCreatingProject(false);
+    }
+  }, [activeModule]);
 
   // A persisted workspace can contain an incomplete annotation cache when a
   // previous import was interrupted. Reconcile that cache once on startup if
@@ -186,13 +209,13 @@ export default function App() {
               <Menu className="w-5 h-5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem onClick={() => setActiveModule('createproject')}>
+              <DropdownMenuItem onClick={handleCreateProject}>
                 <FolderPlus className="w-4 h-4 mr-2" /> {t('menu.createProject')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('loadproject')}>
                 <FolderDown className="w-4 h-4 mr-2" /> {t('menu.loadProject')}
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('preload')}>
+              <DropdownMenuItem onClick={handleOpenPreload}>
                 <FolderCog className="w-4 h-4 mr-2" /> {t('menu.dataPreload')}
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => setActiveModule('extent')}>
@@ -506,20 +529,6 @@ export default function App() {
       {/* ============== Dialog Containers ============== */}
 
       <Dialog
-        open={activeModule === 'createproject'}
-        onOpenChange={(open) => !open && setActiveModule('workspace')}
-      >
-        <DialogContent className="max-w-xl sm:max-w-xl p-0 border-border overflow-hidden">
-          <DialogHeader className="p-4 border-b shrink-0">
-            <DialogTitle>{t('menu.createProject')}</DialogTitle>
-          </DialogHeader>
-          <div className="flex-grow overflow-hidden relative">
-            <CreateProject onClose={() => setActiveModule('workspace')} />
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
         open={activeModule === 'loadproject'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
@@ -535,14 +544,14 @@ export default function App() {
 
       <Dialog
         open={activeModule === 'preload'}
-        onOpenChange={(open) => !open && setActiveModule('workspace')}
+        onOpenChange={(open) => !open && handleClosePreload()}
       >
         <DialogContent className="max-w-4xl sm:max-w-4xl h-[90vh] flex flex-col p-0 border-border">
           <DialogHeader className="p-4 border-b border-border shrink-0">
             <DialogTitle>{t('menu.dataPreload')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-            <DataPreload onClose={() => setActiveModule('workspace')} />
+            <DataPreload onClose={handleClosePreload} isCreatingProject={isCreatingProject} />
           </div>
         </DialogContent>
       </Dialog>

@@ -136,10 +136,21 @@
     "loadingAnnotations": "Loading Annotations: "
   },
   "dataPreload": {
+    "project": {
+      "title": "Project Setup",
+      "description": "Select image folders and the default views and annotation workspace will be generated automatically.",
+      "name": "Project Name",
+      "metaSaveDir": "Project Meta Save Dir",
+      "metaSaveDirPlaceholder": "Select project metadata save directory...",
+      "selectMetaSaveDir": "Select project metadata save directory",
+      "metaPathPreview": "Project meta will be saved to",
+      "metaPathNotReady": "Select an image folder to generate the path"
+    },
     "steps": {
-      "folders": "Folders",
+      "folders": "Image Folders",
       "views": "Views",
-      "workspace": "Workspace"
+      "workspace": "Workspace",
+      "project": "Project Setup"
     },
     "folders": {
       "recent": "Recent",
@@ -181,6 +192,7 @@
       "backendFailed": "Backend connection failed",
       "noFoldersConfigured": "Please configure at least one folder",
       "noMainView": "Please set a Main View",
+      "missingProjectDetails": "Please enter a project name and project metadata save directory",
       "resetViews": "Reset all views?",
       "confirmExit": "Exit without saving?",
       "saveFailed": "Failed to save configuration"
