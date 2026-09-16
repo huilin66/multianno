@@ -6,14 +6,21 @@ import {
   CloudLightning,
   FileText,
   FolderSearch,
+  Globe2,
   History,
   Info,
+  KeyRound,
   Loader2,
   Settings2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
-import { checkVisionAIStatus, updateAIConfig } from '../../../api/client';
+import {
+  checkVisionAIStatus,
+  checkVLMStatus,
+  updateAIConfig,
+  updateVLMConfig,
+} from '../../../api/client';
 import { useStore } from '../../../store/useStore';
 import { showDialog } from '../../../store/useDialogStore';
 import { FileExplorerDialog } from '../FileExplorerDialog';
@@ -67,10 +74,22 @@ function FieldLabel({ children, required = false }: { children: string; required
 const getFileName = (path: string) => path.split(/[\\/]/).pop() || path;
 const normalizeComparablePath = (path: string) => path.trim().replace(/\\/g, '/').toLowerCase();
 
+const DEFAULT_VLM_SETTINGS = {
+  baseUrl: 'https://api.openai.com/v1',
+  model: 'gpt-4o-mini',
+  hasApiKey: false,
+  isConfigured: false,
+  timeout: 90,
+  temperature: 0.1,
+  maxTokens: 1024,
+};
+
 export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const { t } = useTranslation();
   const aiSettings = useStore((s) => s.aiSettings);
   const setAISettings = useStore((s) => s.setAISettings);
+  const vlmSettings = useStore((s) => s.vlmSettings || DEFAULT_VLM_SETTINGS);
+  const setVLMSettings = useStore((s) => s.setVLMSettings);
   
   const [localSettings, setLocalSettings] = useState(aiSettings);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -78,6 +97,10 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const [fileExplorerOpen, setFileExplorerOpen] = useState(false);
   const [fileExplorerTarget, setFileExplorerTarget] = useState<'model' | 'classes'>('model');
   const [recentPaths, setRecentPaths] = useState<string[]>([]);
+  const [localVLMSettings, setLocalVLMSettings] = useState(vlmSettings);
+  const [vlmApiKey, setVlmApiKey] = useState('');
+  const [vlmStatus, setVlmStatus] = useState<'checking' | 'configured' | 'notConfigured' | 'unavailable'>('notConfigured');
+  const [isSavingVLM, setIsSavingVLM] = useState(false);
 
   const isYoloModel = String(localSettings.model || '').toLowerCase().startsWith('yolo');
   const isUnsupportedModel = localSettings.model === 'LocateAnything';
@@ -89,6 +112,27 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const isCurrentConfigConfigured = Boolean(aiSettings.isConfigured && !isConfigDirty);
   const isBackendModelLoaded = isCurrentConfigConfigured && backendStatus === 'loaded';
   const modelFileName = localSettings.modelPath ? getFileName(localSettings.modelPath) : t('aiSettings.noModelSelected');
+  const isVLMConfigDirty =
+    localVLMSettings.baseUrl.trim() !== (vlmSettings.baseUrl || '').trim() ||
+    localVLMSettings.model.trim() !== (vlmSettings.model || '').trim() ||
+    Number(localVLMSettings.timeout) !== Number(vlmSettings.timeout) ||
+    Number(localVLMSettings.temperature) !== Number(vlmSettings.temperature) ||
+    Number(localVLMSettings.maxTokens) !== Number(vlmSettings.maxTokens) ||
+    Boolean(vlmApiKey.trim());
+  const vlmStatusLabel = vlmStatus === 'checking'
+    ? t('aiSettings.vlmStatusChecking')
+    : vlmStatus === 'configured'
+      ? t('aiSettings.vlmStatusReady')
+      : vlmStatus === 'unavailable'
+        ? t('aiSettings.vlmStatusUnavailable')
+        : t('aiSettings.vlmStatusNotConfigured');
+  const vlmStatusClass = vlmStatus === 'configured'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+    : vlmStatus === 'checking'
+      ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300'
+      : vlmStatus === 'unavailable'
+        ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
+        : 'border-border bg-muted text-muted-foreground';
   const statusLabel = isUnsupportedModel
     ? t('aiSettings.statusUnavailable')
     : isConfigDirty
@@ -115,6 +159,8 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   useEffect(() => {
     if (open) {
       setLocalSettings(aiSettings);
+      setLocalVLMSettings(vlmSettings);
+      setVlmApiKey('');
       const savedHistory = localStorage.getItem('multiAnno_aiModelPaths');
       if (savedHistory) {
         try {
@@ -133,6 +179,31 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
             (!status.model_path || normalizeComparablePath(status.model_path) === normalizeComparablePath(aiSettings.modelPath)) &&
             (!status.model_type || status.model_type === aiSettings.model);
           setBackendStatus(matchesCurrentConfig ? 'loaded' : 'notLoaded');
+        }
+      });
+
+      setVlmStatus('checking');
+      checkVLMStatus().then((status) => {
+        if (!cancelled) {
+          const nextVLMSettings = {
+            ...vlmSettings,
+            baseUrl: status.base_url || vlmSettings.baseUrl,
+            model: status.model || vlmSettings.model,
+            hasApiKey: Boolean(status.has_api_key),
+            isConfigured: Boolean(status.is_configured),
+            timeout: Number(status.timeout ?? vlmSettings.timeout),
+            temperature: Number(status.temperature ?? vlmSettings.temperature),
+            maxTokens: Number(status.max_tokens ?? vlmSettings.maxTokens),
+          };
+          setLocalVLMSettings(nextVLMSettings);
+          setVLMSettings(nextVLMSettings);
+          setVlmStatus(
+            !status.is_available
+              ? 'unavailable'
+              : status.is_configured
+                ? 'configured'
+                : 'notConfigured',
+          );
         }
       });
 
@@ -209,8 +280,65 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
     }
   };
 
+  const handleSaveVLM = async () => {
+    const baseUrl = localVLMSettings.baseUrl.trim();
+    const model = localVLMSettings.model.trim();
+    if (!baseUrl || !model) {
+      await showDialog({
+        type: 'warning',
+        title: t('aiSettings.vlmConfigurationMissingTitle'),
+        description: t('aiSettings.vlmConfigurationMissing'),
+        confirmText: t('common.confirm'),
+      });
+      return;
+    }
+
+    setIsSavingVLM(true);
+    try {
+      const status = await updateVLMConfig({
+        base_url: baseUrl,
+        model,
+        api_key: vlmApiKey.trim() || undefined,
+        timeout: Number(localVLMSettings.timeout),
+        temperature: Number(localVLMSettings.temperature),
+        max_tokens: Number(localVLMSettings.maxTokens),
+      });
+      const nextVLMSettings = {
+        ...localVLMSettings,
+        baseUrl: status.base_url || baseUrl,
+        model: status.model || model,
+        hasApiKey: Boolean(status.has_api_key),
+        isConfigured: Boolean(status.is_configured),
+        timeout: Number(status.timeout ?? localVLMSettings.timeout),
+        temperature: Number(status.temperature ?? localVLMSettings.temperature),
+        maxTokens: Number(status.max_tokens ?? localVLMSettings.maxTokens),
+      };
+      setLocalVLMSettings(nextVLMSettings);
+      setVLMSettings(nextVLMSettings);
+      setVlmApiKey('');
+      setVlmStatus(status.is_configured ? 'configured' : 'notConfigured');
+      await showDialog({
+        type: 'success',
+        title: t('common.success'),
+        description: t('aiSettings.vlmConfigurationSaved'),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setVlmStatus('unavailable');
+      await showDialog({
+        type: 'danger',
+        title: t('common.error'),
+        description: `${t('aiSettings.vlmConfigurationFailed')}\n\n${message}`,
+      });
+    } finally {
+      setIsSavingVLM(false);
+    }
+  };
+
   const handleCancel = () => {
     setLocalSettings(aiSettings);
+    setLocalVLMSettings(vlmSettings);
+    setVlmApiKey('');
     onClose();
   };
 
@@ -424,6 +552,121 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                     {t('aiSettings.confidenceHint')}
                   </p>
                 </div>
+              </section>
+
+              <section className="rounded-xl border border-border bg-background p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <SectionHeading
+                    icon={Globe2}
+                    title={t('aiSettings.vlmConfiguration')}
+                    description={t('aiSettings.vlmConfigurationDescription')}
+                  />
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${vlmStatusClass}`}>
+                    {vlmStatusLabel}
+                  </span>
+                </div>
+
+                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                  <div className="space-y-1.5 lg:col-span-2">
+                    <FieldLabel required>{t('aiSettings.vlmBaseUrl')}</FieldLabel>
+                    <Input
+                      id="vlm-base-url"
+                      className="h-9 font-mono text-xs"
+                      value={localVLMSettings.baseUrl}
+                      onChange={(e) => setLocalVLMSettings((current) => ({ ...current, baseUrl: e.target.value }))}
+                      placeholder="https://api.openai.com/v1"
+                      title={localVLMSettings.baseUrl}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <FieldLabel required>{t('aiSettings.vlmModel')}</FieldLabel>
+                    <Input
+                      id="vlm-model"
+                      className="h-9 text-xs"
+                      value={localVLMSettings.model}
+                      onChange={(e) => setLocalVLMSettings((current) => ({ ...current, model: e.target.value }))}
+                      placeholder="gpt-4o-mini"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <FieldLabel>{t('aiSettings.vlmApiKey')}</FieldLabel>
+                      {vlmSettings.hasApiKey && !vlmApiKey && (
+                        <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                          {t('aiSettings.vlmApiKeyConfigured')}
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <KeyRound className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="vlm-api-key"
+                        type="password"
+                        className="h-9 pl-8 text-xs"
+                        value={vlmApiKey}
+                        onChange={(e) => setVlmApiKey(e.target.value)}
+                        placeholder={vlmSettings.hasApiKey ? t('aiSettings.vlmApiKeyPlaceholderConfigured') : t('aiSettings.vlmApiKeyPlaceholder')}
+                        autoComplete="off"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 lg:col-span-2">
+                    <div className="space-y-1.5">
+                      <FieldLabel>{t('aiSettings.vlmTimeout')}</FieldLabel>
+                      <Input
+                        type="number"
+                        min={5}
+                        max={300}
+                        className="h-9 text-xs"
+                        value={localVLMSettings.timeout}
+                        onChange={(e) => setLocalVLMSettings((current) => ({ ...current, timeout: Number(e.target.value) || 90 }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <FieldLabel>{t('aiSettings.vlmTemperature')}</FieldLabel>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={2}
+                        step={0.1}
+                        className="h-9 text-xs"
+                        value={localVLMSettings.temperature}
+                        onChange={(e) => setLocalVLMSettings((current) => ({ ...current, temperature: Number(e.target.value) || 0 }))}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <FieldLabel>{t('aiSettings.vlmMaxTokens')}</FieldLabel>
+                      <Input
+                        type="number"
+                        min={64}
+                        max={8192}
+                        className="h-9 text-xs"
+                        value={localVLMSettings.maxTokens}
+                        onChange={(e) => setLocalVLMSettings((current) => ({ ...current, maxTokens: Number(e.target.value) || 1024 }))}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-col gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-2 text-[10px] leading-relaxed text-muted-foreground">
+                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+                    <span>{t('aiSettings.vlmApiKeyHint')}</span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="shrink-0 text-white"
+                    onClick={handleSaveVLM}
+                    disabled={isSavingVLM || !localVLMSettings.baseUrl.trim() || !localVLMSettings.model.trim()}
+                  >
+                    {isSavingVLM && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                    {isSavingVLM ? t('aiSettings.vlmSaving') : t('aiSettings.vlmSave')}
+                  </Button>
+                </div>
+                {isVLMConfigDirty && (
+                  <p className="mt-2 text-[10px] text-primary">{t('aiSettings.vlmUnsavedChanges')}</p>
+                )}
               </section>
             </div>
           </div>

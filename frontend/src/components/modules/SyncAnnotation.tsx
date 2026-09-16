@@ -1654,6 +1654,38 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
   }, [tempActiveAnno, formLabel, aiSettings.semiClass, currentStem, addAnnotation, pushAction, state.editorSettings, taxonomyAttributes]); 
   // 🎯 极度关键：必须把 taxonomyAttributes 放在依赖数组里！否则 React 会永远记住你刚刷新页面时空的属性列表。
 
+  const handleApplyVLMAttributes = useCallback((updates: Record<string, string>) => {
+    const currentState = useStore.getState() as any;
+    const activeId = currentState.activeAnnotationId;
+    const activeAnnotation = currentState.annotations?.find((annotation: Annotation) => annotation.id === activeId);
+    if (!activeAnnotation || activeAnnotation.stem !== currentState.currentStem) return;
+
+    // The backend already validates the VLM response. Repeat the taxonomy
+    // check in the browser so a stale response cannot write unknown fields.
+    const attributesByName = new Map<string, any>(
+      (currentState.taxonomyAttributes || []).map((attribute: any) => [attribute.name, attribute]),
+    );
+    const safeUpdates: Record<string, string> = {};
+    Object.entries(updates || {}).forEach(([name, rawValue]) => {
+      const attribute = attributesByName.get(name);
+      if (!attribute) return;
+      const value = String(rawValue);
+      const options = Array.isArray(attribute.options) ? attribute.options : [];
+      if (options.length > 0) {
+        const canonical = options.find((option: string) => option === value || option.toLowerCase() === value.toLowerCase());
+        if (!canonical) return;
+        safeUpdates[name] = canonical;
+      } else {
+        safeUpdates[name] = value;
+      }
+    });
+
+    if (Object.keys(safeUpdates).length === 0) return;
+    updateAnnotation(activeId, {
+      attributes: { ...(activeAnnotation.attributes || {}), ...safeUpdates },
+    });
+  }, [updateAnnotation]);
+
 
 
   const [toolbarPos, setToolbarPos] = useState({ x: -9999, y: 32 });
@@ -1760,6 +1792,10 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
         onAutoPredict={handleAutoPredict}
         autoResultMsg={autoResultMsg}
         onResetPrompts={handleResetPrompts}
+        activeAnnotation={currentAnnotations.find((annotation: Annotation) => annotation.id === activeAnnotationId)}
+        vlmImagePath={(mainViewConfig || views[0]) ? getFullImagePath(mainViewConfig || views[0]) || '' : ''}
+        taxonomyAttributes={taxonomyAttributes}
+        onApplyVLMAttributes={handleApplyVLMAttributes}
       />
 
       {/* 🎯 Grid Workspace */}

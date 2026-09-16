@@ -23,6 +23,7 @@ BACKEND_IMPORTS = [
     ("fastapi", "fastapi"),
     ("uvicorn", "uvicorn"),
     ("pydantic", "pydantic"),
+    ("httpx", "httpx"),
     ("cv2", "opencv-python"),
     ("skimage", "scikit-image"),
     ("imagecodecs", "imagecodecs"),

@@ -1,5 +1,5 @@
 // src/components/annotation/AIToolPanel.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ import {
   AlertTriangle, Tags
 } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
+import { checkVLMStatus, inferVLM } from '../../../api/client';
 
 interface AIToolPanelProps {
   isOpen: boolean;
@@ -26,17 +27,32 @@ interface AIToolPanelProps {
   promptMode: 'positive' | 'negative' | 'box';
   setPromptMode: (mode: 'positive' | 'negative' | 'box') => void;
   isAIReady: boolean;
+  activeAnnotation?: any;
+  vlmImagePath?: string;
+  taxonomyAttributes?: any[];
+  onApplyVLMAttributes?: (attributes: Record<string, string>) => void;
 }
+
+const getAnnotationBBox = (annotation: any): number[] | null => {
+  const points = Array.isArray(annotation?.points) ? annotation.points : [];
+  if (points.length === 0) return null;
+  const validPoints = points.filter((point: any) => Number.isFinite(Number(point?.x)) && Number.isFinite(Number(point?.y)));
+  if (validPoints.length === 0) return null;
+  const xs = validPoints.map((point: any) => Number(point.x));
+  const ys = validPoints.map((point: any) => Number(point.y));
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+};
 
 export function AIToolPanel({ 
   isOpen, onClose, views, selectedViewId, onViewChange, taxonomyClasses,
   aiPrompts, setAiPrompts, onConfirmPreview, isPredicting,
   sourceMode, setSourceMode, promptMode, setPromptMode, 
   onConfirmInit, onResetInit, isAIReady, isInitializing,
-  onAutoPredict, autoResultMsg, activeTab, setActiveTab, onResetPrompts
+  onAutoPredict, autoResultMsg, activeTab, setActiveTab, onResetPrompts,
+  activeAnnotation, vlmImagePath, taxonomyAttributes = [], onApplyVLMAttributes,
 }: any) {
   const { t } = useTranslation();
-  const {aiSettings, setAISettings, addTaxonomyClass } = useStore() as any;
+  const { aiSettings, setAISettings, addTaxonomyClass, vlmSettings, setVLMSettings } = useStore() as any;
 
   // 🌟 新增弹窗状态
   const [mappingModalOpen, setMappingModalOpen] = useState(false);
@@ -47,7 +63,99 @@ export function AIToolPanel({
 
   const [autoTags, setAutoTags] = useState<string[]>([]);
   const [autoText, setAutoText] = useState('');
+  const [vlmMode, setVlmMode] = useState<'attributes' | 'vqa'>('attributes');
+  const [vlmPrompt, setVlmPrompt] = useState('');
+  const [vlmResult, setVlmResult] = useState<any>(null);
+  const [vlmError, setVlmError] = useState('');
+  const [isVlmRunning, setIsVlmRunning] = useState(false);
+  const [vlmApplied, setVlmApplied] = useState(false);
   const isYoloModel = String(aiSettings?.model || '').toLowerCase().startsWith('yolo');
+
+  useEffect(() => {
+    setVlmResult(null);
+    setVlmError('');
+    setVlmApplied(false);
+  }, [activeAnnotation?.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'vqa') return;
+    let cancelled = false;
+    checkVLMStatus().then((status) => {
+      if (cancelled || !status) return;
+      setVLMSettings?.({
+        baseUrl: status.base_url || vlmSettings?.baseUrl || '',
+        model: status.model || vlmSettings?.model || '',
+        hasApiKey: Boolean(status.has_api_key),
+        isConfigured: Boolean(status.is_configured),
+        ...(status.timeout !== undefined ? { timeout: Number(status.timeout) } : {}),
+        ...(status.temperature !== undefined ? { temperature: Number(status.temperature) } : {}),
+        ...(status.max_tokens !== undefined ? { maxTokens: Number(status.max_tokens) } : {}),
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, setVLMSettings]);
+
+  const runVLM = async () => {
+    setVlmError('');
+    setVlmResult(null);
+    setVlmApplied(false);
+    if (!vlmSettings?.isConfigured) {
+      setVlmError(t('aiTool.vlmNotConfigured'));
+      return;
+    }
+    if (!vlmImagePath) {
+      setVlmError(t('aiTool.vlmNoImage'));
+      return;
+    }
+    const bbox = vlmMode === 'attributes' ? getAnnotationBBox(activeAnnotation) : null;
+    if (vlmMode === 'attributes' && !bbox) {
+      setVlmError(t('aiTool.vlmNoObject'));
+      return;
+    }
+    if (vlmMode === 'attributes' && taxonomyAttributes.length === 0) {
+      setVlmError(t('aiTool.vlmNoAttributes'));
+      return;
+    }
+
+    setIsVlmRunning(true);
+    try {
+      const response = await inferVLM({
+        image_path: vlmImagePath,
+        bbox: bbox || undefined,
+        prompt: vlmPrompt.trim(),
+        mode: vlmMode,
+        class_name: activeAnnotation?.label,
+        taxonomy: vlmMode === 'attributes'
+          ? {
+              attributes: taxonomyAttributes.map((attribute: any) => ({
+                name: attribute.name,
+                values: Array.isArray(attribute.options) ? attribute.options : [],
+              })),
+            }
+          : undefined,
+      });
+      setVlmResult(response);
+    } catch (error: any) {
+      setVlmError(error?.message || String(error));
+    } finally {
+      setIsVlmRunning(false);
+    }
+  };
+
+  const applyVLMAttributes = () => {
+    if (!vlmResult?.attributes?.length || !onApplyVLMAttributes) return;
+    const updates = vlmResult.attributes.reduce((result: Record<string, string>, item: any) => {
+      if (item?.name && item?.value !== undefined && item?.value !== null) {
+        result[String(item.name)] = String(item.value);
+      }
+      return result;
+    }, {});
+    if (Object.keys(updates).length === 0) return;
+    onApplyVLMAttributes(updates);
+    setVlmApplied(true);
+  };
 
   if (!isOpen) return null;
 
@@ -56,7 +164,24 @@ export function AIToolPanel({
   let statusColor = '';
   let showSpinner = false;
 
-  if (!aiSettings?.isConfigured) {
+  const isVlmTab = activeTab === 'vqa';
+  if (isVlmTab && !vlmSettings?.isConfigured) {
+    statusText = t('aiTool.vlmNotConfigured');
+    statusColor = 'bg-amber-50 text-amber-700 dark:bg-amber-950/20 dark:text-amber-300';
+  } else if (isVlmTab && isVlmRunning) {
+    statusText = t('aiTool.vlmRunning');
+    statusColor = 'bg-purple-50 text-purple-600 dark:bg-purple-950/20 dark:text-purple-400';
+    showSpinner = true;
+  } else if (isVlmTab && vlmError) {
+    statusText = vlmError;
+    statusColor = 'bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-400';
+  } else if (isVlmTab && vlmResult) {
+    statusText = vlmApplied ? t('aiTool.vlmApplied') : t('aiTool.vqaNotSupported');
+    statusColor = 'bg-teal-50 text-teal-600 dark:bg-teal-950/20 dark:text-teal-400 border-teal-200 dark:border-teal-800';
+  } else if (isVlmTab) {
+    statusText = t('aiTool.vlmReady');
+    statusColor = 'bg-green-50 text-green-600 dark:bg-green-950/20 dark:text-green-400';
+  } else if (!aiSettings?.isConfigured) {
     statusText = t('aiTool.modelNotLoaded');
     statusColor = 'bg-red-50 text-red-600 dark:bg-red-950/20 dark:text-red-400';
   } else if (isInitializing) {
@@ -196,7 +321,7 @@ return (
       </div>
 
       {/* 4. 内容区 */}
-      <div className={`flex-1 overflow-y-auto custom-scrollbar p-3 flex flex-col transition-opacity duration-300 ${!isAIReady ? 'opacity-30 pointer-events-none grayscale' : ''}`}>
+      <div className={`flex-1 overflow-y-auto custom-scrollbar p-3 flex flex-col transition-opacity duration-300 ${!isVlmTab && !isAIReady ? 'opacity-30 pointer-events-none grayscale' : ''}`}>
         
         {/* === AUTO TAB === */}
         {activeTab === 'auto' && (
@@ -445,13 +570,108 @@ return (
 
         {/* === VQA TAB === */}
         {activeTab === 'vqa' && (
-          <div className="flex flex-col items-center justify-center h-full text-center space-y-2 opacity-60">
-             <MessageSquare className="w-8 h-8 text-neutral-400 mb-2" />
-             <span className="text-[11px] font-bold text-neutral-500">{t('aiTool.vqaNotSupported')}</span>
-             <p className="text-[9px] text-neutral-400 leading-relaxed px-4">
-               {t('aiTool.vqaDescription')}<br/>
-               {t('aiTool.vqaUnavailable')}
-             </p>
+          <div className="space-y-3">
+            <div className="rounded-lg border border-primary/20 bg-primary/5 p-2.5">
+              <div className="flex items-start gap-2">
+                <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0">
+                  <p className="text-[11px] font-semibold text-foreground">{t('aiTool.vqaNotSupported')}</p>
+                  <p className="mt-1 text-[9px] leading-relaxed text-muted-foreground">{t('aiTool.vqaDescription')}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex rounded-md border border-neutral-200 bg-neutral-100/70 p-0.5 dark:border-neutral-800 dark:bg-neutral-950/50">
+              <button
+                type="button"
+                className={`flex-1 rounded px-1.5 py-1.5 text-[10px] transition-all ${vlmMode === 'attributes' ? 'bg-white font-semibold text-primary shadow-sm dark:bg-neutral-800' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                onClick={() => { setVlmMode('attributes'); setVlmResult(null); setVlmError(''); }}
+              >
+                {t('aiTool.vlmAttributes')}
+              </button>
+              <button
+                type="button"
+                className={`flex-1 rounded px-1.5 py-1.5 text-[10px] transition-all ${vlmMode === 'vqa' ? 'bg-white font-semibold text-primary shadow-sm dark:bg-neutral-800' : 'text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300'}`}
+                onClick={() => { setVlmMode('vqa'); setVlmResult(null); setVlmError(''); }}
+              >
+                {t('aiTool.vlmQuestion')}
+              </button>
+            </div>
+
+            {vlmMode === 'attributes' ? (
+              <div className="space-y-2 rounded-lg border border-neutral-200 p-2.5 dark:border-neutral-800">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-semibold text-foreground">{t('aiTool.vlmSelectedObject')}</span>
+                  <span className="max-w-[110px] truncate rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground" title={activeAnnotation?.label || t('aiTool.vlmNoObject')}>
+                    {activeAnnotation?.label || t('aiTool.vlmNoObject')}
+                  </span>
+                </div>
+                <p className="text-[9px] leading-relaxed text-muted-foreground">{t('aiTool.vlmUseMainImage')}</p>
+                {taxonomyAttributes.length === 0 && (
+                  <p className="text-[9px] text-amber-600 dark:text-amber-400">{t('aiTool.vlmNoAttributes')}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-[9px] leading-relaxed text-muted-foreground">{t('aiTool.vlmUseMainImage')}</p>
+            )}
+
+            <textarea
+              className="min-h-[64px] w-full resize-y rounded-md border border-neutral-200 bg-white px-2.5 py-2 text-[10px] leading-relaxed outline-none transition-colors placeholder:text-neutral-400 focus:border-primary focus:ring-1 focus:ring-primary dark:border-neutral-700 dark:bg-neutral-900"
+              value={vlmPrompt}
+              onChange={(event) => setVlmPrompt(event.target.value)}
+              placeholder={t(vlmMode === 'attributes' ? 'aiTool.vlmPromptPlaceholder' : 'aiTool.vlmQuestionPlaceholder')}
+              disabled={!vlmSettings?.isConfigured || isVlmRunning}
+            />
+
+            {vlmError && (
+              <div className="rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-[9px] leading-relaxed text-red-600 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-300">
+                {vlmError}
+              </div>
+            )}
+
+            <Button
+              className="h-8 w-full gap-2 bg-blue-600 text-[10px] font-bold shadow-sm hover:bg-blue-700"
+              onClick={runVLM}
+              disabled={isVlmRunning || !vlmSettings?.isConfigured || !vlmImagePath || (vlmMode === 'attributes' && (!activeAnnotation || taxonomyAttributes.length === 0))}
+            >
+              {isVlmRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {isVlmRunning ? t('aiTool.vlmRunning') : t('aiTool.vlmRun')}
+            </Button>
+
+            {vlmResult && vlmMode === 'attributes' && (
+              <div className="space-y-2 rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 dark:border-emerald-900/60 dark:bg-emerald-950/10">
+                {Array.isArray(vlmResult.attributes) && vlmResult.attributes.length > 0 ? (
+                  <>
+                    <div className="space-y-1.5">
+                      {vlmResult.attributes.map((item: any, index: number) => (
+                        <div key={`${item.name}-${index}`} className="rounded border border-emerald-200/70 bg-white/70 px-2 py-1.5 dark:border-emerald-900/50 dark:bg-neutral-900/50">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="truncate text-[10px] font-semibold text-foreground" title={item.name}>{item.name}</span>
+                            <span className="shrink-0 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">{item.value}</span>
+                          </div>
+                          {item.confidence !== undefined && (
+                            <p className="mt-1 text-[8px] text-muted-foreground">{t('aiTool.vlmConfidence')}: {(Number(item.confidence) * 100).toFixed(0)}%</p>
+                          )}
+                          {item.evidence && <p className="mt-1 text-[8px] leading-relaxed text-muted-foreground">{t('aiTool.vlmEvidence')}: {item.evidence}</p>}
+                        </div>
+                      ))}
+                    </div>
+                    <Button variant="outline" className="h-7 w-full text-[10px]" onClick={applyVLMAttributes} disabled={vlmApplied}>
+                      {vlmApplied ? <Check className="mr-1.5 h-3 w-3" /> : null}
+                      {vlmApplied ? t('aiTool.vlmApplied') : t('aiTool.vlmApplyAttributes')}
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-[9px] text-muted-foreground">{t('aiTool.vlmNoResult')}</p>
+                )}
+              </div>
+            )}
+
+            {vlmResult && vlmMode === 'vqa' && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-2.5 text-[10px] leading-relaxed text-foreground dark:border-emerald-900/60 dark:bg-emerald-950/10">
+                {vlmResult.answer || t('aiTool.vlmNoResult')}
+              </div>
+            )}
           </div>
         )}
       </div>

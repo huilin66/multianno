@@ -2,6 +2,7 @@
 
 export const API_BASE_URL = 'http://127.0.0.1:8090/api';
 const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
+const VLM_API_URL = `${API_BASE_URL}/ai/vlm`;
 
 const post = async (url: string, body: any, signal?: AbortSignal) => {
   let response: Response;
@@ -243,6 +244,72 @@ export const predictAutoSAM = (
 export const initVisionModel = initSAM;
 export const predictVisionInteractive = predictSAM;
 export const predictVisionAuto = predictAutoSAM;
+
+export interface VLMAttributeResult {
+  name: string;
+  value: string;
+  confidence?: number;
+  evidence?: string;
+}
+
+export interface VLMStatus {
+  is_available: boolean;
+  is_configured: boolean;
+  base_url: string;
+  model: string;
+  has_api_key: boolean;
+  timeout?: number;
+  temperature?: number;
+  max_tokens?: number;
+  detail?: string | null;
+}
+
+export interface VLMInferenceResponse {
+  mode: 'attributes' | 'vqa';
+  attributes: VLMAttributeResult[];
+  answer?: string | null;
+  usage?: Record<string, number> | null;
+  image_width?: number;
+  image_height?: number;
+  crop_bbox?: number[] | null;
+}
+
+export const checkVLMStatus = async (): Promise<VLMStatus> => {
+  try {
+    return await get(`${VLM_API_URL}/status`);
+  } catch {
+    return {
+      is_available: false,
+      is_configured: false,
+      base_url: '',
+      model: '',
+      has_api_key: false,
+      detail: 'VLM backend unavailable',
+    };
+  }
+};
+
+export const updateVLMConfig = (config: {
+  base_url: string;
+  model: string;
+  api_key?: string;
+  timeout: number;
+  temperature: number;
+  max_tokens: number;
+}): Promise<VLMStatus & { status: string }> => post(`${VLM_API_URL}/config`, config);
+
+export const inferVLM = (
+  payload: {
+    image_path?: string;
+    image_data?: string;
+    bbox?: number[];
+    prompt?: string;
+    mode: 'attributes' | 'vqa';
+    class_name?: string;
+    taxonomy?: { attributes: Array<{ name: string; values: string[] }> };
+  },
+  signal?: AbortSignal,
+): Promise<VLMInferenceResponse> => post(`${VLM_API_URL}/infer`, payload, signal);
 
 export const requestVisPreview = (payload: any) =>
   post(`${API_BASE_URL}/vis/preview`, payload);

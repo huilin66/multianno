@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -83,6 +83,34 @@ class AIConfigRequest(BaseModel):
     model_type: str
     confidence: float
     classes_file: Optional[str] = None
+
+
+class VLMConfigRequest(BaseModel):
+    """Runtime configuration for an OpenAI-compatible VLM endpoint.
+
+    The API key is intentionally accepted only by the backend.  It is never
+    returned by the status endpoint and the frontend does not persist it.
+    """
+
+    base_url: str = "https://api.openai.com/v1"
+    model: str = "gpt-4o-mini"
+    api_key: Optional[str] = None
+    timeout: float = Field(default=90.0, ge=5.0, le=300.0)
+    temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    max_tokens: int = Field(default=1024, ge=64, le=8192)
+
+
+class VLMInferenceRequest(BaseModel):
+    """Image and taxonomy context sent to the VLM proxy."""
+
+    image_path: Optional[str] = None
+    image_data: Optional[str] = None
+    # Pixel-space xyxy coordinates in the supplied image's coordinate system.
+    bbox: Optional[List[float]] = None
+    prompt: str = ""
+    mode: Literal["attributes", "vqa"] = "attributes"
+    class_name: Optional[str] = None
+    taxonomy: Optional[Dict[str, Any]] = None
 
 
 class StatRequest(BaseModel):

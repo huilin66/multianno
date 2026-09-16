@@ -247,6 +247,17 @@ export interface AppState {
       outputType: 'polygon' | 'bbox',
       filterThreshold: number,
     };
+  // VLM API settings.  Only non-secret metadata is persisted; the API key
+  // stays in the backend process and is represented here by hasApiKey.
+  vlmSettings: {
+      baseUrl: string;
+      model: string;
+      hasApiKey: boolean;
+      isConfigured: boolean;
+      timeout: number;
+      temperature: number;
+      maxTokens: number;
+    };
   
   // view align
   completedViews: string[];
@@ -317,6 +328,7 @@ export interface AppState {
   updateShortcutSettings: (tool: string, settings: { key: string; shift?: boolean; ctrl?: boolean }) => void;
   resetShortcutSettings: () => void;
   setAISettings: (settings: Partial<AppState['aiSettings']>) => void;
+  setVLMSettings: (settings: Partial<AppState['vlmSettings']>) => void;
 
   // display function
   setViewport: (zoom: number, panX: number, panY: number) => void;
@@ -383,6 +395,15 @@ export const useStore = create<AppState>()(
         inferenceSize: 644,
         outputType: 'polygon',
         filterThreshold: 1
+      },
+      vlmSettings: {
+        baseUrl: 'https://api.openai.com/v1',
+        model: 'gpt-4o-mini',
+        hasApiKey: false,
+        isConfigured: false,
+        timeout: 90,
+        temperature: 0.1,
+        maxTokens: 1024,
       },
       
       // view align
@@ -780,6 +801,9 @@ export const useStore = create<AppState>()(
       setAISettings: (newSettings) => set((state) => ({
         aiSettings: { ...state.aiSettings, ...newSettings }
       })),
+      setVLMSettings: (newSettings) => set((state) => ({
+        vlmSettings: { ...state.vlmSettings, ...newSettings }
+      })),
 
       // display function
       setViewport: (zoom, panX, panY) => set({ viewport: { zoom, panX, panY } }),
@@ -826,6 +850,7 @@ export const useStore = create<AppState>()(
         editorSettings: state.editorSettings,
         shortcutsSettings: state.shortcutsSettings,
         aiSettings: state.aiSettings,
+        vlmSettings: state.vlmSettings,
         hiddenClasses: state.hiddenClasses,
         hiddenAnnotations: state.hiddenAnnotations,
         

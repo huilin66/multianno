@@ -1,4 +1,5 @@
 import asyncio
+import json
 import uuid
 from time import perf_counter
 
@@ -19,9 +20,27 @@ from utils.logging_config import (
 configure_logging()
 logger = get_logger("http")
 
-from routers import ai, annotation, exchange, filesystem, project, taxonomy, vis
+from routers import ai, annotation, exchange, filesystem, project, taxonomy, vis, vlm
 
 app = FastAPI(title="MultiAnno Backend")
+
+
+def _safe_validation_body(path: str, body: bytes) -> str:
+    """Keep validation diagnostics useful without logging VLM credentials."""
+
+    if not body:
+        return "Empty"
+    body_text = body.decode("utf-8", errors="replace")
+    if not path.startswith("/api/ai/vlm"):
+        return body_text
+    try:
+        payload = json.loads(body_text)
+        if isinstance(payload, dict) and "api_key" in payload:
+            payload["api_key"] = "[REDACTED]"
+            return json.dumps(payload, ensure_ascii=False)
+    except (TypeError, ValueError):
+        pass
+    return "[REDACTED VLM request body]"
 
 
 @app.middleware("http")
@@ -124,7 +143,7 @@ async def health_check():
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     body = await request.body()
-    body_text = body.decode("utf-8", errors="replace") if body else "Empty"
+    body_text = _safe_validation_body(request.url.path, body)
     logger.warning(
         "VALIDATION_ERROR method=%s path=%s body=%s errors=%s",
         request.method,
@@ -134,7 +153,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors(), "body": body.decode("utf-8") if body else ""},
+        content={"detail": exc.errors(), "body": body_text if body else ""},
     )
 
 
@@ -152,6 +171,7 @@ app.include_router(project.router)
 app.include_router(annotation.router)
 app.include_router(taxonomy.router)
 app.include_router(ai.router)
+app.include_router(vlm.router)
 app.include_router(vis.router)
 app.include_router(exchange.router)
 
