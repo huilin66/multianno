@@ -13,7 +13,15 @@ import {
   DataImport
 } from './components/Modules';
 import { Button } from '@/components/ui/button';
-import { DropdownMenu,DropdownMenuContent,DropdownMenuItem,DropdownMenuTrigger} from '@/components/ui/dropdown-menu';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
@@ -208,39 +216,62 @@ export default function App() {
             <DropdownMenuTrigger className="flex items-center justify-center w-9 h-9 rounded-md hover:bg-neutral-200 dark:hover:bg-neutral-800 transition-colors outline-none cursor-pointer shrink-0 text-neutral-700 dark:text-neutral-200">
               <Menu className="w-5 h-5" />
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
-              <DropdownMenuItem onClick={handleCreateProject}>
-                <FolderPlus className="w-4 h-4 mr-2" /> {t('menu.createProject')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('loadproject')}>
-                <FolderDown className="w-4 h-4 mr-2" /> {t('menu.loadProject')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleOpenPreload}>
-                <FolderCog className="w-4 h-4 mr-2" /> {t('menu.dataPreload')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('extent')}>
-                <Folders className="w-4 h-4 mr-2" /> {t('menu.viewExtentCheck')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => {
-                void autoSave().then(
-                  () => setActiveModule('taxonomy'),
-                  () => setActiveModule('taxonomy'),
-                );
-              }}>
-                <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('exchange_import')}>
-                <Download className="w-4 h-4 mr-2" /> {t('menu.importData')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('exchange_export')}>
-                <Upload className="w-4 h-4 mr-2" /> {t('menu.exportData')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('local_visualization')}>
-                <Airplay className="w-4 h-4 mr-2" /> {t('menu.localVisualization')}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setActiveModule('meta')}>
-                <Database className="w-4 h-4 mr-2" /> {t('menu.projectMeta')}
-              </DropdownMenuItem>
+            <DropdownMenuContent align="start" className="w-64">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t('menu.projectGroup')}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleCreateProject}>
+                  <FolderPlus className="w-4 h-4 mr-2" /> {t('menu.createProject')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveModule('loadproject')}>
+                  <FolderDown className="w-4 h-4 mr-2" /> {t('menu.loadProject')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveModule('meta')}>
+                  <Database className="w-4 h-4 mr-2" /> {t('menu.projectMeta')}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t('menu.dataPreparationGroup')}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={handleOpenPreload}>
+                  <FolderCog className="w-4 h-4 mr-2" /> {t('menu.dataPreload')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveModule('extent')}>
+                  <Folders className="w-4 h-4 mr-2" /> {t('menu.viewExtentCheck')}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t('menu.annotationGroup')}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => {
+                  void autoSave().then(
+                    () => setActiveModule('taxonomy'),
+                    () => setActiveModule('taxonomy'),
+                  );
+                }}>
+                  <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t('menu.dataExchangeGroup')}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setActiveModule('exchange_import')}>
+                  <Download className="w-4 h-4 mr-2" /> {t('menu.importData')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveModule('exchange_export')}>
+                  <Upload className="w-4 h-4 mr-2" /> {t('menu.exportData')}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>{t('menu.reviewGroup')}</DropdownMenuLabel>
+                <DropdownMenuItem onClick={() => setActiveModule('local_visualization')}>
+                  <Airplay className="w-4 h-4 mr-2" /> {t('menu.localVisualization')}
+                </DropdownMenuItem>
+              </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

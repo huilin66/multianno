@@ -1,5 +1,10 @@
 {
     "menu": {
+    "projectGroup": "项目",
+    "dataPreparationGroup": "数据准备",
+    "annotationGroup": "标注体系",
+    "dataExchangeGroup": "数据交换",
+    "reviewGroup": "检查与可视化",
     "createProject": "创建项目",
     "loadProject": "加载项目",
     "dataPreload": "视图设置",

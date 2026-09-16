@@ -1,5 +1,10 @@
 {
   "menu": {
+    "projectGroup": "Project",
+    "dataPreparationGroup": "Data Preparation",
+    "annotationGroup": "Annotation System",
+    "dataExchangeGroup": "Data Exchange",
+    "reviewGroup": "Review & Visualization",
     "createProject": "Create Project",
     "loadProject": "Load Project",
     "dataPreload": "View Setting",
