@@ -301,6 +301,17 @@
     }
   },
   "projectMeta": {
+    "overview": {
+      "label": "Project Meta",
+      "schema": "Schema",
+      "workspace": "Workspace",
+      "notConfigured": "Not configured",
+      "folders": "Folders",
+      "views": "Views",
+      "scenes": "Scenes",
+      "folderDescription": "Image sources and file counts",
+      "viewDescription": "Bands, alignment, and display settings"
+    },
     "empty": {
       "title": "No Project Meta",
       "desc": "Please load data folders first.",
@@ -310,6 +321,7 @@
       "title": "Data Folders",
       "id": "ID",
       "suffix": "Suffix",
+      "extension": "Extension",
       "validFiles": "Valid Files",
       "skipped": "Skipped",
       "total": "Total",
@@ -324,6 +336,15 @@
       "folderId": "Folder ID",
       "bands": "Bands",
       "renderMode": "Render Mode",
+      "enhancements": "Enhancements",
+      "colorAdjust": "Color Adjust",
+      "binarize": "Binarize",
+      "globalHE": "Global HE",
+      "autoCLAHE": "Auto CLAHE",
+      "defaultRaw": "Default RAW",
+      "stretch": "Stretch",
+      "sharpen": "Sharpen",
+      "invert": "Invert",
       "crop": "Crop",
       "scale": "Scale",
       "offset": "Offset",

@@ -1,339 +1,425 @@
-// src/components/ProjectMetaDashboard.tsx
-import React from 'react';
-import { useStore } from '../../store/useStore'; // 确认路径是否正确
+import { useTranslation } from 'react-i18next';
+import type { ReactNode } from 'react';
+import type { TFunction } from 'i18next';
+import {
+  Boxes,
+  Database,
+  Download,
+  Edit3,
+  FolderOpen,
+  HardDrive,
+  Layers,
+  SlidersHorizontal,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
 import { Button } from '../ui/button';
-import { FolderOpen, Layers, Database, Download, Edit3 } from 'lucide-react';
-import type { ProjectMetaContract } from '../../config/contract';
-import { useTranslation } from 'react-i18next'; // 🌟 引入
-import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { COLOR_MAPS } from '../../config/colors';
+import type { ProjectMetaContract } from '../../config/contract';
+import { generateProjectMetaConfig } from '../../lib/projectUtils';
+import { useStore } from '../../store/useStore';
 
-
-// 🌟 1. 新增：定义组件接收的参数
 interface ProjectMetaDashboardProps {
   onClose?: () => void;
 }
 
-export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}) {
-  const { t } = useTranslation(); // 🌟 激活翻译钩子
-  const {projectName, folders, views, setActiveModule } = useStore();
-  const workspacePath = useStore(s => s.workspacePath);
+type MetaFolder = ProjectMetaContract['folders'][number];
+type MetaView = ProjectMetaContract['views'][number];
 
-  // 🛡️ 这里加上我们之前讨论的防白屏兜底代码！
+const badgeStyles = {
+  neutral:
+    'border-neutral-200 bg-neutral-100 text-neutral-600 dark:border-neutral-700 dark:bg-neutral-800/70 dark:text-neutral-300',
+  blue:
+    'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300',
+  amber:
+    'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
+  green:
+    'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300',
+} as const;
+
+function MetaBadge({
+  children,
+  tone = 'neutral',
+  className = '',
+}: {
+  children: ReactNode;
+  tone?: keyof typeof badgeStyles;
+  className?: string;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-4 ${badgeStyles[tone]} ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function SummaryMetric({
+  label,
+  value,
+  icon: Icon,
+}: {
+  label: string;
+  value: number | string;
+  icon: LucideIcon;
+}) {
+  return (
+    <div className="min-w-[88px] rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 dark:border-neutral-800 dark:bg-neutral-900/70">
+      <div className="flex items-center gap-1.5 text-[10px] font-medium uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+        <Icon className="h-3.5 w-3.5" />
+        <span>{label}</span>
+      </div>
+      <div className="mt-0.5 font-mono text-lg font-semibold leading-5 text-neutral-900 dark:text-neutral-100">
+        {value}
+      </div>
+    </div>
+  );
+}
+
+function PanelHeading({
+  icon: Icon,
+  title,
+  count,
+  description,
+  iconClassName,
+}: {
+  icon: LucideIcon;
+  title: string;
+  count: number;
+  description: string;
+  iconClassName: string;
+}) {
+  return (
+    <div className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800 ${iconClassName}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="truncate text-sm font-semibold text-neutral-900 dark:text-neutral-100">{title}</h3>
+          <p className="truncate text-[11px] text-neutral-500 dark:text-neutral-400">{description}</p>
+        </div>
+      </div>
+      <MetaBadge tone="neutral" className="shrink-0 px-2 py-1 text-xs">
+        {count}
+      </MetaBadge>
+    </div>
+  );
+}
+
+function InfoRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 items-start justify-between gap-3 text-xs">
+      <span className="shrink-0 text-neutral-500 dark:text-neutral-400">{label}</span>
+      <span className="min-w-0 text-right font-mono text-neutral-700 dark:text-neutral-300">{children}</span>
+    </div>
+  );
+}
+
+function FolderCard({ folder, t }: { folder: MetaFolder; t: TFunction; key?: string | number }) {
+  const imageMeta = folder['image meta'];
+
+  return (
+    <article className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3.5 transition-colors hover:border-blue-200 hover:bg-blue-50/30 dark:border-neutral-800 dark:bg-black/20 dark:hover:border-blue-500/30 dark:hover:bg-blue-500/[0.04]">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 font-mono text-xs font-bold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+          {String(folder.Id).padStart(2, '0')}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-neutral-900 dark:text-neutral-100" title={folder.path}>
+            {folder.path}
+          </p>
+          <div className="mt-1.5 flex flex-wrap gap-1.5">
+            <MetaBadge tone="amber">
+              {t('projectMeta.folders.suffix')}: {folder.suffix || '—'}
+            </MetaBadge>
+            <MetaBadge tone="amber">
+              {t('projectMeta.folders.extension')}: {folder.extension || '—'}
+            </MetaBadge>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        <div className="rounded-lg border border-neutral-200 bg-white px-2 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="text-[10px] uppercase tracking-wide text-neutral-500">{t('projectMeta.folders.validFiles')}</div>
+          <div className="mt-0.5 font-mono text-base font-semibold text-emerald-600 dark:text-emerald-400">
+            {folder['files in sceneGroups']}
+          </div>
+        </div>
+        <div className="rounded-lg border border-neutral-200 bg-white px-2 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="text-[10px] uppercase tracking-wide text-neutral-500">{t('projectMeta.folders.skipped')}</div>
+          <div className="mt-0.5 font-mono text-base font-semibold text-rose-600 dark:text-rose-400">
+            {folder['files Skipped']}
+          </div>
+        </div>
+        <div className="rounded-lg border border-neutral-200 bg-white px-2 py-2 dark:border-neutral-800 dark:bg-neutral-900">
+          <div className="text-[10px] uppercase tracking-wide text-neutral-500">{t('projectMeta.folders.total')}</div>
+          <div className="mt-0.5 font-mono text-base font-semibold text-blue-600 dark:text-blue-400">
+            {folder['files total']}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-2 grid grid-cols-3 gap-x-3 gap-y-1.5 rounded-lg border border-neutral-200/80 bg-white/80 px-3 py-2.5 dark:border-neutral-800 dark:bg-neutral-900/70">
+        <InfoRow label={t('projectMeta.folders.size')}>
+          {imageMeta?.width ?? 'Unknown'} × {imageMeta?.height ?? 'Unknown'}
+        </InfoRow>
+        <InfoRow label={t('projectMeta.folders.bands')}>{imageMeta?.bands ?? 'Unknown'}</InfoRow>
+        <div className="col-span-3 border-t border-neutral-100 pt-1.5 dark:border-neutral-800">
+          <InfoRow label={t('projectMeta.folders.type')}>
+            <span className="truncate" title={String(imageMeta?.['data type'] ?? 'uint8')}>
+              {imageMeta?.['data type'] ?? 'uint8'}
+            </span>
+          </InfoRow>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ViewSettingsSummary({ view, t }: { view: MetaView; t: TFunction }) {
+  const settings = view.settings || {};
+  const isSingleBand = view.bands.length === 1;
+  const isDefaultRaw =
+    isSingleBand &&
+    !settings.binarize?.enabled &&
+    (!settings.enhancementMode || settings.enhancementMode === 'manual') &&
+    (settings.gamma ?? 1) === 1 &&
+    settings.spatialFilter !== 'sharpen' &&
+    !settings.invert &&
+    (settings.minMax?.[0] ?? 0) === 0 &&
+    (settings.minMax?.[1] ?? 100) === 100;
+
+  return (
+    <div className="mt-3 border-t border-neutral-200/80 pt-3 dark:border-neutral-800">
+      <div className="flex items-start gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400">
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          {isSingleBand ? t('projectMeta.views.enhancements') : t('projectMeta.views.colorAdjust')}
+        </div>
+        <div className="flex min-w-0 flex-wrap justify-end gap-1.5">
+          {isSingleBand ? (
+            <>
+              {settings.binarize?.enabled ? (
+                <MetaBadge tone="amber">{t('projectMeta.views.binarize')}: {settings.binarize.threshold}</MetaBadge>
+              ) : settings.enhancementMode && settings.enhancementMode !== 'manual' ? (
+                <MetaBadge tone="blue">
+                  {settings.enhancementMode === 'he'
+                    ? t('projectMeta.views.globalHE')
+                    : t('projectMeta.views.autoCLAHE')}
+                </MetaBadge>
+              ) : isDefaultRaw ? (
+                <MetaBadge>{t('projectMeta.views.defaultRaw')}</MetaBadge>
+              ) : (
+                <MetaBadge tone="blue">
+                  {t('projectMeta.views.stretch')}: {settings.minMax?.[0] ?? 0}%–{settings.minMax?.[1] ?? 100}%
+                </MetaBadge>
+              )}
+              {(settings.gamma ?? 1) !== 1 && <MetaBadge tone="blue">γ: {settings.gamma?.toFixed(1)}</MetaBadge>}
+              {settings.spatialFilter === 'sharpen' && <MetaBadge tone="green">{t('projectMeta.views.sharpen')}</MetaBadge>}
+              {settings.invert && <MetaBadge tone="neutral">{t('projectMeta.views.invert')}</MetaBadge>}
+            </>
+          ) : (
+            <>
+              <MetaBadge tone="blue">B: {settings.brightness ?? 1}</MetaBadge>
+              <MetaBadge tone="blue">C: {settings.contrast ?? 1}</MetaBadge>
+              <MetaBadge tone="blue">S: {settings.saturation ?? 1}</MetaBadge>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ViewCard({ view, t }: { view: MetaView; t: TFunction; key?: string | number }) {
+  const crop = view.crop || { t: 0, r: 100, b: 100, l: 0 };
+
+  return (
+    <article className="rounded-xl border border-neutral-200 bg-neutral-50/70 p-3.5 transition-colors hover:border-blue-200 hover:bg-blue-50/30 dark:border-neutral-800 dark:bg-black/20 dark:hover:border-blue-500/30 dark:hover:bg-blue-500/[0.04]">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-mono text-[11px] font-bold ${view.isMain ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300'}`}>
+            {view.isMain ? 'M' : 'A'}
+          </span>
+          <div className="min-w-0">
+            <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+              <h4 className="truncate text-sm font-semibold text-neutral-900 dark:text-neutral-100" title={view.id}>
+                {view.id}
+              </h4>
+              {view.isMain && <MetaBadge tone="blue">{t('projectMeta.views.baseRef')}</MetaBadge>}
+            </div>
+            <p className="mt-0.5 text-[11px] text-neutral-500 dark:text-neutral-400">
+              {t('projectMeta.views.folderId')}: <span className="font-mono">{view['folder id']}</span>
+            </p>
+          </div>
+        </div>
+        <MetaBadge tone={view.isMain ? 'blue' : 'amber'}>{view.isMain ? 'MAIN' : 'AUX'}</MetaBadge>
+      </div>
+
+      <div className="mt-3 grid gap-x-4 gap-y-2 border-t border-neutral-200/80 pt-3 sm:grid-cols-2 dark:border-neutral-800">
+        <InfoRow label={t('projectMeta.views.bands')}>
+          <span className="inline-flex flex-wrap justify-end gap-1">
+            {view.bands.map((band, index) => (
+              <span key={`${band}-${index}`} className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">
+                {band}
+              </span>
+            ))}
+          </span>
+        </InfoRow>
+        {view.bands.length === 1 && (
+          <InfoRow label={t('projectMeta.views.renderMode')}>
+            <span className="inline-flex items-center gap-1.5">
+              <span className={`h-2.5 w-5 rounded-sm bg-gradient-to-r ${COLOR_MAPS.find((color) => color.name === (view.renderMode || 'gray'))?.css || 'from-black to-white'}`} />
+              <span>{view.renderMode || 'gray'}</span>
+            </span>
+          </InfoRow>
+        )}
+        {!view.isMain && (
+          <>
+            <InfoRow label={t('projectMeta.views.crop')}>
+              {crop.t.toFixed(1)}%, {crop.r.toFixed(1)}%, {crop.b.toFixed(1)}%, {crop.l.toFixed(1)}%
+            </InfoRow>
+            <InfoRow label={t('projectMeta.views.scale')}>
+              {view.transform.scaleX.toFixed(3)}, {view.transform.scaleY.toFixed(3)}
+            </InfoRow>
+            <InfoRow label={t('projectMeta.views.offset')}>
+              {view.transform.offsetX.toFixed(0)}px, {view.transform.offsetY.toFixed(0)}px
+            </InfoRow>
+          </>
+        )}
+      </div>
+
+      <ViewSettingsSummary view={view} t={t} />
+    </article>
+  );
+}
+
+export function ProjectMetaDashboard({ onClose }: ProjectMetaDashboardProps = {}) {
+  const { t } = useTranslation();
+  const { projectName, folders, views, setActiveModule } = useStore();
+  const workspacePath = useStore((state) => state.workspacePath);
+
   if (!folders || folders.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[400px] bg-neutral-50 dark:bg-neutral-950 text-neutral-500 dark:text-neutral-400 space-y-4">
-        <Database className="w-12 h-12 text-blue-500/50 mb-2" />
-        <h2 className="text-xl font-semibold text-neutral-900 dark:text-neutral-100">{t('projectMeta.empty.title')}</h2>
-        <p>{t('projectMeta.empty.desc')}</p>
-        <Button onClick={() => setActiveModule('preload')} className="mt-4">
-          <FolderOpen className="w-4 h-4 mr-2" /> {t('projectMeta.empty.goPreload')}
+      <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-4 bg-neutral-50 px-6 text-center text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 dark:bg-blue-500/10">
+          <Database className="h-7 w-7 text-blue-500/70" />
+        </div>
+        <div>
+          <h2 className="text-lg font-semibold text-neutral-900 dark:text-neutral-100">{t('projectMeta.empty.title')}</h2>
+          <p className="mt-1 text-sm">{t('projectMeta.empty.desc')}</p>
+        </div>
+        <Button onClick={() => setActiveModule('preload')} size="sm">
+          <FolderOpen className="mr-2 h-4 w-4" />
+          {t('projectMeta.empty.goPreload')}
         </Button>
       </div>
     );
   }
 
   const meta: ProjectMetaContract = generateProjectMetaConfig(useStore.getState());
+  const metaWorkspacePath = meta.workspacePath || workspacePath || '';
+  const sceneCount = Object.keys(meta.sceneGroups || {}).length;
 
   const handleExportJSON = () => {
     const blob = new Blob([JSON.stringify(meta, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${projectName}_meta.json`;
-    a.click();
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `${projectName || meta.projectName}_meta.json`;
+    anchor.click();
     URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden">
-      {/* 核心展示区：左右双栏布局 */}
-      <div className="flex-1 grid grid-cols-2 gap-6 p-6 overflow-hidden">
-        {/* 左侧：Folders 信息 */}
-        <div className="flex flex-col h-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden rounded-xl">
-          <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
-            <h3 className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100 font-bold">
-              <FolderOpen className="w-5 h-5 text-amber-500" /> 
-              {t('projectMeta.folders.title')} ({meta.folders.length})
-            </h3>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-            {workspacePath && (
-                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mt-2">
-                    <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 uppercase">Workspace</span>
-                    <p className="text-[10px] font-mono text-neutral-600 dark:text-neutral-400 mt-0.5 truncate" title={workspacePath}>
-                        {workspacePath}
-                    </p>
-                </div>
-            )}
-            {meta.folders.map((folder) => (
-            // {/* 🌟 1. 外层卡片：日间浅灰，夜间深灰 */}
-            <div key={folder.Id} className="bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 space-y-3 transition-colors">
-              <div className="flex items-center gap-3 border-b border-neutral-200 dark:border-neutral-800/50 pb-2 flex-wrap">
-                {/* 🌟 2. ID 标签：文字和背景双重适配 */}
-                <span className="bg-neutral-200 dark:bg-neutral-800 text-neutral-700 dark:text-neutral-300 px-2 py-0.5 rounded text-xs font-bold font-mono">{t('projectMeta.folders.id')}: {folder.Id}</span>
-                <span className="text-sm font-semibold text-neutral-900 dark:text-neutral-200 truncate" title={folder.path}>{folder.path}</span>
-                
-                {folder.suffix && (
-                  <span className="text-amber-600 dark:text-amber-500 font-mono font-bold bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-200 dark:border-amber-500/20 shrink-0">
-                    {t('projectMeta.folders.suffix')}: {folder.suffix}
-                  </span>
-                )}
-                {folder.extension && (
-                  <span className="text-amber-600 dark:text-amber-500 font-mono font-bold bg-amber-100 dark:bg-amber-500/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-200 dark:border-amber-500/20 shrink-0">
-                    {t('projectMeta.folders.extension')}: {folder.extension}
-                  </span>
-                )}
-              </div>
-              
-              <div className="grid grid-cols-3 gap-2">
-                {/* 🌟 3. 三个数据小方块：日间纯白，夜间深灰 */}
-                <div className="bg-white dark:bg-neutral-900 p-2 rounded border border-neutral-200 dark:border-neutral-800/50 flex flex-col items-center justify-center shadow-sm dark:shadow-none">
-                  <span className="text-[10px] text-neutral-500 uppercase">{t('projectMeta.folders.validFiles')}</span>
-                  <span className="text-lg font-mono text-green-600 dark:text-green-400">{folder["files in sceneGroups"]}</span>
-                </div>
-                <div className="bg-white dark:bg-neutral-900 p-2 rounded border border-neutral-200 dark:border-neutral-800/50 flex flex-col items-center justify-center shadow-sm dark:shadow-none">
-                  <span className="text-[10px] text-neutral-500 uppercase">{t('projectMeta.folders.skipped')}</span>
-                  <span className="text-lg font-mono text-red-500 dark:text-red-400">{folder["files Skipped"]}</span>
-                </div>
-                <div className="bg-white dark:bg-neutral-900 p-2 rounded border border-neutral-200 dark:border-neutral-800/50 flex flex-col items-center justify-center shadow-sm dark:shadow-none">
-                  <span className="text-[10px] text-neutral-500 uppercase">{t('projectMeta.folders.total')}</span>
-                  <span className="text-lg font-mono text-blue-600 dark:text-blue-400">{folder["files total"]}</span>
-                </div>
-              </div>
-
-              {/* 🌟 4. 底部参数条：日间纯白字变深，夜间恢复 */}
-              <div className="bg-white dark:bg-neutral-900 p-3 rounded border border-neutral-200 dark:border-neutral-800/50 text-xs font-mono text-neutral-700 dark:text-neutral-400 grid grid-cols-2 gap-y-2 shadow-sm dark:shadow-none transition-colors">
-                <div><span className="text-neutral-500 mr-2">{t('projectMeta.folders.size')}:</span>{folder["image meta"]?.width ?? 'Unknown'} x {folder["image meta"]?.height ?? 'Unknown'}</div>
-                <div><span className="text-neutral-500 mr-2">{t('projectMeta.folders.bands')}:</span>{folder["image meta"]?.bands ?? 'Unknown'}</div>
-                <div className="col-span-2"><span className="text-neutral-500 mr-2">{t('projectMeta.folders.type')}::</span>{folder["image meta"]?.["data type"] ?? 'uint8'}</div>
-              </div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
+      <header className="shrink-0 border-b border-neutral-200 bg-white/90 px-5 py-4 dark:border-neutral-800 dark:bg-neutral-900/90">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <MetaBadge tone="blue">{t('projectMeta.overview.label')}</MetaBadge>
+              <MetaBadge>{t('projectMeta.overview.schema')} v{meta.schemaVersion}</MetaBadge>
             </div>
-            ))}
-            {meta.folders.length === 0 && <div className="text-center text-neutral-500 py-8">{t('projectMeta.folders.noFolders')}</div>}
+            <h2 className="mt-2 truncate text-xl font-semibold tracking-tight text-neutral-900 dark:text-neutral-100" title={meta.projectName}>
+              {meta.projectName}
+            </h2>
+            <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-xs text-neutral-500 dark:text-neutral-400">
+              <HardDrive className="h-3.5 w-3.5 shrink-0" />
+              <span className="shrink-0 font-medium">{t('projectMeta.overview.workspace')}:</span>
+              <span className="min-w-0 truncate font-mono" title={metaWorkspacePath || t('projectMeta.overview.notConfigured')}>
+                {metaWorkspacePath || t('projectMeta.overview.notConfigured')}
+              </span>
+            </div>
+          </div>
+
+          <div className="grid shrink-0 grid-cols-3 gap-2">
+            <SummaryMetric icon={FolderOpen} label={t('projectMeta.overview.folders')} value={meta.folders.length} />
+            <SummaryMetric icon={Layers} label={t('projectMeta.overview.views')} value={meta.views.length} />
+            <SummaryMetric icon={Boxes} label={t('projectMeta.overview.scenes')} value={sceneCount} />
           </div>
         </div>
+      </header>
 
-        {/* 右侧：Views 信息 */}
-        <div className="flex flex-col h-full border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 overflow-hidden rounded-xl">
-          <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900">
-            <h3 className="flex items-center gap-2 text-neutral-900 dark:text-neutral-100 font-bold">
-              <Layers className="w-5 h-5 text-blue-500" /> 
-              {t('projectMeta.views.title')} ({meta.views.length})
-            </h3>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-            {meta.views.map((view) => (
-            // {/* 🌟 1. 外层卡片 */}
-            <div key={view.id} className="bg-neutral-50 dark:bg-black/40 border border-neutral-200 dark:border-neutral-800 rounded-lg p-4 space-y-3 transition-colors">
-              <div className="flex items-center justify-between border-b border-neutral-200 dark:border-neutral-800/50 pb-2">
-                <div className="flex items-center gap-2">
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${view.isMain ? 'bg-blue-100 dark:bg-blue-600/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-600/30' : 'bg-amber-100 dark:bg-amber-600/20 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-600/30'}`}>
-                    {view.id}
-                  </span>
-                  {view.isMain && <span className="text-[10px] text-neutral-500 border border-neutral-300 dark:border-neutral-700 px-1 rounded">{t('projectMeta.views.baseRef')}</span>}
-                </div>
-                <span className="text-xs text-neutral-500 dark:text-neutral-400 font-mono">{t('projectMeta.views.folderId')}: {view["folder id"]}</span>
-              </div>
-
-              {/* 🌟 2. 内部参数板 */}
-              <div className="bg-white dark:bg-neutral-900 p-3 rounded border border-neutral-200 dark:border-neutral-800/50 text-xs font-mono text-neutral-700 dark:text-neutral-400 space-y-2 shadow-sm dark:shadow-none transition-colors">
-                <div className="flex items-center gap-2">
-                  <span className="text-neutral-500 w-16">{t('projectMeta.views.bands')}:</span>
-                  <div className="flex gap-1">
-                  {view.bands.map((b, idx) => (
-                    // {/* 🌟 3. Band 小方块：使用 primary 主色调实现日夜自适应 */}
-                    <span 
-                      key={idx} 
-                      className={`w-5 h-5 flex items-center justify-center rounded font-bold shadow-sm text-xs ${
-                        b === 0 
-                          ? 'bg-neutral-100 dark:bg-neutral-800/50 text-neutral-400 dark:text-neutral-600 border border-neutral-200 dark:border-transparent' 
-                          : 'bg-primary text-primary-foreground'
-                      }`}
-                    >
-                      {b}
-                    </span>
-                  ))}
-                </div>
-                </div>
-                {view.bands.length === 1 && (
-                  <div className="flex justify-between items-center mt-1">
-                    <span className="text-neutral-500">{t('projectMeta.views.renderMode')}:</span>
-                    {/* 🌟 升级：在 Dashboard 也加入可视化的色带徽章 */}
-                    <span className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-400/10 px-1.5 py-0.5 rounded text-[10px] border border-amber-200 dark:border-amber-500/20">
-                      <div className={`w-3.5 h-2 rounded-sm bg-gradient-to-r ${COLOR_MAPS.find(c => c.name === (view.renderMode || 'gray'))?.css || 'from-black to-white'} border border-amber-200/50`} />
-                      <span className="text-amber-600 dark:text-amber-400 capitalize font-bold">
-                        {view.renderMode || 'gray'}
-                      </span>
-                    </span>
-                  </div>
-                )}
-                {!view.isMain && (
-                  <>
-                    {/* 🌟 分割线 */}
-                    <div className="h-px bg-neutral-200 dark:bg-neutral-800 my-2"></div>
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">{t('projectMeta.views.crop')}:</span>
-                      <span className="text-amber-600 dark:text-amber-400">
-                        {view.crop.t.toFixed(1)}%, {view.crop.r.toFixed(1)}%, {view.crop.b.toFixed(1)}%, {view.crop.l.toFixed(1)}%
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">{t('projectMeta.views.scale')}:</span>
-                      <span className="text-green-600 dark:text-green-400">{view.transform.scaleX.toFixed(3)}, {view.transform.scaleY.toFixed(3)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-neutral-500">{t('projectMeta.views.offset')}:</span>
-                      <span className="text-primary dark:text-blue-400">{view.transform.offsetX.toFixed(0)}px, {view.transform.offsetY.toFixed(0)}px</span>
-                    </div>
-                  </>
-                )}
-
-                {/* 🌟 新增：在面板底部展示 DIY 颜色配置 */}
-                {/* 🌟 核心修复：移除对 view.settings 的严格判断，使用兜底逻辑，保证新老项目必定显示面板 */}
-                {/* 🌟 核心升级：科研级参数的动态标签云展示 */}
-                {(() => {
-                  // 1. 扩充单波段的默认兜底参数
-                  const defaultSingleBand = { 
-                    minMax: [0, 100], brightness: 1, contrast: 1, saturation: 1,
-                    gamma: 1.0, enhancementMode: 'manual', spatialFilter: 'none', 
-                    invert: false, binarize: { enabled: false, threshold: 128 }
-                  };
-                  
-                  const settings = view.settings || (view.bands.length === 1 
-                    ? defaultSingleBand 
-                    : { brightness: 1, contrast: 1, saturation: 1 });
-
-                  return (
-                    <>
-                      <div className="h-px bg-neutral-200 dark:bg-neutral-800 my-2"></div>
-                      {/* 考虑到徽章可能换行，将 items-center 改为 items-start，并加点 pt */}
-                      <div className="flex justify-between items-start pt-0.5">
-                        <span className="text-neutral-500 shrink-0 mt-0.5">
-                          {view.bands.length === 1 ? 'Enhancements:' : 'Color Adjust:'}
-                        </span>
-                        <div className="flex flex-wrap justify-end gap-1.5 text-[10px] font-mono">
-                          {view.bands.length === 1 ? (
-                            <>
-                              {/* 🌟 1. 二值化模式 (最高级视觉，开启后剥离其他色彩参数) */}
-                              {settings.binarize?.enabled ? (
-                                <span className="bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-500/30 px-1.5 py-0.5 rounded shadow-sm">
-                                  Binarize: {settings.binarize.threshold}
-                                </span>
-                              ) : (
-                                <>
-                                  {/* 🌟 2. 映射模式 (HE / CLAHE / Stretch) */}
-                                  {settings.enhancementMode && settings.enhancementMode !== 'manual' ? (
-                                    <span className="bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-500/30 px-1.5 py-0.5 rounded shadow-sm uppercase">
-                                      {settings.enhancementMode === 'he' ? 'Global HE' : 'Auto CLAHE'}
-                                    </span>
-                                  ) : (
-                                    <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
-                                      Stretch: {settings.minMax?.[0] ?? 0}%-{settings.minMax?.[1] ?? 100}%
-                                    </span>
-                                  )}
-                                  
-                                  {/* 🌟 3. Gamma 校正 (非 1.0 时显示) */}
-                                  {(settings.gamma !== undefined && settings.gamma !== 1.0) && (
-                                    <span className="bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-500/30 px-1.5 py-0.5 rounded shadow-sm">
-                                      γ: {(settings.gamma).toFixed(1)}
-                                    </span>
-                                  )}
-                                </>
-                              )}
-
-                              {/* 🌟 4. 空间滤波 (锐化) */}
-                              {settings.spatialFilter === 'sharpen' && (
-                                <span className="bg-emerald-100 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 px-1.5 py-0.5 rounded shadow-sm">
-                                  Sharpen
-                                </span>
-                              )}
-                              
-                              {/* 🌟 5. 反相操作 */}
-                              {settings.invert && (
-                                <span className="bg-neutral-800 text-white dark:bg-neutral-200 dark:text-black border border-neutral-700 dark:border-neutral-300 px-1.5 py-0.5 rounded shadow-sm">
-                                  Invert
-                                </span>
-                              )}
-
-                              {/* 🌟 6. 极致兜底：如果完全是原始状态（没有任何增强），显示 Default */}
-                              {!settings.binarize?.enabled && 
-                               (settings.enhancementMode === 'manual' || !settings.enhancementMode) && 
-                               (settings.gamma === 1.0 || settings.gamma === undefined) && 
-                               settings.spatialFilter !== 'sharpen' && 
-                               !settings.invert && 
-                               settings.minMax?.[0] === 0 && settings.minMax?.[1] === 100 && (
-                                <span className="bg-neutral-100 dark:bg-neutral-800/40 text-neutral-400 border border-neutral-200 dark:border-neutral-700 px-1.5 py-0.5 rounded shadow-sm">
-                                  Default RAW
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              {/* RGB 多波段的展示保持不变 */}
-                              <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
-                                B:{settings.brightness ?? 1}
-                              </span>
-                              <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
-                                C:{settings.contrast ?? 1}
-                              </span>
-                              <span className="bg-purple-100 dark:bg-purple-500/20 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-500/30 px-1.5 py-0.5 rounded shadow-sm">
-                                S:{settings.saturation ?? 1}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </>
-                  );
-                })()}
-
-
-              </div>
+      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+        <div className="grid gap-4 p-4 xl:grid-cols-2">
+          <section className="min-w-0 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-none">
+            <PanelHeading
+              icon={FolderOpen}
+              iconClassName="text-amber-600 dark:text-amber-300"
+              title={t('projectMeta.folders.title')}
+              description={t('projectMeta.overview.folderDescription')}
+              count={meta.folders.length}
+            />
+            <div className="space-y-3 p-3.5">
+              {meta.folders.map((folder) => <FolderCard key={folder.Id} folder={folder} t={t} />)}
+              {meta.folders.length === 0 && <div className="py-8 text-center text-sm text-neutral-500">{t('projectMeta.folders.noFolders')}</div>}
             </div>
-            ))}
-            {meta.views.length === 0 && <div className="text-center text-neutral-500 py-8">{t('projectMeta.views.noViews')}</div>}
-          </div>
-        </div>
+          </section>
 
+          <section className="min-w-0 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:shadow-none">
+            <PanelHeading
+              icon={Layers}
+              iconClassName="text-blue-600 dark:text-blue-300"
+              title={t('projectMeta.views.title')}
+              description={t('projectMeta.overview.viewDescription')}
+              count={meta.views.length}
+            />
+            <div className="space-y-3 p-3.5">
+              {meta.views.map((view) => <ViewCard key={view.id} view={view} t={t} />)}
+              {meta.views.length === 0 && <div className="py-8 text-center text-sm text-neutral-500">{t('projectMeta.views.noViews')}</div>}
+            </div>
+          </section>
+        </div>
       </div>
-      
-      {/* 底部操作区 */}
-      <div className="p-4 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex justify-between items-center shrink-0 transition-colors">
-        <span className="text-xs text-neutral-500 flex items-center gap-1">
-          <Database className="w-3 h-3"/> {t('projectMeta.bottom.liveState')}
-        </span>
-        {/* 🌟 修改：把按钮包在一个 flex 容器里，并增加 Confirm 按钮 */}
-        <div className="flex items-center gap-3">
-          <Button onClick={handleExportJSON} variant="outline" className="border-primary/50 text-primary hover:bg-primary/10">
-            <Download className="w-4 h-4 mr-2" /> {t('projectMeta.bottom.downloadJson')}
-          </Button>
-          
-          <Button 
-            onClick={() => setActiveModule('preload')} // 跳转到预加载模块
-            variant="outline" 
-            className="border-amber-500/50 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10"
-          >
-            <Edit3 className="w-4 h-4 mr-2" /> {t('common.edit')}
-          </Button>
 
-          <Button 
+      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex items-center gap-2 text-xs text-neutral-500 dark:text-neutral-400">
+          <Database className="h-3.5 w-3.5" />
+          <span>{t('projectMeta.bottom.liveState')}</span>
+          <span className="text-neutral-300 dark:text-neutral-700">•</span>
+          <span className="font-mono">v{meta.schemaVersion}</span>
+        </div>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button onClick={handleExportJSON} variant="outline" size="sm" className="border-primary/40 text-primary hover:bg-primary/10">
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            {t('projectMeta.bottom.downloadJson')}
+          </Button>
+          <Button onClick={() => setActiveModule('preload')} variant="outline" size="sm" className="border-amber-500/40 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-500/10">
+            <Edit3 className="mr-1.5 h-3.5 w-3.5" />
+            {t('common.edit')}
+          </Button>
+          <Button
             type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              // 🌟 3. 核心修复：如果父组件传了 onClose，就调用父组件的关闭逻辑；否则兜底使用全局切换
-              if (onClose) {
-                onClose();
-              } else {
-                setActiveModule('workspace');
-              }
-            }} 
-            variant="default"
+            size="sm"
+            onClick={() => (onClose ? onClose() : setActiveModule('workspace'))}
           >
             {t('common.confirm')}
           </Button>
         </div>
-      </div>
+      </footer>
     </div>
   );
 }

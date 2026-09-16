@@ -322,6 +322,17 @@
     "home": "根目录"
   },
   "projectMeta": {
+    "overview": {
+      "label": "项目元数据",
+      "schema": "结构版本",
+      "workspace": "工作区",
+      "notConfigured": "未配置",
+      "folders": "文件夹",
+      "views": "视图",
+      "scenes": "场景",
+      "folderDescription": "图像来源与文件统计",
+      "viewDescription": "通道、对齐与显示参数"
+    },
     "empty": {
       "title": "暂无项目元数据",
       "desc": "请先加载数据源文件夹。",
@@ -331,6 +342,7 @@
       "title": "数据源文件夹",
       "id": "ID",
       "suffix": "后缀",
+      "extension": "扩展名",
       "validFiles": "有效文件",
       "skipped": "跳过",
       "total": "总计",
@@ -345,6 +357,15 @@
       "folderId": "文件夹 ID",
       "bands": "波段",
       "renderMode": "渲染模式",
+      "enhancements": "增强",
+      "colorAdjust": "色彩调整",
+      "binarize": "二值化",
+      "globalHE": "全局 HE",
+      "autoCLAHE": "自动 CLAHE",
+      "defaultRaw": "默认 RAW",
+      "stretch": "拉伸",
+      "sharpen": "锐化",
+      "invert": "反相",
       "crop": "裁剪",
       "scale": "缩放",
       "offset": "偏移",
