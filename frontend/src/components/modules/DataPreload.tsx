@@ -13,6 +13,7 @@ import { COLOR_MAPS, BAND_COLORS, BAND_UNSELECTED_STYLE } from '../../config/col
 import { SUPPORTED_IMAGE_EXTENSIONS } from '../../config/supportedFormats';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
+import { rememberRecentProject } from '../../lib/projectHistory';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
 import { showDialog } from '../../store/useDialogStore';
 import {
@@ -24,6 +25,8 @@ interface DataPreloadProps {
   onClose: () => void;
   isCreatingProject?: boolean;
 }
+
+type PreloadProgressStage = 'idle' | 'analyzing' | 'preparing' | 'loadingAnnotations' | 'saving' | 'complete';
 
 const getParentDirectory = (path: string) => {
   const trimmed = path.trim();
@@ -92,6 +95,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   const [metaSaveDirExplorerOpen, setMetaSaveDirExplorerOpen] = useState(false);
 
   const [isGlobalConfirming, setIsGlobalConfirming] = useState(false);
+  const [progressStage, setProgressStage] = useState<PreloadProgressStage>('idle');
+  const [operationProgress, setOperationProgress] = useState({ current: 0, total: 0 });
 
   const maxViews = editorSettings.maxViews || 9;
   const workspaceStorePath = useStore(s => s.workspacePath);
@@ -319,6 +324,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   const handleAutoAnalyze = async (item: { id: string; path: string; suffix: string }) => {
     if (!item.path.trim()) return;
     setIsConfirming(true);
+    setProgressStage('analyzing');
+    setOperationProgress({ current: 0, total: 0 });
     try {
       const existingFolders = folders.map(f => ({
         path: f.path,
@@ -461,6 +468,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       alert(t('dataPreload.alerts.backendFailed'));
     } finally {
       setIsConfirming(false);
+      setProgressStage('idle');
     }
   };
 
@@ -468,6 +476,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     const folder = folders.find(f => f.id === folderId);
     if (!folder?.path) return;
     setIsConfirming(true);
+    setProgressStage('analyzing');
+    setOperationProgress({ current: 0, total: 0 });
     try {
       const allFolders = folders.map(f => ({
         path: f.path,
@@ -501,6 +511,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       console.error("Re-analyze error:", error);
     } finally {
       setIsConfirming(false);
+      setProgressStage('idle');
     }
   };
 
@@ -562,7 +573,9 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     if (stemsToLoad.length === 0) return null;
 
     setIsLoadingWorkspaceAnnotations(true);
+    setProgressStage('loadingAnnotations');
     setWorkspaceLoadProgress({ current: 0, total: stemsToLoad.length });
+    setOperationProgress({ current: 0, total: stemsToLoad.length });
     useStore.setState({
       annotations: [],
       hiddenAnnotations: [],
@@ -576,7 +589,10 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       const result = await loadAllProjectAnnotations(
         stemsToLoad,
         saveDir,
-        (current, total) => setWorkspaceLoadProgress({ current, total }),
+        (current, total) => {
+          setWorkspaceLoadProgress({ current, total });
+          setOperationProgress({ current, total });
+        },
         10,
       );
       if (!result) return null;
@@ -592,6 +608,21 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     } finally {
       setIsLoadingWorkspaceAnnotations(false);
     }
+  };
+
+  const getDatasetSummary = () => {
+    const state = useStore.getState();
+    const labelCount = new Set(
+      state.annotations
+        .map((annotation) => annotation.label.trim())
+        .filter((label) => label.length > 0),
+    ).size;
+
+    return {
+      images: state.stems.length,
+      labels: labelCount,
+      objects: state.annotations.length,
+    };
   };
 
   const handleGlobalConfirm = async () => {
@@ -613,6 +644,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     }
 
     setIsGlobalConfirming(true);
+    setProgressStage('preparing');
+    setOperationProgress({ current: 0, total: 2 });
     try {
       const finalPath = isWorkspaceCustom ? workspacePath.trim() : defaultWorkspacePath;
       const shouldEnterAnnotationDirectly = views.length === 1;
@@ -621,6 +654,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       if (finalPath) {
         hasExistingAnnotations = await checkWorkspaceForJson(finalPath, false);
       }
+      setOperationProgress({ current: 1, total: 2 });
 
       const informationItems = [
         t(shouldEnterAnnotationDirectly
@@ -660,17 +694,25 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       }
 
       if (finalPath) setWorkspaceStorePath(finalPath);
+      setProgressStage('saving');
+      setOperationProgress({ current: 0, total: 1 });
       const projectMeta = generateProjectMetaConfig(useStore.getState());
       if (metaPath) await saveProjectMeta({ file_path: metaPath, content: projectMeta });
+      if (isCreatingProject && metaPath) {
+        rememberRecentProject(metaPath, projectNameDraft);
+      }
+      setProgressStage('complete');
+      setOperationProgress({ current: 1, total: 1 });
 
-      if (loadedWorkspaceStats) {
+      if (isCreatingProject || loadedWorkspaceStats) {
+        const datasetSummary = getDatasetSummary();
         await showDialog({
           type: 'success',
-          title: t('dataPreload.workspace.loadSuccessTitle'),
-          description: t('dataPreload.workspace.loadSuccessDescription', {
-            images: loadedWorkspaceStats.loadedSceneCount,
-            labels: loadedWorkspaceStats.labelCount,
-            objects: loadedWorkspaceStats.annotationCount,
+          title: t('dataPreload.datasetLoadedTitle'),
+          description: t('dataPreload.datasetLoadedDescription', {
+            images: datasetSummary.images,
+            labels: datasetSummary.labels,
+            objects: datasetSummary.objects,
           }),
           confirmText: t('common.confirm'),
           hideCancel: true,
@@ -683,6 +725,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       alert(t('dataPreload.alerts.saveFailed'));
     } finally {
       setIsGlobalConfirming(false);
+      setProgressStage('idle');
     }
   };
 
@@ -1156,7 +1199,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
 
       {/* 底部全局按钮 */}
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
-        <div className="flex items-center gap-6 text-sm">
+        <div className="flex min-w-0 items-center gap-6 text-sm">
           <div className="flex items-center gap-1.5">
             <span className="text-muted-foreground">{t('dataPreload.steps.folders')}:</span>
             <span className="font-semibold">{folders.length}</span>
@@ -1179,6 +1222,38 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
             <span className="text-xs text-muted-foreground">
               {t('dataPreload.workspace.loadingAnnotations')} {workspaceLoadProgress.current}/{workspaceLoadProgress.total}
             </span>
+          )}
+          {(isConfirming || isGlobalConfirming || isLoadingWorkspaceAnnotations) && (
+            <div className="flex min-w-[220px] max-w-[320px] flex-1 items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="mb-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                  <span className="truncate">
+                    {progressStage === 'analyzing'
+                      ? t('dataPreload.progress.analyzing')
+                      : progressStage === 'preparing'
+                        ? t('dataPreload.progress.preparing')
+                        : progressStage === 'loadingAnnotations'
+                          ? t('dataPreload.workspace.loadingAnnotations')
+                          : progressStage === 'saving'
+                            ? t('dataPreload.progress.saving')
+                            : t('dataPreload.progress.complete')}
+                  </span>
+                  {operationProgress.total > 0 && (
+                    <span className="shrink-0 font-mono">
+                      {operationProgress.current}/{operationProgress.total}
+                    </span>
+                  )}
+                </div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full bg-primary transition-all duration-300 ${operationProgress.total > 0 ? '' : 'w-1/2 animate-pulse'}`}
+                    style={operationProgress.total > 0
+                      ? { width: `${Math.min(100, (operationProgress.current / operationProgress.total) * 100)}%` }
+                      : undefined}
+                  />
+                </div>
+              </div>
+            </div>
           )}
         </div>
 

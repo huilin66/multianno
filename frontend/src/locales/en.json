@@ -134,7 +134,12 @@
     "confirmResetTitle": "Load Project",
     "confirmReset": "Are you sure you want to load the project? This will delete all data and start a new project.",
     "recentProjects": "Recent Projects",
-    "loadingAnnotations": "Loading Annotations: "
+    "loadingProject": "Loading project metadata...",
+    "analyzingImages": "Scanning image folders...",
+    "loadingAnnotations": "Loading Annotations: ",
+    "loadComplete": "Project loaded",
+    "datasetLoadedTitle": "Dataset loaded",
+    "datasetLoadedDescription": "Loaded {{images}} images, {{labels}} label types, and {{objects}} objects."
   },
   "dataPreload": {
     "project": {
@@ -211,6 +216,14 @@
     },
     "confirmAndAlign": "Confirm & Start Align",
     "confirmAndStartAnnotation": "Confirm & Start Annotation",
+    "progress": {
+      "analyzing": "Analyzing image folders",
+      "preparing": "Preparing project",
+      "saving": "Saving project",
+      "complete": "Project ready"
+    },
+    "datasetLoadedTitle": "Dataset loaded",
+    "datasetLoadedDescription": "Loaded {{images}} images, {{labels}} label types, and {{objects}} objects.",
     "alerts": {
       "noImagesFound": "No images found",
       "backendFailed": "Backend connection failed",

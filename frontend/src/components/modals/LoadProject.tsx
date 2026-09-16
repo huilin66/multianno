@@ -9,52 +9,18 @@ import { FolderSearch, AlertCircle, History } from 'lucide-react';
 import { loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
 import { FileExplorerDialog } from './FileExplorerDialog';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
+import {
+  MAX_RECENT_PROJECTS,
+  RECENT_PROJECTS_KEY,
+  RecentProject,
+  normalizeProjectPath,
+  parseRecentProjects,
+  rememberRecentProject,
+} from '../../lib/projectHistory';
 import { useTranslation } from 'react-i18next';
 import { showDialog } from '../../store/useDialogStore';
 
-const RECENT_PROJECTS_KEY = 'multiAnno_recentProjects';
-const MAX_RECENT_PROJECTS = 3;
-
-interface RecentProject {
-  path: string;
-  name: string;
-}
-
-const normalizeProjectPath = (path: string) => path.trim().replace(/[\\/]+$/, '').toLowerCase();
-
-const getProjectNameFromPath = (path: string) => {
-  const fileName = path.trim().replace(/[\\/]+$/, '').split(/[\\/]/).pop() || path.trim();
-  return fileName.replace(/\.json$/i, '').replace(/_meta$/i, '') || path.trim();
-};
-
-const parseRecentProjects = (raw: string | null): RecentProject[] => {
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    const projects: RecentProject[] = [];
-    parsed.forEach((entry: unknown) => {
-      const path = typeof entry === 'string'
-        ? entry.trim()
-        : entry && typeof entry === 'object' && 'path' in entry && typeof entry.path === 'string'
-          ? entry.path.trim()
-          : '';
-      if (!path || projects.some((project) => normalizeProjectPath(project.path) === normalizeProjectPath(path))) return;
-
-      const name = typeof entry === 'object' && entry && 'name' in entry && typeof entry.name === 'string'
-        ? entry.name.trim()
-        : getProjectNameFromPath(path);
-      projects.push({ path, name: name || getProjectNameFromPath(path) });
-    });
-
-    return projects.slice(0, MAX_RECENT_PROJECTS);
-  } catch (error) {
-    console.warn('Failed to parse recent projects:', error);
-    return [];
-  }
-};
+type LoadStage = 'metadata' | 'analyzing' | 'annotations' | 'complete';
 
 export function LoadProject({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
@@ -64,27 +30,14 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
   const [explorerOpen, setExplorerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [recentProjects, setRecentProjects] = useState<RecentProject[]>([]);
+  const [loadStage, setLoadStage] = useState<LoadStage>('metadata');
 
   React.useEffect(() => {
     setRecentProjects(parseRecentProjects(localStorage.getItem(RECENT_PROJECTS_KEY)));
   }, []);
 
   const rememberProject = (path: string, name?: string) => {
-    const project = {
-      path,
-      name: name?.trim() || getProjectNameFromPath(path),
-    };
-    const nextProjects = [
-      project,
-      ...recentProjects.filter((item) => normalizeProjectPath(item.path) !== normalizeProjectPath(path)),
-    ].slice(0, MAX_RECENT_PROJECTS);
-
-    setRecentProjects(nextProjects);
-    try {
-      localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(nextProjects));
-    } catch (error) {
-      console.warn('Failed to save recent projects:', error);
-    }
+    setRecentProjects(rememberRecentProject(path, name, recentProjects));
   };
 
   const handleExplorerConfirm = (paths: string[]) => {
@@ -94,6 +47,21 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
     }
   };
   const [loadProgress, setLoadProgress] = useState({ current: 0, total: 0 });
+
+  const getDatasetSummary = () => {
+    const state = useStore.getState();
+    const labelCount = new Set(
+      state.annotations
+        .map((annotation) => annotation.label.trim())
+        .filter((label) => label.length > 0),
+    ).size;
+
+    return {
+      images: state.stems.length,
+      labels: labelCount,
+      objects: state.annotations.length,
+    };
+  };
 
   const handleLoadFile = async () => {
     const filePath = selectedPath.trim();
@@ -109,9 +77,11 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
     setIsLoading(true);
     setError('');
     setLoadProgress({ current: 0, total: 0 });
+    setLoadStage('metadata');
 
     try {
       const meta = await loadProjectMetaFromServer(filePath);
+      setLoadStage('analyzing');
       resetProject();
       useStore.getState().setProjectMetaPath(filePath);
       loadProjectMeta(meta);
@@ -138,7 +108,9 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
             const mainFolder = meta.folders?.find((f: any) => f.Id === mainViewFolderId) || meta.folders[0];
             const loadPath = state.workspacePath || mainFolder?.path || '';
             
-             if (loadPath) {
+            if (loadPath) {
+              setLoadStage('annotations');
+              setLoadProgress({ current: 0, total: result.commonStems.length });
               await loadAllProjectAnnotations(
                 result.commonStems, 
                 loadPath, 
@@ -152,13 +124,28 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
         }
       }
 
+      setLoadStage('complete');
+      setLoadProgress({ current: 1, total: 1 });
       rememberProject(filePath, meta.projectName);
+      const datasetSummary = getDatasetSummary();
+      await showDialog({
+        type: 'success',
+        title: t('loadProject.datasetLoadedTitle'),
+        description: t('loadProject.datasetLoadedDescription', {
+          images: datasetSummary.images,
+          labels: datasetSummary.labels,
+          objects: datasetSummary.objects,
+        }),
+        confirmText: t('common.confirm'),
+        hideCancel: true,
+      });
       setActiveModule('workspace');
       onClose();
     } catch (err: any) {
       setError(t('common.error')+err.message);
     } finally {
       setIsLoading(false);
+      setLoadStage('metadata');
     }
   };
 
@@ -240,19 +227,33 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
       </div>
 
       <div className="flex items-center justify-between pt-2 border-t border-border">
-        {isLoading && loadProgress.total > 0 ? (
+        {isLoading ? (
           <div className="flex items-center gap-3 flex-1 mr-4">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              {t('loadProject.loadingAnnotations')}
-              <span className="font-mono font-bold text-foreground ml-1">
-                {loadProgress.current}/{loadProgress.total}
-              </span>
-            </span>
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                <span className="truncate">
+                  {loadStage === 'annotations'
+                    ? t('loadProject.loadingAnnotations')
+                    : loadStage === 'complete'
+                      ? t('loadProject.loadComplete')
+                      : loadStage === 'analyzing'
+                        ? t('loadProject.analyzingImages')
+                        : t('loadProject.loadingProject')}
+                </span>
+                {loadProgress.total > 0 && (
+                  <span className="shrink-0 font-mono font-bold text-foreground">
+                    {loadProgress.current}/{loadProgress.total}
+                  </span>
+                )}
+              </div>
+              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${(loadProgress.current / loadProgress.total) * 100}%` }}
+                className={`h-full bg-primary rounded-full transition-all duration-300 ${loadProgress.total > 0 ? '' : 'w-1/2 animate-pulse'}`}
+                style={loadProgress.total > 0
+                  ? { width: `${Math.min(100, (loadProgress.current / loadProgress.total) * 100)}%` }
+                  : undefined}
               />
+              </div>
             </div>
           </div>
         ) : (

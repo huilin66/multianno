@@ -134,7 +134,12 @@
     "confirmResetTitle": "加载项目",
     "confirmReset": "确认加载项目吗？这将删除所有数据并开始新项目。",
     "recentProjects": "最近项目",
-    "loadingAnnotations": "加载标注: "
+    "loadingProject": "正在加载项目元数据...",
+    "analyzingImages": "正在扫描图像文件夹...",
+    "loadingAnnotations": "正在加载标注: ",
+    "loadComplete": "项目加载完成",
+    "datasetLoadedTitle": "数据集加载完成",
+    "datasetLoadedDescription": "已加载 {{images}} 张图像、{{labels}} 个 label 类型和 {{objects}} 个对象。"
   },
   "dataPreload": {
     "project": {
@@ -211,6 +216,14 @@
     },
     "confirmAndAlign": "确认 & 开始对齐",
     "confirmAndStartAnnotation": "确认 & 开始标注",
+    "progress": {
+      "analyzing": "正在分析图像文件夹",
+      "preparing": "正在准备项目",
+      "saving": "正在保存项目",
+      "complete": "项目准备完成"
+    },
+    "datasetLoadedTitle": "数据集加载完成",
+    "datasetLoadedDescription": "已加载 {{images}} 张图像、{{labels}} 个 label 类型和 {{objects}} 个对象。",
     "alerts": {
       "noImagesFound": "未找到图像",
       "backendFailed": "后端连接失败",
