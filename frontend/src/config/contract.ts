@@ -38,6 +38,7 @@ export interface SceneAnnotationJSON {
 
 type ColormapNames = (typeof COLOR_MAPS)[number]['name'];
 export interface ProjectMetaContract {
+  schemaVersion: number;
   projectName: string;
   workspacePath: string;
   sceneGroups?: Record<string, Record<string, string>>;

@@ -28,6 +28,7 @@ export function generateProjectMetaConfig(state: AppState): ProjectMetaContract 
   const defaultCrop = { t: 0, r: 100, b: 100, l: 0 };
 
   return {
+        schemaVersion: 1,
         projectName: state.projectName || "Untitled Project",
         workspacePath: state.workspacePath || '',
         sceneGroups: sceneGroups || {},
