@@ -133,6 +133,7 @@
     "projectMetaPlaceholder": "Enter or click to set project metadata path ...",
     "confirmResetTitle": "Load Project",
     "confirmReset": "Are you sure you want to load the project? This will delete all data and start a new project.",
+    "recentProjects": "Recent Projects",
     "loadingAnnotations": "Loading Annotations: "
   },
   "dataPreload": {
