@@ -106,7 +106,14 @@ export function LeftToolbar({
 
   const renderToolButton = (t: any) => {
     if (t.type === 'separator') {
-      return <div key={t.id} className="w-8 h-px bg-neutral-200 dark:bg-neutral-800 my-1" />;
+      return (
+        <div
+          key={t.id}
+          role="separator"
+          aria-orientation="horizontal"
+          className="w-10 h-px shrink-0 bg-neutral-300/60 dark:bg-neutral-700/60 my-1.5"
+        />
+      );
     }
 
     const isActive = tool === t.id && !t.action; 
@@ -175,9 +182,17 @@ export function LeftToolbar({
           </div>
         )}
       </div>
-      <div className="w-8 h-px bg-neutral-200 dark:bg-neutral-800 my-1" />
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        className="w-10 h-px shrink-0 bg-neutral-300/60 dark:bg-neutral-700/60 my-1.5"
+      />
       {editTools.map(renderToolButton)}
-      <div className="w-8 h-px bg-neutral-200 dark:bg-neutral-800 my-1" />
+      <div
+        role="separator"
+        aria-orientation="horizontal"
+        className="w-10 h-px shrink-0 bg-neutral-300/60 dark:bg-neutral-700/60 my-1.5"
+      />
       {navTools.map(renderToolButton)}
     </div>
   );
