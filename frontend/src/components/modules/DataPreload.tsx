@@ -12,7 +12,9 @@ import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { COLOR_MAPS, BAND_COLORS, BAND_UNSELECTED_STYLE } from '../../config/colors';
 import { SUPPORTED_IMAGE_EXTENSIONS } from '../../config/supportedFormats';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
+import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
+import { showDialog } from '../../store/useDialogStore';
 import {
   FolderOpen, Plus, Trash2, Info, UploadCloud, History,
   ChevronRight, RotateCcw, Search
@@ -81,7 +83,10 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   const [workspaceExplorerOpen, setWorkspaceExplorerOpen] = useState(false);
   const [isWorkspaceConfirming, setIsWorkspaceConfirming] = useState(false);
   const [workspaceHasJson, setWorkspaceHasJson] = useState(false);
+  const [isWorkspaceLocked, setIsWorkspaceLocked] = useState(false);
   const [isCheckingWorkspace, setIsCheckingWorkspace] = useState(false);
+  const [isLoadingWorkspaceAnnotations, setIsLoadingWorkspaceAnnotations] = useState(false);
+  const [workspaceLoadProgress, setWorkspaceLoadProgress] = useState({ current: 0, total: 0 });
   const [projectNameDraft, setProjectNameDraft] = useState(() => projectName || t('createProject.defaultName'));
   const [projectMetaSaveDir, setProjectMetaSaveDir] = useState('');
   const [metaSaveDirExplorerOpen, setMetaSaveDirExplorerOpen] = useState(false);
@@ -117,17 +122,34 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
 
   const originalPaths = useRef<Record<string, string>>({});
   const autoMetaSaveDirRef = useRef('');
+  const workspaceCheckIdRef = useRef(0);
 
-  const checkWorkspaceForJson = useCallback(async (path: string) => {
-    if (!path) return;
+  const checkWorkspaceForJson = useCallback(async (path: string, lockIfFound = false): Promise<boolean> => {
+    const normalizedPath = path.trim();
+    const checkId = ++workspaceCheckIdRef.current;
+
+    if (!normalizedPath) {
+      setWorkspaceHasJson(false);
+      if (lockIfFound) setIsWorkspaceLocked(false);
+      return false;
+    }
+
     setIsCheckingWorkspace(true);
     try {
-      const data = await checkWorkspaceJson(path);
-      setWorkspaceHasJson(data.hasJson || false);
+      const data = await checkWorkspaceJson(normalizedPath);
+      if (checkId !== workspaceCheckIdRef.current) return false;
+
+      const hasJson = Boolean(data?.hasJson);
+      setWorkspaceHasJson(hasJson);
+      if (lockIfFound) setIsWorkspaceLocked(hasJson);
+      return hasJson;
     } catch {
+      if (checkId !== workspaceCheckIdRef.current) return false;
       setWorkspaceHasJson(false);
+      if (lockIfFound) setIsWorkspaceLocked(false);
+      return false;
     } finally {
-      setIsCheckingWorkspace(false);
+      if (checkId === workspaceCheckIdRef.current) setIsCheckingWorkspace(false);
     }
   }, []);
 
@@ -138,15 +160,16 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     if (workspaceStorePath?.trim()) {
       setWorkspacePath(workspaceStorePath);
       setIsWorkspaceCustom(normalizeComparablePath(workspaceStorePath) !== normalizeComparablePath(defaultWorkspacePath));
-      void checkWorkspaceForJson(workspaceStorePath);
+      void checkWorkspaceForJson(workspaceStorePath, true);
     } else if (defaultWorkspacePath) {
       setWorkspacePath(defaultWorkspacePath);
       setIsWorkspaceCustom(false);
-      void checkWorkspaceForJson(defaultWorkspacePath);
+      void checkWorkspaceForJson(defaultWorkspacePath, true);
     } else {
       setWorkspacePath('');
       setIsWorkspaceCustom(false);
       setWorkspaceHasJson(false);
+      setIsWorkspaceLocked(false);
     }
   }, [checkWorkspaceForJson, defaultWorkspacePath, workspaceStorePath]);
 
@@ -489,20 +512,24 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     if (!finalPath) return;
     setIsWorkspaceConfirming(true);
     setWorkspaceStorePath(finalPath);
-    await checkWorkspaceForJson(finalPath);
+    await checkWorkspaceForJson(finalPath, false);
     setIsWorkspaceConfirming(false);
   };
 
   const handleWorkspaceReset = () => {
     setWorkspacePath(defaultWorkspacePath);
     setIsWorkspaceCustom(false);
-    void checkWorkspaceForJson(defaultWorkspacePath);
+    setIsWorkspaceLocked(false);
+    void checkWorkspaceForJson(defaultWorkspacePath, false);
   };
 
   const handleWorkspaceSelectConfirm = (paths: string[]) => {
     if (paths.length > 0) {
-      setWorkspacePath(paths[0]);
-      setIsWorkspaceCustom(true);
+      const selectedPath = paths[0];
+      setWorkspacePath(selectedPath);
+      setIsWorkspaceCustom(normalizeComparablePath(selectedPath) !== normalizeComparablePath(defaultWorkspacePath));
+      setIsWorkspaceLocked(false);
+      void checkWorkspaceForJson(selectedPath, false);
     }
     setWorkspaceExplorerOpen(false);
   };
@@ -530,6 +557,43 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   // ==========================================
   // 全局操作
   // ==========================================
+  const loadExistingWorkspaceAnnotations = async (saveDir: string) => {
+    const stemsToLoad = useStore.getState().stems;
+    if (stemsToLoad.length === 0) return null;
+
+    setIsLoadingWorkspaceAnnotations(true);
+    setWorkspaceLoadProgress({ current: 0, total: stemsToLoad.length });
+    useStore.setState({
+      annotations: [],
+      hiddenAnnotations: [],
+      activeAnnotationId: null,
+      pendingAnnotationFocus: null,
+      isAnnotationDirty: false,
+      statsCacheValid: false,
+    });
+
+    try {
+      const result = await loadAllProjectAnnotations(
+        stemsToLoad,
+        saveDir,
+        (current, total) => setWorkspaceLoadProgress({ current, total }),
+        10,
+      );
+      if (!result) return null;
+
+      const loadedAnnotations = useStore.getState().annotations;
+      const labelCount = new Set(
+        loadedAnnotations
+          .map((annotation) => annotation.label.trim())
+          .filter((label) => label.length > 0),
+      ).size;
+
+      return { ...result, labelCount };
+    } finally {
+      setIsLoadingWorkspaceAnnotations(false);
+    }
+  };
+
   const handleGlobalConfirm = async () => {
     if (folders.length === 0) { alert(t('dataPreload.alerts.noFoldersConfigured')); return; }
     if (!mainViewFolder) { alert(t('dataPreload.alerts.noMainView')); return; }
@@ -551,10 +615,69 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     setIsGlobalConfirming(true);
     try {
       const finalPath = isWorkspaceCustom ? workspacePath.trim() : defaultWorkspacePath;
+      const shouldEnterAnnotationDirectly = views.length === 1;
+      let hasExistingAnnotations = false;
+
+      if (finalPath) {
+        hasExistingAnnotations = await checkWorkspaceForJson(finalPath, false);
+      }
+
+      const informationItems = [
+        t(shouldEnterAnnotationDirectly
+          ? 'dataPreload.information.singleView'
+          : 'dataPreload.information.multiView'),
+        hasExistingAnnotations ? t('dataPreload.information.annotationExists') : '',
+      ].filter(Boolean);
+      let shouldLoadExistingAnnotations = false;
+
+      if (informationItems.length > 0) {
+        const shouldProceed = await showDialog({
+          type: shouldEnterAnnotationDirectly || hasExistingAnnotations ? 'warning' : 'info',
+          title: t('dataPreload.information.title'),
+          description: informationItems.join('\n\n'),
+          confirmText: hasExistingAnnotations
+            ? t(shouldEnterAnnotationDirectly
+              ? 'dataPreload.singleView.confirmWithAnnotations'
+              : 'dataPreload.multiView.confirmWithAnnotations')
+            : t(shouldEnterAnnotationDirectly
+              ? 'dataPreload.singleView.confirm'
+              : 'dataPreload.multiView.confirm'),
+          cancelText: shouldEnterAnnotationDirectly
+            ? t('dataPreload.singleView.cancel')
+            : t(hasExistingAnnotations
+              ? 'dataPreload.workspace.loadExistingCancel'
+              : 'dataPreload.multiView.cancel'),
+          hideCancel: false,
+        });
+
+        if (!shouldProceed && (shouldEnterAnnotationDirectly || !hasExistingAnnotations)) return;
+        shouldLoadExistingAnnotations = shouldProceed && hasExistingAnnotations;
+      }
+
+      let loadedWorkspaceStats: Awaited<ReturnType<typeof loadExistingWorkspaceAnnotations>> = null;
+      if (finalPath && shouldLoadExistingAnnotations) {
+        loadedWorkspaceStats = await loadExistingWorkspaceAnnotations(finalPath);
+      }
+
       if (finalPath) setWorkspaceStorePath(finalPath);
       const projectMeta = generateProjectMetaConfig(useStore.getState());
       if (metaPath) await saveProjectMeta({ file_path: metaPath, content: projectMeta });
-      setActiveModule('extent');
+
+      if (loadedWorkspaceStats) {
+        await showDialog({
+          type: 'success',
+          title: t('dataPreload.workspace.loadSuccessTitle'),
+          description: t('dataPreload.workspace.loadSuccessDescription', {
+            images: loadedWorkspaceStats.loadedSceneCount,
+            labels: loadedWorkspaceStats.labelCount,
+            objects: loadedWorkspaceStats.annotationCount,
+          }),
+          confirmText: t('common.confirm'),
+          hideCancel: true,
+        });
+      }
+
+      setActiveModule(shouldEnterAnnotationDirectly ? 'workspace' : 'extent');
     } catch (err) {
       console.error("Failed:", err);
       alert(t('dataPreload.alerts.saveFailed'));
@@ -909,7 +1032,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
           <div className="space-y-5">
             <Label className="text-xs text-muted-foreground">{t('dataPreload.workspace.description')}</Label>
 
-            {workspaceHasJson && !isCheckingWorkspace ? (
+            {isWorkspaceLocked && workspaceHasJson && !isCheckingWorkspace ? (
               <div className="p-4 bg-amber-50 dark:bg-amber-950 border border-amber-200 rounded-lg space-y-2">
                 <div className="flex items-center gap-2 text-amber-700">
                   <Info className="w-4 h-4" />
@@ -922,13 +1045,29 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
                 <div className="relative">
                   <Input value={isWorkspaceCustom ? workspacePath : defaultWorkspacePath}
                     placeholder={defaultWorkspacePath || 'default'}
-                    onChange={e => { setWorkspacePath(e.target.value); setIsWorkspaceCustom(!!(e.target.value && e.target.value !== defaultWorkspacePath)); }}
-                    className="h-9 text-xs pr-9 font-mono" disabled={isWorkspaceConfirming || isCheckingWorkspace} />
-                  <button onClick={() => setWorkspaceExplorerOpen(true)} disabled={isWorkspaceConfirming || isCheckingWorkspace}
+                    onChange={e => {
+                      const nextPath = e.target.value;
+                      setWorkspacePath(nextPath);
+                      setIsWorkspaceCustom(normalizeComparablePath(nextPath) !== normalizeComparablePath(defaultWorkspacePath));
+                      setWorkspaceHasJson(false);
+                      setIsWorkspaceLocked(false);
+                    }}
+                    onBlur={e => {
+                      const nextPath = e.currentTarget.value.trim();
+                      if (nextPath) void checkWorkspaceForJson(nextPath, false);
+                    }}
+                    className="h-9 text-xs pr-9 font-mono" disabled={isWorkspaceConfirming || isCheckingWorkspace || isLoadingWorkspaceAnnotations} />
+                  <button onClick={() => setWorkspaceExplorerOpen(true)} disabled={isWorkspaceConfirming || isCheckingWorkspace || isLoadingWorkspaceAnnotations}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                     <FolderOpen size={14} />
                   </button>
                 </div>
+                {workspaceHasJson && !isCheckingWorkspace && (
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-destructive">
+                    <Info className="size-3.5" />
+                    <span>{t('dataPreload.workspace.existingWarning')}</span>
+                  </div>
+                )}
                 <div className="text-xs text-muted-foreground">
                   {t('dataPreload.workspace.default')}: <span className="font-mono">{defaultWorkspacePath || t('dataPreload.workspace.notSet')}</span>
                 </div>
@@ -991,11 +1130,6 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
                       <Plus className="w-3.5 h-3.5 mr-1.5" />{t('dataPreload.views.addView')}
                     </Button>
                   )}
-                                                  {activeStep === 'workspace' && workspaceHasJson && (
-                    <Button variant="ghost" size="sm" onClick={() => { setWorkspaceHasJson(false); handleWorkspaceReset(); }}>
-                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />Clear
-                    </Button>
-                  )}
                   <Button variant="ghost" size="sm"
                     disabled={(activeStep === 'folders' && folders.length === 0) || (activeStep === 'views' && views.length === 0)}
                     onClick={() => {
@@ -1041,6 +1175,11 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
               {workspaceStatus === 'default' ? 'default' : 'defined'}
             </span>
           </div>
+          {isLoadingWorkspaceAnnotations && workspaceLoadProgress.total > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {t('dataPreload.workspace.loadingAnnotations')} {workspaceLoadProgress.current}/{workspaceLoadProgress.total}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -1053,7 +1192,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
             {isGlobalConfirming ? (
               <>{t('common.processing')}</>
             ) : (
-              <>{t('dataPreload.confirmAndAlign')}</>
+              <>{t(views.length === 1 ? 'dataPreload.confirmAndStartAnnotation' : 'dataPreload.confirmAndAlign')}</>
             )}
           </Button>
         </div>

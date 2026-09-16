@@ -152,6 +152,22 @@
       "workspace": "Workspace",
       "project": "Project Setup"
     },
+    "information": {
+      "title": "Information",
+      "singleView": "One View:\nView Align is not needed. After confirmation, MultiAnno will enter the annotation workspace directly.",
+      "multiView": "Multiple Views:\nView Align will be shown next to align the configured views.",
+      "annotationExists": "Annotation Exists:\nThis workspace contains existing annotations. Confirm to load them before continuing."
+    },
+    "singleView": {
+      "confirm": "Enter Annotation",
+      "confirmWithAnnotations": "Load & Enter Annotation",
+      "cancel": "Back to Setup"
+    },
+    "multiView": {
+      "confirm": "Continue to View Align",
+      "confirmWithAnnotations": "Load & Continue to Align",
+      "cancel": "Back to Setup"
+    },
     "folders": {
       "recent": "Recent",
       "pathPlaceholder": "Enter or select folder path...",
@@ -177,7 +193,13 @@
     },
     "workspace": {
       "description": "Annotation save path",
-      "locked": "Workspace contains annotation files. Path is locked.",
+      "locked": "Workspace contains annotation files. The path is locked. Click Reset to edit it.",
+      "existingWarning": "This path already contains annotation data. You can load it after confirmation.",
+      "loadExistingConfirm": "Load annotations",
+      "loadExistingCancel": "Use path only",
+      "loadingAnnotations": "Loading existing annotations",
+      "loadSuccessTitle": "Annotations loaded",
+      "loadSuccessDescription": "Loaded {{images}} images, {{labels}} label types, and {{objects}} objects.",
       "default": "Default",
       "notSet": "Not set"
     },
@@ -187,6 +209,7 @@
       "pending": "Pending"
     },
     "confirmAndAlign": "Confirm & Start Align",
+    "confirmAndStartAnnotation": "Confirm & Start Annotation",
     "alerts": {
       "noImagesFound": "No images found",
       "backendFailed": "Backend connection failed",

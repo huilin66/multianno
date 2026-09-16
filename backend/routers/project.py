@@ -515,10 +515,11 @@ async def check_workspace_json(req: CheckJsonRequest):
             logger.info("WORKSPACE_CHECK_JSON_END path=%s has_json=False", shorten(req.path, 1500))
             return {"hasJson": False}
 
-        # 递归检查目录下是否有 .json 文件
+        # 递归检查目录下是否有标注 JSON，忽略项目元数据文件
         for root, dirs, files in os.walk(req.path):
             for file in files:
-                if file.endswith(".json"):
+                lower_file = file.lower()
+                if lower_file.endswith(".json") and not lower_file.endswith("_meta.json"):
                     logger.info(
                         "WORKSPACE_CHECK_JSON_END path=%s has_json=True found=%s",
                         shorten(req.path, 1500),

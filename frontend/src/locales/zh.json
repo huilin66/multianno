@@ -152,6 +152,22 @@
       "workspace": "工作空间",
       "project": "项目配置"
     },
+    "information": {
+      "title": "提示信息",
+      "singleView": "单个 View：\n无需进行视图对齐，确认后将直接进入标注工作区。",
+      "multiView": "多个 View：\n下一步将进入视图对齐，用于对齐当前配置的多个视图。",
+      "annotationExists": "已有标注：\n当前工作空间包含已有标注，确认后将加载这些标注。"
+    },
+    "singleView": {
+      "confirm": "进入标注",
+      "confirmWithAnnotations": "加载并进入标注",
+      "cancel": "返回配置"
+    },
+    "multiView": {
+      "confirm": "继续进行视图对齐",
+      "confirmWithAnnotations": "加载并继续对齐",
+      "cancel": "返回配置"
+    },
     "folders": {
       "recent": "最近",
       "pathPlaceholder": "请输入或点击文件夹路径...",
@@ -177,7 +193,13 @@
     },
     "workspace": {
       "description": "标注保存路径",
-      "locked": "工作空间包含标注文件。路径已锁定。",
+      "locked": "工作空间包含标注文件。路径已锁定，点击“重置”后可编辑路径。",
+      "existingWarning": "当前路径已包含标注数据，确认后可以直接加载。",
+      "loadExistingConfirm": "加载已有标注",
+      "loadExistingCancel": "仅使用路径",
+      "loadingAnnotations": "正在加载已有标注",
+      "loadSuccessTitle": "标注加载完成",
+      "loadSuccessDescription": "已加载 {{images}} 张图像、{{labels}} 个 label 类型和 {{objects}} 个对象。",
       "default": "默认",
       "notSet": "未设置"
     },
@@ -187,6 +209,7 @@
       "pending": "待处理"
     },
     "confirmAndAlign": "确认 & 开始对齐",
+    "confirmAndStartAnnotation": "确认 & 开始标注",
     "alerts": {
       "noImagesFound": "未找到图像",
       "backendFailed": "后端连接失败",
