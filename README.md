@@ -17,6 +17,9 @@
 ### Multi-View Sync
 MultiAnno supports the simultaneous, synchronized viewing of multi-band and multi-modal imagery (e.g., RGB, Infrared, Depth). It features viewport and crosshair synchronization to facilitate comparative annotation across different views.
 
+### Multiple Annotation Shapes
+MultiAnno supports bounding boxes, polygons, points, line segments, ellipses, circles, rotated boxes, 3D cuboids, and free masks for object detection, instance segmentation, keypoint, and geometric feature annotation tasks. Each annotated object can also store attribute names and values for fine-grained information such as color, status, and defect type.
+
 ### AI-Assisted Annotation
 Integrated with the Segment Anything Model (SAM 3). It supports generating polygons and masks via point and box prompts, reducing the need for manual outlining and improving annotation efficiency.
 
@@ -110,8 +113,7 @@ For the full annotation workflow, see [Annotation Quick Start](./QUICK_START.md)
 
 ## Roadmap
 
-- [ ] Layout & Theme Unification
-- [ ] Raw Image Data Processing
+- [ ] VLM-based Automated Processing Workflow
 - [ ] LocateAnything — Assisted Segmentation
 - [ ] Documentation
 
