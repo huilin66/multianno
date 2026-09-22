@@ -7,7 +7,7 @@
 
 </div>
 
-> **特别说明：** 本项目的核心架构和代码库是在 **Google Gemini 3.1 Pro**、**DeepSeek v4 Pro** 和 **Claude Code** 的结对编程辅助下完成的。
+> **特别说明：** 本项目在 **Google Gemini 3.1 Pro**、**DeepSeek v4 Pro** 和 **Codex** 的协助下完成。
 
 ---
 ![功能演示](./doc/pic/feature2.gif)

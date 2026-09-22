@@ -7,7 +7,7 @@
 
 </div>
 
-> **A Special Note:** The core architecture and codebase of this project were developed with the pair-programming assistance of **Google Gemini 3.1 Pro**, **DeepSeek v4 Pro**, and **Claude Code**. 
+> **A Special Note:** This project was developed with the assistance of **Google Gemini 3.1 Pro**, **DeepSeek v4 Pro**, and **Codex**.
 
 ---
 ![Feature Demo](./doc/pic/feature2.gif)
