@@ -86,6 +86,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const folders = useStore(s => s.folders);
   const views = useStore(s => s.views);
   const stems = useStore(s => s.stems);
+  const currentStem = useStore(s => s.currentStem);
   const taxonomyClasses = useStore(s => s.taxonomyClasses) || [];
   const workspacePath = useStore(s => s.workspacePath);
   const [selectedStems, setSelectedStems] = useState<string[]>([]);
@@ -142,6 +143,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     () => stems.filter(stem => selectedStemSet.has(stem)),
     [stems, selectedStemSet],
   );
+  const currentStemIndex = currentStem ? stems.indexOf(currentStem) : -1;
 
   useEffect(() => {
     setSelectedStems(stems);
@@ -177,6 +179,18 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     setSelectedStems([]);
     lastSelectedStemIndexRef.current = null;
   }, []);
+
+  const selectThroughCurrentStem = useCallback(() => {
+    if (currentStemIndex < 0) return;
+    setSelectedStems(stems.slice(0, currentStemIndex + 1));
+    lastSelectedStemIndexRef.current = currentStemIndex;
+  }, [currentStemIndex, stems]);
+
+  const invertSelectedStems = useCallback(() => {
+    const current = new Set(selectedStems);
+    setSelectedStems(stems.filter(stem => !current.has(stem)));
+    lastSelectedStemIndexRef.current = null;
+  }, [selectedStems, stems]);
 
   // --- 文件浏览器 ---
   const [explorerConfig, setExplorerConfig] = useState<{
@@ -703,12 +717,26 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
               </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[10px]"
+                onClick={selectThroughCurrentStem}
+                disabled={currentStemIndex < 0}
+                title={currentStemIndex < 0 ? t('dataExport.stepScenes.currentUnavailable') : undefined}
+              >
+                {t('dataExport.stepScenes.selectToCurrent')}
+              </Button>
               <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={selectAllStems}>
                 {t('dataExport.stepScenes.selectAll')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={clearSelectedStems}>
                 {t('dataExport.stepScenes.clear')}
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={invertSelectedStems}>
+                {t('dataExport.stepScenes.invert')}
               </Button>
             </div>
 
@@ -720,6 +748,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
               <div className="max-h-[520px] overflow-y-auto p-2 space-y-1 custom-scrollbar">
                 {stems.map((stem, index) => {
                   const isSelected = selectedStemSet.has(stem);
+                  const isCurrent = stem === currentStem;
                   return (
                     <div
                       key={stem}
@@ -745,6 +774,11 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                         {index + 1}
                       </span>
                       <span className="min-w-0 truncate font-mono">{stem}</span>
+                      {isCurrent && (
+                        <span className="ml-auto shrink-0 text-[9px] font-bold text-primary">
+                          {t('dataExport.stepScenes.current')}
+                        </span>
+                      )}
                     </div>
                   );
                 })}
