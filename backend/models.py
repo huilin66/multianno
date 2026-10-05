@@ -22,6 +22,10 @@ class SaveAnnotationRequest(BaseModel):
     save_dir: str
     file_name: str
     content: Dict[str, Any]
+    # 保存前由后端读取主图像真实尺寸，避免使用文件夹级 metadata 覆盖
+    # 不同尺寸图像的 imageWidth/imageHeight。
+    image_path: Optional[str] = None
+    image_raw_profile: Optional[Dict[str, Any]] = None
 
 
 class BatchMergeClassRequest(BaseModel):

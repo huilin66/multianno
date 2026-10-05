@@ -14,6 +14,25 @@ const getSaveDirectory = (state: StoreState) =>
   state.folders[0]?.path ||
   '';
 
+const getMainImagePath = (state: StoreState, stem: string) => {
+  const mainFolder = state.folders.find(
+    (folder: any) => folder.id === state.views.find((view: any) => view.isMain)?.folderId,
+  ) || state.folders[0];
+
+  if (!mainFolder?.path) return undefined;
+
+  const extension = mainFolder.extension
+    ? (String(mainFolder.extension).startsWith('.')
+      ? String(mainFolder.extension)
+      : `.${mainFolder.extension}`)
+    : '';
+  const imageName = state.sceneGroups?.[stem]?.[mainFolder.path]
+    || `${stem}${mainFolder.suffix || ''}${extension}`;
+
+  if (!imageName) return undefined;
+  return `${String(mainFolder.path).replace(/[\\/]+$/, '')}/${imageName}`;
+};
+
 const enqueueAnnotationSave = (payload: AnnotationSavePayload) => {
   const saveTask = pendingSaves
     .catch(() => undefined)
@@ -45,10 +64,15 @@ export const saveCurrentAnnotations = async () => {
 
   const stem = state.currentStem;
   const payload = generateAnnotationPayload(state, stem);
+  const imagePath = getMainImagePath(state, stem);
   await enqueueAnnotationSave({
     save_dir: saveDir,
     file_name: `${stem}.json`,
     content: payload,
+    image_path: imagePath,
+    image_raw_profile: state.folders.find(
+      (folder: any) => folder.id === state.views.find((view: any) => view.isMain)?.folderId,
+    )?.rawProfile,
   });
 
   // 如果保存期间没有新的编辑，确认 dirty 状态；否则保留 dirty，

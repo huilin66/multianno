@@ -62,6 +62,8 @@ export const saveAnnotation = (payload: {
   save_dir: string;
   file_name: string;
   content: Record<string, any>;
+  image_path?: string;
+  image_raw_profile?: Record<string, any>;
 }) => post(`${API_BASE_URL}/annotations/save`, payload);
 
 export const getFileContent = (path: string) =>
