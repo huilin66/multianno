@@ -1009,7 +1009,7 @@
     "cleanFailed": "Clean failed: {{message}}",
     "repairFailed": "Data repair failed: {{message}}",
     "repairFixed": "Fixed {{count}} files",
-    "dataRepair": "Data Repair",
+    "dataRepair": "Data Repair (incl. image size)",
     "importSuccess": "Imported {{count}} items!",
     "importWrongFormat": "Please upload a .yaml file for Attributes or .txt for Classes.",
     "attributeSyncSuccess": "Attribute synchronized to all JSON files successfully!",

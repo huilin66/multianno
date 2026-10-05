@@ -105,8 +105,16 @@ export const batchRenameAttribute = (payload: {
 export const repairData = (
   saveDirs: string[],
   stems: string[],
-  repairTypes: string[] = ['stem']
-) => post(`${API_BASE_URL}/taxonomy/repair`, { save_dirs: saveDirs, stems, repair_types: repairTypes });
+  repairTypes: string[] = ['stem'],
+  imagePaths: Record<string, string> = {},
+  imageRawProfile?: Record<string, any>,
+) => post(`${API_BASE_URL}/taxonomy/repair`, {
+  save_dirs: saveDirs,
+  stems,
+  repair_types: repairTypes,
+  image_paths: imagePaths,
+  image_raw_profile: imageRawProfile,
+});
 
 export const batchMergeClassWithAttribute = (params: {
   save_dirs: string[];

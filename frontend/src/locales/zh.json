@@ -1009,7 +1009,7 @@
     "cleanFailed": "清理失败: {{message}}",
     "repairFailed": "数据修复失败: {{message}}",
     "repairFixed": "已修复 {{count}} 个文件",
-    "dataRepair": "数据修复",
+    "dataRepair": "数据修复（含图像尺寸）",
     "importSuccess": "已导入 {{count}} 项！",
     "importWrongFormat": "请为属性上传 .yaml 文件，或为类别上传 .txt 文件。",
     "attributeSyncSuccess": "属性已成功同步到所有 JSON 文件！",

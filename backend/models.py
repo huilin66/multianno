@@ -226,6 +226,9 @@ class RepairRequest(BaseModel):
     save_dirs: List[str]
     repair_types: List[str] = ["stem"]
     stems: List[str]
+    # 当前项目主视图中每个 scene 对应的真实图像路径，用于修复尺寸元数据。
+    image_paths: Dict[str, str] = Field(default_factory=dict)
+    image_raw_profile: Optional[Dict[str, Any]] = None
 
 
 class MergeRule(BaseModel):

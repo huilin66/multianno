@@ -18,6 +18,7 @@ from models import (
     RepairRequest,
     StatRequest,
 )
+from utils.image_io import read_metadata
 from utils.logging_config import get_logger, shorten
 
 router = APIRouter(prefix="/api/taxonomy", tags=["Taxonomy"])
@@ -749,10 +750,11 @@ async def repair_project_data(req: RepairRequest):
     - duplicate: 清理重复标注
     """
     logger.info(
-        "REPAIR_START folders=%d types=%s stems=%d",
+        "REPAIR_START folders=%d types=%s stems=%d image_paths=%d",
         len(req.save_dirs),
         req.repair_types,
         len(req.stems),
+        len(req.image_paths),
     )
     result = {"total_scanned": 0, "total_fixed": 0, "details": {}}
 
@@ -767,6 +769,16 @@ async def repair_project_data(req: RepairRequest):
             result["details"]["json_file"] = json_file_result
             result["total_scanned"] += json_file_result["scanned"]
             result["total_fixed"] += json_file_result["fixed"]
+        if repair_type == "image_size":
+            image_size_result = _repair_image_sizes(
+                req.save_dirs,
+                req.stems,
+                req.image_paths,
+                req.image_raw_profile,
+            )
+            result["details"]["image_size"] = image_size_result
+            result["total_scanned"] += image_size_result["scanned"]
+            result["total_fixed"] += image_size_result["fixed"]
     logger.info(
         "REPAIR_END scanned=%d fixed=%d",
         result["total_scanned"],
@@ -866,6 +878,108 @@ def _repair_json_files(save_dirs: list, stems: list) -> dict:
                 logger.exception("REPAIR_JSON_FILE_ERROR path=%s error=%s", shorten(fpath, 1500), e)
 
     return {"scanned": scanned, "fixed": fixed, "fixed_files": fixed_files}
+
+
+def _repair_image_sizes(
+    save_dirs: list,
+    stems: list,
+    image_paths: dict,
+    image_raw_profile: dict | None = None,
+) -> dict:
+    """按每个 scene 的真实主图像尺寸修复 JSON 元数据。
+
+    只更新 imageWidth/imageHeight，不触碰 shapes、坐标或其他字段。
+    image_paths 由前端根据主视图逐 scene 生成，避免用文件夹级首图尺寸。
+    """
+    scanned = 0
+    fixed = 0
+    fixed_files = []
+    missing_images = []
+    errors = []
+    stem_filter = set(stems or [])
+
+    for directory in save_dirs:
+        if not os.path.exists(directory):
+            continue
+
+        for fname in os.listdir(directory):
+            if not fname.endswith(".json") or fname.endswith("_meta.json"):
+                continue
+
+            file_stem = fname[:-5]
+            if stem_filter and file_stem not in stem_filter:
+                continue
+
+            fpath = os.path.join(directory, fname)
+            scanned += 1
+
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict):
+                    errors.append(fname)
+                    continue
+
+                image_path = image_paths.get(file_stem) or image_paths.get(data.get("stem", ""))
+                if not image_path or not os.path.isfile(image_path):
+                    missing_images.append(fname)
+                    logger.warning(
+                        "REPAIR_IMAGE_SIZE_IMAGE_MISSING file=%s image=%s",
+                        fname,
+                        shorten(image_path, 1500) if image_path else "-",
+                    )
+                    continue
+
+                image_meta = read_metadata(image_path, raw_profile=image_raw_profile)
+                actual_width = int(image_meta.get("width") or 0)
+                actual_height = int(image_meta.get("height") or 0)
+                if actual_width <= 0 or actual_height <= 0:
+                    errors.append(fname)
+                    logger.warning(
+                        "REPAIR_IMAGE_SIZE_INVALID file=%s image=%s metadata=%s",
+                        fname,
+                        shorten(image_path, 1500),
+                        image_meta,
+                    )
+                    continue
+
+                try:
+                    current_width = int(data.get("imageWidth") or 0)
+                    current_height = int(data.get("imageHeight") or 0)
+                except (TypeError, ValueError):
+                    current_width = 0
+                    current_height = 0
+
+                if current_width == actual_width and current_height == actual_height:
+                    continue
+
+                data["imageWidth"] = actual_width
+                data["imageHeight"] = actual_height
+                with open(fpath, "w", encoding="utf-8") as f:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
+
+                fixed += 1
+                fixed_files.append(fname)
+                logger.info(
+                    "REPAIR_IMAGE_SIZE_FIXED file=%s old=%sx%s new=%sx%s image=%s",
+                    fname,
+                    current_width,
+                    current_height,
+                    actual_width,
+                    actual_height,
+                    shorten(image_path, 1500),
+                )
+            except Exception as e:
+                errors.append(fname)
+                logger.exception("REPAIR_IMAGE_SIZE_FILE_ERROR path=%s error=%s", shorten(fpath, 1500), e)
+
+    return {
+        "scanned": scanned,
+        "fixed": fixed,
+        "fixed_files": fixed_files,
+        "missing_images": missing_images,
+        "errors": errors,
+    }
 
 
 @router.post("/merge_with_attribute")

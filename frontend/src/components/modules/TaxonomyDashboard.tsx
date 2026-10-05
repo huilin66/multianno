@@ -1501,6 +1501,26 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       return folders.map((f: any) => f.path).filter(Boolean);
   };
 
+  const getMainImagePaths = (): Record<string, string> => {
+    const mainFolder = folders.find(
+      (folder: any) => folder.id === views.find((view: any) => view.isMain)?.folderId,
+    ) || folders[0];
+    if (!mainFolder?.path) return {};
+
+    const extension = mainFolder.extension
+      ? (String(mainFolder.extension).startsWith('.')
+        ? String(mainFolder.extension)
+        : `.${mainFolder.extension}`)
+      : '';
+    const basePath = String(mainFolder.path).replace(/[\\/]+$/, '');
+
+    return Object.fromEntries(stems.map((stem: string) => {
+      const imageName = sceneGroups?.[stem]?.[mainFolder.path]
+        || `${stem}${mainFolder.suffix || ''}${extension}`;
+      return [stem, `${basePath}/${imageName}`];
+    }));
+  };
+
   const handleOpenPreviewScene = useCallback((stem: string) => {
     const storeStems = useStore.getState().stems;
     const matchedStem = storeStems.find((candidate: string) => candidate.startsWith(stem));
@@ -1764,7 +1784,16 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setRepairResult(null);
     try {
       const safeSaveDirs = getSaveDirs();
-      const result = await repairData(safeSaveDirs, stems, ['stem', 'json_file']);
+      const mainFolder = folders.find(
+        (folder: any) => folder.id === views.find((view: any) => view.isMain)?.folderId,
+      ) || folders[0];
+      const result = await repairData(
+        safeSaveDirs,
+        stems,
+        ['stem', 'json_file', 'image_size'],
+        getMainImagePaths(),
+        mainFolder?.rawProfile,
+      );
       setRepairResult({ fixed: result.total_fixed, scanned: result.total_scanned });
       await refreshStatsIfNeeded();
     } catch (err: any) {
