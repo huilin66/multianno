@@ -499,6 +499,17 @@
       "includeUnlabeled": "Export Empty Annotation Results",
       "includeUnlabeledDesc": "When enabled, keep all scenes and create empty annotation results for scenes without exportable labels (YOLO creates an empty .txt file). When disabled, skip those scenes."
     },
+    "stepScenes": {
+      "title": "Scene Group Selection",
+      "selection": "Select Scene Groups to Export",
+      "selectionHint": "Click to toggle one scene. Hold Shift and click to select a continuous range. This only changes the export scope; project annotations are not modified.",
+      "selectAll": "Select all",
+      "clear": "Clear",
+      "listTitle": "Scene Group list",
+      "itemHint": "Click to toggle; Shift-click to select a continuous range",
+      "empty": "No Scene Groups are available",
+      "noSelection": "Select at least one Scene Group before exporting."
+    },
 
     "stepNaming": {
       "title": "Annotation Format",

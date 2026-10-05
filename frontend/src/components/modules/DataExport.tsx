@@ -22,7 +22,7 @@ import {
 } from '../../config/supportedFormats';
 import {
   FolderSearch, FileText, RotateCcw, GripVertical,
-  Tag, Layers, FolderOpen, Image, AlertCircle
+  Tag, Layers, FolderOpen, Image, AlertCircle, ListFilter
 } from 'lucide-react';
 import 'rc-slider/assets/index.css';
 
@@ -88,6 +88,8 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const stems = useStore(s => s.stems);
   const taxonomyClasses = useStore(s => s.taxonomyClasses) || [];
   const workspacePath = useStore(s => s.workspacePath);
+  const [selectedStems, setSelectedStems] = useState<string[]>([]);
+  const lastSelectedStemIndexRef = useRef<number | null>(null);
 
   // --- 导航 ---
   const [activeStep, setActiveStep] = useState('task');
@@ -135,6 +137,47 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState(0);
 
+  const selectedStemSet = useMemo(() => new Set(selectedStems), [selectedStems]);
+  const exportStems = useMemo(
+    () => stems.filter(stem => selectedStemSet.has(stem)),
+    [stems, selectedStemSet],
+  );
+
+  useEffect(() => {
+    setSelectedStems(stems);
+    lastSelectedStemIndexRef.current = null;
+  }, [stems]);
+
+  const handleStemSelection = useCallback((stem: string, index: number, extend: boolean) => {
+    setSelectedStems(previous => {
+      const next = new Set(previous);
+      const anchor = lastSelectedStemIndexRef.current;
+
+      if (extend && anchor !== null) {
+        const start = Math.min(anchor, index);
+        const end = Math.max(anchor, index);
+        stems.slice(start, end + 1).forEach(rangeStem => next.add(rangeStem));
+      } else if (next.has(stem)) {
+        next.delete(stem);
+      } else {
+        next.add(stem);
+      }
+
+      return stems.filter(candidate => next.has(candidate));
+    });
+    lastSelectedStemIndexRef.current = index;
+  }, [stems]);
+
+  const selectAllStems = useCallback(() => {
+    setSelectedStems(stems);
+    lastSelectedStemIndexRef.current = null;
+  }, [stems]);
+
+  const clearSelectedStems = useCallback(() => {
+    setSelectedStems([]);
+    lastSelectedStemIndexRef.current = null;
+  }, []);
+
   // --- 文件浏览器 ---
   const [explorerConfig, setExplorerConfig] = useState<{
     open: boolean;
@@ -150,6 +193,8 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     switch (stepId) {
       case 'task':
         return 'done';
+      case 'scenes':
+        return selectedStems.length > 0 ? 'done' : 'pending';
       case 'naming':
         return annoSuffix !== '' || annoExtension !== FORMAT_DETAILS[format]?.defaultExtension ? 'done' : 'default';
       case 'images':
@@ -249,6 +294,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   // ==========================================
   const steps: StepItem[] = useMemo(() => [
     { id: 'task', label: t('dataExport.stepTask.title'), icon: <Tag className="w-4 h-4" />, required: true, visible: true },
+    { id: 'scenes', label: t('dataExport.stepScenes.title'), icon: <ListFilter className="w-4 h-4" />, required: true, visible: true },
     { id: 'naming', label: t('dataExport.stepNaming.title'), icon: <FileText className="w-4 h-4" />, required: false, visible: true },
     { id: 'images', label: t('dataExport.stepImages.title'), icon: <Image className="w-4 h-4" />, required: false, visible: exportMode === 'dataset' },
     { id: 'split', label: t('dataExport.stepSplit.title'), icon: <Layers className="w-4 h-4" />, required: false, visible: exportMode === 'dataset' },
@@ -310,6 +356,16 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
   const handleExecute = async () => {
     if (!targetDir) return;
+    if (exportStems.length === 0) {
+      await showDialog({
+        type: 'warning',
+        title: t('dataExport.stepScenes.title'),
+        description: t('dataExport.stepScenes.noSelection'),
+        confirmText: t('common.confirm'),
+        hideCancel: true,
+      });
+      return;
+    }
 
     const selectedClassNames = exportClasses.filter(c => c.selected).map(c => c.name);
     const allowedShapes = Object.entries(shapeSelection).filter(([, v]) => v).map(([s]) => s);
@@ -389,7 +445,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           extension: annoExtension,
           allowed_shapes: allowedShapes,
           generate_report: false,
-          stems: stems,
+          stems: exportStems,
           export_mode: 'dataset',
           anno_subdir: annoSubdir,
           view_configs: view_configs,
@@ -408,12 +464,12 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
         setExportProgress(100);
         if (!signal.aborted) {
           setExportStatus('done');
-          const exported = result?.exported ?? stems.length;
+          const exported = result?.exported ?? exportStems.length;
           const splitInfo = result?.split || {};
           const lines = [
             t('dataExport.result.method', { format: format.toUpperCase() }),
             t('dataExport.result.mode', { mode: exportMode }),
-            t('dataExport.result.scenes', { count: exported, total: stems.length }),
+            t('dataExport.result.scenes', { count: exported, total: exportStems.length }),
             t('dataExport.result.classes', { count: selectedClassNames.length }),
           ];
           if (mdetExportEnabled) {
@@ -440,7 +496,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           extension: annoExtension,
           allowed_shapes: allowedShapes,
           generate_report: generateReport,
-          stems: stems,
+          stems: exportStems,
           export_mode: 'annotation',
           split_content_mode: splitContentMode,
           include_unlabeled_images: includeUnlabeledImages,
@@ -456,7 +512,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           const lines = [
             t('dataExport.result.method', { format: format.toUpperCase() }),
             t('dataExport.result.mode', { mode: exportMode }),
-            t('dataExport.result.scenes', { count: stems.length, total: stems.length }),
+            t('dataExport.result.scenes', { count: exportStems.length, total: exportStems.length }),
             t('dataExport.result.classes', { count: selectedClassNames.length }),
           ];
           if (mdetExportEnabled) {
@@ -464,7 +520,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           }
           const exported = result?.exported;
           if (exported !== undefined) {
-            lines[2] = t('dataExport.result.scenes', { count: exported, total: stems.length });
+            lines[2] = t('dataExport.result.scenes', { count: exported, total: exportStems.length });
           }
           await showDialog({
             type: 'success',
@@ -630,6 +686,78 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           </div>
         );
 
+      case 'scenes':
+        return (
+          <div className="space-y-4">
+            <div className="flex items-start justify-between gap-4 p-4 rounded-xl border bg-muted/20">
+              <div className="min-w-0">
+                <Label className="text-xs font-bold">
+                  {t('dataExport.stepScenes.selection')}
+                </Label>
+                <p className="text-[10px] leading-relaxed text-muted-foreground mt-1">
+                  {t('dataExport.stepScenes.selectionHint')}
+                </p>
+              </div>
+              <span className="shrink-0 text-xs font-mono font-bold text-primary">
+                {selectedStems.length}/{stems.length}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={selectAllStems}>
+                {t('dataExport.stepScenes.selectAll')}
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={clearSelectedStems}>
+                {t('dataExport.stepScenes.clear')}
+              </Button>
+            </div>
+
+            <div className="rounded-xl border bg-muted/20 overflow-hidden">
+              <div className="px-3 py-2 border-b bg-background/70 text-[10px] text-muted-foreground flex items-center justify-between">
+                <span>{t('dataExport.stepScenes.listTitle')}</span>
+                <span className="font-mono">{stems.length}</span>
+              </div>
+              <div className="max-h-[520px] overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                {stems.map((stem, index) => {
+                  const isSelected = selectedStemSet.has(stem);
+                  return (
+                    <div
+                      key={stem}
+                      role="button"
+                      tabIndex={0}
+                      aria-pressed={isSelected}
+                      onClick={(event) => handleStemSelection(stem, index, event.shiftKey)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          handleStemSelection(stem, index, event.shiftKey);
+                        }
+                      }}
+                      className={`flex items-center gap-2 px-2.5 py-1.5 rounded-lg border text-xs cursor-pointer transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary/40 ${
+                        isSelected
+                          ? 'bg-primary/5 border-primary/30 text-foreground'
+                          : 'bg-background/50 border-transparent text-muted-foreground hover:bg-background hover:border-border'
+                      }`}
+                      title={t('dataExport.stepScenes.itemHint')}
+                    >
+                      <Checkbox checked={isSelected} className="pointer-events-none shrink-0" />
+                      <span className="w-8 shrink-0 text-right text-[10px] font-mono text-muted-foreground">
+                        {index + 1}
+                      </span>
+                      <span className="min-w-0 truncate font-mono">{stem}</span>
+                    </div>
+                  );
+                })}
+                {stems.length === 0 && (
+                  <div className="py-8 text-center text-xs text-muted-foreground">
+                    {t('dataExport.stepScenes.empty')}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+
       case 'naming':
         return (
           <div className="space-y-5">
@@ -645,16 +773,16 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                   {exportMode === 'dataset' ? annoSubdir : '.'}/
                 </div>
                 {/* 文件列表 */}
-                {stems.slice(0, 5).map((stem, i) => (
+                {exportStems.slice(0, 5).map((stem, i) => (
                   <div key={i} className="pl-3">
                     {stem}
                     <span className="text-amber-500">{annoSuffix}</span>
                     <span className="text-primary">{annoExtension}</span>
                   </div>
                 ))}
-                {stems.length > 5 && (
+                {exportStems.length > 5 && (
                   <div className="pl-3 text-muted-foreground/50">
-                    ... {stems.length - 5} {t('dataExport.stepNaming.andMore')}
+                    ... {exportStems.length - 5} {t('dataExport.stepNaming.andMore')}
                   </div>
                 )}
               </div>
@@ -731,16 +859,16 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                     {exportMode === 'dataset' ? vc.subdir : '.'}/
                   </div>
                   <div className="text-[10px] font-mono text-muted-foreground leading-relaxed">
-                    {stems.slice(0, 3).map((stem, i) => (
+                    {exportStems.slice(0, 3).map((stem, i) => (
                       <div key={i} className="pl-3">
                         {stem}
                         <span className="text-amber-500">{vc.suffix}</span>
                         <span className="text-primary">{vc.extension}</span>
                       </div>
                     ))}
-                    {stems.length > 3 && (
+                    {exportStems.length > 3 && (
                       <div className="pl-3 text-muted-foreground/50">
-                        ... {stems.length - 3} {t('dataExport.stepNaming.andMore')}
+                        ... {exportStems.length - 3} {t('dataExport.stepNaming.andMore')}
                       </div>
                     )}
                   </div>
@@ -821,9 +949,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
         // Seeded shuffle preview — mirrors backend 0%-aware split logic
         const seededRand = (seed: number) => { let s = seed | 0; return () => { s = (s * 1664525 + 1013904223) | 0; return (s >>> 0) / 4294967296; }; };
         const rng = seededRand(randomSeed);
-        const previewShuffled = [...stems].sort();
+        const previewShuffled = [...exportStems].sort();
         for (let i = previewShuffled.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [previewShuffled[i], previewShuffled[j]] = [previewShuffled[j], previewShuffled[i]]; }
-        const totalN = stems.length;
+        const totalN = exportStems.length;
         let nTrain2 = splitTrain > 0 ? Math.floor(totalN * splitTrain / 100) : 0;
         let nVal2 = splitVal > 0 ? Math.floor(totalN * splitVal / 100) : 0;
         let nTest2 = splitTest > 0 ? Math.floor(totalN * splitTest / 100) : 0;
@@ -908,21 +1036,21 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                   <div className="text-2xl font-bold text-blue-500">{splitTrain}%</div>
                   <div className="text-[10px] text-muted-foreground">{t('dataExport.stepSplit.train')}</div>
                   <div className="text-[10px] font-mono text-blue-500">
-                    {Math.round(stems.length * splitTrain / 100)} {t('dataExport.stepSplit.files')}
+                    {Math.round(exportStems.length * splitTrain / 100)} {t('dataExport.stepSplit.files')}
                   </div>
                 </div>
                 <div className="space-y-0.5">
                   <div className="text-2xl font-bold text-amber-500">{splitVal}%</div>
                   <div className="text-[10px] text-muted-foreground">{t('dataExport.stepSplit.val')}</div>
                   <div className="text-[10px] font-mono text-amber-500">
-                    {Math.round(stems.length * splitVal / 100)} {t('dataExport.stepSplit.files')}
+                    {Math.round(exportStems.length * splitVal / 100)} {t('dataExport.stepSplit.files')}
                   </div>
                 </div>
                 <div className="space-y-0.5">
                   <div className="text-2xl font-bold text-red-500">{splitTest}%</div>
                   <div className="text-[10px] text-muted-foreground">{t('dataExport.stepSplit.test')}</div>
                   <div className="text-[10px] font-mono text-red-500">
-                    {Math.round(stems.length * splitTest / 100)} {t('dataExport.stepSplit.files')}
+                    {Math.round(exportStems.length * splitTest / 100)} {t('dataExport.stepSplit.files')}
                   </div>
                 </div>
               </div>
@@ -1240,12 +1368,14 @@ useEffect(() => {
                 <h3 className="text-sm font-bold">
                   {steps.find(s => s.id === activeStep)?.label}
                 </h3>
-                {(['naming', 'images', 'split', 'shapes'].includes(activeStep)) && (
+                {(['scenes', 'naming', 'images', 'split', 'shapes'].includes(activeStep)) && (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      if (activeStep === 'naming') {
+                      if (activeStep === 'scenes') {
+                        selectAllStems();
+                      } else if (activeStep === 'naming') {
                         setAnnoSubdir('labels');
                         setAnnoSuffix('');
                         setAnnoExtension(FORMAT_DETAILS[format]?.defaultExtension || '.txt');
@@ -1294,7 +1424,7 @@ useEffect(() => {
             <span className="text-xs text-muted-foreground whitespace-nowrap">
               {t('dataExport.exporting')}
               <span className="font-mono font-bold text-foreground ml-1">
-                {Math.round(stems.length * exportProgress / 100)}/{stems.length}
+                {Math.round(exportStems.length * exportProgress / 100)}/{exportStems.length}
               </span>
             </span>
             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
@@ -1312,7 +1442,7 @@ useEffect(() => {
           </div>
         ) : (
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>{t('dataExport.readyToExport')} {stems.length}</span>
+            <span>{t('dataExport.readyToExport')} {exportStems.length}/{stems.length}</span>
           </div>
         )}
 
@@ -1325,7 +1455,7 @@ useEffect(() => {
             )}
           </Button>
           <Button size="sm" className="text-white" onClick={handleExecute}
-            disabled={isExporting || !targetDir}
+            disabled={isExporting || !targetDir || exportStems.length === 0}
           >
             {isExporting ? (
               <>{t('dataExport.exporting')}</>
