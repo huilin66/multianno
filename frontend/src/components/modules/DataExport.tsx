@@ -91,6 +91,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const workspacePath = useStore(s => s.workspacePath);
   const [selectedStems, setSelectedStems] = useState<string[]>([]);
   const lastSelectedStemIndexRef = useRef<number | null>(null);
+  const currentStemItemRef = useRef<HTMLDivElement | null>(null);
 
   // --- 导航 ---
   const [activeStep, setActiveStep] = useState('task');
@@ -184,13 +185,20 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     if (currentStemIndex < 0) return;
     setSelectedStems(stems.slice(0, currentStemIndex + 1));
     lastSelectedStemIndexRef.current = currentStemIndex;
+    currentStemItemRef.current?.scrollIntoView({
+      behavior: 'auto',
+      block: 'center',
+      inline: 'nearest',
+    });
   }, [currentStemIndex, stems]);
 
   const invertSelectedStems = useCallback(() => {
-    const current = new Set(selectedStems);
-    setSelectedStems(stems.filter(stem => !current.has(stem)));
+    setSelectedStems(previous => {
+      const current = new Set(previous);
+      return stems.filter(stem => !current.has(stem));
+    });
     lastSelectedStemIndexRef.current = null;
-  }, [selectedStems, stems]);
+  }, [stems]);
 
   // --- 文件浏览器 ---
   const [explorerConfig, setExplorerConfig] = useState<{
@@ -752,6 +760,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                   return (
                     <div
                       key={stem}
+                      ref={isCurrent ? currentStemItemRef : undefined}
                       role="button"
                       tabIndex={0}
                       aria-pressed={isSelected}
