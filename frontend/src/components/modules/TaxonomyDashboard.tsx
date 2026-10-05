@@ -415,6 +415,16 @@ type PreviewObject = {
   sourceIndex: number;
 };
 
+type PreviewDimensions = {
+  width: number;
+  height: number;
+};
+
+type PreviewLoadResult = {
+  objects: PreviewObject[];
+  dimensions: PreviewDimensions | null;
+};
+
 const normalizePreviewShapeType = (type?: string) => {
   const value = String(type || 'bbox').toLowerCase();
   if (value === 'rectangle') return 'bbox';
@@ -432,6 +442,15 @@ const shapeToPreviewObject = (shape: any, index: number): PreviewObject => ({
     y: Number(p?.[1] ?? p?.y ?? 0),
   })),
 });
+
+const getPreviewDimensionsFromAnnotation = (data: any): PreviewDimensions | null => {
+  const width = Number(data?.imageWidth);
+  const height = Number(data?.imageHeight);
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    return null;
+  }
+  return { width, height };
+};
 
 const getPreviewObjectBounds = (obj: PreviewObject) => {
   if (!obj.points.length) return null;
@@ -931,6 +950,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [previewCounts, setPreviewCounts] = useState<Record<string, number>>({});
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState('');
+  const [previewAnnotationDimensions, setPreviewAnnotationDimensions] = useState<PreviewDimensions | null>(null);
+  const [previewImageDimensions, setPreviewImageDimensions] = useState<PreviewDimensions | null>(null);
 
   // Keep a render-time snapshot so a dialog unmount can persist the latest
   // browsing position even when React effects have not run yet.
@@ -1050,44 +1071,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     return base ? `${base}/${resolved}.json` : '';
   }, [resolveStoreStem, workspacePath]);
 
-  const loadClassObjectsForStem = useCallback(async (stem: string, className: string) => {
-    const jsonPath = getWorkspaceJsonPath(stem);
-    if (!jsonPath) return [];
-    const rawData = await getFileContent(jsonPath);
-    const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
-    return (data.shapes || [])
-      .map((shape: any, index: number) => shapeToPreviewObject(shape, index))
-      .filter((obj: PreviewObject) => obj.label === className);
-  }, [getWorkspaceJsonPath]);
-
-  const loadAttributeObjectsForStem = useCallback(async (
-    stem: string,
-    attributeName: string,
-    attributeValue?: string | null,
-  ) => {
-    const jsonPath = getWorkspaceJsonPath(stem);
-    if (!jsonPath) return [];
-    const rawData = await getFileContent(jsonPath);
-    const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
-    const expectedValue = attributeValue === null || attributeValue === undefined
-      ? null
-      : String(attributeValue).trim();
-
-    return (data.shapes || [])
-      .map((shape: any, index: number) => ({ shape, index }))
-      .filter(({ shape }: { shape: any }) => {
-        const value = shape.attributes?.[attributeName];
-        if (expectedValue === null) {
-          return value !== undefined;
-        }
-        if (expectedValue === '(empty)') {
-          return value !== undefined && String(value).trim() === '';
-        }
-        return value !== undefined && String(value).trim() === expectedValue;
-      })
-      .map(({ shape, index }: { shape: any; index: number }) => shapeToPreviewObject(shape, index));
-  }, [getWorkspaceJsonPath]);
-
   const classSceneStems = useMemo(
     () => activeClass ? (statsData?.classes?.[activeClass.name]?.stems || []) : [],
     [activeClass, statsData]
@@ -1192,21 +1175,44 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       : '';
   const previewColor = isClassPreview ? (activeClass?.color || '#3b82f6') : '#8b5cf6';
 
-  const loadPreviewObjectsForStem = useCallback(async (stem: string) => {
+  const loadPreviewDataForStem = useCallback(async (stem: string): Promise<PreviewLoadResult> => {
+    const jsonPath = getWorkspaceJsonPath(stem);
+    if (!jsonPath) return { objects: [], dimensions: null };
+    const rawData = await getFileContent(jsonPath);
+    const data = typeof rawData.content === 'string' ? JSON.parse(rawData.content) : rawData;
+    const shapes = Array.isArray(data?.shapes) ? data.shapes : [];
+    const dimensions = getPreviewDimensionsFromAnnotation(data);
+    let objects = shapes.map((shape: any, index: number) => shapeToPreviewObject(shape, index));
+
     if (isClassPreview && activeClass) {
-      return loadClassObjectsForStem(stem, activeClass.name);
+      objects = objects.filter((obj: PreviewObject) => obj.label === activeClass.name);
+    } else if (isAttributePreview && activeAttribute) {
+      const expectedValue = selectedAttributeValueKey === null || selectedAttributeValueKey === undefined
+        ? null
+        : String(selectedAttributeValueKey).trim();
+
+      objects = shapes
+        .map((shape: any, index: number) => ({ shape, index }))
+        .filter(({ shape }: { shape: any }) => {
+          const value = shape.attributes?.[activeAttribute.name];
+          if (expectedValue === null) {
+            return value !== undefined;
+          }
+          if (expectedValue === '(empty)') {
+            return value !== undefined && String(value).trim() === '';
+          }
+          return value !== undefined && String(value).trim() === expectedValue;
+        })
+        .map(({ shape, index }: { shape: any; index: number }) => shapeToPreviewObject(shape, index));
     }
-    if (isAttributePreview && activeAttribute) {
-      return loadAttributeObjectsForStem(stem, activeAttribute.name, selectedAttributeValueKey);
-    }
-    return [];
+
+    return { objects, dimensions };
   }, [
     activeAttribute?.name,
     activeClass?.name,
+    getWorkspaceJsonPath,
     isAttributePreview,
     isClassPreview,
-    loadAttributeObjectsForStem,
-    loadClassObjectsForStem,
     selectedAttributeValueKey,
   ]);
 
@@ -1403,8 +1409,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       const entries = await Promise.all(
         previewSceneStems.map(async (stem: string) => {
           try {
-            const objects = await loadPreviewObjectsForStem(stem);
-            return [stem, objects.length] as const;
+            const result = await loadPreviewDataForStem(stem);
+            return [stem, result.objects.length] as const;
           } catch {
             return [stem, 0] as const;
           }
@@ -1414,31 +1420,35 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     };
     loadCounts();
     return () => { cancelled = true; };
-  }, [loadPreviewObjectsForStem, previewFilterKey, previewSceneStems.join('|')]);
+  }, [loadPreviewDataForStem, previewFilterKey, previewSceneStems.join('|')]);
 
   useEffect(() => {
     let cancelled = false;
     const loadPreview = async () => {
       if (!previewFilterKey || !previewStem) {
         setPreviewObjects([]);
+        setPreviewAnnotationDimensions(null);
         setPreviewLoading(false);
         setPreviewError('');
         return;
       }
       setPreviewObjects([]);
+      setPreviewAnnotationDimensions(null);
       setPreviewObjectIndex(null);
       setPreviewLoading(true);
       setPreviewError('');
       try {
-        const objects = await loadPreviewObjectsForStem(previewStem);
+        const result = await loadPreviewDataForStem(previewStem);
         if (!cancelled) {
-          setPreviewObjects(objects);
+          setPreviewObjects(result.objects);
+          setPreviewAnnotationDimensions(result.dimensions);
           setPreviewObjectIndex(null);
-          setPreviewCounts(prev => ({ ...prev, [previewStem]: objects.length }));
+          setPreviewCounts(prev => ({ ...prev, [previewStem]: result.objects.length }));
         }
       } catch (err: any) {
         if (!cancelled) {
           setPreviewObjects([]);
+          setPreviewAnnotationDimensions(null);
           setPreviewObjectIndex(null);
           setPreviewError(err?.message || t('common.failed'));
         }
@@ -1448,7 +1458,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     };
     loadPreview();
     return () => { cancelled = true; };
-  }, [loadPreviewObjectsForStem, previewFilterKey, previewSceneStemsKey, previewStem, statsStatus, t]);
+  }, [loadPreviewDataForStem, previewFilterKey, previewSceneStemsKey, previewStem, statsStatus, t]);
 
   const previewView = useMemo(
     () => views?.find((v: any) => v.id === previewViewId) || views?.find((v: any) => v.isMain) || views?.[0],
@@ -1477,11 +1487,47 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     );
   }, [previewStem, previewView, previewFolder, sceneGroups, resolveStoreStem]);
 
+  useEffect(() => {
+    if (!previewImageUrl || typeof window === 'undefined') {
+      setPreviewImageDimensions(null);
+      return;
+    }
+
+    let cancelled = false;
+    const image = new window.Image();
+    image.onload = () => {
+      if (cancelled) return;
+      const width = Number(image.naturalWidth || image.width);
+      const height = Number(image.naturalHeight || image.height);
+      setPreviewImageDimensions(
+        Number.isFinite(width) && Number.isFinite(height) && width > 0 && height > 0
+          ? { width, height }
+          : null,
+      );
+    };
+    image.onerror = () => {
+      if (!cancelled) setPreviewImageDimensions(null);
+    };
+    image.src = previewImageUrl;
+
+    return () => {
+      cancelled = true;
+      image.onload = null;
+      image.onerror = null;
+    };
+  }, [previewImageUrl]);
+
   const previewDimensions = useMemo(() => {
-    const width = previewFolder?.metadata?.width || 1024;
-    const height = previewFolder?.metadata?.height || 1024;
+    const width = previewImageDimensions?.width
+      || previewAnnotationDimensions?.width
+      || previewFolder?.metadata?.width
+      || 1024;
+    const height = previewImageDimensions?.height
+      || previewAnnotationDimensions?.height
+      || previewFolder?.metadata?.height
+      || 1024;
     return { width, height };
-  }, [previewFolder]);
+  }, [previewAnnotationDimensions, previewFolder, previewImageDimensions]);
 
   const previewDisplayObjects = useMemo(
     () => previewObjects.map(obj => mapObjectToView(obj, previewView)),
