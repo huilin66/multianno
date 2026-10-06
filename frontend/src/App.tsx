@@ -28,7 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
 import { Checkbox } from './components/ui/checkbox';
-import { repairData } from './api/client';
+import { analyzeWorkspaceFolders, repairData } from './api/client';
 import { useAnnotationAutoSave } from './hooks/useAnnotationAutoSave';
 import { ShortcutSettingsModal } from './components/modals/settings/ShortcutSettingsModal';
 import { AISettingsModal } from './components/modals/settings/AISettingsModal';
@@ -38,7 +38,7 @@ import { GlobalConfirmDialog } from './components/modals/GlobalConfirmDialog';
 import { ViewLayoutSettingsModal } from './components/modals/settings/ViewLayoutSettingsModal';
 import { ToastContainer } from './components/ui/toast';
 import { useBackendHealth } from './hooks/useBackendHealth';
-import { loadAllProjectAnnotations } from './lib/annotationUtils';
+import { loadAllProjectAnnotations, loadProjectAnnotationsForStems } from './lib/annotationUtils';
 import { hasAnnotationAttributeContent } from './lib/annotationAttributeUtils';
 import { showDialog } from './store/useDialogStore';
 import { toast } from './store/useToastStore';
@@ -126,7 +126,7 @@ const DATA_REPAIR_OPTIONS: Array<{ type: DataRepairType; labelKey: string; descr
   },
 ];
 
-interface DataRepairSettingsProps {
+interface DataUpdateSettingsProps {
   folders: any[];
   views: any[];
   sceneGroups: Record<string, Record<string, string>>;
@@ -134,13 +134,13 @@ interface DataRepairSettingsProps {
   workspacePath?: string | null;
 }
 
-function DataRepairSettings({
+function DataUpdateSettings({
   folders,
   views,
   sceneGroups,
   stems,
   workspacePath,
-}: DataRepairSettingsProps) {
+}: DataUpdateSettingsProps) {
   const { t } = useTranslation();
   const [selectedTypes, setSelectedTypes] = useState<DataRepairType[]>([
     'stem',
@@ -148,11 +148,18 @@ function DataRepairSettings({
     'image_size',
   ]);
   const [isRepairing, setIsRepairing] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [repairResult, setRepairResult] = useState<{ fixed: number; scanned: number } | null>(null);
+  const [updateResult, setUpdateResult] = useState<{
+    addedScenes: number;
+    scannedScenes: number;
+    loadedObjects: number;
+  } | null>(null);
 
   const saveDirs = workspacePath
     ? [workspacePath]
     : (folders || []).map((folder: any) => folder.path).filter(Boolean);
+  const imageFolders = (folders || []).filter((folder: any) => String(folder.path || '').trim());
   const mainFolder = (folders || []).find(
     (folder: any) => folder.id === (views || []).find((view: any) => view.isMain)?.folderId,
   ) || folders?.[0];
@@ -175,8 +182,89 @@ function DataRepairSettings({
     }));
   };
 
+  const handleUpdateData = async () => {
+    if (isUpdating || isRepairing) return;
+    if (imageFolders.length === 0) {
+      toast.warning(t('headerSetting.dataUpdateNoFolders'));
+      return;
+    }
+
+    setIsUpdating(true);
+    setUpdateResult(null);
+    try {
+      const result = await analyzeWorkspaceFolders(imageFolders.map((folder: any) => ({
+        path: folder.path,
+        suffix: folder.suffix || '',
+        rawProfile: folder.rawProfile,
+      })));
+      const scannedStems = Array.isArray(result?.commonStems) ? result.commonStems : [];
+
+      if (scannedStems.length === 0) {
+        toast.warning(t('headerSetting.dataUpdateNoScenes'));
+        return;
+      }
+
+      const currentState = useStore.getState();
+      const previousStems = new Set(currentState.stems);
+      const addedStems = scannedStems.filter((stem: string) => !previousStems.has(stem));
+
+      result.data?.forEach((meta: any) => {
+        const existingFolder = useStore.getState().folders.find(
+          (folder: any) => folder.path === meta.folderPath,
+        );
+        if (!existingFolder) return;
+
+        useStore.getState().updateFolder(existingFolder.id, {
+          metadata: {
+            ...existingFolder.metadata,
+            width: meta.width || existingFolder.metadata?.width || 0,
+            height: meta.height || existingFolder.metadata?.height || 0,
+            bands: meta.bands || existingFolder.metadata?.bands || 0,
+            fileType: meta.dtype || existingFolder.metadata?.fileType || '',
+            dataType: meta.dtype || existingFolder.metadata?.dataType || '',
+            sceneGroupsLoaded: meta.group_success || 0,
+            sceneGroupsSkipped: meta.group_fail || 0,
+          },
+        });
+      });
+
+      const scannedStemSet = new Set(scannedStems);
+      useStore.getState().setSceneGroups(result.sceneGroups || {});
+      useStore.getState().setStems(scannedStems);
+      useStore.getState().setCurrentStem(
+        currentState.currentStem && scannedStemSet.has(currentState.currentStem)
+          ? currentState.currentStem
+          : scannedStems[0],
+      );
+
+      let loadedObjects = 0;
+      if (addedStems.length > 0) {
+        const annotationDirectory = workspacePath || mainFolder?.path || '';
+        if (annotationDirectory) {
+          const loaded = await loadProjectAnnotationsForStems(addedStems, annotationDirectory);
+          loadedObjects = loaded.annotationCount;
+        }
+      }
+
+      useStore.getState().setStatsCacheValid(false);
+      const summary = {
+        addedScenes: addedStems.length,
+        scannedScenes: scannedStems.length,
+        loadedObjects,
+      };
+      setUpdateResult(summary);
+      toast.success(t('headerSetting.dataUpdateSuccess', summary));
+    } catch (error: any) {
+      toast.error(t('headerSetting.dataUpdateError', {
+        message: error?.message || String(error),
+      }));
+    } finally {
+      setIsUpdating(false);
+    }
+  };
+
   const handleRepair = async () => {
-    if (isRepairing) return;
+    if (isRepairing || isUpdating) return;
     if (!hasProject) {
       toast.warning(t('headerSetting.dataRepairNoProject'));
       return;
@@ -216,8 +304,26 @@ function DataRepairSettings({
       <div className="flex items-start gap-2 px-1">
         <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
         <p className="text-[10px] leading-4 text-neutral-500 dark:text-neutral-400">
-          {t('headerSetting.dataRepairHint')}
+          {t('headerSetting.dataUpdateHint')}
         </p>
+      </div>
+
+      <div className="space-y-1 border-b border-amber-200/70 pb-2 dark:border-amber-900/60">
+        <button
+          type="button"
+          onClick={handleUpdateData}
+          disabled={isUpdating || isRepairing || imageFolders.length === 0}
+          title={t('headerSetting.dataUpdateScanHint')}
+          className="flex w-full items-center justify-center gap-1.5 rounded border border-blue-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-neutral-900 dark:text-blue-300 dark:hover:bg-blue-950/30"
+        >
+          {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          {isUpdating ? t('headerSetting.dataUpdateScanning') : t('headerSetting.dataUpdateScan')}
+        </button>
+        {updateResult && (
+          <p className="px-1 text-[10px] leading-4 text-blue-700 dark:text-blue-300">
+            {t('headerSetting.dataUpdateResult', updateResult)}
+          </p>
+        )}
       </div>
 
       <div className="space-y-0.5">
@@ -226,12 +332,12 @@ function DataRepairSettings({
           return (
             <label
               key={option.type}
-              htmlFor={`data-repair-${option.type}`}
+              htmlFor={`data-update-repair-${option.type}`}
               className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 hover:bg-amber-100/70 dark:hover:bg-amber-900/20"
               title={t(option.descriptionKey)}
             >
               <Checkbox
-                id={`data-repair-${option.type}`}
+                id={`data-update-repair-${option.type}`}
                 checked={checked}
                 onCheckedChange={(value) => {
                   setSelectedTypes((current) => value === true
@@ -251,7 +357,7 @@ function DataRepairSettings({
       <button
         type="button"
         onClick={handleRepair}
-        disabled={isRepairing || !hasProject || selectedTypes.length === 0}
+        disabled={isRepairing || isUpdating || !hasProject || selectedTypes.length === 0}
         className="flex w-full items-center justify-center gap-1.5 rounded border border-amber-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:bg-neutral-900 dark:text-amber-300 dark:hover:bg-amber-900/30"
       >
         {isRepairing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
@@ -750,8 +856,8 @@ export default function App() {
                   </button>
                 </SettingsSection>
 
-                <SettingsSection title={t('headerSetting.groups.repair')}>
-                  <DataRepairSettings
+                <SettingsSection title={t('headerSetting.groups.update')}>
+                  <DataUpdateSettings
                     folders={folders}
                     views={views}
                     sceneGroups={sceneGroups as Record<string, Record<string, string>>}

@@ -165,6 +165,60 @@ export const loadAllProjectAnnotations = async (
 };
 
 /**
+ * Load annotations for newly discovered scenes without replacing the existing
+ * in-memory annotations. This is used by incremental data updates so adding
+ * images does not reset the user's current scene or unsaved edits.
+ */
+export const loadProjectAnnotationsForStems = async (
+  stems: string[],
+  mainFolderPath: string,
+  onProgress?: (current: number, total: number) => void,
+) => {
+  if (!stems || stems.length === 0 || !mainFolderPath) {
+    return {
+      totalScenes: 0,
+      loadedSceneCount: 0,
+      missingSceneCount: 0,
+      annotationCount: 0,
+    };
+  }
+
+  const targetStems = Array.from(new Set(stems));
+  const loadedAnnotations: Annotation[] = [];
+  let loadedSceneCount = 0;
+  let missingSceneCount = 0;
+
+  for (let i = 0; i < targetStems.length; i += 1) {
+    const stem = targetStems[i];
+    try {
+      const result = await readStemAnnotations(stem, mainFolderPath);
+      if (result.found) loadedSceneCount += 1;
+      loadedAnnotations.push(...result.annotations);
+    } catch {
+      missingSceneCount += 1;
+    }
+
+    onProgress?.(i + 1, targetStems.length);
+  }
+
+  const targetStemSet = new Set(targetStems);
+  const latestState = useStore.getState();
+  useStore.setState({
+    annotations: [
+      ...latestState.annotations.filter((annotation) => !targetStemSet.has(annotation.stem)),
+      ...loadedAnnotations,
+    ],
+  });
+
+  return {
+    totalScenes: targetStems.length,
+    loadedSceneCount,
+    missingSceneCount,
+    annotationCount: loadedAnnotations.length,
+  };
+};
+
+/**
  * ==========================================
  * 3. 写逻辑 (Write / Export)
  * ==========================================
