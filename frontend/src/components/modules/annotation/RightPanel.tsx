@@ -9,7 +9,7 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, EyeOff, ListPlus, ListX, Check, X, MapPin, Copy, RefreshCw, ExternalLink
+  Tag, Type, Hash, EyeOff, ListPlus, ListX, Check, X, MapPin, Copy, RefreshCw, ExternalLink, Search
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -118,6 +118,7 @@ export function RightPanel({
   const [confirmDeleteAll, setConfirmDeleteAll] = React.useState(false);
 
   const sceneListRef = React.useRef<HTMLDivElement>(null);
+  const [sceneSearch, setSceneSearch] = React.useState('');
   const [nmsPanelOpen, setNmsPanelOpen] = React.useState(false);
   const [nmsMode, setNmsMode] = React.useState<'iou' | 'ios'>('ios');
   const [nmsThreshold, setNmsThreshold] = React.useState(80);
@@ -125,6 +126,17 @@ export function RightPanel({
   const [nmsGroups, setNmsGroups] = React.useState<Record<string, { groupName: string, isMaster: boolean }>>({});
   const [hasScanned, setHasScanned] = React.useState(false);
   const [showHiddenObjects, setShowHiddenObjects] = React.useState(true);
+  const filteredSceneStems = React.useMemo(() => {
+    const query = sceneSearch.trim().toLowerCase();
+    if (!query) return stems;
+    return stems.filter((stem: string) => stem.toLowerCase().includes(query));
+  }, [sceneSearch, stems]);
+
+  const jumpToScene = (stem: string) => {
+    setCurrentStem(stem);
+    setActiveAnnotationId(null);
+  };
+
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
@@ -136,9 +148,9 @@ export function RightPanel({
         isExpanded ? 'bg-blue-50 dark:bg-blue-900/35' : 'bg-neutral-100 dark:bg-neutral-800'
       }`}
     >
-      <div className="flex items-center gap-2">
+      <div className="min-w-0 flex items-center gap-2">
         <Icon className={`w-3.5 h-3.5 ${isExpanded ? 'text-blue-500' : 'text-neutral-500 dark:text-neutral-300'}`} />
-        <h3 className={`font-bold text-[10px] uppercase tracking-wider ${
+        <h3 className={`truncate font-bold text-[10px] uppercase tracking-wider ${
           isExpanded ? 'text-blue-600 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'
         }`}>
           {title}
@@ -153,9 +165,9 @@ export function RightPanel({
           </span>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {actionNode && (
-          <div onClick={(e) => e.stopPropagation()}>
+          <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
             {actionNode}
           </div>
         )}
@@ -1372,10 +1384,44 @@ export function RightPanel({
           title={t('workspace.scenegroup')} icon={ImageIcon} 
           isExpanded={expanded.scenes} onToggle={() => toggleSection('scenes')} 
           badge={currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}
+          actionNode={(
+            <div className="relative w-28 sm:w-36">
+              <Search className="pointer-events-none absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-neutral-400" />
+              <Input
+                value={sceneSearch}
+                onChange={(event) => setSceneSearch(event.target.value)}
+                onFocus={() => setExpanded((previous) => ({ ...previous, scenes: true }))}
+                onKeyDown={(event) => {
+                  event.stopPropagation();
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    if (filteredSceneStems[0]) jumpToScene(filteredSceneStems[0]);
+                  } else if (event.key === 'Escape') {
+                    setSceneSearch('');
+                    event.currentTarget.blur();
+                  }
+                }}
+                placeholder={t('rightPanel.searchSceneGroup')}
+                aria-label={t('rightPanel.searchSceneGroup')}
+                className="h-6 w-full bg-white/80 pl-6 pr-5 text-[10px] dark:bg-neutral-900/80"
+              />
+              {sceneSearch && (
+                <button
+                  type="button"
+                  aria-label={t('rightPanel.clearSceneSearch')}
+                  title={t('rightPanel.clearSceneSearch')}
+                  onClick={() => setSceneSearch('')}
+                  className="absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          )}
         />
         {expanded.scenes && (
           <div ref={sceneListRef} className="max-h-[25vh] overflow-y-auto p-2 space-y-1 bg-neutral-100 dark:bg-black/20 custom-scrollbar shrink-0 max-h-[228px]">
-            {stems.map((stem: string) => {
+            {filteredSceneStems.map((stem: string) => {
               // 🌟 核心：计算该场景下包含多少个标注对象
               const annoCount = annotations.filter((a: any) => a.stem === stem).length;
 
@@ -1383,7 +1429,7 @@ export function RightPanel({
                 <button
                   key={stem}
                   data-stem={stem}
-                  onClick={() => { setCurrentStem(stem); setActiveAnnotationId(null); }}
+                  onClick={() => jumpToScene(stem)}
                   className={`w-full text-left px-3 py-1.5 text-[11px] rounded transition-all flex items-center justify-between group h-[40px] ${
                     currentStem === stem ? 'bg-blue-600 text-white shadow-md font-bold' : 'text-neutral-600 dark:text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-800'
                   }`}
@@ -1402,6 +1448,13 @@ export function RightPanel({
                 </button>
               );
             })}
+            {filteredSceneStems.length === 0 && (
+              <div className="py-4 text-center text-[10px] text-neutral-400">
+                {sceneSearch.trim()
+                  ? t('rightPanel.noSceneGroupMatches')
+                  : t('rightPanel.noSceneGroups')}
+              </div>
+            )}
           </div>
         )}
 
