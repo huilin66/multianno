@@ -138,7 +138,9 @@ const CanvasViewInner=({
       const folder = folders.find((f: any) => f.id === view.folderId);
       if (!folder) return;
 
-      setRawImage(null)
+      let cancelled = false;
+      setRawImage(null);
+      setImageObj(null);
 
       // ========== 加载当前图片 ==========
       const exactFileName = sceneGroups?.[currentStem]?.[folder.path];
@@ -150,15 +152,30 @@ const CanvasViewInner=({
 
       const img = new Image();
       img.crossOrigin = 'anonymous';
-      img.src = url;
+      let settled = false;
 
-      img.onload = () => {
+      const handleImageLoad = () => {
+          if (cancelled || settled) return;
+          settled = true;
           setRawImage(img);
           onImageLoaded?.();
       };
-      img.onerror = () => {
+
+      const handleImageError = () => {
+          if (cancelled || settled) return;
+          settled = true;
           onImageLoaded?.();
       };
+
+      // 先绑定回调，再设置 src，避免命中浏览器缓存时错过 load 事件。
+      img.onload = handleImageLoad;
+      img.onerror = handleImageError;
+      img.src = url;
+
+      // 预加载已完成时，load 事件可能已经在绑定前结束，主动补一次状态同步。
+      if (img.complete && img.naturalWidth > 0) {
+          handleImageLoad();
+      }
 
       // ========== 预加载前后各 3 张 ==========
       const idx = stems.indexOf(currentStem);
@@ -179,6 +196,12 @@ const CanvasViewInner=({
       if (prefetchPaths.length > 0) {
           prefetchImages(prefetchPaths);
       }
+
+      return () => {
+          cancelled = true;
+          img.onload = null;
+          img.onerror = null;
+      };
 }, [view.folderId, view.bands, currentStem, folders, stems, view.id, backendRenderKey]);
 
   // 🌟 引擎阶段 2：纯前端内存像素级渲染（极速重绘 Colormap 和 Stretch Range）

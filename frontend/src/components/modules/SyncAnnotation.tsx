@@ -1923,7 +1923,8 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   {view.isMain ? t('view.mainView') : `${t('view.augView')} ${index}`}
                 </div>
                 
-                <CanvasView 
+                <CanvasView
+                  key={`${view.id}-${currentStem || 'none'}`}
                   view={view} 
                   annotations={renderState === 'ready' 
                     ? (tempActiveAnno && tempActiveAnno.id !== 'ai_preview' 

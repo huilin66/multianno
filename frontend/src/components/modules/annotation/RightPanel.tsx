@@ -207,6 +207,13 @@ export function RightPanel({
 
     setSceneSearchQuery(query);
     setExpanded((previous) => ({ ...previous, scenes: true }));
+
+    const normalizedQuery = query.toLowerCase();
+    const exactMatch = stems.find((stem: string) => stem.toLowerCase() === normalizedQuery);
+    const firstMatch = exactMatch || stems.find((stem: string) => stem.toLowerCase().includes(normalizedQuery));
+    if (firstMatch) {
+      jumpToScene(firstMatch);
+    }
   };
 
   React.useEffect(() => {
