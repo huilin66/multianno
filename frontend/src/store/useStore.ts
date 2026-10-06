@@ -158,6 +158,7 @@ export interface EditorSettings {
   showLongCrosshair: boolean;
   continuousDrawing: boolean; 
   showToolLabels: boolean; 
+  showGroupId: boolean;
   autoRefreshStats: boolean; 
   fillAnnotationShapes: boolean;
   att_show: boolean;
@@ -381,6 +382,7 @@ export const useStore = create<AppState>()(
         showLongCrosshair: false,
         continuousDrawing: false, 
         showToolLabels: false, 
+        showGroupId: false,
         autoRefreshStats: true,
         fillAnnotationShapes: true,
         att_show: false,

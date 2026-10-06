@@ -48,6 +48,7 @@
     "continuousDrawing": "Continuous Drawing",
     "fillShapes": "Fill Shapes",
     "showAnnotationToolLabel": "Show Annotation Tool Label",
+    "showGroupId": "Show Group ID",
     "drawingObjectEditor": "Drawing Object Editor",
     "drawingObjectEditorHint": "Choose the form used when creating a new object.",
     "drawingObjectEditorChooseTemplate": "Editor template",

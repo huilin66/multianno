@@ -160,7 +160,12 @@ function drawAnnotationLabel(
   imageWidth?: number,
   imageHeight?: number,
 ) {
-  const label = String(annotation.label ?? '');
+  const classLabel = String(annotation.label ?? '');
+  const groupId = annotation.group_id;
+  const hasGroupId = groupId !== null && groupId !== undefined && String(groupId).trim() !== '';
+  const label = editorSettings?.showGroupId === true && hasGroupId
+    ? `${String(groupId)}:${classLabel}`
+    : classLabel;
   const showAttributes = editorSettings?.att_show === true;
   const attributeEntries = showAttributes
     ? getAnnotationAttributeEntries(

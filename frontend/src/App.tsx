@@ -1052,6 +1052,14 @@ export default function App() {
                       onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })}
                     />
                   </div>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.showGroupId')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.showGroupId}
+                      onCheckedChange={(v) => updateEditorSettings({ showGroupId: v })}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => setDrawingObjectEditorModalOpen(true)}

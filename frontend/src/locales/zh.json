@@ -48,6 +48,7 @@
     "continuousDrawing": "连续绘制",
     "fillShapes": "填充掩膜",
     "showAnnotationToolLabel": "显示标注工具标签",
+    "showGroupId": "显示 Group ID",
     "drawingObjectEditor": "绘图 Object Editor",
     "drawingObjectEditorHint": "选择创建新对象时使用的编辑器形式。",
     "drawingObjectEditorChooseTemplate": "编辑器模板",
