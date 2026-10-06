@@ -149,6 +149,8 @@ export interface TaxonomyAttribute {
   applyToAll: boolean; 
 }
 
+export type DrawingObjectEditorTemplate = 'standard' | 'quick';
+
 // settings
 export interface EditorSettings {
   showCrosshair: boolean; 
@@ -160,6 +162,7 @@ export interface EditorSettings {
   fillAnnotationShapes: boolean;
   att_show: boolean;
   att_hide_no: boolean;
+  drawingObjectEditorTemplate: DrawingObjectEditorTemplate;
   maxViews: number;
   gridLayout: { rows: number; cols: number };
 }
@@ -382,6 +385,7 @@ export const useStore = create<AppState>()(
         fillAnnotationShapes: true,
         att_show: false,
         att_hide_no: true,
+        drawingObjectEditorTemplate: 'standard',
         maxViews: 9,
         gridLayout: { rows: 0, cols: 0 },
       },

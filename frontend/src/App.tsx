@@ -36,6 +36,7 @@ import { useMetaAutoSave } from './hooks/useMetaAutoSave';
 import { LocalVisualization } from './components/modules/LocalVisualization';
 import { GlobalConfirmDialog } from './components/modals/GlobalConfirmDialog';
 import { ViewLayoutSettingsModal } from './components/modals/settings/ViewLayoutSettingsModal';
+import { DrawingObjectEditorSettingsModal } from './components/modals/settings/DrawingObjectEditorSettingsModal';
 import { ToastContainer } from './components/ui/toast';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { loadAllProjectAnnotations, loadProjectAnnotationsForStems } from './lib/annotationUtils';
@@ -681,6 +682,7 @@ export default function App() {
   useBackendHealth();
   const [viewLayoutModalOpen, setViewLayoutModalOpen] = useState(false);
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
+  const [drawingObjectEditorModalOpen, setDrawingObjectEditorModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isReloadingAll, setIsReloadingAll] = useState(false);
@@ -1050,6 +1052,14 @@ export default function App() {
                       onCheckedChange={(v) => updateEditorSettings({ showToolLabels: v })}
                     />
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setDrawingObjectEditorModalOpen(true)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  >
+                    <Label className="cursor-pointer text-xs">{t('headerSetting.drawingObjectEditor')}</Label>
+                    <LayoutTemplate className="h-4 w-4 shrink-0" />
+                  </button>
                   <div
                     className={`rounded-md px-1.5 py-1 ${!hasAttributeContent ? 'opacity-60' : ''}`}
                     title={!hasAttributeContent ? t('headerSetting.attShowUnavailable') : undefined}
@@ -1290,6 +1300,10 @@ export default function App() {
       <ShortcutSettingsModal
         open={shortcutModalOpen}
         onClose={() => setShortcutModalOpen(false)}
+      />
+      <DrawingObjectEditorSettingsModal
+        open={drawingObjectEditorModalOpen}
+        onClose={() => setDrawingObjectEditorModalOpen(false)}
       />
       <AISettingsModal
         open={aiSettingsModalOpen}

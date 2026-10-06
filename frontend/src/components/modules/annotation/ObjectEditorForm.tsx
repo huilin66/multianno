@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import type { DrawingObjectEditorTemplate } from '../../../store/useStore';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
 import { Switch } from '../../ui/switch';
@@ -17,6 +18,7 @@ export interface ObjectEditorFormProps {
   taxonomyClasses: any[];
   taxonomyAttributes: any[];
   activeColor: string;
+  template?: DrawingObjectEditorTemplate;
 }
 
 export function ObjectEditorForm({
@@ -25,9 +27,68 @@ export function ObjectEditorForm({
   difficult, onDifficultChange,
   occluded, onOccludedChange,
   truncated, onTruncatedChange,
-  attributes, onAttributesChange, taxonomyClasses, taxonomyAttributes, activeColor
+  attributes, onAttributesChange, taxonomyClasses, taxonomyAttributes, activeColor,
+  template = 'standard',
 }: ObjectEditorFormProps) {
   const { t } = useTranslation();
+
+  if (template === 'quick') {
+    return (
+      <div className="space-y-2.5">
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-[10px] font-medium uppercase tracking-wider text-neutral-400">
+            {t('objectEditor.class')}
+          </Label>
+          <span className="text-[10px] text-neutral-400">{t('objectEditor.quickHint')}</span>
+        </div>
+
+        {taxonomyClasses && taxonomyClasses.length > 0 ? (
+          <div className="grid max-h-[260px] grid-cols-2 gap-1.5 overflow-y-auto custom-scrollbar pr-1">
+            {taxonomyClasses.map((item: any) => {
+              const isSelected = item.name === label;
+              return (
+                <label
+                  key={item.id || item.name}
+                  className={`flex min-h-8 cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors ${
+                    isSelected
+                      ? 'border-primary/50 bg-primary/10 font-semibold text-primary'
+                      : 'border-border/70 bg-background/70 text-foreground hover:border-primary/30 hover:bg-primary/[0.02]'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="drawing-object-class"
+                    value={item.name}
+                    checked={isSelected}
+                    onChange={() => onLabelChange(item.name)}
+                    className="sr-only"
+                  />
+                  <span
+                    className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border ${
+                      isSelected ? 'border-primary' : 'border-neutral-300 dark:border-neutral-600'
+                    }`}
+                    aria-hidden="true"
+                  >
+                    {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                  </span>
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: item.color || activeColor }}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 truncate" title={item.name}>{item.name}</span>
+                </label>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[10px] text-neutral-400">
+            {t('objectEditor.noClassesDefined')}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2.5">
