@@ -898,6 +898,9 @@ export const useStore = create<AppState>()(
         return {
           ...currentState,
           ...persisted,
+          stems: Array.isArray(persisted.stems)
+            ? [...persisted.stems].sort(naturalStringCompare)
+            : currentState.stems,
           editorSettings: {
             ...currentState.editorSettings,
             ...persistedEditorSettings,
