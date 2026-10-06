@@ -23,10 +23,12 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
+import { Checkbox } from './components/ui/checkbox';
+import { repairData } from './api/client';
 import { useAnnotationAutoSave } from './hooks/useAnnotationAutoSave';
 import { ShortcutSettingsModal } from './components/modals/settings/ShortcutSettingsModal';
 import { AISettingsModal } from './components/modals/settings/AISettingsModal';
@@ -104,6 +106,167 @@ const formatSavedTimestamp = (
   return `${timeText} ${dateText}`;
 };
 
+type DataRepairType = 'stem' | 'json_file' | 'image_size';
+
+const DATA_REPAIR_OPTIONS: Array<{ type: DataRepairType; labelKey: string; descriptionKey: string }> = [
+  {
+    type: 'stem',
+    labelKey: 'headerSetting.repairStem',
+    descriptionKey: 'headerSetting.repairStemHint',
+  },
+  {
+    type: 'json_file',
+    labelKey: 'headerSetting.repairJsonFile',
+    descriptionKey: 'headerSetting.repairJsonFileHint',
+  },
+  {
+    type: 'image_size',
+    labelKey: 'headerSetting.repairImageSize',
+    descriptionKey: 'headerSetting.repairImageSizeHint',
+  },
+];
+
+interface DataRepairSettingsProps {
+  folders: any[];
+  views: any[];
+  sceneGroups: Record<string, Record<string, string>>;
+  stems: string[];
+  workspacePath?: string | null;
+}
+
+function DataRepairSettings({
+  folders,
+  views,
+  sceneGroups,
+  stems,
+  workspacePath,
+}: DataRepairSettingsProps) {
+  const { t } = useTranslation();
+  const [selectedTypes, setSelectedTypes] = useState<DataRepairType[]>([
+    'stem',
+    'json_file',
+    'image_size',
+  ]);
+  const [isRepairing, setIsRepairing] = useState(false);
+  const [repairResult, setRepairResult] = useState<{ fixed: number; scanned: number } | null>(null);
+
+  const saveDirs = workspacePath
+    ? [workspacePath]
+    : (folders || []).map((folder: any) => folder.path).filter(Boolean);
+  const mainFolder = (folders || []).find(
+    (folder: any) => folder.id === (views || []).find((view: any) => view.isMain)?.folderId,
+  ) || folders?.[0];
+  const hasProject = stems.length > 0 && saveDirs.length > 0;
+
+  const getMainImagePaths = () => {
+    if (!mainFolder?.path) return {};
+
+    const extension = mainFolder.extension
+      ? (String(mainFolder.extension).startsWith('.')
+        ? String(mainFolder.extension)
+        : `.${mainFolder.extension}`)
+      : '';
+    const basePath = String(mainFolder.path).replace(/[\\/]+$/, '');
+
+    return Object.fromEntries(stems.map((stem) => {
+      const imageName = sceneGroups?.[stem]?.[mainFolder.path]
+        || `${stem}${mainFolder.suffix || ''}${extension}`;
+      return [stem, `${basePath}/${imageName}`];
+    }));
+  };
+
+  const handleRepair = async () => {
+    if (isRepairing) return;
+    if (!hasProject) {
+      toast.warning(t('headerSetting.dataRepairNoProject'));
+      return;
+    }
+    if (selectedTypes.length === 0) {
+      toast.warning(t('headerSetting.dataRepairNoSelection'));
+      return;
+    }
+
+    setIsRepairing(true);
+    setRepairResult(null);
+    try {
+      const result = await repairData(
+        saveDirs,
+        stems,
+        selectedTypes,
+        getMainImagePaths(),
+        mainFolder?.rawProfile,
+      );
+      const summary = {
+        fixed: Number(result?.total_fixed || 0),
+        scanned: Number(result?.total_scanned || 0),
+      };
+      setRepairResult(summary);
+      toast.success(t('headerSetting.dataRepairSuccess', summary));
+    } catch (error: any) {
+      toast.error(t('headerSetting.dataRepairError', {
+        message: error?.message || String(error),
+      }));
+    } finally {
+      setIsRepairing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 rounded-md border border-amber-200/70 bg-amber-50/50 p-2 dark:border-amber-900/60 dark:bg-amber-950/20">
+      <div className="flex items-start gap-2 px-1">
+        <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <p className="text-[10px] leading-4 text-neutral-500 dark:text-neutral-400">
+          {t('headerSetting.dataRepairHint')}
+        </p>
+      </div>
+
+      <div className="space-y-0.5">
+        {DATA_REPAIR_OPTIONS.map((option) => {
+          const checked = selectedTypes.includes(option.type);
+          return (
+            <label
+              key={option.type}
+              htmlFor={`data-repair-${option.type}`}
+              className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 hover:bg-amber-100/70 dark:hover:bg-amber-900/20"
+              title={t(option.descriptionKey)}
+            >
+              <Checkbox
+                id={`data-repair-${option.type}`}
+                checked={checked}
+                onCheckedChange={(value) => {
+                  setSelectedTypes((current) => value === true
+                    ? Array.from(new Set([...current, option.type]))
+                    : current.filter((type) => type !== option.type));
+                }}
+                className="mt-0.5 scale-90"
+              />
+              <span className="min-w-0 text-[11px] leading-4 text-neutral-700 dark:text-neutral-300">
+                {t(option.labelKey)}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      <button
+        type="button"
+        onClick={handleRepair}
+        disabled={isRepairing || !hasProject || selectedTypes.length === 0}
+        className="flex w-full items-center justify-center gap-1.5 rounded border border-amber-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:bg-neutral-900 dark:text-amber-300 dark:hover:bg-amber-900/30"
+      >
+        {isRepairing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
+        {isRepairing ? t('headerSetting.dataRepairRunning') : t('headerSetting.dataRepairRun')}
+      </button>
+
+      {repairResult && (
+        <p className="px-1 text-[10px] leading-4 text-emerald-700 dark:text-emerald-400">
+          {t('headerSetting.dataRepairResult', repairResult)}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const {
@@ -124,6 +287,7 @@ export default function App() {
     workspacePath,
     stems,
     views,
+    sceneGroups,
     resetProject,
   } = useStore();
   const annotationLastSavedTime = useStore((s) => s.annotationLastSavedTime);
@@ -584,6 +748,16 @@ export default function App() {
                     </span>
                     <RefreshCw className={`h-4 w-4 shrink-0 ${isReloadingAll ? 'animate-spin' : ''}`} />
                   </button>
+                </SettingsSection>
+
+                <SettingsSection title={t('headerSetting.groups.repair')}>
+                  <DataRepairSettings
+                    folders={folders}
+                    views={views}
+                    sceneGroups={sceneGroups as Record<string, Record<string, string>>}
+                    stems={stems}
+                    workspacePath={workspacePath}
+                  />
                 </SettingsSection>
 
                 <SettingsSection title={t('headerSetting.groups.workspace')}>

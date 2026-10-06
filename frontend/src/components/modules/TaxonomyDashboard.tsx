@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
-  Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser, Wrench,
+  Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
   Plus, Check, X, Loader2, AlertCircle, Upload, Database, Activity,
   List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, 
   Layers, ShieldCheck, CheckSquare, Square
@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '..
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, repairData,fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, batchRenameAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
+import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, batchRenameAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 import { showDialog, useDialogStore } from '../../store/useDialogStore';
@@ -908,9 +908,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
   const [selectedAttributeValue, setSelectedAttributeValue] = useState<string | null>(null);
   const [expanded, setExpanded] = useState({ classes: true, attributes: true });
-  const [isRepairing, setIsRepairing] = useState(false);
-  const [repairResult, setRepairResult] = useState<{fixed?: number, scanned?: number} | null>(null);
-
   const [statsStatus, setStatsStatus] = useState<'idle' | 'loading' | 'done'>('idle');
   const [statsData, setStatsData] = useState<any>(null); 
   const statsRequestIdRef = useRef(0);
@@ -1547,26 +1544,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       return folders.map((f: any) => f.path).filter(Boolean);
   };
 
-  const getMainImagePaths = (): Record<string, string> => {
-    const mainFolder = folders.find(
-      (folder: any) => folder.id === views.find((view: any) => view.isMain)?.folderId,
-    ) || folders[0];
-    if (!mainFolder?.path) return {};
-
-    const extension = mainFolder.extension
-      ? (String(mainFolder.extension).startsWith('.')
-        ? String(mainFolder.extension)
-        : `.${mainFolder.extension}`)
-      : '';
-    const basePath = String(mainFolder.path).replace(/[\\/]+$/, '');
-
-    return Object.fromEntries(stems.map((stem: string) => {
-      const imageName = sceneGroups?.[stem]?.[mainFolder.path]
-        || `${stem}${mainFolder.suffix || ''}${extension}`;
-      return [stem, `${basePath}/${imageName}`];
-    }));
-  };
-
   const handleOpenPreviewScene = useCallback((stem: string) => {
     const storeStems = useStore.getState().stems;
     const matchedStem = storeStems.find((candidate: string) => candidate.startsWith(stem));
@@ -1825,30 +1802,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       description: 'System reserved class for soft-deleted items.',
     });
   }, [taxonomyClasses, addTaxonomyClass]);
-  const handleRepair = async () => {
-    setIsRepairing(true);
-    setRepairResult(null);
-    try {
-      const safeSaveDirs = getSaveDirs();
-      const mainFolder = folders.find(
-        (folder: any) => folder.id === views.find((view: any) => view.isMain)?.folderId,
-      ) || folders[0];
-      const result = await repairData(
-        safeSaveDirs,
-        stems,
-        ['stem', 'json_file', 'image_size'],
-        getMainImagePaths(),
-        mainFolder?.rawProfile,
-      );
-      setRepairResult({ fixed: result.total_fixed, scanned: result.total_scanned });
-      await refreshStatsIfNeeded();
-    } catch (err: any) {
-      alert(t('taxonomyDashboard.repairFailed', { message: err.message }));
-    } finally {
-      setIsRepairing(false);
-    }
-  };
-
   // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
   useEffect(() => { 
     if (folders?.length > 0) {
@@ -2576,21 +2529,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                 <p className="text-xs text-neutral-500 mt-1">{t('taxonomyDashboard.globalAnalyticsDesc')}</p>
               </div>
               <div className="flex items-center gap-2">
-                {/* 🌟 数据修复按钮 */}
-                <Button 
-                  onClick={handleRepair} 
-                  disabled={isRepairing}
-                  variant="outline"
-                  className="border-amber-200 text-amber-600 hover:bg-amber-50 dark:border-amber-800 dark:text-amber-400 dark:hover:bg-amber-900/20 font-bold"
-                >
-                  {isRepairing ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <Wrench className="w-4 h-4 mr-2" />
-                  )}
-                  {repairResult ? t('taxonomyDashboard.repairFixed', { count: repairResult.fixed }) : t('taxonomyDashboard.dataRepair')}
-                </Button>
-
                 <Button onClick={() => loadStatistics(true)} disabled={statsStatus === 'loading'} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md font-bold">
                   {statsStatus === 'loading' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                   {t('taxonomyDashboard.refreshStatistics')}
