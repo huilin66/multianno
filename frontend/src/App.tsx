@@ -1090,9 +1090,6 @@ export default function App() {
                     </span>
                     <RefreshCw className={`h-4 w-4 shrink-0 ${isReloadingAll ? 'animate-spin' : ''}`} />
                   </button>
-                </SettingsSection>
-
-                <SettingsSection title={t('headerSetting.groups.update')}>
                   <DataUpdateSettings
                     folders={folders}
                     views={views}
