@@ -500,6 +500,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           if (splitInfo.train !== undefined) {
             lines.push(t('dataExport.result.split', { train: splitInfo.train, val: splitInfo.val ?? 0, test: splitInfo.test ?? 0 }));
           }
+          if (format === 'yolo' && result?.classes_file) {
+            lines.push(t('dataExport.result.classesFile', { path: result.classes_file }));
+          }
           await showDialog({
             type: 'success',
             title: t('dataExport.success'),
@@ -543,6 +546,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           const exported = result?.exported;
           if (exported !== undefined) {
             lines[2] = t('dataExport.result.scenes', { count: exported, total: exportStems.length });
+          }
+          if (format === 'yolo' && result?.classes_file) {
+            lines.push(t('dataExport.result.classesFile', { path: result.classes_file }));
           }
           await showDialog({
             type: 'success',

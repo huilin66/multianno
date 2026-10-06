@@ -600,6 +600,7 @@
       "mode": "导出模式: {{mode}}",
       "scenes": "导出场景数: {{count}}/{{total}}",
       "classes": "类别数: {{count}}",
+      "classesFile": "类别文件: {{path}}",
       "attributes": "已启用属性导出 (mdet)",
       "split": "数据集分割: Train {{train}} / Val {{val}} / Test {{test}}"
     }

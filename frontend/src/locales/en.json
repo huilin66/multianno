@@ -600,6 +600,7 @@
       "mode": "Mode: {{mode}}",
       "scenes": "Scenes: {{count}}/{{total}}",
       "classes": "Classes: {{count}}",
+      "classesFile": "Class file: {{path}}",
       "attributes": "Attribute export enabled (mdet)",
       "split": "Split: Train {{train}} / Val {{val}} / Test {{test}}"
     }

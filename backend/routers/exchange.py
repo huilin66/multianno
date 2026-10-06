@@ -184,8 +184,37 @@ def _write_classes_file(target_dir: str, selected_classes: list[str]):
         cf.write("\n".join(selected_classes))
 
 
+def _write_yolo_classes_file(target_dir: str, selected_classes: list[str]) -> str:
+    """Write the YOLO class map beside the export directory with a unique name.
+
+    YOLO label files stay in ``target_dir``. The class map is placed in the
+    parent directory so repeated exports do not overwrite a previous map.
+    """
+    target_path = os.path.abspath(os.path.normpath(target_dir))
+    parent_dir = os.path.dirname(target_path) or target_path
+    os.makedirs(parent_dir, exist_ok=True)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    classes_path = os.path.join(parent_dir, f"classes_{timestamp}.txt")
+    suffix = 1
+    while os.path.exists(classes_path):
+        classes_path = os.path.join(parent_dir, f"classes_{timestamp}_{suffix}.txt")
+        suffix += 1
+
+    with open(classes_path, "w", encoding="utf-8") as cf:
+        cf.write("\n".join(selected_classes))
+
+    logger.info(
+        "EXPORT_YOLO_CLASSES_FILE target=%s path=%s classes=%d",
+        shorten(target_dir, 1500),
+        shorten(classes_path, 1500),
+        len(selected_classes),
+    )
+    return classes_path
+
+
 def _write_attribute_config_file(target_dir: str, attributes_map: dict):
-    """把属性配置写为 attributes.yaml（与 classes.txt 同级），便于回灌 ultralytics。
+    """把属性配置写为 target_dir/attributes.yaml，便于回灌 ultralytics。
 
     这是可合并到 Ultralytics data.yaml 的属性片段，不是包含 path/train/val/names
     的完整数据集配置。
@@ -464,9 +493,8 @@ async def export_yolo_dataset_stream(req: ExportRequest):
             req.split_content_mode, req.view_configs,
         )
 
-        # classes.txt
-        with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
-            f.write("\n".join(req.selected_classes))
+        # classes.txt（保存到导出目录的上一级，并带时间戳）
+        classes_file = _write_yolo_classes_file(req.target_dir, req.selected_classes)
 
         # attributes.yaml (多属性导出配套)
         _write_attribute_config_file(req.target_dir, attributes_map)
@@ -485,6 +513,7 @@ async def export_yolo_dataset_stream(req: ExportRequest):
                         "val": len(val_stems),
                         "test": len(test_stems),
                     },
+                    "classes_file": classes_file,
                 }
             )
             + "\n"
@@ -1145,9 +1174,13 @@ async def export_yolo_annotation_stream(req: ExportRequest):
             await asyncio.sleep(0)
 
         reporter.save_report(req.task_type, req.format)
-        _write_classes_file(req.target_dir, req.selected_classes)
+        classes_file = _write_yolo_classes_file(req.target_dir, req.selected_classes)
         _write_attribute_config_file(req.target_dir, attributes_map)
-        yield _complete_event(exported_count, empty_annotations=empty_count)
+        yield _complete_event(
+            exported_count,
+            empty_annotations=empty_count,
+            classes_file=classes_file,
+        )
     except asyncio.CancelledError:
         logger.warning("EXPORT_CANCELLED client_disconnected")
     except Exception as e:
@@ -1359,9 +1392,13 @@ async def export_to_yolo(req: ExportRequest):
             exported_count += 1
         reporter.log_scene(base_stem, stats)
     reporter.save_report(req.task_type, req.format)
-    _write_classes_file(req.target_dir, req.selected_classes)
+    classes_file = _write_yolo_classes_file(req.target_dir, req.selected_classes)
     _write_attribute_config_file(req.target_dir, attributes_map)
-    return {"status": "success", "message": f"YOLO: 生成 {exported_count} 个 txt。"}
+    return {
+        "status": "success",
+        "message": f"YOLO: 生成 {exported_count} 个 txt。",
+        "classes_file": classes_file,
+    }
 
 
 async def export_to_coco(req: ExportRequest):
@@ -2371,9 +2408,8 @@ async def export_dataset(req: ExportRequest):
         req.split_content_mode, req.view_configs,
     )
 
-    # 5. classes.txt
-    with open(os.path.join(req.target_dir, "classes.txt"), "w") as f:
-        f.write("\n".join(req.selected_classes))
+    # 5. classes.txt（保存到导出目录的上一级，并带时间戳）
+    classes_file = _write_yolo_classes_file(req.target_dir, req.selected_classes)
 
     # attributes.yaml (多属性导出配套)
     _write_attribute_config_file(req.target_dir, attributes_map)
@@ -2388,6 +2424,7 @@ async def export_dataset(req: ExportRequest):
             "val": len(val_stems),
             "test": len(test_stems),
         },
+        "classes_file": classes_file,
     }
 
 
