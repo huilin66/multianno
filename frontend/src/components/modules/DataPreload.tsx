@@ -457,7 +457,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
 
       if (result.commonStems && result.commonStems.length > 0) {
         useStore.getState().setStems(result.commonStems);
-        useStore.getState().setCurrentStem(result.commonStems[0]);
+        useStore.getState().setCurrentStem(useStore.getState().stems[0]);
         useStore.getState().setSceneGroups(result.sceneGroups);
       }
 
@@ -504,7 +504,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
 
       if (result.commonStems && result.commonStems.length > 0) {
         useStore.getState().setStems(result.commonStems);
-        useStore.getState().setCurrentStem(result.commonStems[0]);
+        useStore.getState().setCurrentStem(useStore.getState().stems[0]);
         useStore.getState().setSceneGroups(result.sceneGroups);
       }
     } catch (error) {

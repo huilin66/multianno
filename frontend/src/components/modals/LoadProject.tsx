@@ -100,8 +100,9 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
           
           if (result.commonStems && result.commonStems.length > 0) {
             useStore.getState().setStems(result.commonStems);
+            const sortedStems = useStore.getState().stems;
             useStore.getState().setSceneGroups(result.sceneGroups);
-            useStore.getState().setCurrentStem(result.commonStems[0]);
+            useStore.getState().setCurrentStem(sortedStems[0]);
 
             const state = useStore.getState();
             const mainViewFolderId = meta.views?.find((v: any) => v.isMain)?.["folder id"];
@@ -110,9 +111,9 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
             
             if (loadPath) {
               setLoadStage('annotations');
-              setLoadProgress({ current: 0, total: result.commonStems.length });
+              setLoadProgress({ current: 0, total: sortedStems.length });
               await loadAllProjectAnnotations(
-                result.commonStems, 
+                sortedStems,
                 loadPath, 
                 (current, total) => setLoadProgress({ current, total }),
                 10,

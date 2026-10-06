@@ -3,6 +3,12 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { ProjectMetaContract } from '../config/contract';
 
+// Match Windows Explorer-style ordering for scene names such as 1, 2, 10, 11.
+export const naturalStringCompare = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: 'base',
+}).compare;
+
 export interface FolderData {
   id: string;
   path: string;
@@ -426,7 +432,9 @@ export const useStore = create<AppState>()(
       setProjectMetaPath: (path) => set({ projectMetaPath: path }),
       setProjectMetadata: (data) => set({ projectMetadata: data }),
       loadProjectMeta: (meta) => {
-        const loadedStems = meta.sceneGroups ? Object.keys(meta.sceneGroups).sort() : [];
+        const loadedStems = meta.sceneGroups
+          ? Object.keys(meta.sceneGroups).sort(naturalStringCompare)
+          : [];
 
         set({
           projectName: meta.projectName || 'Untitled Project',
@@ -534,7 +542,7 @@ export const useStore = create<AppState>()(
       removeView: (id) => set((state) => ({ views: state.views.filter(v => v.id !== id) })),
       clearViews: () => set({ views: [] }),
       setWorkspacePath: (path: string | null) => set({ workspacePath: path }),
-      setStems: (stems) => set({ stems }),
+      setStems: (stems) => set({ stems: [...stems].sort(naturalStringCompare) }),
       updateStemMetadata: (stem, data) => set((state) => ({
         stemMetadata: {
           ...state.stemMetadata,

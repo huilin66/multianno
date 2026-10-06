@@ -275,10 +275,11 @@ function DataUpdateSettings({
       const scannedStemSet = new Set(scannedStems);
       useStore.getState().setSceneGroups(result.sceneGroups || {});
       useStore.getState().setStems(scannedStems);
+      const sortedScannedStems = useStore.getState().stems;
       useStore.getState().setCurrentStem(
         currentState.currentStem && scannedStemSet.has(currentState.currentStem)
           ? currentState.currentStem
-          : scannedStems[0],
+          : sortedScannedStems[0],
       );
 
       let loadedObjects = 0;

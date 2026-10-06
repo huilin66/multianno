@@ -204,8 +204,9 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
             );
             if (analyzeResult.commonStems?.length > 0) {
               useStore.getState().setStems(analyzeResult.commonStems);
+              const sortedStems = useStore.getState().stems;
               useStore.getState().setSceneGroups(analyzeResult.sceneGroups);
-              useStore.getState().setCurrentStem(analyzeResult.commonStems[0]);
+              useStore.getState().setCurrentStem(sortedStems[0]);
 
               const mainFolder = meta.folders.find((f: any) =>
                 f.Id === meta.views?.find((v: any) => v.isMain)?.["folder id"]
@@ -213,7 +214,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
 
               const loadPath = useStore.getState().workspacePath || mainFolder?.path || '';
               if (loadPath) {
-                loadAllProjectAnnotations(analyzeResult.commonStems, loadPath);
+                loadAllProjectAnnotations(sortedStems, loadPath);
               }
             }
           }
