@@ -14,7 +14,9 @@ export function ClassFormPopover({
   const { taxonomyAttributes = [], editorSettings } = useStore() as any;
   const drawingEditorTemplate = editorSettings?.drawingObjectEditorTemplate === 'quick'
     ? 'quick'
-    : 'standard';
+    : editorSettings?.drawingObjectEditorTemplate === 'custom'
+      ? 'custom'
+      : 'standard';
   const activeClassDef = taxonomyClasses.find((c: any) => c.name === formLabel);
   const activeColor = activeClassDef?.color || '#3B82F6';
   
@@ -99,6 +101,7 @@ export function ClassFormPopover({
           attributes={formAttributes} onAttributesChange={setFormAttributes}
           taxonomyClasses={taxonomyClasses} taxonomyAttributes={taxonomyAttributes} activeColor={activeColor}
           template={drawingEditorTemplate}
+          visibleFields={editorSettings?.drawingObjectEditorVisibleFields}
         />
 
         <div className="pt-3 border-t border-neutral-100 dark:border-neutral-800 mt-2">

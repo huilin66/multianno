@@ -155,7 +155,19 @@ export interface TaxonomyAttribute {
   applyToAll: boolean; 
 }
 
-export type DrawingObjectEditorTemplate = 'standard' | 'quick';
+export const DRAWING_OBJECT_EDITOR_FIELDS = [
+  'class',
+  'groupId',
+  'trackId',
+  'text',
+  'attributes',
+  'difficult',
+  'occluded',
+  'truncated',
+] as const;
+
+export type DrawingObjectEditorField = typeof DRAWING_OBJECT_EDITOR_FIELDS[number];
+export type DrawingObjectEditorTemplate = 'standard' | 'quick' | 'custom';
 
 // settings
 export interface EditorSettings {
@@ -170,6 +182,7 @@ export interface EditorSettings {
   att_show: boolean;
   att_hide_no: boolean;
   drawingObjectEditorTemplate: DrawingObjectEditorTemplate;
+  drawingObjectEditorVisibleFields: DrawingObjectEditorField[];
   maxViews: number;
   gridLayout: { rows: number; cols: number };
 }
@@ -394,6 +407,7 @@ export const useStore = create<AppState>()(
         att_show: false,
         att_hide_no: true,
         drawingObjectEditorTemplate: 'standard',
+        drawingObjectEditorVisibleFields: [...DRAWING_OBJECT_EDITOR_FIELDS],
         maxViews: 9,
         gridLayout: { rows: 0, cols: 0 },
       },

@@ -1,6 +1,10 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import type { DrawingObjectEditorTemplate } from '../../../store/useStore';
+import {
+  DRAWING_OBJECT_EDITOR_FIELDS,
+  type DrawingObjectEditorField,
+  type DrawingObjectEditorTemplate,
+} from '../../../store/useStore';
 import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
 import { Switch } from '../../ui/switch';
@@ -19,6 +23,7 @@ export interface ObjectEditorFormProps {
   taxonomyAttributes: any[];
   activeColor: string;
   template?: DrawingObjectEditorTemplate;
+  visibleFields?: DrawingObjectEditorField[];
 }
 
 export function ObjectEditorForm({
@@ -29,8 +34,14 @@ export function ObjectEditorForm({
   truncated, onTruncatedChange,
   attributes, onAttributesChange, taxonomyClasses, taxonomyAttributes, activeColor,
   template = 'standard',
+  visibleFields,
 }: ObjectEditorFormProps) {
   const { t } = useTranslation();
+  const visibleFieldSet = template === 'custom'
+    ? new Set(visibleFields ?? DRAWING_OBJECT_EDITOR_FIELDS)
+    : null;
+  const isFieldVisible = (field: DrawingObjectEditorField) =>
+    template !== 'custom' || visibleFieldSet?.has(field) === true;
 
   if (template === 'quick') {
     return (
@@ -92,7 +103,14 @@ export function ObjectEditorForm({
 
   return (
     <div className="space-y-2.5">
+      {template === 'custom' && visibleFieldSet?.size === 0 && (
+        <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[10px] text-neutral-400">
+          {t('headerSetting.drawingObjectEditorCustomNoFields')}
+        </div>
+      )}
+
       {/* Class */}
+      {isFieldVisible('class') && (
       <div className="flex items-center gap-2">
         <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.class')}</Label>
         <Select value={label} onValueChange={onLabelChange}>
@@ -114,26 +132,34 @@ export function ObjectEditorForm({
           </SelectContent>
         </Select>
       </div>
+      )}
 
       {/* Group ID + Track ID 同行 */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 flex-1">
-          <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.groupID')}</Label>
-          <Input
-            type="number" value={groupId || ''} onChange={(e) => onGroupIdChange(e.target.value)}
-            placeholder="-" className="h-6 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
-          />
+      {(isFieldVisible('groupId') || isFieldVisible('trackId')) && (
+        <div className="flex items-center gap-3">
+          {isFieldVisible('groupId') && (
+            <div className="flex items-center gap-2 flex-1">
+              <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.groupID')}</Label>
+              <Input
+                type="number" value={groupId || ''} onChange={(e) => onGroupIdChange(e.target.value)}
+                placeholder="-" className="h-6 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
+              />
+            </div>
+          )}
+          {isFieldVisible('trackId') && (
+            <div className="flex items-center gap-2 flex-1">
+              <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.trackID')}</Label>
+              <Input
+                type="number" value={trackId || ''} onChange={(e) => onTrackIdChange(e.target.value)}
+                placeholder="-" className="h-6 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
+              />
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-2 flex-1">
-          <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.trackID')}</Label>
-          <Input
-            type="number" value={trackId || ''} onChange={(e) => onTrackIdChange(e.target.value)}
-            placeholder="-" className="h-6 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
-          />
-        </div>
-      </div>
+      )}
 
       {/* Text */}
+      {isFieldVisible('text') && (
       <div className="flex items-center gap-2">
         <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.text')}</Label>
         <Input
@@ -142,8 +168,10 @@ export function ObjectEditorForm({
           className="h-6 text-[11px] md:text-[11px] placeholder:text-[11px] flex-1 bg-neutral-50 dark:bg-black border-neutral-200 dark:border-neutral-800"
         />
       </div>
+      )}
 
       {/* Attributes */}
+      {isFieldVisible('attributes') && (
       <div className="pt-1.5 border-t border-neutral-100 dark:border-neutral-800">
         <Label className="text-[10px] text-neutral-400 mb-1 block uppercase tracking-wider">{t('objectEditor.attributes')}</Label>
           {taxonomyAttributes && taxonomyAttributes.length > 0 ? (
@@ -170,22 +198,31 @@ export function ObjectEditorForm({
           </div>
         )}
       </div>
+      )}
       
       {/* 状态开关 */}
-      <div className="flex items-center justify-between pt-2 mt-2 border-t border-neutral-100 dark:border-neutral-800">
-        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onDifficultChange(!difficult)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.difficult')}</Label>
-          <Switch checked={difficult} onCheckedChange={onDifficultChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+      {(isFieldVisible('difficult') || isFieldVisible('occluded') || isFieldVisible('truncated')) && (
+        <div className="flex items-center justify-between pt-2 mt-2 border-t border-neutral-100 dark:border-neutral-800">
+          {isFieldVisible('difficult') && (
+            <div className="flex items-center gap-1 cursor-pointer" onClick={() => onDifficultChange(!difficult)}>
+              <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.difficult')}</Label>
+              <Switch checked={difficult} onCheckedChange={onDifficultChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+            </div>
+          )}
+          {isFieldVisible('occluded') && (
+            <div className="flex items-center gap-1 cursor-pointer" onClick={() => onOccludedChange(!occluded)}>
+              <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.occluded')}</Label>
+              <Switch checked={occluded} onCheckedChange={onOccludedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+            </div>
+          )}
+          {isFieldVisible('truncated') && (
+            <div className="flex items-center gap-1 cursor-pointer" onClick={() => onTruncatedChange(!truncated)}>
+              <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.truncated')}</Label>
+              <Switch checked={truncated} onCheckedChange={onTruncatedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
+            </div>
+          )}
         </div>
-        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onOccludedChange(!occluded)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.occluded')}</Label>
-          <Switch checked={occluded} onCheckedChange={onOccludedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
-        </div>
-        <div className="flex items-center gap-1 cursor-pointer" onClick={() => onTruncatedChange(!truncated)}>
-          <Label className="text-[11px] text-neutral-500 cursor-pointer">{t('objectEditor.truncated')}</Label>
-          <Switch checked={truncated} onCheckedChange={onTruncatedChange} className="scale-[0.7] origin-left m-0 shadow-none" />
-        </div>
-      </div>
+      )}
     </div>
   );
 }
