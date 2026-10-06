@@ -37,6 +37,62 @@ interface RightPanelProps {
   isRefreshingAnnotations: boolean;
 }
 
+interface SectionHeaderProps {
+  title: string;
+  icon: React.ElementType;
+  isExpanded: boolean;
+  onToggle: () => void;
+  badge?: React.ReactNode;
+  colorClass?: string;
+  actionNode?: React.ReactNode;
+}
+
+function SectionHeader({
+  title,
+  icon: Icon,
+  isExpanded,
+  onToggle,
+  badge,
+  actionNode,
+}: SectionHeaderProps) {
+  return (
+    <div
+      onClick={onToggle}
+      className={`h-10 px-2.5 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-700 cursor-pointer hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors shrink-0 ${
+        isExpanded ? 'bg-blue-50 dark:bg-blue-900/35' : 'bg-neutral-100 dark:bg-neutral-800'
+      }`}
+    >
+      <div className="min-w-0 flex items-center gap-2">
+        <Icon className={`w-3.5 h-3.5 ${isExpanded ? 'text-blue-500' : 'text-neutral-500 dark:text-neutral-300'}`} />
+        <h3 className={`truncate font-bold text-[10px] uppercase tracking-wider ${
+          isExpanded ? 'text-blue-600 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'
+        }`}>
+          {title}
+        </h3>
+        {badge !== undefined && (
+          <span className={`ml-2 px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
+            isExpanded
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+              : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-200'
+          }`}>
+            {badge}
+          </span>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {actionNode && (
+          <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
+            {actionNode}
+          </div>
+        )}
+        <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${
+          isExpanded ? 'rotate-90 text-blue-500' : 'text-neutral-500 dark:text-neutral-300'
+        }`} />
+      </div>
+    </div>
+  );
+}
+
 export function RightPanel({ 
   tool, showFullExtent, toggleFullExtent, pushAction, 
   focusedViewId, setFocusedViewId,
@@ -118,7 +174,10 @@ export function RightPanel({
   const [confirmDeleteAll, setConfirmDeleteAll] = React.useState(false);
 
   const sceneListRef = React.useRef<HTMLDivElement>(null);
-  const [sceneSearch, setSceneSearch] = React.useState('');
+  const sceneSearchInputRef = React.useRef<HTMLInputElement>(null);
+  const [sceneSearchOpen, setSceneSearchOpen] = React.useState(false);
+  const [sceneSearchInput, setSceneSearchInput] = React.useState('');
+  const [sceneSearchQuery, setSceneSearchQuery] = React.useState('');
   const [nmsPanelOpen, setNmsPanelOpen] = React.useState(false);
   const [nmsMode, setNmsMode] = React.useState<'iou' | 'ios'>('ios');
   const [nmsThreshold, setNmsThreshold] = React.useState(80);
@@ -127,56 +186,39 @@ export function RightPanel({
   const [hasScanned, setHasScanned] = React.useState(false);
   const [showHiddenObjects, setShowHiddenObjects] = React.useState(true);
   const filteredSceneStems = React.useMemo(() => {
-    const query = sceneSearch.trim().toLowerCase();
+    const query = sceneSearchQuery.trim().toLowerCase();
     if (!query) return stems;
     return stems.filter((stem: string) => stem.toLowerCase().includes(query));
-  }, [sceneSearch, stems]);
+  }, [sceneSearchQuery, stems]);
 
   const jumpToScene = (stem: string) => {
     setCurrentStem(stem);
     setActiveAnnotationId(null);
   };
 
+  const handleSceneSearch = () => {
+    const query = sceneSearchInput.trim();
+    if (!query) {
+      setSceneSearchInput('');
+      setSceneSearchQuery('');
+      setSceneSearchOpen(false);
+      return;
+    }
+
+    setSceneSearchQuery(query);
+    setExpanded((previous) => ({ ...previous, scenes: true }));
+  };
+
+  React.useEffect(() => {
+    if (sceneSearchOpen) {
+      sceneSearchInputRef.current?.focus();
+    }
+  }, [sceneSearchOpen]);
+
   const toggleSection = (section: keyof typeof expanded) => {
     setExpanded(prev => ({ ...prev, [section]: !prev[section] }));
   };
 
-  const SectionHeader = ({ title, icon: Icon, isExpanded, onToggle, badge, colorClass, actionNode }: any) => (
-    <div 
-      onClick={onToggle}
-      className={`h-10 px-2.5 flex items-center justify-between border-b border-neutral-200 dark:border-neutral-700 cursor-pointer hover:bg-neutral-200/70 dark:hover:bg-neutral-700 transition-colors shrink-0 ${
-        isExpanded ? 'bg-blue-50 dark:bg-blue-900/35' : 'bg-neutral-100 dark:bg-neutral-800'
-      }`}
-    >
-      <div className="min-w-0 flex items-center gap-2">
-        <Icon className={`w-3.5 h-3.5 ${isExpanded ? 'text-blue-500' : 'text-neutral-500 dark:text-neutral-300'}`} />
-        <h3 className={`truncate font-bold text-[10px] uppercase tracking-wider ${
-          isExpanded ? 'text-blue-600 dark:text-blue-300' : 'text-neutral-600 dark:text-neutral-200'
-        }`}>
-          {title}
-        </h3>
-        {badge !== undefined && (
-          <span className={`ml-2 px-1.5 py-0.5 rounded-full text-[9px] font-mono ${
-            isExpanded 
-              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'  // ← badge 也变蓝
-              : 'bg-neutral-200 dark:bg-neutral-700 text-neutral-600 dark:text-neutral-200'
-          }`}>
-            {badge}
-          </span>
-        )}
-      </div>
-      <div className="flex shrink-0 items-center gap-2">
-        {actionNode && (
-          <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
-            {actionNode}
-          </div>
-        )}
-        <ChevronRight className={`w-3.5 h-3.5 transition-transform duration-200 ${
-          isExpanded ? 'rotate-90 text-blue-500' : 'text-neutral-500 dark:text-neutral-300'
-        }`} />
-      </div>
-    </div>
-  );
   const currentAnnotations = annotations.filter((a: any) => a.stem === currentStem);
   const isObjectHidden = (annotation: any) =>
     hiddenClasses.includes(annotation.label) || hiddenAnnotations.includes(annotation.id);
@@ -1385,38 +1427,52 @@ export function RightPanel({
           isExpanded={expanded.scenes} onToggle={() => toggleSection('scenes')} 
           badge={currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}
           actionNode={(
-            <div className="relative w-28 sm:w-36">
-              <Search className="pointer-events-none absolute left-1.5 top-1/2 h-3 w-3 -translate-y-1/2 text-neutral-400" />
-              <Input
-                value={sceneSearch}
-                onChange={(event) => setSceneSearch(event.target.value)}
-                onFocus={() => setExpanded((previous) => ({ ...previous, scenes: true }))}
-                onKeyDown={(event) => {
-                  event.stopPropagation();
-                  if (event.key === 'Enter') {
-                    event.preventDefault();
-                    if (filteredSceneStems[0]) jumpToScene(filteredSceneStems[0]);
-                  } else if (event.key === 'Escape') {
-                    setSceneSearch('');
-                    event.currentTarget.blur();
-                  }
-                }}
-                placeholder={t('rightPanel.searchSceneGroup')}
+            !sceneSearchOpen ? (
+              <button
+                type="button"
                 aria-label={t('rightPanel.searchSceneGroup')}
-                className="h-6 w-full bg-white/80 pl-6 pr-5 text-[10px] dark:bg-neutral-900/80"
-              />
-              {sceneSearch && (
+                title={t('rightPanel.searchSceneGroup')}
+                onClick={() => {
+                  setSceneSearchOpen(true);
+                  setExpanded((previous) => ({ ...previous, scenes: true }));
+                }}
+                className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
+              >
+                <Search className="h-3.5 w-3.5" />
+              </button>
+            ) : (
+              <div className="flex w-28 items-center gap-1">
+                <Input
+                  ref={sceneSearchInputRef}
+                  value={sceneSearchInput}
+                  onChange={(event) => setSceneSearchInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    event.stopPropagation();
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      handleSceneSearch();
+                    } else if (event.key === 'Escape') {
+                      setSceneSearchInput('');
+                      setSceneSearchQuery('');
+                      setSceneSearchOpen(false);
+                      event.currentTarget.blur();
+                    }
+                  }}
+                  placeholder={t('rightPanel.searchSceneGroup')}
+                  aria-label={t('rightPanel.searchSceneGroup')}
+                  className="h-6 min-w-0 flex-1 bg-white/80 px-2 text-[10px] dark:bg-neutral-900/80"
+                />
                 <button
                   type="button"
-                  aria-label={t('rightPanel.clearSceneSearch')}
-                  title={t('rightPanel.clearSceneSearch')}
-                  onClick={() => setSceneSearch('')}
-                  className="absolute right-1 top-1/2 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 hover:text-neutral-700 dark:hover:bg-neutral-700 dark:hover:text-neutral-200"
+                  aria-label={t('rightPanel.executeSceneSearch')}
+                  title={t('rightPanel.executeSceneSearch')}
+                  onClick={handleSceneSearch}
+                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-500 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
                 >
-                  <X className="h-3 w-3" />
+                  <Search className="h-3.5 w-3.5" />
                 </button>
-              )}
-            </div>
+              </div>
+            )
           )}
         />
         {expanded.scenes && (
@@ -1450,7 +1506,7 @@ export function RightPanel({
             })}
             {filteredSceneStems.length === 0 && (
               <div className="py-4 text-center text-[10px] text-neutral-400">
-                {sceneSearch.trim()
+                {sceneSearchQuery.trim()
                   ? t('rightPanel.noSceneGroupMatches')
                   : t('rightPanel.noSceneGroups')}
               </div>

@@ -786,6 +786,7 @@
     "objects": "对象列表",
     "scenes": "场景组",
     "searchSceneGroup": "搜索场景...",
+    "executeSceneSearch": "搜索场景组",
     "clearSceneSearch": "清除场景搜索",
     "noSceneGroupMatches": "没有匹配结果",
     "noSceneGroups": "暂无场景组",

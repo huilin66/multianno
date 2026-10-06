@@ -786,6 +786,7 @@
     "objects": "Object List",
     "scenes": "Scene Group",
     "searchSceneGroup": "Search scenes...",
+    "executeSceneSearch": "Search scene groups",
     "clearSceneSearch": "Clear scene search",
     "noSceneGroupMatches": "No matching results",
     "noSceneGroups": "No scene groups",
