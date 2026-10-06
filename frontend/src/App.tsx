@@ -422,64 +422,71 @@ function DataUpdateSettings({
           if (!isBusy) setIsModalOpen(open);
         }}
       >
-        <DialogContent className="flex max-h-[min(720px,calc(100vh-2rem))] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
-          <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
-            <DialogTitle className="flex items-center gap-2 text-sm">
-              <Wrench className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-              {t('headerSetting.dataUpdateTitle')}
-            </DialogTitle>
-            <p className="pt-1 text-[11px] leading-4 text-muted-foreground">
-              {t('headerSetting.dataUpdateModalHint')}
-            </p>
+        <DialogContent className="flex max-h-[min(88vh,760px)] w-[calc(100vw-2rem)] max-w-2xl flex-col overflow-hidden border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-2xl">
+          <DialogHeader className="shrink-0 border-b border-neutral-200 px-5 py-4 dark:border-neutral-800">
+            <div className="flex items-center gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <Wrench className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base">{t('headerSetting.dataUpdateTitle')}</DialogTitle>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {t('headerSetting.dataUpdateModalHint')}
+                </p>
+              </div>
+            </div>
           </DialogHeader>
 
-          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-            <section className="rounded-md border border-blue-200/70 bg-blue-50/50 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+          <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
+            <div className="space-y-4 p-4 sm:p-5">
+            <section className="rounded-xl border border-border bg-muted/20 p-4">
               <div className="mb-2 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+                  <h3 className="text-xs font-semibold text-foreground">
                     {t('headerSetting.dataUpdateScan')}
                   </h3>
                   <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
                     {t('headerSetting.dataUpdateScanHint')}
                   </p>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={handleUpdateData}
                   disabled={isBusy || imageFolders.length === 0}
-                  className="flex shrink-0 items-center gap-1.5 rounded border border-blue-300 bg-background px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40"
                 >
-                  {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {isUpdating ? <Loader2 className="animate-spin" /> : <RefreshCw />}
                   {isUpdating ? t('headerSetting.dataUpdateScanning') : t('headerSetting.dataUpdateScan')}
-                </button>
+                </Button>
               </div>
               {updateResult && (
-                <p className="text-[10px] leading-4 text-blue-700 dark:text-blue-300">
+                  <p className="text-[10px] leading-4 text-muted-foreground">
                   {t('headerSetting.dataUpdateResult', updateResult)}
                 </p>
               )}
             </section>
 
-            <section className="rounded-md border border-amber-200/70 bg-amber-50/40 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+            <section className="rounded-xl border border-border bg-background p-4">
               <div className="mb-2 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                  <h3 className="text-xs font-semibold text-foreground">
                     {t('headerSetting.dataRepairRun')}
                   </h3>
                   <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
                     {t('headerSetting.dataRepairSelectionHint')}
                   </p>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={handleScanRepairs}
                   disabled={isBusy || !hasProject || selectedTypes.length === 0}
-                  className="flex shrink-0 items-center gap-1.5 rounded border border-amber-300 bg-background px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-900/30"
                 >
-                  {isScanningRepairs ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {isScanningRepairs ? <Loader2 className="animate-spin" /> : <RefreshCw />}
                   {isScanningRepairs ? t('headerSetting.dataRepairScanning') : t('headerSetting.dataRepairScan')}
-                </button>
+                </Button>
               </div>
 
               <div className="grid gap-1 sm:grid-cols-3">
@@ -490,7 +497,7 @@ function DataUpdateSettings({
                       key={option.type}
                       htmlFor={`data-update-repair-${option.type}`}
                       title={t(option.descriptionKey)}
-                      className="flex cursor-pointer items-start gap-2 rounded border border-transparent px-2 py-1.5 hover:border-amber-200 hover:bg-amber-100/60 dark:hover:border-amber-900 dark:hover:bg-amber-900/20"
+                      className="flex cursor-pointer items-start gap-2 rounded-lg border border-border/70 bg-background/70 px-3 py-2 transition-colors hover:border-primary/30 hover:bg-primary/[0.02]"
                     >
                       <Checkbox
                         id={`data-update-repair-${option.type}`}
@@ -519,9 +526,9 @@ function DataUpdateSettings({
                     </span>
                     <span>{operationProgress}%</span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-amber-200/70 dark:bg-amber-900/60">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full rounded-full bg-amber-500 transition-[width] duration-300 dark:bg-amber-400"
+                      className="h-full rounded-full bg-primary transition-[width] duration-300"
                       style={{ width: `${Math.max(4, operationProgress)}%` }}
                     />
                   </div>
@@ -529,7 +536,7 @@ function DataUpdateSettings({
               )}
 
               {repairPreview && (
-                <div className="mt-3 rounded border border-border/80 bg-background/70 p-2.5">
+                <div className="mt-3 rounded-lg border border-border bg-background/70 p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
                     <h4 className="text-[11px] font-semibold text-foreground">
                       {t('headerSetting.dataRepairScanResult')}
@@ -549,7 +556,7 @@ function DataUpdateSettings({
                       const affectedImages = Number(detail.affected_images ?? detail.fixed ?? 0);
                       const affectedAnnotations = Number(detail.affected_annotations || 0);
                       return (
-                        <div key={option.type} className="flex items-center justify-between gap-3 rounded bg-muted/40 px-2 py-1.5">
+                        <div key={option.type} className="flex items-center justify-between gap-3 rounded-lg border border-border/70 bg-muted/20 px-3 py-2">
                           <span className="min-w-0 truncate text-[10px] text-foreground">{t(option.labelKey)}</span>
                           <span className="shrink-0 text-[10px] text-muted-foreground">
                             {t('headerSetting.dataRepairCounts', {
@@ -575,9 +582,10 @@ function DataUpdateSettings({
                 </p>
               )}
             </section>
+            </div>
           </div>
 
-          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-muted/20 px-4 py-3">
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border p-4">
             <p className="min-w-0 text-[10px] leading-4 text-muted-foreground">
               {!hasProject ? t('headerSetting.dataRepairNoProject') : t('headerSetting.dataRepairConfirmHint')}
             </p>
@@ -596,7 +604,7 @@ function DataUpdateSettings({
                 size="sm"
                 onClick={handleApplyRepairs}
                 disabled={isBusy || !repairPreview || !previewSummary || previewSummary.fixed <= 0}
-                className="bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600"
+                className="text-white"
               >
                 {isRepairing ? <Loader2 className="animate-spin" /> : <Wrench />}
                 {isRepairing ? t('headerSetting.dataRepairRunning') : t('headerSetting.dataRepairApply')}
