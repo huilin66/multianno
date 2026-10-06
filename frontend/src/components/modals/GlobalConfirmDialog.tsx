@@ -54,15 +54,15 @@ export function GlobalConfirmDialog() {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleDialogCancel()}>
       <DialogContent className="max-w-sm sm:max-w-sm p-0 border-border overflow-hidden gap-0">
-        <div className="p-5">
+        <div className="min-w-0 p-5">
           <div className="flex items-start gap-4">
             <div className={`p-2.5 rounded-full shrink-0 ${config.iconBg}`}>
               <Icon className={`w-5 h-5 ${config.iconColor}`} />
             </div>
-            <div className="min-w-0 pt-0.5">
-              <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+            <div className="min-w-0 flex-1 pt-0.5">
+              <h2 className="break-words text-sm font-semibold text-foreground">{title}</h2>
               {description && (
-                <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                <p className="mt-1.5 max-w-full select-text text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">
                   {description}
                 </p>
               )}
