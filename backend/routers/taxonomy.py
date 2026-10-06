@@ -750,44 +750,80 @@ async def repair_project_data(req: RepairRequest):
     - duplicate: 清理重复标注
     """
     logger.info(
-        "REPAIR_START folders=%d types=%s stems=%d image_paths=%d",
+        "REPAIR_START dry_run=%s folders=%d types=%s stems=%d image_paths=%d",
+        req.dry_run,
         len(req.save_dirs),
         req.repair_types,
         len(req.stems),
         len(req.image_paths),
     )
-    result = {"total_scanned": 0, "total_fixed": 0, "details": {}}
+    result = {
+        "dry_run": req.dry_run,
+        "total_scanned": 0,
+        "total_fixed": 0,
+        "total_affected_images": 0,
+        "total_affected_annotations": 0,
+        "details": {},
+    }
 
-    for repair_type in req.repair_types:
+    # Keep the execution order stable because stem repair can affect whether a
+    # JSON file is considered valid by the json_file repair.
+    repair_order = [
+        repair_type
+        for repair_type in ("stem", "json_file", "image_size")
+        if repair_type in req.repair_types
+    ]
+
+    for repair_type in repair_order:
         if repair_type == "stem":
-            stem_result = _repair_stems(req.save_dirs)
+            stem_result = _repair_stems(req.save_dirs, dry_run=req.dry_run)
             result["details"]["stem"] = stem_result
             result["total_scanned"] += stem_result["scanned"]
             result["total_fixed"] += stem_result["fixed"]
+            result["total_affected_images"] += stem_result["affected_images"]
+            result["total_affected_annotations"] += stem_result["affected_annotations"]
         if repair_type == "json_file":
-            json_file_result = _repair_json_files(req.save_dirs, req.stems)
+            json_file_result = _repair_json_files(
+                req.save_dirs,
+                req.stems,
+                dry_run=req.dry_run,
+                normalize_stem="stem" in repair_order,
+            )
             result["details"]["json_file"] = json_file_result
             result["total_scanned"] += json_file_result["scanned"]
             result["total_fixed"] += json_file_result["fixed"]
+            result["total_affected_images"] += json_file_result["affected_images"]
+            result["total_affected_annotations"] += json_file_result["affected_annotations"]
         if repair_type == "image_size":
             image_size_result = _repair_image_sizes(
                 req.save_dirs,
                 req.stems,
                 req.image_paths,
                 req.image_raw_profile,
+                dry_run=req.dry_run,
             )
             result["details"]["image_size"] = image_size_result
             result["total_scanned"] += image_size_result["scanned"]
             result["total_fixed"] += image_size_result["fixed"]
+            result["total_affected_images"] += image_size_result["affected_images"]
+            result["total_affected_annotations"] += image_size_result["affected_annotations"]
     logger.info(
-        "REPAIR_END scanned=%d fixed=%d",
+        "REPAIR_END dry_run=%s scanned=%d fixed=%d affected_images=%d affected_annotations=%d",
+        req.dry_run,
         result["total_scanned"],
         result["total_fixed"],
+        result["total_affected_images"],
+        result["total_affected_annotations"],
     )
     return result
 
 
-def _repair_stems(save_dirs: list) -> dict:
+def _annotation_count(data: dict) -> int:
+    shapes = data.get("shapes", []) if isinstance(data, dict) else []
+    return len(shapes) if isinstance(shapes, list) else 0
+
+
+def _repair_stems(save_dirs: list, dry_run: bool = False) -> dict:
     """
     修复规则：
     如果文件名是 DJI_20260211160843_1138.json，
@@ -796,6 +832,7 @@ def _repair_stems(save_dirs: list) -> dict:
     """
     scanned = 0
     fixed = 0
+    affected_annotations = 0
     fixed_files = []
 
     for directory in save_dirs:
@@ -829,18 +866,31 @@ def _repair_stems(save_dirs: list) -> dict:
                     changed = True
 
                 if changed:
-                    with open(fpath, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    if not dry_run:
+                        with open(fpath, "w", encoding="utf-8") as f:
+                            json.dump(data, f, ensure_ascii=False, indent=2)
                     fixed += 1
+                    affected_annotations += _annotation_count(data)
                     fixed_files.append(fname)
 
             except Exception as e:
                 logger.exception("REPAIR_STEM_FILE_ERROR path=%s error=%s", shorten(fpath, 1500), e)
 
-    return {"scanned": scanned, "fixed": fixed, "fixed_files": fixed_files}
+    return {
+        "scanned": scanned,
+        "fixed": fixed,
+        "affected_images": fixed,
+        "affected_annotations": affected_annotations,
+        "fixed_files": fixed_files,
+    }
 
 
-def _repair_json_files(save_dirs: list, stems: list) -> dict:
+def _repair_json_files(
+    save_dirs: list,
+    stems: list,
+    dry_run: bool = False,
+    normalize_stem: bool = False,
+) -> dict:
     """
     修复规则：
     如果 JSON 内的 stem 字段与文件名不一致，
@@ -848,13 +898,15 @@ def _repair_json_files(save_dirs: list, stems: list) -> dict:
     """
     scanned = 0
     fixed = 0
+    affected_annotations = 0
     fixed_files = []
 
     for directory in save_dirs:
         if not os.path.exists(directory):
             continue
         directory_backup_error = directory + "_backup_error"
-        os.makedirs(directory_backup_error, exist_ok=True)
+        if not dry_run:
+            os.makedirs(directory_backup_error, exist_ok=True)
         for fname in os.listdir(directory):
             if not fname.endswith(".json"):
                 continue
@@ -868,16 +920,32 @@ def _repair_json_files(save_dirs: list, stems: list) -> dict:
                 with open(fpath, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 current_stem = data.get("stem", "")
+                if (
+                    dry_run
+                    and normalize_stem
+                    and current_stem
+                    and current_stem != fname[:-5]
+                    and current_stem.startswith(fname[:-5])
+                ):
+                    current_stem = fname[:-5]
                 if current_stem not in stems:
-                    fpath_backup_error = os.path.join(directory_backup_error, fname)
-                    shutil.move(fpath, fpath_backup_error)
+                    if not dry_run:
+                        fpath_backup_error = os.path.join(directory_backup_error, fname)
+                        shutil.move(fpath, fpath_backup_error)
                     fixed += 1
+                    affected_annotations += _annotation_count(data)
                     fixed_files.append(fname)
 
             except Exception as e:
                 logger.exception("REPAIR_JSON_FILE_ERROR path=%s error=%s", shorten(fpath, 1500), e)
 
-    return {"scanned": scanned, "fixed": fixed, "fixed_files": fixed_files}
+    return {
+        "scanned": scanned,
+        "fixed": fixed,
+        "affected_images": fixed,
+        "affected_annotations": affected_annotations,
+        "fixed_files": fixed_files,
+    }
 
 
 def _repair_image_sizes(
@@ -885,6 +953,7 @@ def _repair_image_sizes(
     stems: list,
     image_paths: dict,
     image_raw_profile: dict | None = None,
+    dry_run: bool = False,
 ) -> dict:
     """按每个 scene 的真实主图像尺寸修复 JSON 元数据。
 
@@ -893,6 +962,7 @@ def _repair_image_sizes(
     """
     scanned = 0
     fixed = 0
+    affected_annotations = 0
     fixed_files = []
     missing_images = []
     errors = []
@@ -955,13 +1025,16 @@ def _repair_image_sizes(
 
                 data["imageWidth"] = actual_width
                 data["imageHeight"] = actual_height
-                with open(fpath, "w", encoding="utf-8") as f:
-                    json.dump(data, f, ensure_ascii=False, indent=2)
+                if not dry_run:
+                    with open(fpath, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
 
                 fixed += 1
+                affected_annotations += _annotation_count(data)
                 fixed_files.append(fname)
                 logger.info(
-                    "REPAIR_IMAGE_SIZE_FIXED file=%s old=%sx%s new=%sx%s image=%s",
+                    "REPAIR_IMAGE_SIZE_%s file=%s old=%sx%s new=%sx%s image=%s",
+                    "WOULD_FIX" if dry_run else "FIXED",
                     fname,
                     current_width,
                     current_height,
@@ -976,6 +1049,8 @@ def _repair_image_sizes(
     return {
         "scanned": scanned,
         "fixed": fixed,
+        "affected_images": fixed,
+        "affected_annotations": affected_annotations,
         "fixed_files": fixed_files,
         "missing_images": missing_images,
         "errors": errors,

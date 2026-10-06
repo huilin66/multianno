@@ -108,12 +108,14 @@ export const repairData = (
   repairTypes: string[] = ['stem'],
   imagePaths: Record<string, string> = {},
   imageRawProfile?: Record<string, any>,
+  dryRun = false,
 ) => post(`${API_BASE_URL}/taxonomy/repair`, {
   save_dirs: saveDirs,
   stems,
   repair_types: repairTypes,
   image_paths: imagePaths,
   image_raw_profile: imageRawProfile,
+  dry_run: dryRun,
 });
 
 export const batchMergeClassWithAttribute = (params: {

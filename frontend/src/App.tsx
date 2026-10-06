@@ -134,6 +134,23 @@ interface DataUpdateSettingsProps {
   workspacePath?: string | null;
 }
 
+interface RepairScanDetail {
+  scanned?: number;
+  fixed?: number;
+  affected_images?: number;
+  affected_annotations?: number;
+  fixed_files?: string[];
+}
+
+type RepairScanDetails = Partial<Record<DataRepairType, RepairScanDetail>>;
+
+interface RepairSummary {
+  scanned: number;
+  fixed: number;
+  affectedImages: number;
+  affectedAnnotations: number;
+}
+
 function DataUpdateSettings({
   folders,
   views,
@@ -147,14 +164,18 @@ function DataUpdateSettings({
     'json_file',
     'image_size',
   ]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isScanningRepairs, setIsScanningRepairs] = useState(false);
   const [isRepairing, setIsRepairing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [repairResult, setRepairResult] = useState<{ fixed: number; scanned: number } | null>(null);
+  const [repairPreview, setRepairPreview] = useState<RepairScanDetails | null>(null);
+  const [repairResult, setRepairResult] = useState<RepairSummary | null>(null);
   const [updateResult, setUpdateResult] = useState<{
     addedScenes: number;
     scannedScenes: number;
     loadedObjects: number;
   } | null>(null);
+  const [operationProgress, setOperationProgress] = useState(0);
 
   const saveDirs = workspacePath
     ? [workspacePath]
@@ -164,6 +185,26 @@ function DataUpdateSettings({
     (folder: any) => folder.id === (views || []).find((view: any) => view.isMain)?.folderId,
   ) || folders?.[0];
   const hasProject = stems.length > 0 && saveDirs.length > 0;
+
+  const summarizeRepairResult = (result: any): RepairSummary => {
+    const details = (result?.details || {}) as RepairScanDetails;
+    const selectedDetails = selectedTypes.map((type) => details[type]).filter(Boolean) as RepairScanDetail[];
+    const sum = (selector: (detail: RepairScanDetail) => number) =>
+      selectedDetails.reduce((total, detail) => total + selector(detail), 0);
+
+    return {
+      scanned: Number(result?.total_scanned ?? sum((detail) => Number(detail.scanned || 0))),
+      fixed: Number(result?.total_fixed ?? sum((detail) => Number(detail.fixed || 0))),
+      affectedImages: Number(
+        result?.total_affected_images
+          ?? sum((detail) => Number(detail.affected_images ?? detail.fixed ?? 0)),
+      ),
+      affectedAnnotations: Number(
+        result?.total_affected_annotations
+          ?? sum((detail) => Number(detail.affected_annotations || 0)),
+      ),
+    };
+  };
 
   const getMainImagePaths = () => {
     if (!mainFolder?.path) return {};
@@ -183,13 +224,14 @@ function DataUpdateSettings({
   };
 
   const handleUpdateData = async () => {
-    if (isUpdating || isRepairing) return;
+    if (isUpdating || isRepairing || isScanningRepairs) return;
     if (imageFolders.length === 0) {
       toast.warning(t('headerSetting.dataUpdateNoFolders'));
       return;
     }
 
     setIsUpdating(true);
+    setOperationProgress(10);
     setUpdateResult(null);
     try {
       const result = await analyzeWorkspaceFolders(imageFolders.map((folder: any) => ({
@@ -198,6 +240,7 @@ function DataUpdateSettings({
         rawProfile: folder.rawProfile,
       })));
       const scannedStems = Array.isArray(result?.commonStems) ? result.commonStems : [];
+      setOperationProgress(45);
 
       if (scannedStems.length === 0) {
         toast.warning(t('headerSetting.dataUpdateNoScenes'));
@@ -246,6 +289,7 @@ function DataUpdateSettings({
         }
       }
 
+      setOperationProgress(90);
       useStore.getState().setStatsCacheValid(false);
       const summary = {
         addedScenes: addedStems.length,
@@ -253,6 +297,7 @@ function DataUpdateSettings({
         loadedObjects,
       };
       setUpdateResult(summary);
+      setOperationProgress(100);
       toast.success(t('headerSetting.dataUpdateSuccess', summary));
     } catch (error: any) {
       toast.error(t('headerSetting.dataUpdateError', {
@@ -263,8 +308,8 @@ function DataUpdateSettings({
     }
   };
 
-  const handleRepair = async () => {
-    if (isRepairing || isUpdating) return;
+  const handleScanRepairs = async () => {
+    if (isScanningRepairs || isRepairing || isUpdating) return;
     if (!hasProject) {
       toast.warning(t('headerSetting.dataRepairNoProject'));
       return;
@@ -274,7 +319,53 @@ function DataUpdateSettings({
       return;
     }
 
+    setIsScanningRepairs(true);
+    setOperationProgress(15);
+    setRepairPreview(null);
+    setRepairResult(null);
+    try {
+      const result = await repairData(
+        saveDirs,
+        stems,
+        selectedTypes,
+        getMainImagePaths(),
+        mainFolder?.rawProfile,
+        true,
+      );
+      setOperationProgress(100);
+      setRepairPreview((result?.details || {}) as RepairScanDetails);
+    } catch (error: any) {
+      toast.error(t('headerSetting.dataRepairScanError', {
+        message: error?.message || String(error),
+      }));
+    } finally {
+      setIsScanningRepairs(false);
+    }
+  };
+
+  const handleApplyRepairs = async () => {
+    if (isRepairing || isScanningRepairs || isUpdating || !repairPreview) return;
+
+    const previewSummary = summarizeRepairResult({ details: repairPreview });
+    if (previewSummary.fixed <= 0) {
+      toast.info(t('headerSetting.dataUpdateNoChanges'));
+      return;
+    }
+
+    const confirmed = await showDialog({
+      type: 'warning',
+      title: t('headerSetting.dataRepairConfirmTitle'),
+      description: t('headerSetting.dataRepairConfirmDescription', {
+        images: previewSummary.affectedImages,
+        annotations: previewSummary.affectedAnnotations,
+      }),
+      confirmText: t('headerSetting.dataRepairConfirm'),
+      cancelText: t('common.cancel'),
+    });
+    if (!confirmed) return;
+
     setIsRepairing(true);
+    setOperationProgress(15);
     setRepairResult(null);
     try {
       const result = await repairData(
@@ -284,12 +375,14 @@ function DataUpdateSettings({
         getMainImagePaths(),
         mainFolder?.rawProfile,
       );
-      const summary = {
-        fixed: Number(result?.total_fixed || 0),
-        scanned: Number(result?.total_scanned || 0),
-      };
+      setOperationProgress(100);
+      const summary = summarizeRepairResult(result);
       setRepairResult(summary);
-      toast.success(t('headerSetting.dataRepairSuccess', summary));
+      setRepairPreview((result?.details || repairPreview) as RepairScanDetails);
+      toast.success(t('headerSetting.dataRepairSuccess', {
+        scanned: summary.scanned,
+        fixed: summary.fixed,
+      }));
     } catch (error: any) {
       toast.error(t('headerSetting.dataRepairError', {
         message: error?.message || String(error),
@@ -299,77 +392,220 @@ function DataUpdateSettings({
     }
   };
 
+  const toggleRepairType = (type: DataRepairType, checked: boolean) => {
+    setRepairPreview(null);
+    setRepairResult(null);
+    setSelectedTypes((current) => checked
+      ? Array.from(new Set([...current, type]))
+      : current.filter((item) => item !== type));
+  };
+
+  const previewSummary = repairPreview ? summarizeRepairResult({ details: repairPreview }) : null;
+  const isBusy = isUpdating || isScanningRepairs || isRepairing;
+
   return (
-    <div className="space-y-2 rounded-md border border-amber-200/70 bg-amber-50/50 p-2 dark:border-amber-900/60 dark:bg-amber-950/20">
-      <div className="flex items-start gap-2 px-1">
-        <Wrench className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-        <p className="text-[10px] leading-4 text-neutral-500 dark:text-neutral-400">
-          {t('headerSetting.dataUpdateHint')}
-        </p>
-      </div>
-
-      <div className="space-y-1 border-b border-amber-200/70 pb-2 dark:border-amber-900/60">
-        <button
-          type="button"
-          onClick={handleUpdateData}
-          disabled={isUpdating || isRepairing || imageFolders.length === 0}
-          title={t('headerSetting.dataUpdateScanHint')}
-          className="flex w-full items-center justify-center gap-1.5 rounded border border-blue-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:bg-neutral-900 dark:text-blue-300 dark:hover:bg-blue-950/30"
-        >
-          {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-          {isUpdating ? t('headerSetting.dataUpdateScanning') : t('headerSetting.dataUpdateScan')}
-        </button>
-        {updateResult && (
-          <p className="px-1 text-[10px] leading-4 text-blue-700 dark:text-blue-300">
-            {t('headerSetting.dataUpdateResult', updateResult)}
-          </p>
-        )}
-      </div>
-
-      <div className="space-y-0.5">
-        {DATA_REPAIR_OPTIONS.map((option) => {
-          const checked = selectedTypes.includes(option.type);
-          return (
-            <label
-              key={option.type}
-              htmlFor={`data-update-repair-${option.type}`}
-              className="flex cursor-pointer items-start gap-2 rounded px-1 py-1 hover:bg-amber-100/70 dark:hover:bg-amber-900/20"
-              title={t(option.descriptionKey)}
-            >
-              <Checkbox
-                id={`data-update-repair-${option.type}`}
-                checked={checked}
-                onCheckedChange={(value) => {
-                  setSelectedTypes((current) => value === true
-                    ? Array.from(new Set([...current, option.type]))
-                    : current.filter((type) => type !== option.type));
-                }}
-                className="mt-0.5 scale-90"
-              />
-              <span className="min-w-0 text-[11px] leading-4 text-neutral-700 dark:text-neutral-300">
-                {t(option.labelKey)}
-              </span>
-            </label>
-          );
-        })}
-      </div>
-
+    <>
       <button
         type="button"
-        onClick={handleRepair}
-        disabled={isRepairing || isUpdating || !hasProject || selectedTypes.length === 0}
-        className="flex w-full items-center justify-center gap-1.5 rounded border border-amber-300 bg-white px-2 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:bg-neutral-900 dark:text-amber-300 dark:hover:bg-amber-900/30"
+        onClick={() => setIsModalOpen(true)}
+        className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
       >
-        {isRepairing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-        {isRepairing ? t('headerSetting.dataRepairRunning') : t('headerSetting.dataRepairRun')}
+        <Label className="cursor-pointer text-xs">
+          {t('headerSetting.dataUpdateTitle')}
+        </Label>
+        <Wrench className="h-4 w-4 shrink-0" />
       </button>
 
-      {repairResult && (
-        <p className="px-1 text-[10px] leading-4 text-emerald-700 dark:text-emerald-400">
-          {t('headerSetting.dataRepairResult', repairResult)}
-        </p>
-      )}
-    </div>
+      <Dialog
+        open={isModalOpen}
+        onOpenChange={(open) => {
+          if (!isBusy) setIsModalOpen(open);
+        }}
+      >
+        <DialogContent className="flex max-h-[min(720px,calc(100vh-2rem))] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="shrink-0 border-b border-border px-4 py-3 text-left">
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Wrench className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+              {t('headerSetting.dataUpdateTitle')}
+            </DialogTitle>
+            <p className="pt-1 text-[11px] leading-4 text-muted-foreground">
+              {t('headerSetting.dataUpdateModalHint')}
+            </p>
+          </DialogHeader>
+
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+            <section className="rounded-md border border-blue-200/70 bg-blue-50/50 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-xs font-semibold text-blue-800 dark:text-blue-300">
+                    {t('headerSetting.dataUpdateScan')}
+                  </h3>
+                  <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
+                    {t('headerSetting.dataUpdateScanHint')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleUpdateData}
+                  disabled={isBusy || imageFolders.length === 0}
+                  className="flex shrink-0 items-center gap-1.5 rounded border border-blue-300 bg-background px-2.5 py-1.5 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                >
+                  {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {isUpdating ? t('headerSetting.dataUpdateScanning') : t('headerSetting.dataUpdateScan')}
+                </button>
+              </div>
+              {updateResult && (
+                <p className="text-[10px] leading-4 text-blue-700 dark:text-blue-300">
+                  {t('headerSetting.dataUpdateResult', updateResult)}
+                </p>
+              )}
+            </section>
+
+            <section className="rounded-md border border-amber-200/70 bg-amber-50/40 p-3 dark:border-amber-900/60 dark:bg-amber-950/20">
+              <div className="mb-2 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="text-xs font-semibold text-amber-800 dark:text-amber-300">
+                    {t('headerSetting.dataRepairRun')}
+                  </h3>
+                  <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
+                    {t('headerSetting.dataRepairSelectionHint')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleScanRepairs}
+                  disabled={isBusy || !hasProject || selectedTypes.length === 0}
+                  className="flex shrink-0 items-center gap-1.5 rounded border border-amber-300 bg-background px-2.5 py-1.5 text-[11px] font-semibold text-amber-700 transition-colors hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-amber-800 dark:text-amber-300 dark:hover:bg-amber-900/30"
+                >
+                  {isScanningRepairs ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  {isScanningRepairs ? t('headerSetting.dataRepairScanning') : t('headerSetting.dataRepairScan')}
+                </button>
+              </div>
+
+              <div className="grid gap-1 sm:grid-cols-3">
+                {DATA_REPAIR_OPTIONS.map((option) => {
+                  const checked = selectedTypes.includes(option.type);
+                  return (
+                    <label
+                      key={option.type}
+                      htmlFor={`data-update-repair-${option.type}`}
+                      title={t(option.descriptionKey)}
+                      className="flex cursor-pointer items-start gap-2 rounded border border-transparent px-2 py-1.5 hover:border-amber-200 hover:bg-amber-100/60 dark:hover:border-amber-900 dark:hover:bg-amber-900/20"
+                    >
+                      <Checkbox
+                        id={`data-update-repair-${option.type}`}
+                        checked={checked}
+                        disabled={isBusy}
+                        onCheckedChange={(value) => toggleRepairType(option.type, value === true)}
+                        className="mt-0.5 scale-90"
+                      />
+                      <span className="min-w-0 text-[11px] leading-4 text-neutral-700 dark:text-neutral-300">
+                        {t(option.labelKey)}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {(isScanningRepairs || isRepairing || isUpdating) && (
+                <div className="mt-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
+                    <span>
+                      {isUpdating
+                        ? t('headerSetting.dataUpdateScanning')
+                        : isScanningRepairs
+                          ? t('headerSetting.dataRepairScanning')
+                          : t('headerSetting.dataRepairRunning')}
+                    </span>
+                    <span>{operationProgress}%</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-amber-200/70 dark:bg-amber-900/60">
+                    <div
+                      className="h-full rounded-full bg-amber-500 transition-[width] duration-300 dark:bg-amber-400"
+                      style={{ width: `${Math.max(4, operationProgress)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {repairPreview && (
+                <div className="mt-3 rounded border border-border/80 bg-background/70 p-2.5">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <h4 className="text-[11px] font-semibold text-foreground">
+                      {t('headerSetting.dataRepairScanResult')}
+                    </h4>
+                    {previewSummary && (
+                      <span className="text-[10px] text-muted-foreground">
+                        {t('headerSetting.dataRepairScanTotals', {
+                          images: previewSummary.affectedImages,
+                          annotations: previewSummary.affectedAnnotations,
+                        })}
+                      </span>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    {DATA_REPAIR_OPTIONS.filter((option) => selectedTypes.includes(option.type)).map((option) => {
+                      const detail = repairPreview[option.type] || {};
+                      const affectedImages = Number(detail.affected_images ?? detail.fixed ?? 0);
+                      const affectedAnnotations = Number(detail.affected_annotations || 0);
+                      return (
+                        <div key={option.type} className="flex items-center justify-between gap-3 rounded bg-muted/40 px-2 py-1.5">
+                          <span className="min-w-0 truncate text-[10px] text-foreground">{t(option.labelKey)}</span>
+                          <span className="shrink-0 text-[10px] text-muted-foreground">
+                            {t('headerSetting.dataRepairCounts', {
+                              images: affectedImages,
+                              annotations: affectedAnnotations,
+                            })}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {previewSummary?.fixed === 0 && (
+                    <p className="mt-2 text-[10px] text-emerald-700 dark:text-emerald-400">
+                      {t('headerSetting.dataUpdateNoChanges')}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {repairResult && (
+                <p className="mt-2 text-[10px] leading-4 text-emerald-700 dark:text-emerald-400">
+                  {t('headerSetting.dataRepairResult', repairResult)}
+                </p>
+              )}
+            </section>
+          </div>
+
+          <div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-muted/20 px-4 py-3">
+            <p className="min-w-0 text-[10px] leading-4 text-muted-foreground">
+              {!hasProject ? t('headerSetting.dataRepairNoProject') : t('headerSetting.dataRepairConfirmHint')}
+            </p>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setIsModalOpen(false)}
+                disabled={isBusy}
+              >
+                {t('common.cancel')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleApplyRepairs}
+                disabled={isBusy || !repairPreview || !previewSummary || previewSummary.fixed <= 0}
+                className="bg-amber-600 text-white hover:bg-amber-700 dark:bg-amber-500 dark:hover:bg-amber-600"
+              >
+                {isRepairing ? <Loader2 className="animate-spin" /> : <Wrench />}
+                {isRepairing ? t('headerSetting.dataRepairRunning') : t('headerSetting.dataRepairApply')}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
