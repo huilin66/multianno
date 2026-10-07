@@ -493,8 +493,10 @@ async def export_yolo_dataset_stream(req: ExportRequest):
             req.split_content_mode, req.view_configs,
         )
 
-        # classes.txt（保存到导出目录的上一级，并带时间戳）
-        classes_file = _write_yolo_classes_file(req.target_dir, req.selected_classes)
+        # classes.txt 放在标注目录的上一级，并带时间戳。
+        # 数据集导出时标签位于 target_dir/anno_subdir；因此这里传入
+        # anno_dir，避免把 class 文件错误地写到数据集根目录的上一级。
+        classes_file = _write_yolo_classes_file(anno_dir, req.selected_classes)
 
         # attributes.yaml (多属性导出配套)
         _write_attribute_config_file(req.target_dir, attributes_map)
