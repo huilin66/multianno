@@ -35,6 +35,7 @@ interface RightPanelProps {
   handleSave: () => Promise<boolean>;
   handleRefreshAnnotations: () => void;
   isRefreshingAnnotations: boolean;
+  onOpenTrackIdWindow: () => void;
 }
 
 interface SectionHeaderProps {
@@ -100,6 +101,7 @@ export function RightPanel({
   visibleLayers, setVisibleLayers,
   hiddenAnnotations, toggleAnnotationVisibility, handleClear, handleSave,
   handleRefreshAnnotations, isRefreshingAnnotations,
+  onOpenTrackIdWindow,
 }: RightPanelProps) {
   const { t } = useTranslation();
   
@@ -1101,6 +1103,17 @@ export function RightPanel({
               title={t('workspace.editorTitle')} icon={Edit3} 
               isExpanded={expanded.editor} onToggle={() => toggleSection('editor')} 
               colorClass="text-blue-500"
+              actionNode={(
+                <button
+                  type="button"
+                  onClick={onOpenTrackIdWindow}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-neutral-500 transition-colors hover:bg-blue-100 hover:text-blue-600 dark:text-neutral-400 dark:hover:bg-blue-950/50 dark:hover:text-blue-300"
+                  title={t('trackIdWindow.open')}
+                  aria-label={t('trackIdWindow.open')}
+                >
+                  <Hash className="h-3.5 w-3.5" />
+                </button>
+              )}
             />
             {expanded.editor && (
               <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 shrink-0 bg-white dark:bg-neutral-900/30 transition-all animate-in fade-in relative">

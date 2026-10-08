@@ -45,8 +45,9 @@ const getControlPoints = (anno: any) => {
 };
 interface SyncAnnotationProps {
   autoSave: () => Promise<boolean>;
+  onOpenTrackIdWindow: () => void;
 }
-export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
+export function SyncAnnotation({ autoSave, onOpenTrackIdWindow }: SyncAnnotationProps) {
   const { t } = useTranslation();
   const [formAttributes, setFormAttributes] = useState<Record<string, any>>({});
   const { pushAction, performGlobalUndo, performGlobalRedo, undoCount, redoCount } = useActionHistory();
@@ -2017,6 +2018,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             handleSave={autoSave}
             handleRefreshAnnotations={handleRefreshCurrentAnnotations}
             isRefreshingAnnotations={isRefreshingAnnotations}
+            onOpenTrackIdWindow={onOpenTrackIdWindow}
           />
         ) : (
           <button

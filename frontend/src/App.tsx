@@ -23,7 +23,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2 } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2, Hash } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -37,6 +37,7 @@ import { LocalVisualization } from './components/modules/LocalVisualization';
 import { GlobalConfirmDialog } from './components/modals/GlobalConfirmDialog';
 import { ViewLayoutSettingsModal } from './components/modals/settings/ViewLayoutSettingsModal';
 import { DrawingObjectEditorSettingsModal } from './components/modals/settings/DrawingObjectEditorSettingsModal';
+import { TrackIdAnnotationModal } from './components/modals/TrackIdAnnotationModal';
 import { ToastContainer } from './components/ui/toast';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { loadAllProjectAnnotations, loadProjectAnnotationsForStems } from './lib/annotationUtils';
@@ -702,6 +703,7 @@ export default function App() {
   const [shortcutModalOpen, setShortcutModalOpen] = useState(false);
   const [drawingObjectEditorModalOpen, setDrawingObjectEditorModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
+  const [trackIdWindowOpen, setTrackIdWindowOpen] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isReloadingAll, setIsReloadingAll] = useState(false);
   const [reloadProgress, setReloadProgress] = useState({ current: 0, total: 0 });
@@ -879,6 +881,9 @@ export default function App() {
                   );
                 }}>
                   <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setTrackIdWindowOpen(true)}>
+                  <Hash className="w-4 h-4 mr-2" /> {t('menu.trackIdAnnotation')}
                 </DropdownMenuItem>
               </DropdownMenuGroup>
 
@@ -1200,7 +1205,7 @@ export default function App() {
 
       {/* Main Content Area - Always Workspace */}
       <main className="flex-grow overflow-hidden relative">
-        <SyncAnnotation autoSave={autoSave} />
+        <SyncAnnotation autoSave={autoSave} onOpenTrackIdWindow={() => setTrackIdWindowOpen(true)} />
       </main>
 
       {/* ============== Dialog Containers ============== */}
@@ -1334,6 +1339,10 @@ export default function App() {
       <AISettingsModal
         open={aiSettingsModalOpen}
         onClose={() => setAiSettingsModalOpen(false)}
+      />
+      <TrackIdAnnotationModal
+        open={trackIdWindowOpen}
+        onClose={() => setTrackIdWindowOpen(false)}
       />
       <GlobalConfirmDialog />
       <ToastContainer />

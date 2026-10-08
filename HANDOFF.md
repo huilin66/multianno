@@ -76,6 +76,8 @@ The primary annotation workflow is:
 
 ### 0.3 Recently Completed Changes
 
+- The Track ID annotation window scaffold is available from the top-left Annotation System menu and the Object Editor title action. It currently provides a single-modality, three-frame layout, filmstrip navigation, existing Track ID selection, and sequence placeholders; locking, missing-frame marking, interpolation, and ReID are not connected yet.
+
 These behaviors are part of the current baseline and should not be accidentally regressed:
 
 - Native bounding boxes use `shape_type: "bbox"`. External or legacy `rectangle` values are normalized at compatibility boundaries.
