@@ -17,7 +17,6 @@ import {
   Link2,
   Plus,
   Route,
-  ScanLine,
   Sparkles,
   Unlink2,
   Unlock,
@@ -39,6 +38,12 @@ interface ViewportState {
   panX: number;
   panY: number;
   zoom: number;
+}
+
+interface TrackCandidate {
+  stem: string;
+  annotationId: string;
+  label?: string;
 }
 
 const getTrackIdLabel = (value: string | number | null | undefined) => String(value ?? '').trim();
@@ -69,6 +74,7 @@ function TrackIdFrameCanvas({
   fitRef,
   syncViewport,
   syncViewportEnabled,
+  onTrackObjectDoubleClick,
 }: {
   slot: FrameSlot;
   index: number;
@@ -78,6 +84,7 @@ function TrackIdFrameCanvas({
   fitRef?: React.MutableRefObject<(() => void) | null>;
   syncViewport?: ViewportState;
   syncViewportEnabled?: boolean;
+  onTrackObjectDoubleClick?: (annotation: any, stem: string) => void;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const [imageSize, setImageSize] = React.useState({
@@ -192,6 +199,7 @@ function TrackIdFrameCanvas({
           return x >= minX && x <= maxX && y >= minY && y <= maxY;
         });
         canvasProps.setActiveAnnotationId(target?.id || null);
+        if (target) onTrackObjectDoubleClick?.(target, slot.stem);
       }
     : undefined;
 
@@ -248,6 +256,11 @@ function TrackIdEditor({
   activeAnnotation,
   activeSequence,
   setActiveSequence,
+  startCandidate,
+  endCandidate,
+  startLocked,
+  endLocked,
+  onToggleCandidateLock,
 }: {
   t: (key: string, options?: any) => string;
   trackIds: string[];
@@ -261,7 +274,16 @@ function TrackIdEditor({
   activeAnnotation: any;
   activeSequence: number;
   setActiveSequence: React.Dispatch<React.SetStateAction<number>>;
+  startCandidate: TrackCandidate | null;
+  endCandidate: TrackCandidate | null;
+  startLocked: boolean;
+  endLocked: boolean;
+  onToggleCandidateLock: (kind: 'start' | 'end') => void;
 }) {
+  const renderCandidate = (candidate: TrackCandidate | null) => candidate
+    ? `${candidate.stem}${candidate.label ? ` · ${candidate.label}` : ''}`
+    : t('trackIdWindow.notSelected');
+
   return (
     <div className="min-h-0 overflow-y-auto custom-scrollbar">
       <div className="border-b border-neutral-200 px-3 py-3 dark:border-neutral-800">
@@ -278,7 +300,6 @@ function TrackIdEditor({
                   applyTrackId();
                 }
               }}
-              placeholder={t('trackIdWindow.mainIdPlaceholder')}
               className="h-8 min-w-0 text-xs"
               aria-label={t('trackIdWindow.mainId')}
             />
@@ -295,7 +316,6 @@ function TrackIdEditor({
                   applyTrackId();
                 }
               }}
-              placeholder={t('trackIdWindow.partIdPlaceholder')}
               className="h-8 min-w-0 text-xs"
               aria-label={t('trackIdWindow.partId')}
             />
@@ -312,13 +332,13 @@ function TrackIdEditor({
           </Button>
         </div>
         <p className="mt-1.5 text-[10px] text-neutral-400">
-          {activeAnnotation ? `Selected object: ${activeAnnotation.label || 'object'}` : t('trackIdWindow.editorDescription')}
+          {activeAnnotation ? `${activeAnnotation.label || 'object'} · ${t('trackIdWindow.selected')}` : t('trackIdWindow.selectObject')}
         </p>
       </div>
 
       <div className="border-b border-neutral-200 px-3 py-3 dark:border-neutral-800">
         <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">{t('trackIdWindow.existingTrackIds')}</span>
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">{t('trackIdWindow.existingTrackIdsShort')}</span>
           <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[9px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">{trackIds.length}</span>
         </div>
         <div className="max-h-28 space-y-1 overflow-auto">
@@ -345,7 +365,6 @@ function TrackIdEditor({
         <div className="flex items-center justify-between gap-2">
           <div>
             <h3 className="text-xs font-semibold text-neutral-800 dark:text-neutral-100">{t('trackIdWindow.sequence')}</h3>
-            <p className="mt-1 text-[10px] text-neutral-500">{t('trackIdWindow.sequenceDescription')}</p>
           </div>
           <Button type="button" size="icon-xs" variant="outline" onClick={() => setActiveSequence((value) => value + 1)} title={t('trackIdWindow.addSequence')}>
             <Plus className="h-3.5 w-3.5" />
@@ -362,16 +381,38 @@ function TrackIdEditor({
             <div className="rounded-md border border-white/80 bg-white/80 p-2 dark:border-neutral-800 dark:bg-neutral-900/70">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-medium text-neutral-700 dark:text-neutral-200">{t('trackIdWindow.startCandidate')}</span>
-                <Button type="button" size="icon-xs" variant="ghost" title={t('trackIdWindow.lock')} aria-label={t('trackIdWindow.lock')}><Unlock className="h-3.5 w-3.5 text-neutral-400" /></Button>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  disabled={!startCandidate && !activeAnnotation}
+                  onClick={() => onToggleCandidateLock('start')}
+                  title={t(startLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
+                  aria-label={t(startLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
+                  aria-pressed={startLocked}
+                >
+                  {startLocked ? <Lock className="h-3.5 w-3.5 text-blue-500" /> : <Unlock className="h-3.5 w-3.5 text-neutral-400" />}
+                </Button>
               </div>
-              <p className="mt-1 truncate text-[10px] text-neutral-500">{activeAnnotation?.stem || t('trackIdWindow.notSelected')}</p>
+              <p className="mt-1 truncate text-[10px] text-neutral-500" title={startCandidate?.stem}>{renderCandidate(startCandidate)}</p>
             </div>
             <div className="rounded-md border border-white/80 bg-white/80 p-2 dark:border-neutral-800 dark:bg-neutral-900/70">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[10px] font-medium text-neutral-700 dark:text-neutral-200">{t('trackIdWindow.endCandidate')}</span>
-                <Button type="button" size="icon-xs" variant="ghost" title={t('trackIdWindow.lock')} aria-label={t('trackIdWindow.lock')}><Lock className="h-3.5 w-3.5 text-neutral-400" /></Button>
+                <Button
+                  type="button"
+                  size="icon-xs"
+                  variant="ghost"
+                  disabled={!endCandidate && !activeAnnotation}
+                  onClick={() => onToggleCandidateLock('end')}
+                  title={t(endLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
+                  aria-label={t(endLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
+                  aria-pressed={endLocked}
+                >
+                  {endLocked ? <Lock className="h-3.5 w-3.5 text-blue-500" /> : <Unlock className="h-3.5 w-3.5 text-neutral-400" />}
+                </Button>
               </div>
-              <p className="mt-1 truncate text-[10px] text-neutral-500">{activeAnnotation?.stem || t('trackIdWindow.notSelected')}</p>
+              <p className="mt-1 truncate text-[10px] text-neutral-500" title={endCandidate?.stem}>{renderCandidate(endCandidate)}</p>
             </div>
           </div>
 
@@ -381,7 +422,6 @@ function TrackIdEditor({
           </Button>
         </div>
 
-        <div className="rounded-md border border-dashed border-neutral-300 p-3 text-[10px] leading-5 text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">{t('trackIdWindow.scaffoldNotice')}</div>
       </div>
     </div>
   );
@@ -390,7 +430,7 @@ function TrackIdEditor({
 export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasProps }: TrackIdAnnotationModalProps) {
   const { t } = useTranslation();
   const {
-    stems = [], currentStem, setCurrentStem, annotations = [], views = [], folders = [], activeAnnotationId, updateAnnotation,
+    stems = [], currentStem, setCurrentStem, annotations = [], activeAnnotationId, updateAnnotation,
     viewport, setViewport,
   } = useStore() as any;
 
@@ -399,6 +439,10 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null);
   const [activeSequence, setActiveSequence] = React.useState(1);
   const [syncFrames, setSyncFrames] = React.useState(true);
+  const [startCandidate, setStartCandidate] = React.useState<TrackCandidate | null>(null);
+  const [endCandidate, setEndCandidate] = React.useState<TrackCandidate | null>(null);
+  const [startLocked, setStartLocked] = React.useState(false);
+  const [endLocked, setEndLocked] = React.useState(false);
   const centerFitRef = React.useRef<(() => void) | null>(null);
   const previousViewportRef = React.useRef<any>(null);
 
@@ -414,9 +458,15 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     };
   }, [open, setViewport]);
 
+  React.useEffect(() => {
+    if (!open) return;
+    setStartCandidate(null);
+    setEndCandidate(null);
+    setStartLocked(false);
+    setEndLocked(false);
+  }, [open]);
+
   const currentIndex = currentStem ? stems.indexOf(currentStem) : -1;
-  const mainView = views.find((view: any) => view.isMain) || views[0];
-  const mainFolder = folders.find((folder: any) => folder.id === mainView?.folderId);
   const activeAnnotation = annotations.find((annotation: any) => annotation.id === activeAnnotationId) || null;
 
   const trackIds = React.useMemo(() => {
@@ -449,6 +499,51 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     if (activeAnnotation && value) updateAnnotation(activeAnnotation.id, { track_id: value });
   };
 
+  const makeCandidate = (annotation: any, stem = annotation?.stem || currentStem): TrackCandidate | null => {
+    if (!annotation || !stem) return null;
+    return {
+      stem,
+      annotationId: String(annotation.id),
+      label: annotation.label,
+    };
+  };
+
+  const handleTrackObjectDoubleClick = (annotation: any, stem: string) => {
+    const candidate = makeCandidate(annotation, stem);
+    if (!candidate) return;
+
+    if (!startLocked) {
+      setStartCandidate(candidate);
+      setStartLocked(true);
+    } else if (!endLocked) {
+      setEndCandidate(candidate);
+      setEndLocked(true);
+    }
+  };
+
+  const toggleCandidateLock = (kind: 'start' | 'end') => {
+    if (kind === 'start') {
+      if (startLocked) {
+        setStartLocked(false);
+        return;
+      }
+      const candidate = startCandidate || makeCandidate(activeAnnotation);
+      if (!candidate) return;
+      setStartCandidate(candidate);
+      setStartLocked(true);
+      return;
+    }
+
+    if (endLocked) {
+      setEndLocked(false);
+      return;
+    }
+    const candidate = endCandidate || makeCandidate(activeAnnotation);
+    if (!candidate) return;
+    setEndCandidate(candidate);
+    setEndLocked(true);
+  };
+
   const jumpToStem = (stem: string | null) => {
     if (stem) setCurrentStem(stem);
   };
@@ -467,6 +562,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       activeAnnotation={activeAnnotation}
       activeSequence={activeSequence}
       setActiveSequence={setActiveSequence}
+      startCandidate={startCandidate}
+      endCandidate={endCandidate}
+      startLocked={startLocked}
+      endLocked={endLocked}
+      onToggleCandidateLock={toggleCandidateLock}
     />
   );
 
@@ -500,11 +600,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
           <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 pr-6">
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 text-base font-semibold"><Route className="h-4 w-4 text-blue-500" />{t('trackIdWindow.title')}</DialogTitle>
-              <DialogDescription className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t('trackIdWindow.description')}</DialogDescription>
-            </div>
-            <div className="flex min-w-0 max-w-full shrink-0 items-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
-              <ScanLine className="h-3.5 w-3.5" /><span>{t('trackIdWindow.singleModality')}</span><span className="text-blue-400">·</span>
-              <span className="max-w-[24rem] truncate" title={mainFolder?.path || undefined}>{mainFolder?.path || t('trackIdWindow.noFolder')}</span>
+              <DialogDescription className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t('trackIdWindow.descriptionShort')}</DialogDescription>
             </div>
           </div>
         </DialogHeader>
@@ -539,7 +635,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                   const editable = slot.offset === 0;
                   return (
                     <article key={`${slot.offset}-${slot.stem || 'empty'}`} className={`overflow-hidden rounded-lg border bg-white shadow-sm dark:bg-neutral-900 ${editable ? 'border-blue-300 ring-1 ring-blue-100 dark:border-blue-700 dark:ring-blue-950' : 'border-neutral-200 dark:border-neutral-800'}`}>
-                      <div className="flex items-center justify-between gap-2 border-b border-neutral-100 px-3 py-2 dark:border-neutral-800"><div className="flex min-w-0 items-center gap-2"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-100 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{index + 1}</span><span className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100">{slot.offset === -1 ? t('trackIdWindow.frameOne') : slot.offset === 0 ? t('trackIdWindow.frameTwo') : t('trackIdWindow.frameThree')}</span></div><span className={`shrink-0 text-[10px] ${editable ? 'text-blue-600 dark:text-blue-300' : 'text-neutral-400'}`}>{editable ? t('trackIdWindow.editable') : t('trackIdWindow.readOnly')}</span></div>
+                      <div className="flex items-center gap-2 border-b border-neutral-100 px-3 py-2 dark:border-neutral-800"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-100 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{index + 1}</span><span className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100">{slot.offset === -1 ? t('trackIdWindow.frameOne') : slot.offset === 0 ? t('trackIdWindow.frameTwo') : t('trackIdWindow.frameThree')}</span></div>
                       <div
                         role="button"
                         tabIndex={slot.stem ? 0 : -1}
@@ -563,6 +659,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                           fitRef={editable ? centerFitRef : undefined}
                           syncViewport={canvasProps.viewport}
                           syncViewportEnabled={syncFrames}
+                          onTrackObjectDoubleClick={handleTrackObjectDoubleClick}
                         />
                       </div>
                       <div className="flex items-center justify-between gap-2 border-t border-neutral-100 px-3 py-2 text-[10px] dark:border-neutral-800"><span className="truncate text-neutral-500" title={slot.stem || undefined}>{slot.stem || t('trackIdWindow.frameUnavailable')}</span>{slot.offset === -1 && <ChevronLeft className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}{slot.offset === 1 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}</div>
@@ -570,7 +667,6 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                   );
                 })}
               </div>
-              <div className="mt-4 rounded-lg border border-dashed border-neutral-300 bg-white/70 p-3 dark:border-neutral-700 dark:bg-neutral-900/50"><div className="flex items-center gap-2 text-xs font-medium text-neutral-700 dark:text-neutral-200"><Sparkles className="h-3.5 w-3.5 text-violet-500" />{t('trackIdWindow.processingPreview')}</div><p className="mt-1 text-[10px] leading-5 text-neutral-500 dark:text-neutral-400">{t('trackIdWindow.processingPreviewDescription')}</p></div>
             </div>
 
             <div className="shrink-0 border-t border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"><div className="mb-1.5 flex items-center justify-between text-[10px] text-neutral-500"><span>{t('trackIdWindow.filmstrip')}</span><span>{currentIndex >= 0 ? `${currentIndex + 1}/${stems.length}` : `0/${stems.length}`}</span></div><div className="flex gap-1.5 overflow-x-auto pb-0.5">{stems.slice(Math.max(0, currentIndex - 5), Math.max(0, currentIndex - 5) + 11).map((stem: string) => <button type="button" key={stem} onClick={() => jumpToStem(stem)} className={`h-9 min-w-16 max-w-28 shrink-0 truncate rounded border px-1.5 text-[9px] transition-colors ${stem === currentStem ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300' : 'border-neutral-200 bg-neutral-50 text-neutral-500 hover:border-blue-300 hover:text-blue-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400'}`} title={stem}>{stem}</button>)}{stems.length === 0 && <span className="py-2 text-[10px] text-neutral-400">{t('trackIdWindow.noFrames')}</span>}</div></div>
