@@ -445,24 +445,7 @@ function TrackIdEditor({
 
   return (
     <div className="min-h-0 overflow-y-auto custom-scrollbar">
-      {reidRunning && reidProgress && (
-        <div className="border-b border-blue-100 bg-blue-50/60 px-3 py-2 dark:border-blue-900/50 dark:bg-blue-950/20">
-          <OperationProgress
-            stageIndex={reidProgress.stage_index}
-            stageCount={reidProgress.stage_count}
-            stageName={reidProgress.stage_name}
-            current={reidProgress.current}
-            total={reidProgress.total}
-            stageLabel={t('common.stage')}
-          />
-          {reidProgress.message && (
-            <p className="mt-1 truncate text-[9px] text-neutral-500" title={reidProgress.message}>
-              {reidProgress.message}
-            </p>
-          )}
-        </div>
-      )}
-      <div className="border-b border-neutral-200 px-3 py-3 dark:border-neutral-800">
+      <div className="border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
         <Label className="block text-[10px] uppercase tracking-wider text-neutral-500">{t('trackIdWindow.trackId')}</Label>
         <div className="mt-1.5 flex items-end gap-1.5">
           <div className="min-w-0 flex-1">
@@ -476,7 +459,7 @@ function TrackIdEditor({
                   applyTrackId();
                 }
               }}
-              className="h-8 min-w-0 text-xs"
+              className="h-7 min-w-0 text-[11px]"
               aria-label={t('trackIdWindow.mainId')}
             />
           </div>
@@ -492,7 +475,7 @@ function TrackIdEditor({
                   applyTrackId();
                 }
               }}
-              className="h-8 min-w-0 text-xs"
+              className="h-7 min-w-0 text-[11px]"
               aria-label={t('trackIdWindow.partId')}
             />
           </div>
@@ -512,7 +495,7 @@ function TrackIdEditor({
         </p>
       </div>
 
-      <div className="border-b border-neutral-200 px-3 py-3 dark:border-neutral-800">
+      <div className="border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500">{t('trackIdWindow.existingTrackIdsShort')}</span>
           <span className="rounded-full bg-neutral-100 px-1.5 py-0.5 text-[9px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">{trackIds.length}</span>
@@ -523,7 +506,7 @@ function TrackIdEditor({
               key={trackId}
               type="button"
               onClick={() => selectTrackId(trackId)}
-              className={`flex w-full items-center justify-between rounded-md border px-2.5 py-1.5 text-left text-[11px] transition-colors ${
+              className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left text-[10px] transition-colors ${
                 selectedTrackId === trackId
                   ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
                   : 'border-transparent bg-neutral-50 text-neutral-600 hover:border-neutral-200 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700'
@@ -537,17 +520,17 @@ function TrackIdEditor({
         </div>
       </div>
 
-      <div className="space-y-3 p-3">
+      <div className="space-y-2.5 p-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
-            <h3 className="text-xs font-semibold text-neutral-800 dark:text-neutral-100">{t('trackIdWindow.sequence')}</h3>
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-200">{t('trackIdWindow.sequence')}</h3>
             <span className="min-w-0 max-w-36 truncate rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" title={selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || undefined}>
               {selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || t('trackIdWindow.none')}
             </span>
           </div>
         </div>
 
-        <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-2 dark:border-blue-900/60 dark:bg-blue-950/20">
+        <div className="rounded-md border border-blue-200 bg-blue-50/60 p-2 dark:border-blue-900/60 dark:bg-blue-950/20">
           <div className="space-y-1">
             {sequences.map((sequence) => {
               const isActive = sequence.id === activeSequence;
@@ -714,7 +697,7 @@ function TrackIdEditor({
             type="button"
             variant="outline"
             size="sm"
-            className="mt-1.5 w-full text-[10px]"
+            className="mt-1 h-7 w-full text-[10px]"
             disabled={
               reidRunning
               || !reidStatus?.runtime_available
@@ -729,6 +712,23 @@ function TrackIdEditor({
             {reidRunning && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {reidRunning ? t('trackIdWindow.reidRunning') : t('trackIdWindow.autoTrack')}
           </Button>
+          {reidRunning && reidProgress && (
+            <div className="mt-2 rounded-md border border-blue-100 bg-blue-50/50 p-2 dark:border-blue-900/50 dark:bg-blue-950/20">
+              <OperationProgress
+                stageIndex={reidProgress.stage_index}
+                stageCount={reidProgress.stage_count}
+                stageName={reidProgress.stage_name}
+                current={reidProgress.current}
+                total={reidProgress.total}
+                stageLabel={t('common.stage')}
+              />
+              {reidProgress.message && (
+                <p className="mt-1 truncate text-[9px] text-neutral-500" title={reidProgress.message}>
+                  {reidProgress.message}
+                </p>
+              )}
+            </div>
+          )}
           {reidMessage && <p className="mt-1.5 text-[10px] leading-relaxed text-neutral-500">{reidMessage}</p>}
         </div>
 

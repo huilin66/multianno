@@ -343,10 +343,14 @@ def _associate_track_id_sync(
         encoder.load()
         report(2, "Loading ReID model", 1, 1, "Model ready")
         report(3, "Extracting anchor features", 0, 2, "Start candidate")
-        anchor_embeddings = encoder.embed_batch([
+        anchor_items = [
             (start_frame.image_path, req.start.points),
             (end_frame.image_path, req.end.points),
-        ])
+        ]
+        anchor_batch_size = max(1, encoder.effective_batch_size(len(anchor_items)))
+        anchor_embeddings: list[Optional[np.ndarray]] = []
+        for batch_start in range(0, len(anchor_items), anchor_batch_size):
+            anchor_embeddings.extend(encoder.embed_batch(anchor_items[batch_start:batch_start + anchor_batch_size]))
         start_embedding, end_embedding = anchor_embeddings
         if start_embedding is None or end_embedding is None:
             raise ReIDUnavailableError("Unable to create ReID embeddings for the locked anchors.")
@@ -359,7 +363,10 @@ def _associate_track_id_sync(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         logger.exception("REID_ASSOCIATE_SETUP_UNEXPECTED_ERROR error=%s", exc)
-        raise HTTPException(status_code=500, detail="Unexpected ReID model error.") from exc
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected ReID model error: {shorten(str(exc), 600)}",
+        ) from exc
 
     progress_total = max(total_reid_candidates, 1)
     report(4, "Running ReID", 0, progress_total, f"{len(candidate_work)} boxes ready")
