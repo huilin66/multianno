@@ -293,6 +293,9 @@
       "importData": "导入数据",
       "project": "项目配置"
     },
+    "summary": {
+      "title": "当前配置"
+    },
     "information": {
       "title": "提示信息",
       "singleView": "单个 View：\n无需进行视图对齐，确认后将直接进入标注工作区。",

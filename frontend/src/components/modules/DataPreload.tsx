@@ -1483,6 +1483,31 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
               );
             })}
           </div>
+          <div className="border-t border-border px-3 py-2.5 space-y-2">
+            <div className="text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {t('dataPreload.summary.title')}
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+              <div className="rounded-md bg-background/60 px-2 py-1.5">
+                <div className="text-muted-foreground">{t('dataPreload.steps.folders')}</div>
+                <div className="mt-0.5 font-semibold text-foreground">{folders.length}</div>
+              </div>
+              <div className="rounded-md bg-background/60 px-2 py-1.5">
+                <div className="text-muted-foreground">{t('dataPreload.steps.views')}</div>
+                <div className="mt-0.5 font-semibold text-foreground">{views.length}</div>
+              </div>
+              <div className="col-span-2 flex items-center justify-between rounded-md bg-background/60 px-2 py-1.5">
+                <span className="text-muted-foreground">{t('dataPreload.steps.workspace')}</span>
+                <span className={`font-semibold ${
+                  workspaceStatus === 'default'
+                    ? 'text-gray-500 dark:text-gray-400'
+                    : 'text-blue-600 dark:text-blue-400'
+                }`}>
+                  {workspaceStatus === 'default' ? 'default' : 'defined'}
+                </span>
+              </div>
+            </div>
+          </div>
           <Legend items={[
             { color: 'bg-emerald-400', label: t('dataPreload.legend.configured') },
             { color: 'bg-primary', label: t('dataPreload.legend.current') },
@@ -1534,27 +1559,9 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
 
       {/* 底部全局按钮 */}
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
-        <div className="flex min-w-0 items-center gap-6 text-sm">
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">{t('dataPreload.steps.folders')}:</span>
-            <span className="font-semibold">{folders.length}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">{t('dataPreload.steps.views')}:</span>
-            <span className="font-semibold">{views.length}</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="text-muted-foreground">{t('dataPreload.steps.workspace')}:</span>
-            <span className={`font-semibold ${
-              workspaceStatus === 'default' 
-                ? 'text-gray-500 dark:text-gray-400' 
-                : 'text-blue-600 dark:text-blue-400'
-            }`}>
-              {workspaceStatus === 'default' ? 'default' : 'defined'}
-            </span>
-          </div>
+        <div className="flex min-w-0 flex-1 items-center gap-2 pr-4">
           {(isConfirming || isGlobalConfirming || isLoadingWorkspaceAnnotations) && (
-            <div className="flex min-w-[220px] max-w-[320px] flex-1 items-center gap-2">
+            <div className="flex min-w-0 max-w-[440px] flex-1 items-center gap-2">
               <OperationProgress
                 stageIndex={progressStageIndex}
                 stageCount={progressStageCount}

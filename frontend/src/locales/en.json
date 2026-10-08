@@ -293,6 +293,9 @@
       "importData": "Import Data",
       "project": "Project Setup"
     },
+    "summary": {
+      "title": "Current setup"
+    },
     "information": {
       "title": "Information",
       "singleView": "One View:\nView Align is not needed. After confirmation, MultiAnno will enter the annotation workspace directly.",
