@@ -4,6 +4,7 @@ import os
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from models import SaveAnnotationRequest
+from utils.annotation_ids import ensure_shape_ids
 from utils.image_io import read_metadata
 from utils.logging_config import get_logger, shorten
 
@@ -96,6 +97,18 @@ async def save_annotation(request: SaveAnnotationRequest):
                             request.file_name,
                             shorten(request.image_path, 1500),
                         )
+
+        normalized_shapes, generated_ids, duplicate_ids = ensure_shape_ids(
+            content_to_save.get("shapes", [])
+        )
+        content_to_save["shapes"] = normalized_shapes
+        if generated_ids or duplicate_ids:
+            logger.info(
+                "ANNOTATION_IDS_NORMALIZED file=%s generated=%d duplicates=%d",
+                request.file_name,
+                generated_ids,
+                duplicate_ids,
+            )
 
         # 极速覆盖写入本地 JSON
         with open(file_path, "w", encoding="utf-8") as f:

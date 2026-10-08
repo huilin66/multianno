@@ -655,11 +655,13 @@ Entity ID: 1
 
 Here `1` is the entity root, `a/b` are parts, and `1-a`/`1-b` are local Stage 1 Track IDs. Later, parts may be merged into one `group_id`, or expanded to numeric suffixes such as `1-1` and `1-2`. Letter-to-number conversion must be explicit and must not renumber existing IDs automatically after deletion or sorting.
 
-Implementation prerequisites:
+#### Stable Shape ID Implementation
 
-- Every shape must have a persistent stable ID. The current frontend has a runtime `id`, but legacy loading regenerates it and saving does not reliably write it back, so it cannot yet serve as a cross-scene reference. Persist UUIDs and provide a compatibility fallback for legacy data.
+- Every shape uses a persistent UUID `id`. New, copied, split, AI-generated, and imported annotations generate or preserve a stable ID.
+- Annotation-save and import endpoints validate missing or duplicate IDs again on the backend instead of relying only on frontend state.
+- Legacy JSON files can use the Data Update setting `Assign annotation IDs` to scan and, after confirmation, repair missing and cross-file duplicate IDs at project scope.
 - `track_id` and future `group_id` must retain string semantics; editors and APIs must not force numeric conversion.
-- Stage 2 should add a `group_id` mapping without destroying the original `track_id`, sequence, or review history.
+- Stage 2 should add a `group_id` mapping without destroying the original `id`, `track_id`, sequence, or review history.
 
 #### Stage 2: Spatial Consistency Correction
 

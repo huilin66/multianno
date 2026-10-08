@@ -101,6 +101,8 @@
     "repairJsonFileHint": "将不属于当前项目场景的 JSON 移至备份目录。",
     "repairImageSize": "修复图像尺寸",
     "repairImageSizeHint": "按每张主图像的真实尺寸更新 imageWidth/imageHeight。",
+    "repairAnnotationId": "补全标注唯一 ID",
+    "repairAnnotationIdHint": "为缺少 ID 或 ID 重复的标注生成并保存稳定 UUID。",
     "dataRepairRun": "执行选中的修复",
     "dataRepairRunning": "修复中...",
     "dataRepairSelectionHint": "选择一项或多项修复内容，扫描确认影响范围后再执行。",

@@ -7,6 +7,7 @@ import { COLOR_MAPS } from './colors';
 
 // 针对单个标注对象的结构定义
 export interface AnnotationShape {
+  id: string;
   label: string;
   text: string;
   points: number[][]; // 例如: [[x1, y1], [x2, y2], ...]

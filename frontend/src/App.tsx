@@ -108,7 +108,7 @@ const formatSavedTimestamp = (
   return `${timeText} ${dateText}`;
 };
 
-type DataRepairType = 'stem' | 'json_file' | 'image_size';
+type DataRepairType = 'stem' | 'json_file' | 'image_size' | 'annotation_id';
 
 const DATA_REPAIR_OPTIONS: Array<{ type: DataRepairType; labelKey: string; descriptionKey: string }> = [
   {
@@ -125,6 +125,11 @@ const DATA_REPAIR_OPTIONS: Array<{ type: DataRepairType; labelKey: string; descr
     type: 'image_size',
     labelKey: 'headerSetting.repairImageSize',
     descriptionKey: 'headerSetting.repairImageSizeHint',
+  },
+  {
+    type: 'annotation_id',
+    labelKey: 'headerSetting.repairAnnotationId',
+    descriptionKey: 'headerSetting.repairAnnotationIdHint',
   },
 ];
 
@@ -165,6 +170,7 @@ function DataUpdateSettings({
     'stem',
     'json_file',
     'image_size',
+    'annotation_id',
   ]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isScanningRepairs, setIsScanningRepairs] = useState(false);
@@ -504,7 +510,7 @@ function DataUpdateSettings({
                 </Button>
               </div>
 
-              <div className="grid gap-1 sm:grid-cols-3">
+              <div className="grid gap-1 sm:grid-cols-2 lg:grid-cols-4">
                 {DATA_REPAIR_OPTIONS.map((option) => {
                   const checked = selectedTypes.includes(option.type);
                   return (

@@ -21,6 +21,7 @@ import { createPortal } from 'react-dom';
 import { CURSOR_FOCUS, CURSOR_DRAG } from '../../lib/cursors';
 import { TAXONOMY_COLORS } from '../../config/colors';
 import { reloadProjectAnnotation } from '../../lib/annotationUtils';
+import { createAnnotationId } from '../../lib/annotationIds';
 import { showDialog } from '../../store/useDialogStore';
 import { toast } from '../../store/useToastStore';
 
@@ -280,7 +281,7 @@ export function SyncAnnotation({ autoSave }: SyncAnnotationProps) {
 
   const handlePaste = useCallback(() => {
     if (!clipboard || !currentStem) return;
-    const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+    const newId = createAnnotationId();
     
     // 🌟 偏移量：每次粘贴累加，避免重叠
     const offset = 30 + pasteOffset * 20;
@@ -1167,7 +1168,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 
               for (let i = 1; i < result.regions.length; i++) {
                  const extraPoints = result.regions[i].map((pt: any) => ({ x: pt[0], y: pt[1] }));
-                 const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+                 const newId = createAnnotationId();
                  addAnnotation({ ...activeAnno, id: newId, points: extraPoints, holes: [] });
               }
             }
@@ -1187,7 +1188,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
               ]
             });
             updateAnnotation(activeAnno.id, { points: splitResult[0] });
-            const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+            const newId = createAnnotationId();
             addAnnotation({ ...activeAnno, id: newId, points: splitResult[1], holes: [] });
           }
         }
@@ -1258,7 +1259,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 
   const savePendingAnnotationToStore = () => {
     if (pendingAnnotation && currentStem) {
-      const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+      const newId = createAnnotationId();
       
       // 🌟 1. 对主图形执行裁剪与越界检测
       const { clampedPoints } = clampAndFlag(pendingAnnotation.points);
@@ -1582,7 +1583,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             }
             
             const { clampedPoints, truncated } = clampAndFlag(mappedPoly);
-            const newId = `anno_auto_${Math.random().toString(36).substr(2, 9)}_${totalFound}`;
+            const newId = createAnnotationId();
             const finalAnno = {
               id: newId,
               type: finalType, 
@@ -1628,7 +1629,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
 
     tempActiveAnno.allPolygons.forEach((polyPoints: any) => {
       const { clampedPoints, truncated } = clampAndFlag(polyPoints);
-      const newId = `anno_${Math.random().toString(36).substr(2, 9)}`;
+      const newId = createAnnotationId();
       const finalAnno = {
         id: newId,
         type: tempActiveAnno.type, 

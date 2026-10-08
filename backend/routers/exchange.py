@@ -28,6 +28,7 @@ from utils.format_converters import (
     render_mask_array,
     yolo_to_shapes,
 )
+from utils.annotation_ids import ensure_shape_ids
 from utils.image_io import (
     RAW_IMAGE_EXTS,
     find_image_path,
@@ -1646,6 +1647,18 @@ def _finalize_import_annotation(
     image_path: str | None = None,
     image_name: str | None = None,
 ):
+    normalized_shapes, generated_ids, duplicate_ids = ensure_shape_ids(
+        data.get("shapes", [])
+    )
+    data["shapes"] = normalized_shapes
+    if generated_ids or duplicate_ids:
+        logger.info(
+            "IMPORT_IDS_NORMALIZED stem=%s generated=%d duplicates=%d",
+            stem,
+            generated_ids,
+            duplicate_ids,
+        )
+
     logger.info(
         "IMPORT_JSON_WRITE_START stem=%s path=%s shapes=%d dimensions=%sx%s",
         stem,

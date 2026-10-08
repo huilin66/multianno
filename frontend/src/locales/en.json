@@ -101,6 +101,8 @@
     "repairJsonFileHint": "Move JSON files that are not part of the current project scenes to the backup folder.",
     "repairImageSize": "Repair image dimensions",
     "repairImageSizeHint": "Update imageWidth/imageHeight from each main image's actual dimensions.",
+    "repairAnnotationId": "Assign annotation IDs",
+    "repairAnnotationIdHint": "Generate and persist stable UUIDs for annotations with missing or duplicate IDs.",
     "dataRepairRun": "Run selected repairs",
     "dataRepairRunning": "Repairing...",
     "dataRepairSelectionHint": "Choose one or more repair items, then scan before applying any changes.",

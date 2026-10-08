@@ -1,6 +1,11 @@
 // src/lib/annotationUtils.ts
 import { AppState, useStore, Annotation } from '../store/useStore';
 import { getFileContent } from '../api/client';
+import {
+  createAnnotationId,
+  ensureUniqueAnnotationIds,
+  normalizeAnnotationId,
+} from './annotationIds';
 
 /**
  * ==========================================
@@ -53,7 +58,9 @@ const readStemAnnotations = async (
     .map((shape: any, sourceIndex: number) => ({ shape, sourceIndex }))
     .filter(({ shape }) => Array.isArray(shape.points))
     .map(({ shape, sourceIndex }) => ({
-      id: crypto.randomUUID(),
+      // Keep IDs already written by MultiAnno. Legacy files without an ID get
+      // one now and can be persisted by Data Update or the next annotation save.
+      id: normalizeAnnotationId(shape.id) || createAnnotationId(),
       stem,
       label: shape.label,
       text: shape.text || '',
@@ -72,7 +79,10 @@ const readStemAnnotations = async (
       sourceIndex,
     }));
 
-  return { annotations, found: true };
+  return {
+    annotations: ensureUniqueAnnotationIds(annotations),
+    found: true,
+  };
 };
 
 /** 清理当前场景的前端持久化缓存，并从磁盘重新读取该场景 JSON。 */
@@ -97,10 +107,16 @@ export const reloadProjectAnnotation = async (
   }
 
   const latestState = useStore.getState();
+  const reservedIds = new Set(
+    latestState.annotations
+      .filter((annotation) => annotation.stem !== stem)
+      .map((annotation) => annotation.id),
+  );
+  const normalizedAnnotations = ensureUniqueAnnotationIds(result.annotations, reservedIds);
   useStore.setState({
     annotations: [
       ...latestState.annotations.filter((annotation) => annotation.stem !== stem),
-      ...result.annotations,
+      ...normalizedAnnotations,
     ],
     isAnnotationDirty: false,
     activeAnnotationId: null,
@@ -138,6 +154,7 @@ export const loadAllProjectAnnotations = async (
 
     const chunkResults = await Promise.all(promises);
     
+    const chunkAnnotations: Annotation[] = [];
     chunkResults.forEach(result => {
       if (result.found) {
         loadedSceneCount += 1;
@@ -145,9 +162,15 @@ export const loadAllProjectAnnotations = async (
         missingSceneCount += 1;
       }
       if (result.annotations.length > 0) {
-        allLoadedAnnotations.push(...result.annotations);
+        chunkAnnotations.push(...result.annotations);
       }
     });
+
+    const normalizedChunkAnnotations = ensureUniqueAnnotationIds(
+      chunkAnnotations,
+      allLoadedAnnotations.map((annotation) => annotation.id),
+    );
+    allLoadedAnnotations.push(...normalizedChunkAnnotations);
 
     useStore.setState({ annotations: [...allLoadedAnnotations] });
 
@@ -203,10 +226,16 @@ export const loadProjectAnnotationsForStems = async (
 
   const targetStemSet = new Set(targetStems);
   const latestState = useStore.getState();
+  const reservedIds = new Set(
+    latestState.annotations
+      .filter((annotation) => !targetStemSet.has(annotation.stem))
+      .map((annotation) => annotation.id),
+  );
+  const normalizedAnnotations = ensureUniqueAnnotationIds(loadedAnnotations, reservedIds);
   useStore.setState({
     annotations: [
       ...latestState.annotations.filter((annotation) => !targetStemSet.has(annotation.stem)),
-      ...loadedAnnotations,
+      ...normalizedAnnotations,
     ],
   });
 
@@ -247,6 +276,7 @@ export const generateAnnotationPayload = (state: AppState, currentStem: string) 
     
     // 逆向映射：前端状态 -> 后端落盘格式
     shapes: currentAnnotations.map((ann: any) => ({
+      id: normalizeAnnotationId(ann.id) || createAnnotationId(),
       label: ann.label,
       text: ann.text || "",
       // 将前端的 {x, y} 转换为后端的 [x, y] 数组

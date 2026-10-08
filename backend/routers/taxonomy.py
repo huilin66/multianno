@@ -18,6 +18,7 @@ from models import (
     RepairRequest,
     StatRequest,
 )
+from utils.annotation_ids import ensure_shape_ids
 from utils.image_io import read_metadata
 from utils.logging_config import get_logger, shorten
 
@@ -767,10 +768,11 @@ async def repair_project_data(req: RepairRequest):
     }
 
     # Keep the execution order stable because stem repair can affect whether a
-    # JSON file is considered valid by the json_file repair.
+    # JSON file is considered valid by the json_file repair. ID repair runs
+    # last so it does not modify files that json_file repair will quarantine.
     repair_order = [
         repair_type
-        for repair_type in ("stem", "json_file", "image_size")
+        for repair_type in ("stem", "json_file", "image_size", "annotation_id")
         if repair_type in req.repair_types
     ]
 
@@ -807,6 +809,17 @@ async def repair_project_data(req: RepairRequest):
             result["total_fixed"] += image_size_result["fixed"]
             result["total_affected_images"] += image_size_result["affected_images"]
             result["total_affected_annotations"] += image_size_result["affected_annotations"]
+        if repair_type == "annotation_id":
+            annotation_id_result = _repair_annotation_ids(
+                req.save_dirs,
+                req.stems,
+                dry_run=req.dry_run,
+            )
+            result["details"]["annotation_id"] = annotation_id_result
+            result["total_scanned"] += annotation_id_result["scanned"]
+            result["total_fixed"] += annotation_id_result["fixed"]
+            result["total_affected_images"] += annotation_id_result["affected_images"]
+            result["total_affected_annotations"] += annotation_id_result["affected_annotations"]
     logger.info(
         "REPAIR_END dry_run=%s scanned=%d fixed=%d affected_images=%d affected_annotations=%d",
         req.dry_run,
@@ -821,6 +834,90 @@ async def repair_project_data(req: RepairRequest):
 def _annotation_count(data: dict) -> int:
     shapes = data.get("shapes", []) if isinstance(data, dict) else []
     return len(shapes) if isinstance(shapes, list) else 0
+
+
+def _repair_annotation_ids(save_dirs: list, stems: list, dry_run: bool = False) -> dict:
+    """Assign persistent, project-level IDs to every annotation shape.
+
+    Existing unique IDs are preserved. Missing IDs and duplicates within or
+    across JSON files receive new UUIDs. The scan order is deterministic so a
+    duplicate is kept in the first file and repaired in later files.
+    """
+    scanned = 0
+    fixed = 0
+    affected_annotations = 0
+    fixed_files = []
+    used_ids: set[str] = set()
+    stem_filter = set(stems or [])
+
+    for directory in save_dirs:
+        if not os.path.isdir(directory):
+            continue
+
+        for fname in sorted(os.listdir(directory)):
+            if not fname.endswith(".json") or fname.endswith("_meta.json"):
+                continue
+
+            file_stem = fname[:-5]
+            if stem_filter and file_stem not in stem_filter:
+                continue
+
+            fpath = os.path.join(directory, fname)
+            scanned += 1
+            try:
+                with open(fpath, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if not isinstance(data, dict):
+                    continue
+
+                shapes = data.get("shapes", [])
+                normalized_shapes, generated_ids, duplicate_ids = ensure_shape_ids(
+                    shapes,
+                    reserved_ids=used_ids,
+                )
+
+                for shape in normalized_shapes:
+                    if isinstance(shape, dict) and shape.get("id") is not None:
+                        used_ids.add(str(shape["id"]).strip())
+
+                changed = (
+                    isinstance(shapes, list)
+                    and len(shapes) == len(normalized_shapes)
+                    and any(
+                        isinstance(before, dict)
+                        and isinstance(after, dict)
+                        and before.get("id") != after.get("id")
+                        for before, after in zip(shapes, normalized_shapes)
+                    )
+                )
+                if not changed:
+                    continue
+
+                data["shapes"] = normalized_shapes
+                if not dry_run:
+                    with open(fpath, "w", encoding="utf-8") as f:
+                        json.dump(data, f, ensure_ascii=False, indent=2)
+
+                fixed += 1
+                affected_annotations += generated_ids
+                fixed_files.append(fname)
+                logger.info(
+                    "REPAIR_ANNOTATION_ID_%s file=%s generated=%d duplicates=%d",
+                    "WOULD_FIX" if dry_run else "FIXED",
+                    fname,
+                    generated_ids,
+                    duplicate_ids,
+                )
+            except Exception:
+                logger.exception("REPAIR_ANNOTATION_ID_FILE_ERROR path=%s", shorten(fpath, 1500))
+
+    return {
+        "scanned": scanned,
+        "fixed": fixed,
+        "affected_images": fixed,
+        "affected_annotations": affected_annotations,
+        "fixed_files": fixed_files,
+    }
 
 
 def _repair_stems(save_dirs: list, dry_run: bool = False) -> dict:

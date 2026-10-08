@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { ProjectMetaContract } from '../config/contract';
+import { ensureUniqueAnnotationIds } from '../lib/annotationIds';
 
 // Match Windows Explorer-style ordering for scene names such as 1, 2, 10, 11.
 export const naturalStringCompare = new Intl.Collator(undefined, {
@@ -776,12 +777,20 @@ export const useStore = create<AppState>()(
           ? state.hiddenAnnotations.filter((aId) => aId !== id)
           : [...state.hiddenAnnotations, id]
       })),
-      addAnnotation: (annotation) => set((state) => ({ 
-        annotations: [...state.annotations, annotation], 
-        isAnnotationDirty: true
-      })),
-      updateAnnotation: (id, data) => set((state) => ({ 
-        annotations: state.annotations.map(a => a.id === id ? { ...a, ...data } : a), 
+      addAnnotation: (annotation) => set((state) => {
+        const [normalizedAnnotation] = ensureUniqueAnnotationIds(
+          [annotation],
+          state.annotations.map((existing) => existing.id),
+        );
+        return {
+          annotations: [...state.annotations, normalizedAnnotation],
+          isAnnotationDirty: true,
+        };
+      }),
+      updateAnnotation: (id, data) => set((state) => ({
+        // Shape identity is immutable. Geometry and metadata may change, but
+        // an edit must never silently replace the ID used by future tracks.
+        annotations: state.annotations.map(a => a.id === id ? { ...a, ...data, id: a.id } : a),
         isAnnotationDirty: true
       })),
       removeAnnotation: (id) => set((state) => ({ 
