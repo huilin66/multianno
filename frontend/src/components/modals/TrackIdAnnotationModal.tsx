@@ -1,7 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
-import { getPreviewImageUrl } from '../../api/client';
+import {
+  checkTrackIdReIDStatus,
+  getPreviewImageUrl,
+  runTrackIdReID,
+  type TrackIdReIDCandidate,
+  type TrackIdReIDStatus,
+} from '../../api/client';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -14,6 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Film,
+  Loader2,
   Lock,
   Link2,
   Plus,
@@ -65,6 +72,18 @@ const composeTrackId = (mainId: string, partId: string) => {
   const part = partId.trim();
   if (!main) return '';
   return part ? `${main}-${part}` : main;
+};
+
+const getFrameImagePath = (stem: string, canvasProps: Record<string, any>) => {
+  const view = canvasProps.view;
+  const folder = (canvasProps.folders || []).find((item: any) => item.id === view?.folderId);
+  if (!folder?.path) return '';
+
+  const exactFileName = canvasProps.sceneGroups?.[stem]?.[folder.path];
+  const extension = folder.extension || '.tif';
+  const normalizedExtension = extension.startsWith('.') ? extension : `.${extension}`;
+  const fileName = exactFileName || `${stem}${folder.suffix || normalizedExtension}`;
+  return `${String(folder.path).replace(/[\\/]+$/, '')}\\${fileName}`;
 };
 
 function TrackIdFrameCanvas({
@@ -316,6 +335,10 @@ function TrackIdEditor({
   startLocked,
   endLocked,
   onToggleCandidateLock,
+  reidStatus,
+  reidRunning,
+  reidMessage,
+  onRunReid,
 }: {
   t: (key: string, options?: any) => string;
   trackIds: string[];
@@ -334,6 +357,10 @@ function TrackIdEditor({
   startLocked: boolean;
   endLocked: boolean;
   onToggleCandidateLock: (kind: 'start' | 'end') => void;
+  reidStatus: TrackIdReIDStatus | null;
+  reidRunning: boolean;
+  reidMessage: string;
+  onRunReid: () => void;
 }) {
   const renderCandidate = (candidate: TrackCandidate | null) => candidate
     ? `${candidate.stem}${candidate.label ? ` · ${candidate.label}` : ''}`
@@ -471,10 +498,34 @@ function TrackIdEditor({
             </div>
           </div>
 
-          <Button type="button" variant="outline" size="sm" className="mt-3 w-full text-[10px]" disabled>
-            <Sparkles className="h-3.5 w-3.5" />
-            {t('trackIdWindow.interpolateReid')}
+          <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-neutral-500">
+            <span className="truncate" title={reidStatus?.detail || undefined}>
+              {reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists
+                ? `${t('trackIdWindow.reidReady')}${reidStatus.model_name ? ` · ${reidStatus.model_name}` : ''}`
+                : t('trackIdWindow.reidUnavailable')}
+            </span>
+            {reidStatus?.loaded && <span className="shrink-0 text-emerald-600">{t('trackIdWindow.reidLoaded')}</span>}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-1.5 w-full text-[10px]"
+            disabled={
+              reidRunning
+              || !reidStatus?.runtime_available
+              || !reidStatus.configured
+              || !reidStatus.model_exists
+              || !selectedTrackId
+              || !startLocked
+              || !endLocked
+            }
+            onClick={onRunReid}
+          >
+            {reidRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {reidRunning ? t('trackIdWindow.reidRunning') : t('trackIdWindow.interpolateReid')}
           </Button>
+          {reidMessage && <p className="mt-1.5 text-[10px] leading-relaxed text-neutral-500">{reidMessage}</p>}
         </div>
 
       </div>
@@ -499,6 +550,9 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [endCandidate, setEndCandidate] = React.useState<TrackCandidate | null>(null);
   const [startLocked, setStartLocked] = React.useState(false);
   const [endLocked, setEndLocked] = React.useState(false);
+  const [reidStatus, setReidStatus] = React.useState<TrackIdReIDStatus | null>(null);
+  const [reidRunning, setReidRunning] = React.useState(false);
+  const [reidMessage, setReidMessage] = React.useState('');
   const centerFitRef = React.useRef<(() => void) | null>(null);
   const previousViewportRef = React.useRef<any>(null);
 
@@ -520,6 +574,19 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     setEndCandidate(null);
     setStartLocked(false);
     setEndLocked(false);
+    setReidMessage('');
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setReidStatus(null);
+    checkTrackIdReIDStatus().then((status) => {
+      if (!cancelled) setReidStatus(status);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   const currentIndex = currentStem ? stems.indexOf(currentStem) : -1;
@@ -624,6 +691,79 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     setEndLocked(true);
   };
 
+  const runReid = async () => {
+    const trackId = selectedTrackId || composeTrackId(mainIdDraft, partIdDraft);
+    if (!trackId || !startLocked || !endLocked || !startCandidate || !endCandidate) return;
+
+    const startAnnotation = annotations.find((annotation: any) => (
+      String(annotation.id) === startCandidate.annotationId && annotation.stem === startCandidate.stem
+    ));
+    const endAnnotation = annotations.find((annotation: any) => (
+      String(annotation.id) === endCandidate.annotationId && annotation.stem === endCandidate.stem
+    ));
+    if (!startAnnotation || !endAnnotation) {
+      setReidMessage(t('trackIdWindow.reidCandidatesMissing'));
+      return;
+    }
+
+    const startIndex = stems.indexOf(startCandidate.stem);
+    const endIndex = stems.indexOf(endCandidate.stem);
+    if (startIndex < 0 || endIndex < 0) {
+      setReidMessage(t('trackIdWindow.reidCandidatesMissing'));
+      return;
+    }
+
+    const firstIndex = Math.min(startIndex, endIndex);
+    const lastIndex = Math.max(startIndex, endIndex);
+    const frameStems = stems.slice(firstIndex, lastIndex + 1);
+    const toCandidate = (annotation: any): TrackIdReIDCandidate => ({
+      stem: annotation.stem,
+      annotation_id: String(annotation.id),
+      label: annotation.label || '',
+      points: Array.isArray(annotation.points) ? annotation.points : [],
+    });
+
+    const frames = frameStems.map((stem: string) => ({
+      stem,
+      image_path: getFrameImagePath(stem, canvasProps),
+      candidates: annotations
+        .filter((annotation: any) => annotation.stem === stem)
+        .map(toCandidate),
+    }));
+
+    setReidRunning(true);
+    setReidMessage('');
+    try {
+      const result = await runTrackIdReID({
+        track_id: trackId,
+        start: toCandidate(startAnnotation),
+        end: toCandidate(endAnnotation),
+        frames,
+      });
+      const updatedAnnotationIds = new Set<string>();
+      result.assignments.forEach((assignment) => {
+        const annotation = annotations.find((item: any) => (
+          String(item.id) === assignment.annotation_id && item.stem === assignment.stem
+        ));
+        if (!annotation || updatedAnnotationIds.has(String(annotation.id))) return;
+        updatedAnnotationIds.add(String(annotation.id));
+        updateAnnotation(annotation.id, { track_id: result.track_id });
+      });
+      const missingText = result.missing_stems.length > 0
+        ? ` ${t('trackIdWindow.reidMissing', { count: result.missing_stems.length })}`
+        : '';
+      setReidMessage(t('trackIdWindow.reidResult', {
+        matched: result.matched_frames,
+        total: result.total_frames,
+      }) + missingText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setReidMessage(`${t('trackIdWindow.reidFailed')}: ${message}`);
+    } finally {
+      setReidRunning(false);
+    }
+  };
+
   const jumpToStem = (stem: string | null) => {
     if (stem) setCurrentStem(stem);
   };
@@ -647,6 +787,10 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       startLocked={startLocked}
       endLocked={endLocked}
       onToggleCandidateLock={toggleCandidateLock}
+      reidStatus={reidStatus}
+      reidRunning={reidRunning}
+      reidMessage={reidMessage}
+      onRunReid={runReid}
     />
   );
 

@@ -108,9 +108,10 @@ Copy `.env.example` to `.env` in the repository root and set the paths used by t
 VITE_AI_MODEL_TYPE=YOLO-Custom
 VITE_AI_MODEL_PATH=E:/models/detector.pt
 VITE_AI_CLASSES_PATH=E:/models/classes.txt
+REID_MODEL_PATH=E:/model_weights/reid_model.onnx
 ```
 
-The paths are used as defaults in `Settings > AI`; the model is loaded when you confirm the AI settings. VLM endpoint settings use `MULTIANNO_VLM_*`. Keep API keys in `MULTIANNO_VLM_API_KEY` or `OPENAI_API_KEY` only—never use a `VITE_` prefix for secrets.
+The vision paths are used as defaults in `Settings > AI`; the model is loaded when you confirm the AI settings. `REID_MODEL_PATH` is loaded lazily when you run `Interpolate + ReID` in Track ID Annotation. VLM endpoint settings use `MULTIANNO_VLM_*`. Keep API keys in `MULTIANNO_VLM_API_KEY` or `OPENAI_API_KEY` only—never use a `VITE_` prefix for secrets.
 
 1. **Create a new project:**
    * Set up your project meta path.

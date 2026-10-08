@@ -75,8 +75,16 @@
     "notSelected": "未选择",
     "interpolateReid": "插值 + ReID",
     "scaffoldNotice": "第一版先提供窗口结构和入口。对象锁定、缺失帧标记、插值与 ReID 将在下一步接入。",
-    "notImplemented": "尚未接入"
-    ,"viewLayersReadOnly": "Track ID 标注中 View Layers 为只读"
+    "notImplemented": "尚未接入",
+    "reidReady": "ReID 已就绪",
+    "reidUnavailable": "ReID 不可用",
+    "reidLoaded": "已加载",
+    "reidRunning": "正在运行 ReID…",
+    "reidCandidatesMissing": "锁定的候选对象已不存在。",
+    "reidResult": "已匹配 {{matched}} / {{total}} 帧。",
+    "reidMissing": "还有 {{count}} 帧需要检查。",
+    "reidFailed": "ReID 失败",
+    "viewLayersReadOnly": "Track ID 标注中 View Layers 为只读"
   },
   "header": {
     "appName": "欢迎使用 Multianno!",

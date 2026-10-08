@@ -75,8 +75,16 @@
     "notSelected": "Not selected",
     "interpolateReid": "Interpolate + ReID",
     "scaffoldNotice": "This first version provides the window structure and entry points. Object locking, missing-frame marking, interpolation, and ReID will be connected next.",
-    "notImplemented": "Not connected yet"
-    ,"viewLayersReadOnly": "View Layers are read-only in Track ID Annotation"
+    "notImplemented": "Not connected yet",
+    "reidReady": "ReID ready",
+    "reidUnavailable": "ReID unavailable",
+    "reidLoaded": "loaded",
+    "reidRunning": "Running ReID...",
+    "reidCandidatesMissing": "The locked candidates are no longer available.",
+    "reidResult": "Matched {{matched}} / {{total}} frames.",
+    "reidMissing": "{{count}} frame(s) need review.",
+    "reidFailed": "ReID failed",
+    "viewLayersReadOnly": "View Layers are read-only in Track ID Annotation"
   },
   "header": {
     "appName": "Welcome to use Multianno!",

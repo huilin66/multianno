@@ -22,7 +22,7 @@ load_project_env()
 configure_logging()
 logger = get_logger("http")
 
-from routers import ai, annotation, exchange, filesystem, project, taxonomy, vis, vlm
+from routers import ai, annotation, exchange, filesystem, project, taxonomy, track_id, vis, vlm
 
 app = FastAPI(title="MultiAnno Backend")
 
@@ -174,6 +174,7 @@ app.include_router(annotation.router)
 app.include_router(taxonomy.router)
 app.include_router(ai.router)
 app.include_router(vlm.router)
+app.include_router(track_id.router)
 app.include_router(vis.router)
 app.include_router(exchange.router)
 

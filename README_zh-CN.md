@@ -100,9 +100,10 @@ python app.py
 VITE_AI_MODEL_TYPE=YOLO-Custom
 VITE_AI_MODEL_PATH=E:/models/detector.pt
 VITE_AI_CLASSES_PATH=E:/models/classes.txt
+REID_MODEL_PATH=E:/model_weights/reid_model.onnx
 ```
 
-这些路径会作为 `设置 > AI` 的默认值；点击确认 AI 设置后才会加载模型。VLM 接口使用 `MULTIANNO_VLM_*` 配置。API key 只能放在 `MULTIANNO_VLM_API_KEY` 或 `OPENAI_API_KEY` 中，不要使用 `VITE_` 前缀保存密钥。
+视觉模型路径会作为 `设置 > AI` 的默认值；点击确认 AI 设置后才会加载模型。`REID_MODEL_PATH` 会在 Track ID 标注中点击“插值 + ReID”时懒加载。VLM 接口使用 `MULTIANNO_VLM_*` 配置。API key 只能放在 `MULTIANNO_VLM_API_KEY` 或 `OPENAI_API_KEY` 中，不要使用 `VITE_` 前缀保存密钥。
 
 1. **创建新项目：**
    * 设置项目元数据路径。

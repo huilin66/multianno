@@ -95,6 +95,27 @@ class AIConfigRequest(BaseModel):
     classes_file: Optional[str] = None
 
 
+class TrackIdCandidate(BaseModel):
+    stem: str
+    annotation_id: str
+    label: str = ""
+    points: List[Any] = Field(default_factory=list)
+
+
+class TrackIdFrame(BaseModel):
+    stem: str
+    image_path: str
+    candidates: List[TrackIdCandidate] = Field(default_factory=list)
+
+
+class TrackIdReIDRequest(BaseModel):
+    track_id: str
+    start: TrackIdCandidate
+    end: TrackIdCandidate
+    frames: List[TrackIdFrame] = Field(default_factory=list)
+    min_similarity: float = Field(default=0.25, ge=-1.0, le=1.0)
+
+
 class VLMConfigRequest(BaseModel):
     """Runtime configuration for an OpenAI-compatible VLM endpoint.
 

@@ -3,6 +3,7 @@
 export const API_BASE_URL = 'http://127.0.0.1:8090/api';
 const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
 const VLM_API_URL = `${API_BASE_URL}/ai/vlm`;
+const TRACK_ID_REID_API_URL = `${API_BASE_URL}/track-id/reid`;
 
 const post = async (url: string, body: any, signal?: AbortSignal) => {
   let response: Response;
@@ -367,6 +368,72 @@ export const predictAutoSAM = (
 export const initVisionModel = initSAM;
 export const predictVisionInteractive = predictSAM;
 export const predictVisionAuto = predictAutoSAM;
+
+export interface TrackIdReIDStatus {
+  runtime_available: boolean;
+  configured: boolean;
+  model_exists: boolean;
+  loaded: boolean;
+  model_name: string;
+  providers: string[];
+  detail?: string | null;
+}
+
+export const checkTrackIdReIDStatus = async (): Promise<TrackIdReIDStatus> => {
+  try {
+    return await get(`${TRACK_ID_REID_API_URL}/status`);
+  } catch {
+    return {
+      runtime_available: false,
+      configured: false,
+      model_exists: false,
+      loaded: false,
+      model_name: '',
+      providers: [],
+      detail: 'ReID backend unavailable',
+    };
+  }
+};
+
+export interface TrackIdReIDCandidate {
+  stem: string;
+  annotation_id: string;
+  label?: string;
+  points: Array<{ x: number; y: number } | [number, number]>;
+}
+
+export interface TrackIdReIDFrame {
+  stem: string;
+  image_path: string;
+  candidates: TrackIdReIDCandidate[];
+}
+
+export interface TrackIdReIDResult {
+  track_id: string;
+  assignments: Array<{
+    stem: string;
+    annotation_id: string;
+    track_id: string;
+    score: number;
+    combined_score?: number;
+    method: string;
+  }>;
+  missing_stems: string[];
+  matched_frames: number;
+  total_frames: number;
+  model_name: string;
+}
+
+export const runTrackIdReID = (
+  payload: {
+    track_id: string;
+    start: TrackIdReIDCandidate;
+    end: TrackIdReIDCandidate;
+    frames: TrackIdReIDFrame[];
+    min_similarity?: number;
+  },
+  signal?: AbortSignal,
+): Promise<TrackIdReIDResult> => post(`${TRACK_ID_REID_API_URL}/associate`, payload, signal);
 
 export interface VLMAttributeResult {
   name: string;
