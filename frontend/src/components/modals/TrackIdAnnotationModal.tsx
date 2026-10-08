@@ -29,7 +29,6 @@ import {
   Plus,
   Route,
   Settings2,
-  Sparkles,
   Unlink2,
 } from 'lucide-react';
 
@@ -410,6 +409,7 @@ function TrackIdEditor({
   const activeSequenceData = sequences.find((sequence) => sequence.id === activeSequence);
   const activeStartLocked = activeSequenceData?.startLocked ?? false;
   const activeEndLocked = activeSequenceData?.endLocked ?? false;
+  const currentTrackId = selectedTrackId || composeTrackId(mainIdDraft, partIdDraft);
 
   return (
     <div className="min-h-0 overflow-y-auto custom-scrollbar">
@@ -562,13 +562,13 @@ function TrackIdEditor({
           </div>
 
           <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-neutral-500">
-            <span className="flex min-w-0 items-center gap-1.5 truncate" title={reidStatus?.detail || undefined}>
-              <span className="font-semibold text-neutral-700 dark:text-neutral-200">{t('trackIdWindow.reidStatus')}</span>
-              <span className={reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists ? 'text-emerald-600' : 'text-amber-600'}>
-                {reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists
-                  ? t('trackIdWindow.reidReady')
-                  : t('trackIdWindow.reidUnavailable')}
-              </span>
+            <span
+              className={`min-w-0 truncate font-semibold ${reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists ? 'text-emerald-600' : 'text-amber-600'}`}
+              title={reidStatus?.detail || undefined}
+            >
+              {reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists
+                ? t('trackIdWindow.reidReady')
+                : t('trackIdWindow.reidUnavailable')}
             </span>
             <Button
               type="button"
@@ -658,13 +658,13 @@ function TrackIdEditor({
               || !reidStatus?.runtime_available
               || !reidStatus.configured
               || !reidStatus.model_exists
-              || !selectedTrackId
+              || !currentTrackId
               || !activeStartLocked
               || !activeEndLocked
             }
             onClick={onRunReid}
           >
-            {reidRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            {reidRunning && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {reidRunning ? t('trackIdWindow.reidRunning') : t('trackIdWindow.autoTrack')}
           </Button>
           {reidMessage && <p className="mt-1.5 text-[10px] leading-relaxed text-neutral-500">{reidMessage}</p>}
