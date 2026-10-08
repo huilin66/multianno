@@ -66,6 +66,7 @@
     "sequence": "序列",
     "sequenceDescription": "同一个 Track 可以拆分为多个可见片段，每个序列单独设置。",
     "addSequence": "添加序列",
+    "selectSequence": "选择此序列",
     "sequenceNumber": "序列 {{count}}",
     "unassigned": "未分配",
     "startCandidate": "起始候选",

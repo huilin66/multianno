@@ -66,6 +66,7 @@
     "sequence": "Sequences",
     "sequenceDescription": "Each sequence can define a separate visible segment of the same track.",
     "addSequence": "Add sequence",
+    "selectSequence": "Select this sequence",
     "sequenceNumber": "Sequence {{count}}",
     "unassigned": "Unassigned",
     "startCandidate": "Start candidate",

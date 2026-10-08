@@ -65,6 +65,22 @@ interface TrackIdReIDSettings {
   sameLabelOnly: boolean;
 }
 
+interface TrackSequence {
+  id: number;
+  startCandidate: TrackCandidate | null;
+  endCandidate: TrackCandidate | null;
+  startLocked: boolean;
+  endLocked: boolean;
+}
+
+const createTrackSequence = (id: number): TrackSequence => ({
+  id,
+  startCandidate: null,
+  endCandidate: null,
+  startLocked: false,
+  endLocked: false,
+});
+
 const getTrackIdLabel = (value: string | number | null | undefined) => String(value ?? '').trim();
 
 const parseTrackId = (value: string | number | null | undefined) => {
@@ -341,11 +357,9 @@ function TrackIdEditor({
   applyTrackId,
   activeAnnotation,
   activeSequence,
+  sequences,
   setActiveSequence,
-  startCandidate,
-  endCandidate,
-  startLocked,
-  endLocked,
+  onAddSequence,
   onToggleCandidateLock,
   reidStatus,
   reidRunning,
@@ -372,12 +386,10 @@ function TrackIdEditor({
   applyTrackId: () => void;
   activeAnnotation: any;
   activeSequence: number;
+  sequences: TrackSequence[];
   setActiveSequence: React.Dispatch<React.SetStateAction<number>>;
-  startCandidate: TrackCandidate | null;
-  endCandidate: TrackCandidate | null;
-  startLocked: boolean;
-  endLocked: boolean;
-  onToggleCandidateLock: (kind: 'start' | 'end') => void;
+  onAddSequence: () => void;
+  onToggleCandidateLock: (kind: 'start' | 'end', sequenceId?: number) => void;
   reidStatus: TrackIdReIDStatus | null;
   reidRunning: boolean;
   reidMessage: string;
@@ -395,6 +407,9 @@ function TrackIdEditor({
   const renderCandidate = (candidate: TrackCandidate | null) => candidate
     ? `${candidate.stem}${candidate.label ? ` · ${candidate.label}` : ''}`
     : t('trackIdWindow.none');
+  const activeSequenceData = sequences.find((sequence) => sequence.id === activeSequence);
+  const activeStartLocked = activeSequenceData?.startLocked ?? false;
+  const activeEndLocked = activeSequenceData?.endLocked ?? false;
 
   return (
     <div className="min-h-0 overflow-y-auto custom-scrollbar">
@@ -475,66 +490,75 @@ function TrackIdEditor({
 
       <div className="space-y-3 p-3">
         <div className="flex items-center justify-between gap-2">
-          <div>
+          <div className="flex min-w-0 items-center gap-1.5">
             <h3 className="text-xs font-semibold text-neutral-800 dark:text-neutral-100">{t('trackIdWindow.sequence')}</h3>
+            <span className="min-w-0 max-w-36 truncate rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" title={selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || undefined}>
+              {selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || t('trackIdWindow.none')}
+            </span>
           </div>
         </div>
 
         <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-2 dark:border-blue-900/60 dark:bg-blue-950/20">
-          <div className="flex min-w-0 items-center gap-1">
-          <span className="shrink-0 rounded bg-blue-600 px-1.5 py-0.5 text-[10px] font-semibold text-white dark:bg-blue-500">{activeSequence}</span>
-          <span className="max-w-14 shrink-0 truncate rounded-full bg-white/80 px-1.5 py-0.5 text-[9px] text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" title={selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || undefined}>
-            {selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || t('trackIdWindow.none')}
-          </span>
-
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 rounded-md border border-white/80 bg-white/80 px-1 py-1 dark:border-neutral-800 dark:bg-neutral-900/70">
-            <ArrowLeftToLine className="h-3.5 w-3.5 shrink-0 text-blue-500" aria-hidden="true" />
-            <span
-              className="min-w-0 flex-1 truncate text-[10px] text-neutral-600 dark:text-neutral-300"
-              title={startCandidate?.stem}
-            >
-              {renderCandidate(startCandidate)}
-            </span>
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              className="shrink-0"
-              disabled={!startCandidate && !activeAnnotation}
-              onClick={() => onToggleCandidateLock('start')}
-              title={t(startLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
-              aria-label={t(startLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
-              aria-pressed={startLocked}
-            >
-              {startLocked ? <Link2 className="h-3.5 w-3.5 text-blue-500" /> : <Link2Off className="h-3.5 w-3.5 text-neutral-400" />}
-            </Button>
-          </div>
-
-          <span className="shrink-0 text-[10px] text-neutral-300 dark:text-neutral-600" aria-hidden="true">→</span>
-
-          <div className="flex min-w-0 flex-1 items-center gap-0.5 rounded-md border border-white/80 bg-white/80 px-1 py-1 dark:border-neutral-800 dark:bg-neutral-900/70">
-            <ArrowRightToLine className="h-3.5 w-3.5 shrink-0 text-blue-500" aria-hidden="true" />
-            <span
-              className="min-w-0 flex-1 truncate text-[10px] text-neutral-600 dark:text-neutral-300"
-              title={endCandidate?.stem}
-            >
-              {renderCandidate(endCandidate)}
-            </span>
-            <Button
-              type="button"
-              size="icon-xs"
-              variant="ghost"
-              className="shrink-0"
-              disabled={!endCandidate && !activeAnnotation}
-              onClick={() => onToggleCandidateLock('end')}
-              title={t(endLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
-              aria-label={t(endLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
-              aria-pressed={endLocked}
-            >
-              {endLocked ? <Link2 className="h-3.5 w-3.5 text-blue-500" /> : <Link2Off className="h-3.5 w-3.5 text-neutral-400" />}
-            </Button>
-          </div>
-
+          <div className="space-y-1">
+            {sequences.map((sequence) => {
+              const isActive = sequence.id === activeSequence;
+              const canUseCurrentObject = isActive && !!activeAnnotation;
+              return (
+                <div
+                  key={sequence.id}
+                  className={`flex min-w-0 items-center gap-1 rounded-md border px-1 py-1 ${
+                    isActive
+                      ? 'border-blue-300 bg-white/90 dark:border-blue-700 dark:bg-neutral-900/90'
+                      : 'border-transparent bg-white/50 dark:bg-neutral-900/40'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                    onClick={() => setActiveSequence(sequence.id)}
+                    title={t('trackIdWindow.selectSequence')}
+                    aria-pressed={isActive}
+                  >
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-blue-600 text-[10px] font-semibold text-white dark:bg-blue-500">{sequence.id}</span>
+                    <ArrowLeftToLine className="h-3.5 w-3.5 shrink-0 text-blue-500" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-[10px] text-neutral-600 dark:text-neutral-300" title={sequence.startCandidate?.stem}>
+                      {renderCandidate(sequence.startCandidate)}
+                    </span>
+                    <span className="shrink-0 text-[10px] text-neutral-400" aria-hidden="true">-</span>
+                    <ArrowRightToLine className="h-3.5 w-3.5 shrink-0 text-blue-500" aria-hidden="true" />
+                    <span className="min-w-0 flex-1 truncate text-[10px] text-neutral-600 dark:text-neutral-300" title={sequence.endCandidate?.stem}>
+                      {renderCandidate(sequence.endCandidate)}
+                    </span>
+                  </button>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    className="shrink-0"
+                    disabled={!sequence.startCandidate && !canUseCurrentObject}
+                    onClick={() => onToggleCandidateLock('start', sequence.id)}
+                    title={t(sequence.startLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
+                    aria-label={t(sequence.startLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
+                    aria-pressed={sequence.startLocked}
+                  >
+                    {sequence.startLocked ? <Link2 className="h-3.5 w-3.5 text-blue-500" /> : <Link2Off className="h-3.5 w-3.5 text-neutral-400" />}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="icon-xs"
+                    variant="ghost"
+                    className="shrink-0"
+                    disabled={!sequence.endCandidate && !canUseCurrentObject}
+                    onClick={() => onToggleCandidateLock('end', sequence.id)}
+                    title={t(sequence.endLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
+                    aria-label={t(sequence.endLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
+                    aria-pressed={sequence.endLocked}
+                  >
+                    {sequence.endLocked ? <Link2 className="h-3.5 w-3.5 text-blue-500" /> : <Link2Off className="h-3.5 w-3.5 text-neutral-400" />}
+                  </Button>
+                </div>
+              );
+            })}
           </div>
 
           <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-neutral-500">
@@ -635,8 +659,8 @@ function TrackIdEditor({
               || !reidStatus.configured
               || !reidStatus.model_exists
               || !selectedTrackId
-              || !startLocked
-              || !endLocked
+              || !activeStartLocked
+              || !activeEndLocked
             }
             onClick={onRunReid}
           >
@@ -647,7 +671,7 @@ function TrackIdEditor({
         </div>
 
         <div className="flex justify-end">
-          <Button type="button" size="icon-xs" variant="outline" onClick={() => setActiveSequence((value) => value + 1)} title={t('trackIdWindow.addSequence')} aria-label={t('trackIdWindow.addSequence')}>
+          <Button type="button" size="icon-xs" variant="outline" onClick={onAddSequence} title={t('trackIdWindow.addSequence')} aria-label={t('trackIdWindow.addSequence')}>
             <Plus className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -668,12 +692,9 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [partIdDraft, setPartIdDraft] = React.useState('');
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null);
   const [activeSequence, setActiveSequence] = React.useState(1);
+  const [sequences, setSequences] = React.useState<TrackSequence[]>([createTrackSequence(1)]);
   const [syncFrames, setSyncFrames] = React.useState(true);
   const [frameContextMode, setFrameContextMode] = React.useState<'locked' | 'adjacent'>('locked');
-  const [startCandidate, setStartCandidate] = React.useState<TrackCandidate | null>(null);
-  const [endCandidate, setEndCandidate] = React.useState<TrackCandidate | null>(null);
-  const [startLocked, setStartLocked] = React.useState(false);
-  const [endLocked, setEndLocked] = React.useState(false);
   const [reidStatus, setReidStatus] = React.useState<TrackIdReIDStatus | null>(null);
   const [reidRunning, setReidRunning] = React.useState(false);
   const [reidMessage, setReidMessage] = React.useState('');
@@ -698,10 +719,8 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
 
   React.useEffect(() => {
     if (!open) return;
-    setStartCandidate(null);
-    setEndCandidate(null);
-    setStartLocked(false);
-    setEndLocked(false);
+    setSequences([createTrackSequence(1)]);
+    setActiveSequence(1);
     setReidMessage('');
     setReidSettingsOpen(false);
     setReidSettingsMessage('');
@@ -724,6 +743,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
 
   const currentIndex = currentStem ? stems.indexOf(currentStem) : -1;
   const activeAnnotation = annotations.find((annotation: any) => annotation.id === activeAnnotationId) || null;
+  const activeSequenceData = sequences.find((sequence) => sequence.id === activeSequence) || sequences[0] || createTrackSequence(1);
+  const startCandidate = activeSequenceData.startCandidate;
+  const endCandidate = activeSequenceData.endCandidate;
+  const startLocked = activeSequenceData.startLocked;
+  const endLocked = activeSequenceData.endLocked;
 
   const trackIds = React.useMemo(() => {
     const values = (annotations as any[]).map((annotation) => getTrackIdLabel(annotation.track_id)).filter(Boolean);
@@ -788,40 +812,51 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     };
   };
 
+  const updateSequence = (sequenceId: number, updates: Partial<TrackSequence>) => {
+    setSequences((current) => current.map((sequence) => (
+      sequence.id === sequenceId ? { ...sequence, ...updates } : sequence
+    )));
+  };
+
   const handleTrackObjectDoubleClick = (annotation: any, stem: string) => {
     const candidate = makeCandidate(annotation, stem);
     if (!candidate) return;
 
     if (!startLocked) {
-      setStartCandidate(candidate);
-      setStartLocked(true);
+      updateSequence(activeSequence, { startCandidate: candidate, startLocked: true });
     } else if (!endLocked) {
-      setEndCandidate(candidate);
-      setEndLocked(true);
+      updateSequence(activeSequence, { endCandidate: candidate, endLocked: true });
     }
   };
 
-  const toggleCandidateLock = (kind: 'start' | 'end') => {
+  const toggleCandidateLock = (kind: 'start' | 'end', sequenceId = activeSequence) => {
+    const sequence = sequences.find((item) => item.id === sequenceId);
+    if (!sequence) return;
+
     if (kind === 'start') {
-      if (startLocked) {
-        setStartLocked(false);
+      if (sequence.startLocked) {
+        updateSequence(sequenceId, { startLocked: false });
         return;
       }
-      const candidate = startCandidate || makeCandidate(activeAnnotation);
+      const candidate = sequence.startCandidate || (sequenceId === activeSequence ? makeCandidate(activeAnnotation) : null);
       if (!candidate) return;
-      setStartCandidate(candidate);
-      setStartLocked(true);
+      updateSequence(sequenceId, { startCandidate: candidate, startLocked: true });
       return;
     }
 
-    if (endLocked) {
-      setEndLocked(false);
+    if (sequence.endLocked) {
+      updateSequence(sequenceId, { endLocked: false });
       return;
     }
-    const candidate = endCandidate || makeCandidate(activeAnnotation);
+    const candidate = sequence.endCandidate || (sequenceId === activeSequence ? makeCandidate(activeAnnotation) : null);
     if (!candidate) return;
-    setEndCandidate(candidate);
-    setEndLocked(true);
+    updateSequence(sequenceId, { endCandidate: candidate, endLocked: true });
+  };
+
+  const addSequence = () => {
+    const nextId = sequences.reduce((maximum, sequence) => Math.max(maximum, sequence.id), 0) + 1;
+    setSequences((current) => [...current, createTrackSequence(nextId)]);
+    setActiveSequence(nextId);
   };
 
   const confirmReidPath = async () => {
@@ -935,11 +970,9 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       applyTrackId={applyTrackId}
       activeAnnotation={activeAnnotation}
       activeSequence={activeSequence}
+      sequences={sequences}
       setActiveSequence={setActiveSequence}
-      startCandidate={startCandidate}
-      endCandidate={endCandidate}
-      startLocked={startLocked}
-      endLocked={endLocked}
+      onAddSequence={addSequence}
       onToggleCandidateLock={toggleCandidateLock}
       reidStatus={reidStatus}
       reidRunning={reidRunning}
