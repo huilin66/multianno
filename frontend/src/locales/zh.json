@@ -290,6 +290,7 @@
       "folders": "图像文件夹",
       "views": "视图",
       "workspace": "工作空间",
+      "importData": "导入数据",
       "project": "项目配置"
     },
     "information": {
@@ -347,6 +348,8 @@
     "annotations": {
       "title": "检测到的标注来源",
       "description": "图像场景加载后，MultiAnno 会自动检查常见的同级文件夹和文件。请选择一个来源导入，也可以跳过并创建空项目。",
+      "existingWorkspace": "检测到工作空间中已有标注",
+      "existingWorkspaceHint": "为避免重复导入，已默认暂停外部来源探测。只有需要检查其他来源时才点击“重新扫描”。",
       "scanning": "正在扫描...",
       "rescan": "重新扫描",
       "scanningHint": "正在扫描 labels、annotations、COCO JSON、MultiAnno JSON 和 mask 文件夹...",

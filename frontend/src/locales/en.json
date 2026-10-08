@@ -290,6 +290,7 @@
       "folders": "Image Folders",
       "views": "Views",
       "workspace": "Workspace",
+      "importData": "Import Data",
       "project": "Project Setup"
     },
     "information": {
@@ -347,6 +348,8 @@
     "annotations": {
       "title": "Detected Annotation Sources",
       "description": "MultiAnno checks common sibling folders and files after the image scenes are loaded. Select one source to import, or skip it to create an empty project.",
+      "existingWorkspace": "Existing workspace annotations detected",
+      "existingWorkspaceHint": "External source detection is paused by default to avoid importing the same annotations twice. Use Rescan only if you want to inspect another source.",
       "scanning": "Scanning...",
       "rescan": "Rescan",
       "scanningHint": "Scanning labels, annotations, COCO JSON, MultiAnno JSON, and mask folders...",
