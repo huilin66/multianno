@@ -9,7 +9,7 @@ import {
   type TrackIdReIDCandidate,
   type TrackIdReIDStatus,
 } from '../../api/client';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -27,7 +27,6 @@ import {
   Link2,
   Link2Off,
   Plus,
-  Route,
   Settings2,
   Unlink2,
 } from 'lucide-react';
@@ -1021,13 +1020,8 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent className="flex h-[min(92vh,900px)] max-h-[min(92vh,900px)] w-[95vw] max-w-[95vw] flex-col gap-0 overflow-hidden border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-[95vw]" showCloseButton>
-        <DialogHeader className="shrink-0 border-b border-neutral-200 bg-white px-5 py-4 dark:border-neutral-800 dark:bg-neutral-950">
-          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 pr-6">
-            <div className="min-w-0">
-              <DialogTitle className="flex items-center gap-2 text-base font-semibold"><Route className="h-4 w-4 text-blue-500" />{t('trackIdWindow.title')}</DialogTitle>
-              <DialogDescription className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{t('trackIdWindow.descriptionShort')}</DialogDescription>
-            </div>
-          </div>
+        <DialogHeader className="shrink-0 border-b border-border p-4">
+          <DialogTitle>{t('trackIdWindow.title')}</DialogTitle>
         </DialogHeader>
 
         <div className="flex min-h-0 flex-1 overflow-hidden bg-neutral-50/70 dark:bg-neutral-950/50">
