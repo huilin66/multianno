@@ -55,6 +55,28 @@ export const loadProjectMetaFromServer = (file_path: string) =>
 export const analyzeWorkspaceFolders = (folders: { path: string; suffix?: string; rawProfile?: Record<string, any> }[]) =>
   post(`${API_BASE_URL}/project/analyze`, { folders });
 
+export interface AnnotationSourceCandidate {
+  source_path: string;
+  format: 'yolo' | 'coco' | 'multianno' | 'mask';
+  task_type: string;
+  extension: string;
+  classes_file?: string;
+  attributes_file?: string;
+  source_file_count: number;
+  matched_count: number;
+  shape_count: number;
+  match_ratio: number;
+  sample_files: string[];
+  score: number;
+}
+
+export const detectAnnotationSources = (payload: {
+  image_folders: string[];
+  stems: string[];
+  workspace_path?: string;
+}, signal?: AbortSignal) =>
+  post(`${API_BASE_URL}/project/detect-annotations`, payload, signal);
+
 export const checkWorkspaceJson = (path: string) =>
   post(`${API_BASE_URL}/workspace/check-json`, { path });
 

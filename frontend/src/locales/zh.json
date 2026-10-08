@@ -296,7 +296,8 @@
       "title": "提示信息",
       "singleView": "单个 View：\n无需进行视图对齐，确认后将直接进入标注工作区。",
       "multiView": "多个 View：\n下一步将进入视图对齐，用于对齐当前配置的多个视图。",
-      "annotationExists": "已有标注：\n当前工作空间包含已有标注，确认后将加载这些标注。"
+      "annotationExists": "已有标注：\n当前工作空间包含已有标注，确认后将加载这些标注。",
+      "annotationDetected": "检测到标注来源：\n{{format}} 匹配 {{matched}} 张图像，约包含 {{objects}} 个对象。确认后将导入。"
     },
     "singleView": {
       "confirm": "进入标注",
@@ -342,6 +343,29 @@
       "loadSuccessDescription": "已加载 {{images}} 张图像、{{labels}} 个 label 类型和 {{objects}} 个对象。",
       "default": "默认",
       "notSet": "未设置"
+    },
+    "annotations": {
+      "title": "检测到的标注来源",
+      "description": "图像场景加载后，MultiAnno 会自动检查常见的同级文件夹和文件。请选择一个来源导入，也可以跳过并创建空项目。",
+      "scanning": "正在扫描...",
+      "rescan": "重新扫描",
+      "scanningHint": "正在扫描 labels、annotations、COCO JSON、MultiAnno JSON 和 mask 文件夹...",
+      "scanFailed": "标注探测失败。你可以不导入标注继续创建项目，或重新扫描。",
+      "noneFound": "没有找到匹配的标注来源，可以继续创建空项目。",
+      "detected": "候选来源",
+      "selected": "已选择",
+      "files": "{{count}} 个源文件",
+      "matched": "匹配 {{count}} 张图像",
+      "objects": "{{count}} 个对象",
+      "classesFile": "类别文件",
+      "importTitle": "导入选中的来源",
+      "willImport": "确认后将导入该来源。",
+      "skipImport": "不会导入该来源。",
+      "skip": "跳过导入",
+      "use": "使用此来源",
+      "mergeStrategy": "合并策略",
+      "noClassesFile": "未检测到 classes 文件。YOLO 中的未知类别将使用 Class_0 等自动名称。",
+      "importing": "正在导入检测到的标注"
     },
     "legend": {
       "configured": "已配置",

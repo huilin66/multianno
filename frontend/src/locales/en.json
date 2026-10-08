@@ -296,7 +296,8 @@
       "title": "Information",
       "singleView": "One View:\nView Align is not needed. After confirmation, MultiAnno will enter the annotation workspace directly.",
       "multiView": "Multiple Views:\nView Align will be shown next to align the configured views.",
-      "annotationExists": "Annotation Exists:\nThis workspace contains existing annotations. Confirm to load them before continuing."
+      "annotationExists": "Annotation Exists:\nThis workspace contains existing annotations. Confirm to load them before continuing.",
+      "annotationDetected": "Annotation Source Detected:\n{{format}} matches {{matched}} images and contains about {{objects}} objects. Confirm to import it."
     },
     "singleView": {
       "confirm": "Enter Annotation",
@@ -342,6 +343,29 @@
       "loadSuccessDescription": "Loaded {{images}} images, {{labels}} label types, and {{objects}} objects.",
       "default": "Default",
       "notSet": "Not set"
+    },
+    "annotations": {
+      "title": "Detected Annotation Sources",
+      "description": "MultiAnno checks common sibling folders and files after the image scenes are loaded. Select one source to import, or skip it to create an empty project.",
+      "scanning": "Scanning...",
+      "rescan": "Rescan",
+      "scanningHint": "Scanning labels, annotations, COCO JSON, MultiAnno JSON, and mask folders...",
+      "scanFailed": "Annotation detection failed. You can continue without importing, or scan again.",
+      "noneFound": "No matching annotation source was found. You can continue with an empty project.",
+      "detected": "Candidates",
+      "selected": "Selected",
+      "files": "{{count}} source files",
+      "matched": "{{count}} matched images",
+      "objects": "{{count}} objects",
+      "classesFile": "Classes",
+      "importTitle": "Import selected source",
+      "willImport": "This source will be imported after confirmation.",
+      "skipImport": "This source will not be imported.",
+      "skip": "Skip import",
+      "use": "Use source",
+      "mergeStrategy": "Merge strategy",
+      "noClassesFile": "No classes file was detected. Unknown YOLO classes will keep generated names such as Class_0.",
+      "importing": "Importing detected annotations"
     },
     "legend": {
       "configured": "Configured",

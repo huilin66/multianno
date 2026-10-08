@@ -13,6 +13,12 @@ class AnalyzeRequest(BaseModel):
     folders: List[FolderPayload]
 
 
+class DetectAnnotationSourcesRequest(BaseModel):
+    image_folders: List[str] = Field(default_factory=list)
+    stems: List[str] = Field(default_factory=list)
+    workspace_path: Optional[str] = ""
+
+
 class StatsRequest(BaseModel):
     save_dirs: List[str]
     target_class: str

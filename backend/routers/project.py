@@ -9,6 +9,7 @@ from fastapi.responses import Response, StreamingResponse
 from models import (
     AnalyzeRequest,
     CheckJsonRequest,
+    DetectAnnotationSourcesRequest,
     InferSuffixRequest,
     ProjectMetaPayload,
     StatsRequest,
@@ -30,6 +31,314 @@ from utils.logging_config import get_logger, shorten
 
 router = APIRouter(prefix="/api", tags=["Project"])
 logger = get_logger("project")
+
+ANNOTATION_DIR_NAMES = {
+    "anno",
+    "annos",
+    "annotation",
+    "annotations",
+    "gt",
+    "ground_truth",
+    "label",
+    "labels",
+    "mask",
+    "masks",
+}
+ANNOTATION_CLASS_FILE_NAMES = {"class.txt", "classes.txt", "classes.names", "labels.txt"}
+ANNOTATION_ATTRIBUTE_FILE_NAMES = {
+    "attribute.yaml",
+    "attributes.yaml",
+    "attribute.yml",
+    "attributes.yml",
+}
+ANNOTATION_SCAN_EXTENSIONS = {".json", ".txt", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
+
+
+def _path_key(path: str) -> str:
+    return os.path.normcase(os.path.abspath(path))
+
+
+def _path_is_under(path: str, parent: str) -> bool:
+    try:
+        return os.path.commonpath([_path_key(path), _path_key(parent)]) == _path_key(parent)
+    except ValueError:
+        return False
+
+
+def _is_annotation_excluded(path: str, workspace_path: str) -> bool:
+    return bool(workspace_path and _path_is_under(path, workspace_path))
+
+
+def _read_json_preview(path: str) -> dict | None:
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            value = json.load(handle)
+        return value if isinstance(value, dict) else None
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+
+
+def _looks_like_yolo_file(path: str) -> tuple[bool, int]:
+    valid_lines = 0
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            for raw_line in handle:
+                parts = raw_line.strip().split()
+                if not parts:
+                    continue
+                if len(parts) < 5:
+                    return False, 0
+                int(parts[0])
+                for value in parts[1:]:
+                    float(value)
+                valid_lines += 1
+        return True, valid_lines
+    except (OSError, ValueError, UnicodeDecodeError):
+        return False, 0
+
+
+def _find_nearby_file(path: str, names: set[str]) -> str:
+    current = os.path.dirname(path) if os.path.isfile(path) else path
+    for _ in range(3):
+        try:
+            for entry in os.scandir(current):
+                if entry.is_file() and entry.name.casefold() in names:
+                    return entry.path
+        except (OSError, PermissionError):
+            return ""
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return ""
+
+
+def _annotation_candidate(
+    source_path: str,
+    format_name: str,
+    source_files: list[str],
+    stems: list[str],
+    classes_file: str = "",
+    attributes_file: str = "",
+    shape_count: int = 0,
+    source_file_count: int | None = None,
+) -> dict:
+    source_stems = {
+        Path(file_path).stem.casefold()
+        for file_path in source_files
+        if Path(file_path).stem
+    }
+    known_stems = {str(stem).casefold() for stem in stems if str(stem).strip()}
+    matched_count = len(source_stems & known_stems) if known_stems else len(source_stems)
+    directory_name = os.path.basename(source_path.rstrip("/\\"))
+    if os.path.isfile(source_path):
+        directory_name = os.path.basename(os.path.dirname(source_path))
+    directory_bonus = 25 if directory_name.casefold() in ANNOTATION_DIR_NAMES else 0
+    file_count = source_file_count if source_file_count is not None else len(source_files)
+    match_ratio = round(matched_count / max(1, len(known_stems)), 4) if known_stems else 0
+    classes_file = classes_file or _find_nearby_file(source_path, ANNOTATION_CLASS_FILE_NAMES)
+    attributes_file = attributes_file or _find_nearby_file(source_path, ANNOTATION_ATTRIBUTE_FILE_NAMES)
+
+    return {
+        "source_path": os.path.abspath(source_path).replace("\\", "/"),
+        "format": format_name,
+        "task_type": "image_segmentation" if format_name == "mask" else "object_detection",
+        "extension": ".txt" if format_name == "yolo" else ".png" if format_name == "mask" else ".json",
+        "classes_file": os.path.abspath(classes_file).replace("\\", "/") if classes_file else "",
+        "attributes_file": os.path.abspath(attributes_file).replace("\\", "/") if attributes_file else "",
+        "source_file_count": file_count,
+        "matched_count": matched_count,
+        "shape_count": shape_count,
+        "match_ratio": match_ratio,
+        "sample_files": [os.path.basename(path) for path in source_files[:3]],
+        "score": matched_count * 100 + directory_bonus + min(file_count, 50),
+    }
+
+
+def _scan_annotation_directory(path: str, stems: list[str]) -> list[dict]:
+    try:
+        entries = [entry for entry in os.scandir(path) if entry.is_file()]
+    except (OSError, PermissionError):
+        return []
+
+    files_by_ext: dict[str, list[str]] = {}
+    for entry in entries:
+        suffix = Path(entry.name).suffix.casefold()
+        if suffix in ANNOTATION_SCAN_EXTENSIONS:
+            files_by_ext.setdefault(suffix, []).append(entry.path)
+
+    lower_names = {entry.name.casefold(): entry.path for entry in entries}
+    classes_file = next(
+        (lower_names[name] for name in ANNOTATION_CLASS_FILE_NAMES if name in lower_names),
+        "",
+    )
+    attributes_file = next(
+        (
+            lower_names[name]
+            for name in ANNOTATION_ATTRIBUTE_FILE_NAMES
+            if name in lower_names
+        ),
+        "",
+    )
+    candidates = []
+
+    yolo_files = [
+        file_path
+        for file_path in files_by_ext.get(".txt", [])
+        if os.path.basename(file_path).casefold() not in ANNOTATION_CLASS_FILE_NAMES
+        and os.path.basename(file_path).casefold() != "attributes.txt"
+    ]
+    yolo_shape_count = 0
+    yolo_valid_files = []
+    for file_path in yolo_files:
+        valid, count = _looks_like_yolo_file(file_path)
+        if valid:
+            yolo_valid_files.append(file_path)
+            yolo_shape_count += count
+    if yolo_valid_files:
+        candidates.append(
+            _annotation_candidate(
+                path,
+                "yolo",
+                yolo_valid_files,
+                stems,
+                classes_file,
+                attributes_file,
+                yolo_shape_count,
+            )
+        )
+
+    multianno_files = []
+    multianno_shape_count = 0
+    for file_path in files_by_ext.get(".json", []):
+        if os.path.basename(file_path).casefold().endswith("_meta.json"):
+            continue
+        data = _read_json_preview(file_path)
+        if isinstance(data, dict) and isinstance(data.get("shapes"), list):
+            multianno_files.append(file_path)
+            multianno_shape_count += len(data["shapes"])
+    if multianno_files:
+        candidates.append(
+            _annotation_candidate(
+                path,
+                "multianno",
+                multianno_files,
+                stems,
+                classes_file,
+                attributes_file,
+                multianno_shape_count,
+            )
+        )
+
+    mask_files = files_by_ext.get(".png", []) + files_by_ext.get(".jpg", [])
+    mask_files += files_by_ext.get(".jpeg", []) + files_by_ext.get(".tif", [])
+    mask_files += files_by_ext.get(".tiff", []) + files_by_ext.get(".bmp", [])
+    if mask_files and os.path.basename(path.rstrip("/\\")).casefold() in {"mask", "masks"}:
+        candidates.append(
+            _annotation_candidate(
+                path,
+                "mask",
+                mask_files,
+                stems,
+                classes_file,
+                attributes_file,
+                0,
+            )
+        )
+
+    return candidates
+
+
+def _scan_coco_file(path: str, stems: list[str]) -> dict | None:
+    data = _read_json_preview(path)
+    if not isinstance(data, dict):
+        return None
+    images = data.get("images")
+    annotations = data.get("annotations")
+    if not isinstance(images, list) or not isinstance(annotations, list):
+        return None
+    image_names = [
+        os.path.join(os.path.dirname(path), str(image.get("file_name", "")))
+        for image in images
+        if isinstance(image, dict) and image.get("file_name")
+    ]
+    return _annotation_candidate(
+        path,
+        "coco",
+        image_names,
+        stems,
+        shape_count=len(annotations),
+        source_file_count=len(images),
+    )
+
+
+def _discover_annotation_sources(request: DetectAnnotationSourcesRequest) -> list[dict]:
+    workspace_path = request.workspace_path or ""
+    roots: set[str] = set()
+    candidate_dirs: set[str] = set()
+    candidate_files: set[str] = set()
+
+    for raw_folder in request.image_folders:
+        folder = os.path.abspath(raw_folder)
+        if not os.path.isdir(folder):
+            continue
+        current = folder
+        for _ in range(3):
+            roots.add(current)
+            parent = os.path.dirname(current)
+            if parent == current:
+                break
+            current = parent
+
+    for root in roots:
+        try:
+            entries = list(os.scandir(root))
+        except (OSError, PermissionError):
+            continue
+        for entry in entries:
+            if entry.is_dir() and entry.name.casefold() in ANNOTATION_DIR_NAMES:
+                candidate_dirs.add(entry.path)
+            elif entry.is_file() and entry.name.casefold().endswith(".json"):
+                candidate_files.add(entry.path)
+
+        root_name = os.path.basename(root.rstrip("/\\")).casefold()
+        has_flat_annotation_files = any(
+            entry.is_file() and Path(entry.name).suffix.casefold() in {".txt", ".json"}
+            for entry in entries
+        )
+        if root_name in ANNOTATION_DIR_NAMES or has_flat_annotation_files:
+            candidate_dirs.add(root)
+
+    candidates: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+    for directory in sorted(candidate_dirs):
+        if _is_annotation_excluded(directory, workspace_path):
+            continue
+        for candidate in _scan_annotation_directory(directory, request.stems):
+            key = (_path_key(candidate["source_path"]), candidate["format"])
+            if key not in seen:
+                seen.add(key)
+                candidates.append(candidate)
+
+    for file_path in sorted(candidate_files):
+        if _is_annotation_excluded(file_path, workspace_path):
+            continue
+        candidate = _scan_coco_file(file_path, request.stems)
+        if candidate is None:
+            continue
+        key = (_path_key(candidate["source_path"]), candidate["format"])
+        if key not in seen:
+            seen.add(key)
+            candidates.append(candidate)
+
+    candidates.sort(
+        key=lambda candidate: (
+            -candidate["score"],
+            -candidate["matched_count"],
+            candidate["source_path"].casefold(),
+        )
+    )
+    return candidates[:8]
 
 
 def _parse_json_query(value: str | None) -> dict:
@@ -323,6 +632,25 @@ async def analyze_project(request: AnalyzeRequest):
         (perf_counter() - started) * 1000,
     )
     return result
+
+
+@router.post("/project/detect-annotations")
+async def detect_annotation_sources(request: DetectAnnotationSourcesRequest):
+    started = perf_counter()
+    logger.info(
+        "PROJECT_ANNOTATION_DETECT_START folders=%d stems=%d workspace=%s",
+        len(request.image_folders),
+        len(request.stems),
+        shorten(request.workspace_path or "", 1500),
+    )
+    candidates = _discover_annotation_sources(request)
+    logger.info(
+        "PROJECT_ANNOTATION_DETECT_END candidates=%d top=%s duration_ms=%.1f",
+        len(candidates),
+        shorten(candidates[0]["source_path"] if candidates else "", 1500),
+        (perf_counter() - started) * 1000,
+    )
+    return {"status": "success", "candidates": candidates}
 
 
 @router.get("/project/preview")

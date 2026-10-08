@@ -14,7 +14,15 @@ import { SUPPORTED_IMAGE_EXTENSIONS } from '../../config/supportedFormats';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { rememberRecentProject } from '../../lib/projectHistory';
-import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
+import {
+  saveProjectMeta,
+  analyzeWorkspaceFolders,
+  checkWorkspaceJson,
+  detectAnnotationSources,
+  importData,
+  inferSuffix,
+  type AnnotationSourceCandidate,
+} from '../../api/client';
 import { showDialog } from '../../store/useDialogStore';
 import { OperationProgress } from '../ui/OperationProgress';
 import {
@@ -27,7 +35,8 @@ interface DataPreloadProps {
   isCreatingProject?: boolean;
 }
 
-type PreloadProgressStage = 'idle' | 'analyzing' | 'preparing' | 'loadingAnnotations' | 'saving' | 'complete';
+type PreloadProgressStage = 'idle' | 'analyzing' | 'preparing' | 'detectingAnnotations' | 'importingAnnotations' | 'loadingAnnotations' | 'saving' | 'complete';
+type AnnotationMergeStrategy = 'append' | 'overwrite' | 'skip' | 'mirror';
 
 const getParentDirectory = (path: string) => {
   const trimmed = path.trim();
@@ -99,9 +108,16 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   const [progressStageIndex, setProgressStageIndex] = useState(1);
   const [progressStageCount, setProgressStageCount] = useState(1);
   const [operationProgress, setOperationProgress] = useState({ current: 0, total: 0 });
+  const [annotationCandidates, setAnnotationCandidates] = useState<AnnotationSourceCandidate[]>([]);
+  const [selectedAnnotationPath, setSelectedAnnotationPath] = useState('');
+  const [annotationMergeStrategy, setAnnotationMergeStrategy] = useState<AnnotationMergeStrategy>('append');
+  const [annotationImportEnabled, setAnnotationImportEnabled] = useState(true);
+  const [annotationDetectionState, setAnnotationDetectionState] = useState<'idle' | 'scanning' | 'done' | 'error'>('idle');
 
   const maxViews = editorSettings.maxViews || 9;
   const workspaceStorePath = useStore(s => s.workspacePath);
+  const stems = useStore(s => s.stems);
+  const sceneGroups = useStore(s => s.sceneGroups);
   const setWorkspaceStorePath = useStore(s => s.setWorkspacePath);
 
   const mainViewFolder = useMemo(() => {
@@ -126,10 +142,20 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   }, [defaultMetaSaveDir, isCreatingProject, projectMetaPath, projectMetaSaveDir, projectNameDraft]);
 
   const workspaceStatus = isWorkspaceCustom ? 'defined' : 'default';
+  const selectedAnnotationCandidate = useMemo(
+    () => annotationCandidates.find(candidate => candidate.source_path === selectedAnnotationPath),
+    [annotationCandidates, selectedAnnotationPath],
+  );
+  const annotationImageFolders = useMemo(
+    () => folders.map(folder => folder.path).filter(Boolean),
+    [folders],
+  );
+  const annotationTargetWorkspace = isWorkspaceCustom ? workspacePath.trim() : defaultWorkspacePath;
 
   const originalPaths = useRef<Record<string, string>>({});
   const autoMetaSaveDirRef = useRef('');
   const workspaceCheckIdRef = useRef(0);
+  const annotationDetectionControllerRef = useRef<AbortController | null>(null);
 
   const checkWorkspaceForJson = useCallback(async (path: string, lockIfFound = false): Promise<boolean> => {
     const normalizedPath = path.trim();
@@ -159,6 +185,48 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       if (checkId === workspaceCheckIdRef.current) setIsCheckingWorkspace(false);
     }
   }, []);
+
+  const scanAnnotationSources = useCallback(async () => {
+    if (!isCreatingProject || annotationImageFolders.length === 0 || stems.length === 0) {
+      setAnnotationCandidates([]);
+      setSelectedAnnotationPath('');
+      setAnnotationDetectionState('idle');
+      return;
+    }
+
+    annotationDetectionControllerRef.current?.abort();
+    const controller = new AbortController();
+    annotationDetectionControllerRef.current = controller;
+    setAnnotationDetectionState('scanning');
+
+    try {
+      const result = await detectAnnotationSources({
+        image_folders: annotationImageFolders,
+        stems,
+        workspace_path: annotationTargetWorkspace,
+      }, controller.signal);
+      if (controller.signal.aborted) return;
+
+      const candidates = Array.isArray(result?.candidates)
+        ? result.candidates as AnnotationSourceCandidate[]
+        : [];
+      setAnnotationCandidates(candidates);
+      setSelectedAnnotationPath(candidates[0]?.source_path || '');
+      setAnnotationImportEnabled(candidates.length > 0);
+      setAnnotationDetectionState('done');
+    } catch (error: any) {
+      if (controller.signal.aborted || error?.name === 'AbortError') return;
+      console.warn('Annotation source detection failed:', error);
+      setAnnotationCandidates([]);
+      setSelectedAnnotationPath('');
+      setAnnotationDetectionState('error');
+    }
+  }, [annotationImageFolders, annotationTargetWorkspace, isCreatingProject, stems]);
+
+  useEffect(() => {
+    void scanAnnotationSources();
+    return () => annotationDetectionControllerRef.current?.abort();
+  }, [scanAnnotationSources]);
 
   // ==========================================
   // 初始化
@@ -673,12 +741,22 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
           ? 'dataPreload.information.singleView'
           : 'dataPreload.information.multiView'),
         hasExistingAnnotations ? t('dataPreload.information.annotationExists') : '',
+        selectedAnnotationCandidate && annotationImportEnabled
+          ? t('dataPreload.information.annotationDetected', {
+            format: selectedAnnotationCandidate.format.toUpperCase(),
+            matched: selectedAnnotationCandidate.matched_count,
+            objects: selectedAnnotationCandidate.shape_count,
+          })
+          : '',
       ].filter(Boolean);
       let shouldLoadExistingAnnotations = false;
+      let shouldImportDetectedAnnotations = false;
 
       if (informationItems.length > 0) {
         const shouldProceed = await showDialog({
-          type: shouldEnterAnnotationDirectly || hasExistingAnnotations ? 'warning' : 'info',
+          type: shouldEnterAnnotationDirectly || hasExistingAnnotations || Boolean(selectedAnnotationCandidate && annotationImportEnabled)
+            ? 'warning'
+            : 'info',
           title: t('dataPreload.information.title'),
           description: informationItems.join('\n\n'),
           confirmText: hasExistingAnnotations
@@ -698,18 +776,65 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
 
         if (!shouldProceed && (shouldEnterAnnotationDirectly || !hasExistingAnnotations)) return;
         shouldLoadExistingAnnotations = shouldProceed && hasExistingAnnotations;
+        shouldImportDetectedAnnotations = shouldProceed && Boolean(selectedAnnotationCandidate && annotationImportEnabled && finalPath);
       }
 
       let loadedWorkspaceStats: Awaited<ReturnType<typeof loadExistingWorkspaceAnnotations>> = null;
-      const totalStages = shouldLoadExistingAnnotations ? 3 : 2;
+      const shouldLoadProjectAnnotations = Boolean(finalPath && (shouldLoadExistingAnnotations || shouldImportDetectedAnnotations));
+      const totalStages = 2 + (shouldImportDetectedAnnotations ? 1 : 0) + (shouldLoadProjectAnnotations ? 1 : 0);
       setProgressStageCount(totalStages);
-      if (finalPath && shouldLoadExistingAnnotations) {
-        loadedWorkspaceStats = await loadExistingWorkspaceAnnotations(finalPath, 2, totalStages);
+
+      if (finalPath && shouldImportDetectedAnnotations && selectedAnnotationCandidate) {
+        setProgressStage('importingAnnotations');
+        setProgressStageIndex(2);
+        setOperationProgress({ current: 0, total: 0 });
+
+        const imagePaths: Record<string, string> = {};
+        const mainFolderPath = mainViewFolder.path.replace(/[\\/]+$/, '');
+        const mainExtension = mainViewFolder.extension || '';
+        const normalizedExtension = mainExtension
+          ? (mainExtension.startsWith('.') ? mainExtension : `.${mainExtension}`)
+          : '';
+        stems.forEach((stem) => {
+          const exactFileName = sceneGroups?.[stem]?.[mainViewFolder.path];
+          const fileName = exactFileName
+            || `${stem}${mainViewFolder.suffix || ''}${normalizedExtension}`;
+          if (fileName) imagePaths[stem] = `${mainFolderPath}/${fileName}`;
+        });
+
+        const importResult = await importData({
+          source_path: selectedAnnotationCandidate.source_path,
+          target_dir: finalPath,
+          format: selectedAnnotationCandidate.format,
+          merge_strategy: annotationMergeStrategy,
+          classes_file: selectedAnnotationCandidate.classes_file || undefined,
+          custom_suffix: '',
+          extension: selectedAnnotationCandidate.extension,
+          import_zero_class: false,
+          coco_mode: 'polygon',
+          stems,
+          image_paths: imagePaths,
+          image_raw_profile: mainViewFolder.rawProfile,
+          attributes_file: selectedAnnotationCandidate.attributes_file || undefined,
+        });
+
+        const importedAttributeDefinitions = Array.isArray(importResult?.attribute_definitions)
+          ? importResult.attribute_definitions
+          : [];
+        if (importedAttributeDefinitions.length > 0) {
+          useStore.getState().upsertTaxonomyAttributes(importedAttributeDefinitions);
+        }
+        setOperationProgress({ current: 1, total: 1 });
+      }
+
+      if (finalPath && shouldLoadProjectAnnotations) {
+        const loadStageIndex = shouldImportDetectedAnnotations ? 3 : 2;
+        loadedWorkspaceStats = await loadExistingWorkspaceAnnotations(finalPath, loadStageIndex, totalStages);
       }
 
       if (finalPath) setWorkspaceStorePath(finalPath);
       setProgressStage('saving');
-      setProgressStageIndex(shouldLoadExistingAnnotations ? 3 : 2);
+      setProgressStageIndex(totalStages);
       setProgressStageCount(totalStages);
       setOperationProgress({ current: 0, total: 1 });
       const projectMeta = generateProjectMetaConfig(useStore.getState());
@@ -1134,6 +1259,141 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
                 </div>
               </div>
             )}
+
+            {isCreatingProject && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-xs font-bold">{t('dataPreload.annotations.title')}</div>
+                    <p className="mt-1 text-[10px] text-muted-foreground">
+                      {t('dataPreload.annotations.description')}
+                    </p>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 shrink-0 text-[10px]"
+                    onClick={() => void scanAnnotationSources()}
+                    disabled={annotationDetectionState === 'scanning' || isGlobalConfirming}
+                  >
+                    <Search className="mr-1.5 size-3.5" />
+                    {t(annotationDetectionState === 'scanning' ? 'dataPreload.annotations.scanning' : 'dataPreload.annotations.rescan')}
+                  </Button>
+                </div>
+
+                {annotationDetectionState === 'scanning' && (
+                  <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-[10px] text-muted-foreground">
+                    {t('dataPreload.annotations.scanningHint')}
+                  </div>
+                )}
+
+                {annotationDetectionState === 'error' && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300">
+                    {t('dataPreload.annotations.scanFailed')}
+                  </div>
+                )}
+
+                {annotationDetectionState === 'done' && annotationCandidates.length === 0 && (
+                  <div className="rounded-lg border border-dashed border-border px-3 py-3 text-[10px] text-muted-foreground">
+                    {t('dataPreload.annotations.noneFound')}
+                  </div>
+                )}
+
+                {annotationCandidates.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {t('dataPreload.annotations.detected')}
+                    </div>
+                    {annotationCandidates.map((candidate) => {
+                      const selected = candidate.source_path === selectedAnnotationPath;
+                      return (
+                        <button
+                          key={`${candidate.format}:${candidate.source_path}`}
+                          type="button"
+                          onClick={() => setSelectedAnnotationPath(candidate.source_path)}
+                          className={`w-full rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                            selected
+                              ? 'border-primary bg-background shadow-sm'
+                              : 'border-border/60 bg-background/60 hover:border-primary/40'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="flex min-w-0 items-center gap-2 text-[11px] font-semibold">
+                              <span className="rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[9px] text-primary">
+                                {candidate.format.toUpperCase()}
+                              </span>
+                              <span className="truncate font-mono" title={candidate.source_path}>
+                                {candidate.source_path}
+                              </span>
+                            </span>
+                            {selected && <span className="shrink-0 text-[9px] font-semibold text-primary">{t('dataPreload.annotations.selected')}</span>}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[9px] text-muted-foreground">
+                            <span>{t('dataPreload.annotations.files', { count: candidate.source_file_count })}</span>
+                            <span>{t('dataPreload.annotations.matched', { count: candidate.matched_count })}</span>
+                            <span>{t('dataPreload.annotations.objects', { count: candidate.shape_count })}</span>
+                          </div>
+                          {candidate.classes_file && (
+                            <div className="mt-1 truncate text-[9px] text-muted-foreground" title={candidate.classes_file}>
+                              {t('dataPreload.annotations.classesFile')}: <span className="font-mono">{candidate.classes_file}</span>
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {selectedAnnotationCandidate && (
+                  <div className="space-y-3 rounded-lg border border-border/60 bg-background/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-[10px] font-semibold">{t('dataPreload.annotations.importTitle')}</div>
+                        <div className="mt-0.5 text-[9px] text-muted-foreground">
+                          {t(annotationImportEnabled ? 'dataPreload.annotations.willImport' : 'dataPreload.annotations.skipImport')}
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant={annotationImportEnabled ? 'default' : 'outline'}
+                        size="sm"
+                        className="h-7 text-[10px]"
+                        onClick={() => setAnnotationImportEnabled(current => !current)}
+                        disabled={isGlobalConfirming}
+                      >
+                        {t(annotationImportEnabled ? 'dataPreload.annotations.skip' : 'dataPreload.annotations.use')}
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 items-center gap-3">
+                      <Label className="text-[10px] text-muted-foreground">
+                        {t('dataPreload.annotations.mergeStrategy')}
+                      </Label>
+                      <Select
+                        value={annotationMergeStrategy}
+                        onValueChange={(value) => setAnnotationMergeStrategy(value as AnnotationMergeStrategy)}
+                        disabled={!annotationImportEnabled || isGlobalConfirming}
+                      >
+                        <SelectTrigger className="h-8 text-[10px]"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {(['append', 'overwrite', 'skip', 'mirror'] as AnnotationMergeStrategy[]).map(strategy => (
+                            <SelectItem key={strategy} value={strategy} className="text-xs">
+                              {t(`dataImport.task.${strategy}`)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {selectedAnnotationCandidate.format === 'yolo' && !selectedAnnotationCandidate.classes_file && (
+                      <div className="text-[9px] text-amber-600 dark:text-amber-300">
+                        {t('dataPreload.annotations.noClassesFile')}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
 
@@ -1149,6 +1409,10 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     ? t('dataPreload.progress.analyzing')
     : progressStage === 'preparing'
       ? t('dataPreload.progress.preparing')
+      : progressStage === 'detectingAnnotations'
+        ? t('dataPreload.annotations.scanning')
+        : progressStage === 'importingAnnotations'
+          ? t('dataPreload.annotations.importing')
       : progressStage === 'loadingAnnotations'
         ? t('dataPreload.workspace.loadingAnnotations')
         : progressStage === 'saving'
