@@ -168,7 +168,7 @@ class ExportRequest(BaseModel):
     split: dict = {}
     random_seed: int = 42
     split_files: dict = {}
-    split_content_mode: str = "stem"  # "stem" or "main_view"
+    split_content_mode: Optional[str] = None  # "stem" or "main_view"; inferred from view count when omitted
     overwrite_target: bool = False
     include_unlabeled_images: bool = True
 

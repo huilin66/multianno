@@ -77,6 +77,15 @@ const DefaultSplitConfig = {
   splitValFile: 'val.txt',
   splitTestFile: 'test.txt',
 }
+
+const getDefaultImageSubdir = (viewCount: number, isMain: boolean, index: number) => {
+  if (viewCount === 1) return 'images';
+  return isMain ? 'main' : `aug_${index}`;
+};
+
+const getDefaultSplitContentMode = (viewCount: number): 'stem' | 'main_view' => (
+  viewCount === 1 ? 'main_view' : 'stem'
+);
 // ==========================================
 // 主组件
 // ==========================================
@@ -118,7 +127,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const [splitTrainFile, setSplitTrainFile] = useState(DefaultSplitConfig.splitTrainFile);
   const [splitValFile, setSplitValFile] = useState(DefaultSplitConfig.splitValFile);
   const [splitTestFile, setSplitTestFile] = useState(DefaultSplitConfig.splitTestFile);
-  const [splitContentMode, setSplitContentMode] = useState<'stem' | 'main_view'>('stem');
+  const [splitContentMode, setSplitContentMode] = useState<'stem' | 'main_view'>(
+    getDefaultSplitContentMode(views.length),
+  );
   const [includeUnlabeledImages, setIncludeUnlabeledImages] = useState(true);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -232,22 +243,6 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
         return 'pending';
     }
   };
-  useEffect(() => {
-    if (views.length === 0) return;
-    const configs: ViewExportConfig[] = views.map((v: any, i: number) => {
-      const folder = folders.find((f: any) => f.id === v.folderId);
-      return {
-        viewId: v.id,
-        viewName: v.isMain ? t('view.mainView') : `${t('view.augView')} ${i}`,
-        suffix: folder?.suffix || '',
-        extension: folder?.extension || '.png',
-        subdir: `${v.isMain ? 'main' : `aug_${i}`}`,
-        keepOriginal: false,
-      };
-    });
-    setViewConfigs(configs);
-  }, [views, folders]);
-
   const classOrder = useStore(s => s.classOrder);
 
   const resetClasses = useCallback(() => {
@@ -342,18 +337,17 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     return views.map((v: any, i: number) => {
       const folder = folders.find((f: any) => f.id === v.folderId);
       const rawSuffix = folder?.suffix || '';
-      let suffix = rawSuffix;
-      const ext = folder?.extension || '.png';
+      const ext = getExportImageExtension(folder?.extension);
       return {
         viewId: v.id,
         viewName: v.isMain ? t('view.mainView') : `${t('view.augView')} ${i}`,
-        suffix,
+        suffix: rawSuffix,
         extension: ext,
-        subdir: v.isMain ? 'main' : `aug_${i}`,
+        subdir: getDefaultImageSubdir(views.length, v.isMain, i),
         keepOriginal: false,
       };
     });
-  }, [views, folders]);
+  }, [views, folders, t]);
   const handleLoadClassFile = async (paths: string[]) => {
     setExplorerConfig(prev => ({ ...prev, open: false }));
     if (paths.length === 0) return;
@@ -977,7 +971,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                       value={vc.subdir}
                       onChange={(e) => updateViewConfig(vc.viewId, { subdir: e.target.value })}
                       className="h-9 text-xs font-mono"
-                      placeholder={vc.viewName.startsWith(t('view.mainView')) ? 'main' : 'aug'}
+                      placeholder={views.length === 1 ? 'images' : (vc.viewName.startsWith(t('view.mainView')) ? 'main' : 'aug')}
                     />
                   </Field>
                 )}
@@ -1351,14 +1345,19 @@ useEffect(() => {
     return {
       viewId: v.id,
       viewName: v.isMain ? t('view.mainView') : `${t('view.augView')} ${i}`,
-      suffix: folder?.suffix || '',           // 🆕 从 store 读取
-      extension: getExportImageExtension(folder?.extension),  // 🆕 从 store 读取
-      subdir: v.isMain ? 'main' : `aug_${i}`,
+      suffix: folder?.suffix || '',
+      extension: getExportImageExtension(folder?.extension),
+      subdir: getDefaultImageSubdir(views.length, v.isMain, i),
       keepOriginal: false,
     };
   });
   setViewConfigs(configs);
-}, [views, folders]);
+}, [views, folders, t]);
+
+useEffect(() => {
+  if (views.length === 0) return;
+  setSplitContentMode(getDefaultSplitContentMode(views.length));
+}, [views.length]);
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* 主体：左右分栏 */}
@@ -1439,7 +1438,7 @@ useEffect(() => {
                         setSplitTrainFile(DefaultSplitConfig.splitTrainFile);
                         setSplitValFile(DefaultSplitConfig.splitValFile);
                         setSplitTestFile(DefaultSplitConfig.splitTestFile);
-                        setSplitContentMode('stem');
+                        setSplitContentMode(getDefaultSplitContentMode(views.length));
                         setIncludeUnlabeledImages(true);
                       } else if (activeStep === 'shapes') {
                         const mapping = TASK_SHAPE_MAPPINGS[taskType];

@@ -2527,9 +2527,13 @@ def _copy_images_for_stem(stem, view_configs, target_dir):
             )
 
 
-def _write_split_files(target_dir, split_files, train, val, test, split_content_mode="stem", view_configs=None):
+def _write_split_files(target_dir, split_files, train, val, test, split_content_mode=None, view_configs=None):
     """生成 train.txt, val.txt, test.txt"""
-    if split_content_mode == "main_view" and view_configs:
+    effective_mode = split_content_mode
+    if effective_mode is None:
+        effective_mode = "main_view" if view_configs and len(view_configs) == 1 else "stem"
+
+    if effective_mode == "main_view" and view_configs:
         main_vc = next((vc for vc in view_configs if vc.is_main), view_configs[0])
         main_suffix = getattr(main_vc, "suffix", "")
         main_ext = getattr(main_vc, "extension", ".jpg")
