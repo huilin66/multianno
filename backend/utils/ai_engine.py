@@ -353,6 +353,9 @@ class SAM3Adapter:
             half=True,
             compile=False,
         )
+        configured_device = os.getenv("MULTIANNO_AI_DEVICE", "").strip()
+        if configured_device:
+            overrides["device"] = configured_device
         self.predictor = UnifiedSAM3Predcitor(overrides=overrides)
 
     def set_image(self, img_array: np.ndarray):
@@ -472,6 +475,7 @@ class UltralyticsYOLOAdapter:
         self.default_conf = 0.25
         self.current_cv2_img: np.ndarray | None = None
         self.class_names: list[str] = []
+        self.device = os.getenv("MULTIANNO_AI_DEVICE", "").strip()
 
     @property
     def is_loaded(self):
@@ -497,10 +501,15 @@ class UltralyticsYOLOAdapter:
             raise RuntimeError(f"{self.model_type} model is not loaded.")
         if self.current_cv2_img is None:
             raise RuntimeError("Image is not initialized for Vision AI.")
+        predict_options = {
+            "source": self.current_cv2_img,
+            "conf": self.default_conf if conf is None else conf,
+            "verbose": False,
+        }
+        if self.device:
+            predict_options["device"] = self.device
         return self.model.predict(
-            source=self.current_cv2_img,
-            conf=self.default_conf if conf is None else conf,
-            verbose=False,
+            **predict_options,
         )
 
     def _collect_detections(self, conf: Optional[float]) -> list[dict[str, Any]]:

@@ -92,6 +92,18 @@ python app.py
 
 完整标注工作流请阅读 [标注项目快速开始](./QUICK_START_zh-CN.md)。
 
+### 本地 AI 配置
+
+将 `.env.example` 复制为根目录下的 `.env`，然后设置 AI 设置窗口使用的路径：
+
+```dotenv
+VITE_AI_MODEL_TYPE=YOLO-Custom
+VITE_AI_MODEL_PATH=E:/models/detector.pt
+VITE_AI_CLASSES_PATH=E:/models/classes.txt
+```
+
+这些路径会作为 `设置 > AI` 的默认值；点击确认 AI 设置后才会加载模型。VLM 接口使用 `MULTIANNO_VLM_*` 配置。API key 只能放在 `MULTIANNO_VLM_API_KEY` 或 `OPENAI_API_KEY` 中，不要使用 `VITE_` 前缀保存密钥。
+
 1. **创建新项目：**
    * 设置项目元数据路径。
    * 选择图像文件夹及对应视图。

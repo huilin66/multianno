@@ -22,6 +22,7 @@ import {
   updateVLMConfig,
 } from '../../../api/client';
 import { useStore } from '../../../store/useStore';
+import { VLM_ENV_DEFAULTS } from '../../../config/env';
 import { showDialog } from '../../../store/useDialogStore';
 import { FileExplorerDialog } from '../FileExplorerDialog';
 import { Button } from '../../ui/button';
@@ -75,8 +76,8 @@ const getFileName = (path: string) => path.split(/[\\/]/).pop() || path;
 const normalizeComparablePath = (path: string) => path.trim().replace(/\\/g, '/').toLowerCase();
 
 const DEFAULT_VLM_SETTINGS = {
-  baseUrl: 'https://api.openai.com/v1',
-  model: 'gpt-4o-mini',
+  baseUrl: VLM_ENV_DEFAULTS.baseUrl,
+  model: VLM_ENV_DEFAULTS.model,
   hasApiKey: false,
   isConfigured: false,
   timeout: 90,

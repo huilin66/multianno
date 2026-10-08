@@ -2,6 +2,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { ProjectMetaContract } from '../config/contract';
+import { AI_ENV_DEFAULTS, VLM_ENV_DEFAULTS } from '../config/env';
 import { ensureUniqueAnnotationIds } from '../lib/annotationIds';
 
 // Match Windows Explorer-style ordering for scene names such as 1, 2, 10, 11.
@@ -414,18 +415,18 @@ export const useStore = create<AppState>()(
       },
       shortcutsSettings:DEFAULT_SHORTCUTS_SETTINGS,
       aiSettings: {
-        model: 'SAM-3',
-        modelPath: '',
-        classFilePath: '',
+        model: AI_ENV_DEFAULTS.model,
+        modelPath: AI_ENV_DEFAULTS.modelPath,
+        classFilePath: AI_ENV_DEFAULTS.classFilePath,
         confidence: 0.25,
-        isConfigured: false,
+        isConfigured: Boolean(AI_ENV_DEFAULTS.modelPath),
         inferenceSize: 644,
         outputType: 'polygon',
         filterThreshold: 1
       },
       vlmSettings: {
-        baseUrl: 'https://api.openai.com/v1',
-        model: 'gpt-4o-mini',
+        baseUrl: VLM_ENV_DEFAULTS.baseUrl,
+        model: VLM_ENV_DEFAULTS.model,
         hasApiKey: false,
         isConfigured: false,
         timeout: 90,

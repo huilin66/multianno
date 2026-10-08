@@ -1,5 +1,6 @@
 # routers/ai.py
 import base64
+import os
 
 import cv2
 import numpy as np
@@ -26,6 +27,26 @@ logger = get_logger("ai")
 
 
 vision_engine = InteractiveVisionEngine() if InteractiveVisionEngine else None
+
+
+def _env_first(*names: str, default: str = "") -> str:
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return default
+
+
+def _default_model_type() -> str:
+    return _env_first("MULTIANNO_AI_MODEL_TYPE", "VITE_AI_MODEL_TYPE", default="SAM-3")
+
+
+def _default_model_path() -> str:
+    return _env_first("MULTIANNO_AI_MODEL_PATH", "VITE_AI_MODEL_PATH")
+
+
+def _default_classes_path() -> str:
+    return _env_first("MULTIANNO_AI_CLASSES_PATH", "VITE_AI_CLASSES_PATH")
 
 
 def _ai_unavailable_detail() -> str:
@@ -58,8 +79,8 @@ async def get_engine_status():
         return {
             "is_available": False,
             "is_loaded": False,
-            "model_path": "",
-            "model_type": "",
+            "model_path": _default_model_path(),
+            "model_type": _default_model_type(),
             "supported_models": [],
             "detail": _ai_unavailable_detail(),
         }
@@ -67,28 +88,37 @@ async def get_engine_status():
     return {
         "is_available": True,
         "is_loaded": vision_engine.is_loaded,
-        "model_path": vision_engine.model_path,
-        "model_type": vision_engine.model_type,
+        "model_path": vision_engine.model_path or _default_model_path(),
+        "model_type": vision_engine.model_type or _default_model_type(),
         "supported_models": vision_engine.supported_models,
     }
 
 
 @router.post("/config")
 async def update_ai_config(req: AIConfigRequest):
+    model_path = req.model_path.strip() or _default_model_path()
+    model_type = req.model_type.strip() or _default_model_type()
+    classes_file = (req.classes_file or "").strip() or _default_classes_path()
+    if not model_path:
+        raise HTTPException(
+            status_code=400,
+            detail="Vision AI model path is required. Set it in the AI settings or .env.",
+        )
+
     logger.info(
         "AI_CONFIG_START model=%s type=%s confidence=%s classes=%s",
-        shorten(req.model_path, 1500),
-        req.model_type,
+        shorten(model_path, 1500),
+        model_type,
         req.confidence,
-        shorten(req.classes_file, 1000),
+        shorten(classes_file, 1000),
     )
     engine = _require_vision_engine()
     try:
-        engine.load_model(req.model_path, req.model_type, req.confidence, req.classes_file)
-        logger.info("AI_CONFIG_END model=%s", shorten(req.model_path, 1500))
+        engine.load_model(model_path, model_type, req.confidence, classes_file or None)
+        logger.info("AI_CONFIG_END model=%s", shorten(model_path, 1500))
         return {"status": "success"}
     except Exception as e:
-        logger.exception("AI_CONFIG_ERROR model=%s error=%s", req.model_path, e)
+        logger.exception("AI_CONFIG_ERROR model=%s error=%s", model_path, e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

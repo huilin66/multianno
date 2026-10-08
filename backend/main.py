@@ -8,6 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from utils.env import load_project_env
 from utils.logging_config import (
     configure_logging,
     get_logger,
@@ -17,6 +18,7 @@ from utils.logging_config import (
 )
 
 
+load_project_env()
 configure_logging()
 logger = get_logger("http")
 

@@ -43,6 +43,20 @@ def _env_first(*names: str, default: str = "") -> str:
     return default
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, "").strip() or default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, "").strip() or default)
+    except (TypeError, ValueError):
+        return default
+
+
 # This state deliberately lives only for the backend process lifetime.  The
 # non-secret fields are mirrored in the frontend for display, while api_key is
 # never sent back to the browser or written to project metadata.
@@ -50,9 +64,9 @@ _vlm_config: dict[str, Any] = {
     "base_url": _env_first("MULTIANNO_VLM_BASE_URL", default="https://api.openai.com/v1"),
     "model": _env_first("MULTIANNO_VLM_MODEL", default="gpt-4o-mini"),
     "api_key": _env_first("MULTIANNO_VLM_API_KEY", "OPENAI_API_KEY"),
-    "timeout": 90.0,
-    "temperature": 0.1,
-    "max_tokens": 1024,
+    "timeout": max(5.0, min(300.0, _env_float("MULTIANNO_VLM_TIMEOUT", 90.0))),
+    "temperature": max(0.0, min(2.0, _env_float("MULTIANNO_VLM_TEMPERATURE", 0.1))),
+    "max_tokens": max(64, min(8192, _env_int("MULTIANNO_VLM_MAX_TOKENS", 1024))),
 }
 
 

@@ -100,6 +100,18 @@ This starts the services without opening a browser. To open the frontend automat
 
 For the full annotation workflow, see [Annotation Quick Start](./QUICK_START.md).
 
+### Local AI configuration
+
+Copy `.env.example` to `.env` in the repository root and set the paths used by the AI settings window:
+
+```dotenv
+VITE_AI_MODEL_TYPE=YOLO-Custom
+VITE_AI_MODEL_PATH=E:/models/detector.pt
+VITE_AI_CLASSES_PATH=E:/models/classes.txt
+```
+
+The paths are used as defaults in `Settings > AI`; the model is loaded when you confirm the AI settings. VLM endpoint settings use `MULTIANNO_VLM_*`. Keep API keys in `MULTIANNO_VLM_API_KEY` or `OPENAI_API_KEY` only—never use a `VITE_` prefix for secrets.
+
 1. **Create a new project:**
    * Set up your project meta path.
    * Select your image folder(s) and corresponding views.
