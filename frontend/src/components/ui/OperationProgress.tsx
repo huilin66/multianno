@@ -36,6 +36,7 @@ export function OperationProgress({
     ? Math.min(safeTotal, Math.max(0, Number(current) || 0))
     : 0;
   const percent = hasTotal ? (safeCurrent / safeTotal) * 100 : 0;
+  const showDeterminateProgress = hasTotal && safeCurrent > 0;
 
   return (
     <div className={cn('min-w-0 flex-1 space-y-1.5', className)}>
@@ -56,10 +57,10 @@ export function OperationProgress({
         <div
           className={cn(
             'h-full rounded-full transition-[width] duration-300',
-            hasTotal ? 'bg-primary' : 'w-1/2 animate-pulse bg-primary',
+            showDeterminateProgress ? 'bg-primary' : 'w-1/2 animate-pulse bg-primary',
             barClassName,
           )}
-          style={hasTotal ? { width: `${percent}%` } : undefined}
+          style={showDeterminateProgress ? { width: `${percent}%` } : undefined}
         />
       </div>
     </div>

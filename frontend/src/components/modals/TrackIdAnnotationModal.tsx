@@ -712,7 +712,7 @@ function TrackIdEditor({
             {reidRunning && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {reidRunning ? t('trackIdWindow.reidRunning') : t('trackIdWindow.autoTrack')}
           </Button>
-          {reidRunning && reidProgress && (
+          {reidProgress && (reidRunning || reidProgress.status === 'completed' || reidProgress.status === 'failed') && (
             <div className="mt-2 rounded-md border border-blue-100 bg-blue-50/50 p-2 dark:border-blue-900/50 dark:bg-blue-950/20">
               <OperationProgress
                 stageIndex={reidProgress.stage_index}
@@ -1035,7 +1035,9 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       setReidProgress(job);
 
       for (let attempt = 0; attempt < 7200 && (job.status === 'queued' || job.status === 'running'); attempt += 1) {
-        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        if (attempt > 0) {
+          await new Promise((resolve) => window.setTimeout(resolve, 100));
+        }
         job = await getTrackIdReIDJob(job.job_id, controller.signal);
         setReidProgress(job);
       }
