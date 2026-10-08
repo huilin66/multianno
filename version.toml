@@ -1,6 +1,6 @@
 [project]
 name = "MultiAnno"
-version = "1.6.46"
+version = "1.6.47"
 version_scheme = "semver"
 release_date = "2026-10-08"
 

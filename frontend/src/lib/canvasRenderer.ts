@@ -169,7 +169,7 @@ function drawAnnotationLabel(
   const trackId = annotation.track_id;
   const hasTrackId = trackId !== null && trackId !== undefined && String(trackId).trim() !== '';
   const label = editorSettings?.showTrackId === true && hasTrackId
-    ? `${baseLabel} · ${String(trackId)}`
+    ? `${String(trackId)}:${baseLabel}`
     : baseLabel;
   const showAttributes = editorSettings?.att_show === true;
   const attributeEntries = showAttributes
