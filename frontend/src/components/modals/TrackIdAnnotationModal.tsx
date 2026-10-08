@@ -1,6 +1,7 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useStore } from '../../store/useStore';
+import { getPreviewImageUrl } from '../../api/client';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -32,6 +33,7 @@ interface TrackIdAnnotationModalProps {
 interface FrameSlot {
   stem: string | null;
   offset: -1 | 0 | 1;
+  role: 'previous' | 'current' | 'next' | 'start' | 'end';
 }
 
 interface ViewportState {
@@ -243,6 +245,59 @@ function TrackIdFrameCanvas({
   );
 }
 
+function TrackFrameThumbnail({
+  stem,
+  current,
+  canvasProps,
+  onClick,
+}: {
+  key?: React.Key;
+  stem: string;
+  current: boolean;
+  canvasProps: Record<string, any>;
+  onClick: () => void;
+}) {
+  const view = canvasProps.view;
+  const folder = (canvasProps.folders || []).find((item: any) => item.id === view?.folderId);
+  const imageUrl = React.useMemo(() => {
+    if (!view || !folder?.path) return '';
+    const exactFileName = canvasProps.sceneGroups?.[stem]?.[folder.path];
+    const extension = folder.extension || '.tif';
+    const normalizedExtension = extension.startsWith('.') ? extension : `.${extension}`;
+    const fileName = exactFileName || `${stem}${folder.suffix || normalizedExtension}`;
+    return getPreviewImageUrl(
+      folder.path,
+      fileName,
+      view.bands || [],
+      view.colormap || 'gray',
+      view.settings,
+      folder.rawProfile,
+    );
+  }, [canvasProps.sceneGroups, folder, stem, view]);
+
+  return (
+    <button
+      type="button"
+      data-stem={stem}
+      onClick={onClick}
+      className={`group relative h-14 min-w-24 max-w-32 shrink-0 overflow-hidden rounded border text-left transition-colors ${
+        current
+          ? 'border-blue-400 ring-1 ring-blue-200 dark:border-blue-600 dark:ring-blue-900'
+          : 'border-neutral-200 hover:border-blue-300 dark:border-neutral-800 dark:hover:border-blue-700'
+      }`}
+      title={stem}
+      aria-label={stem}
+    >
+      {imageUrl ? (
+        <img src={imageUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
+      ) : (
+        <span className="flex h-full items-center justify-center bg-neutral-100 text-[9px] text-neutral-400 dark:bg-neutral-900">—</span>
+      )}
+      <span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-1 text-[9px] text-white">{stem}</span>
+    </button>
+  );
+}
+
 function TrackIdEditor({
   t,
   trackIds,
@@ -439,6 +494,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null);
   const [activeSequence, setActiveSequence] = React.useState(1);
   const [syncFrames, setSyncFrames] = React.useState(true);
+  const [frameContextMode, setFrameContextMode] = React.useState<'locked' | 'adjacent'>('locked');
   const [startCandidate, setStartCandidate] = React.useState<TrackCandidate | null>(null);
   const [endCandidate, setEndCandidate] = React.useState<TrackCandidate | null>(null);
   const [startLocked, setStartLocked] = React.useState(false);
@@ -474,10 +530,34 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
   }, [annotations]);
 
-  const frameSlots = React.useMemo<FrameSlot[]>(() => [-1, 0, 1].map((offset) => ({
-    offset: offset as FrameSlot['offset'],
-    stem: currentIndex >= 0 ? stems[currentIndex + offset] || null : null,
-  })), [currentIndex, stems]);
+  const frameSlots = React.useMemo<FrameSlot[]>(() => {
+    const previousStem = currentIndex >= 0 ? stems[currentIndex - 1] || null : null;
+    const nextStem = currentIndex >= 0 ? stems[currentIndex + 1] || null : null;
+    const startStem = frameContextMode === 'locked'
+      ? (startLocked ? startCandidate?.stem || null : null)
+      : previousStem;
+    const endStem = frameContextMode === 'locked'
+      ? (endLocked ? endCandidate?.stem || null : null)
+      : nextStem;
+
+    return [
+      {
+        offset: -1,
+        role: frameContextMode === 'locked' ? 'start' : 'previous',
+        stem: startStem,
+      },
+      {
+        offset: 0,
+        role: 'current',
+        stem: currentStem || (currentIndex >= 0 ? stems[currentIndex] || null : null),
+      },
+      {
+        offset: 1,
+        role: frameContextMode === 'locked' ? 'end' : 'next',
+        stem: endStem,
+      },
+    ];
+  }, [currentIndex, currentStem, endCandidate?.stem, endLocked, frameContextMode, startCandidate?.stem, startLocked, stems]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -625,7 +705,17 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                   {syncFrames ? <Link2 className="h-3.5 w-3.5" /> : <Unlink2 className="h-3.5 w-3.5" />}
                   {t('trackIdWindow.syncViews')}
                 </Button>
-                <span className="rounded-full bg-neutral-100 px-2 py-1 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">{t('trackIdWindow.frameNavigationHint')}</span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={frameContextMode === 'locked' ? 'default' : 'outline'}
+                  className="h-7 px-2 text-[10px]"
+                  onClick={() => setFrameContextMode((value) => value === 'locked' ? 'adjacent' : 'locked')}
+                  title={t(frameContextMode === 'locked' ? 'trackIdWindow.switchToAdjacentFrames' : 'trackIdWindow.switchToLockedFrames')}
+                  aria-pressed={frameContextMode === 'locked'}
+                >
+                  {t(frameContextMode === 'locked' ? 'trackIdWindow.lockedFrames' : 'trackIdWindow.adjacentFrames')}
+                </Button>
               </div>
             </div>
 
@@ -633,9 +723,18 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
               <div className="grid min-w-[900px] grid-cols-3 gap-3">
                 {frameSlots.map((slot, index) => {
                   const editable = slot.offset === 0;
+                  const frameLabel = slot.role === 'start'
+                    ? t('trackIdWindow.startFrame')
+                    : slot.role === 'end'
+                      ? t('trackIdWindow.endFrame')
+                      : slot.role === 'previous'
+                        ? t('trackIdWindow.frameOne')
+                        : slot.role === 'next'
+                          ? t('trackIdWindow.frameThree')
+                          : t('trackIdWindow.frameTwo');
                   return (
                     <article key={`${slot.offset}-${slot.stem || 'empty'}`} className={`overflow-hidden rounded-lg border bg-white shadow-sm dark:bg-neutral-900 ${editable ? 'border-blue-300 ring-1 ring-blue-100 dark:border-blue-700 dark:ring-blue-950' : 'border-neutral-200 dark:border-neutral-800'}`}>
-                      <div className="flex items-center gap-2 border-b border-neutral-100 px-3 py-2 dark:border-neutral-800"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-100 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{index + 1}</span><span className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100">{slot.offset === -1 ? t('trackIdWindow.frameOne') : slot.offset === 0 ? t('trackIdWindow.frameTwo') : t('trackIdWindow.frameThree')}</span></div>
+                      <div className="flex items-center gap-2 border-b border-neutral-100 px-3 py-2 dark:border-neutral-800"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-100 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{index + 1}</span><span className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100">{frameLabel}</span></div>
                       <div
                         role="button"
                         tabIndex={slot.stem ? 0 : -1}
@@ -662,14 +761,22 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                           onTrackObjectDoubleClick={handleTrackObjectDoubleClick}
                         />
                       </div>
-                      <div className="flex items-center justify-between gap-2 border-t border-neutral-100 px-3 py-2 text-[10px] dark:border-neutral-800"><span className="truncate text-neutral-500" title={slot.stem || undefined}>{slot.stem || t('trackIdWindow.frameUnavailable')}</span>{slot.offset === -1 && <ChevronLeft className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}{slot.offset === 1 && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}</div>
+                      <div className="flex items-center justify-between gap-2 border-t border-neutral-100 px-3 py-2 text-[10px] dark:border-neutral-800"><span className="truncate text-neutral-500" title={slot.stem || undefined}>{slot.stem || t('trackIdWindow.frameUnavailable')}</span>{slot.role === 'previous' && <ChevronLeft className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}{slot.role === 'next' && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}</div>
                     </article>
                   );
                 })}
               </div>
             </div>
 
-            <div className="shrink-0 border-t border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950"><div className="mb-1.5 flex items-center justify-between text-[10px] text-neutral-500"><span>{t('trackIdWindow.filmstrip')}</span><span>{currentIndex >= 0 ? `${currentIndex + 1}/${stems.length}` : `0/${stems.length}`}</span></div><div className="flex gap-1.5 overflow-x-auto pb-0.5">{stems.slice(Math.max(0, currentIndex - 5), Math.max(0, currentIndex - 5) + 11).map((stem: string) => <button type="button" key={stem} onClick={() => jumpToStem(stem)} className={`h-9 min-w-16 max-w-28 shrink-0 truncate rounded border px-1.5 text-[9px] transition-colors ${stem === currentStem ? 'border-blue-400 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300' : 'border-neutral-200 bg-neutral-50 text-neutral-500 hover:border-blue-300 hover:text-blue-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400'}`} title={stem}>{stem}</button>)}{stems.length === 0 && <span className="py-2 text-[10px] text-neutral-400">{t('trackIdWindow.noFrames')}</span>}</div></div>
+            <div className="shrink-0 border-t border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="mb-1.5 flex items-center justify-between text-[10px] text-neutral-500"><span>{t('trackIdWindow.filmstrip')}</span><span>{currentIndex >= 0 ? `${currentIndex + 1}/${stems.length}` : `0/${stems.length}`}</span></div>
+              <div className="flex max-w-full gap-1.5 overflow-x-scroll pb-2 custom-scrollbar">
+                {stems.map((stem: string) => (
+                  <TrackFrameThumbnail key={stem} stem={stem} current={stem === currentStem} canvasProps={canvasProps} onClick={() => jumpToStem(stem)} />
+                ))}
+                {stems.length === 0 && <span className="py-2 text-[10px] text-neutral-400">{t('trackIdWindow.noFrames')}</span>}
+              </div>
+            </div>
               </div>
             </div>
           </section>

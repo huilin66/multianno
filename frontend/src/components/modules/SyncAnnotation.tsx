@@ -1732,6 +1732,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     taxonomyAttributes,
     theme,
     folders,
+    sceneGroups,
     mainWidth,
     mainHeight,
     tool,
