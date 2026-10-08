@@ -420,6 +420,7 @@ export interface TrackIdReIDResult {
     track_id: string;
     score: number;
     combined_score?: number;
+    iou?: number;
     method: string;
   }>;
   missing_stems: string[];

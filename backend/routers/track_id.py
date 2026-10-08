@@ -47,6 +47,45 @@ def _interpolated_center(
     )
 
 
+def _interpolated_bbox(
+    start: TrackIdCandidate,
+    end: TrackIdCandidate,
+    progress: float,
+) -> Optional[list[float]]:
+    start_bbox = candidate_bbox(start.model_dump())
+    end_bbox = candidate_bbox(end.model_dump())
+    if start_bbox is None or end_bbox is None:
+        return None
+    return [
+        start_bbox[index] + (end_bbox[index] - start_bbox[index]) * progress
+        for index in range(4)
+    ]
+
+
+def _bbox_iou(left: Optional[list[float]], right: Optional[list[float]]) -> float:
+    if left is None or right is None:
+        return 0.0
+    left_width = left[2] - left[0]
+    left_height = left[3] - left[1]
+    right_width = right[2] - right[0]
+    right_height = right[3] - right[1]
+    if left_width <= 0 or left_height <= 0 or right_width <= 0 or right_height <= 0:
+        return 0.0
+
+    intersection_left = max(left[0], right[0])
+    intersection_top = max(left[1], right[1])
+    intersection_right = min(left[2], right[2])
+    intersection_bottom = min(left[3], right[3])
+    intersection_width = max(0.0, intersection_right - intersection_left)
+    intersection_height = max(0.0, intersection_bottom - intersection_top)
+    intersection_area = intersection_width * intersection_height
+    if intersection_area <= 0:
+        return 0.0
+
+    union_area = left_width * left_height + right_width * right_height - intersection_area
+    return intersection_area / union_area if union_area > 0 else 0.0
+
+
 def _location_score(candidate: TrackIdCandidate, expected_center: Optional[tuple[float, float]]) -> float:
     actual_center = candidate_center(candidate.model_dump())
     if actual_center is None or expected_center is None:
@@ -158,9 +197,31 @@ async def associate_track_id(req: TrackIdReIDRequest):
             continue
 
         progress = (frame_index - start_index) / index_distance if index_distance else 0.5
+        expected_bbox = _interpolated_bbox(req.start, req.end, progress)
         expected_center = _interpolated_center(req.start, req.end, progress)
+        candidate_ious = {
+            candidate.annotation_id: _bbox_iou(candidate_bbox(candidate.model_dump()), expected_bbox)
+            for candidate in candidates
+        }
+        overlapping_candidates = [
+            candidate for candidate in candidates
+            if candidate_ious.get(candidate.annotation_id, 0.0) > 0.0
+        ]
+        # Use the interpolated box as a hard pre-filter when it overlaps any
+        # detection. If detector jitter leaves no overlap, retain the old
+        # all-candidate fallback so a track is not lost solely because the
+        # predicted box missed by a few pixels.
+        reid_candidates = overlapping_candidates or candidates
+        logger.info(
+            "REID_FRAME_FILTER stem=%s candidates=%s overlap=%s evaluated=%s",
+            shorten(frame.stem, 200),
+            len(candidates),
+            len(overlapping_candidates),
+            len(reid_candidates),
+        )
         best: Optional[tuple[float, float, TrackIdCandidate]] = None
-        for candidate in candidates:
+        best_iou = 0.0
+        for candidate in reid_candidates:
             try:
                 embedding = encoder.embed(frame.image_path, candidate.points)
             except (OSError, ValueError, ReIDUnavailableError) as exc:
@@ -172,11 +233,13 @@ async def associate_track_id(req: TrackIdReIDRequest):
                 )
                 continue
             similarity = cosine_similarity(reference, embedding)
-            location = _location_score(candidate, expected_center)
+            candidate_iou = candidate_ious.get(candidate.annotation_id, 0.0)
+            location = candidate_iou if expected_bbox is not None and candidate_iou > 0.0 else _location_score(candidate, expected_center)
             combined = similarity * (1.0 - req.location_weight) + location * req.location_weight
             score = (combined, similarity, candidate)
             if best is None or score[:2] > best[:2]:
                 best = score
+                best_iou = candidate_iou
 
         if best is None or best[1] < req.min_similarity:
             missing_stems.append(frame.stem)
@@ -189,7 +252,8 @@ async def associate_track_id(req: TrackIdReIDRequest):
                 "track_id": req.track_id,
                 "score": round(float(similarity), 5),
                 "combined_score": round(float(combined), 5),
-                "method": "reid_interpolation",
+                "iou": round(float(best_iou), 5),
+                "method": "reid_iou" if best_iou > 0.0 else "reid_fallback",
             }
         )
 
