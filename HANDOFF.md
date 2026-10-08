@@ -76,9 +76,11 @@ The primary annotation workflow is:
 
 ### 0.3 Recently Completed Changes
 
-- The Track ID window uses an explicit large responsive dialog width so its three-frame workspace does not inherit the generic small-dialog width.
+- The Track ID window follows the existing large-dialog width convention (95vw) and reuses the main workspace CanvasView, so the three temporal slots load real images and annotations instead of placeholder cards.
 
-- The Track ID annotation window scaffold is available from the top-left Annotation System menu and the Object Editor title action. It currently provides a single-modality, three-frame layout, filmstrip navigation, existing Track ID selection, and sequence placeholders; locking, missing-frame marking, interpolation, and ReID are not connected yet.
+- The Track ID window reuses the main annotation right-panel structure. View Layers are read-only in this mode, and Track ID Editor is added as a dedicated section in the same panel.
+
+- The Track ID annotation window is available from the top-left Annotation System menu and the Object Editor title action. It currently provides a single-modality, three-canvas layout, center-frame object double-click selection, filmstrip navigation, existing Track ID selection/assignment, and sequence placeholders; locking, missing-frame marking, interpolation, and ReID are not connected yet.
 
 These behaviors are part of the current baseline and should not be accidentally regressed:
 

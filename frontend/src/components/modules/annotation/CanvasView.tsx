@@ -86,11 +86,12 @@ const CanvasViewInner=({
   formLabel, pendingAnnotation, onDoubleClick, 
   hoverPos, onMouseLeave, editorSettings, mouseQuad,
   layerOrder, visibleLayers, layerConfigs, allViews, isSingleViewMode, showFullExtent, tempViewSettings, cursorStyle,
-  aiPrompts, onImageLoaded
+  aiPrompts, onImageLoaded, onImageDimensions, onWheel, viewportOverride
 }: any) => {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { viewport, sceneGroups, stems } = useStore();
+  const { viewport: storeViewport, sceneGroups, stems } = useStore();
+  const viewport = viewportOverride || storeViewport;
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
 
 
@@ -158,6 +159,7 @@ const CanvasViewInner=({
           if (cancelled || settled) return;
           settled = true;
           setRawImage(img);
+          onImageDimensions?.({ width: img.naturalWidth || img.width, height: img.naturalHeight || img.height });
           onImageLoaded?.();
       };
 
@@ -310,7 +312,10 @@ const CanvasViewInner=({
       ctx.putImageData(imgData, 0, 0);
       
       const processedImg = new Image();
-      processedImg.onload = () => setImageObj(processedImg);
+      processedImg.onload = () => {
+        setImageObj(processedImg);
+        onImageDimensions?.({ width: processedImg.naturalWidth || processedImg.width, height: processedImg.naturalHeight || processedImg.height });
+      };
       processedImg.src = canvas.toDataURL('image/jpeg', 0.95);
 
     }, 50); // 50ms 防抖，防止滑块拖动时界面卡死
@@ -509,7 +514,7 @@ return (
                     : 'default'
         }} 
         className="absolute inset-0 w-full h-full outline-none"
-        onMouseDown={onMouseDown} onMouseUp={onMouseUp} onDoubleClick={onDoubleClick}
+        onMouseDown={onMouseDown} onMouseUp={onMouseUp} onDoubleClick={onDoubleClick} onWheel={onWheel}
         onMouseMove={onMouseMove} onMouseLeave={onMouseLeave} onContextMenu={(e) => e.preventDefault()}
       />
 
@@ -680,6 +685,7 @@ export const CanvasView = React.memo(CanvasViewInner, (prev, next) => {
         prev.editorSettings === next.editorSettings &&
         prev.taxonomyAttributes === next.taxonomyAttributes &&
         prev.mainWidth === next.mainWidth &&
-        prev.mainHeight === next.mainHeight
+        prev.mainHeight === next.mainHeight &&
+        prev.viewportOverride === next.viewportOverride
     );
 });

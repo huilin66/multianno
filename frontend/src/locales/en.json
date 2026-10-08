@@ -22,6 +22,10 @@
     "open": "Open Track ID Annotation",
     "singleModality": "Single modality",
     "noFolder": "No image folder",
+    "mainScene": "Main scene",
+    "syncViews": "Sync views",
+    "syncViewsOn": "Frame 1 and Frame 3 follow the editable frame's zoom and pan",
+    "syncViewsOff": "Keep the read-only frames fitted independently",
     "threeFrameView": "Three-frame view",
     "noCurrentScene": "No current scene",
     "frameNavigationHint": "A / D: scene · W / S: frame",
@@ -41,6 +45,10 @@
     "editorTitle": "Track ID editor",
     "editorDescription": "Select an existing ID or prepare a new sequence.",
     "trackId": "Track ID",
+    "mainId": "Main ID",
+    "partId": "Part ID",
+    "mainIdPlaceholder": "e.g. 1",
+    "partIdPlaceholder": "e.g. a",
     "trackIdPlaceholder": "e.g. 1-a",
     "selectTrackId": "Use this track ID",
     "existingTrackIds": "Existing track IDs",
@@ -57,6 +65,7 @@
     "interpolateReid": "Interpolate + ReID",
     "scaffoldNotice": "This first version provides the window structure and entry points. Object locking, missing-frame marking, interpolation, and ReID will be connected next.",
     "notImplemented": "Not connected yet"
+    ,"viewLayersReadOnly": "View Layers are read-only in Track ID Annotation"
   },
   "header": {
     "appName": "Welcome to use Multianno!",

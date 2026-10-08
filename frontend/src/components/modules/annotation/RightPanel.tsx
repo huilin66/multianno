@@ -9,14 +9,14 @@ import {
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, EyeOff, ListPlus, ListX, Check, X, MapPin, Copy, RefreshCw, ExternalLink, Search
+  Tag, Type, Hash, EyeOff, ListPlus, ListX, Check, X, MapPin, Copy, RefreshCw, ExternalLink, Search, Route
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
 import { ObjectEditorForm } from './ObjectEditorForm'; // 🌟 引入新组件
 import { toast } from '../../../store/useToastStore';
 
-interface RightPanelProps {
+export interface RightPanelProps {
   tool: string;
   showFullExtent: Record<string, boolean>;
   toggleFullExtent: (id: string) => void;
@@ -36,6 +36,9 @@ interface RightPanelProps {
   handleRefreshAnnotations: () => void;
   isRefreshingAnnotations: boolean;
   onOpenTrackIdWindow: () => void;
+  readOnlyViewLayers?: boolean;
+  trackIdMode?: boolean;
+  trackIdEditor?: React.ReactNode;
 }
 
 interface SectionHeaderProps {
@@ -102,6 +105,9 @@ export function RightPanel({
   hiddenAnnotations, toggleAnnotationVisibility, handleClear, handleSave,
   handleRefreshAnnotations, isRefreshingAnnotations,
   onOpenTrackIdWindow,
+  readOnlyViewLayers = false,
+  trackIdMode = false,
+  trackIdEditor,
 }: RightPanelProps) {
   const { t } = useTranslation();
   
@@ -170,7 +176,8 @@ export function RightPanel({
     taxonomy: false,
     editor: true,    // 编辑器默认展开
     objects: true,
-    scenes: false    // 场景列表较长，默认收起
+    scenes: false,   // 场景列表较长，默认收起
+    trackId: true,
   });
 
   const [confirmDeleteAll, setConfirmDeleteAll] = React.useState(false);
@@ -450,11 +457,11 @@ export function RightPanel({
                     
                   {/* 🌟 体验升级：将 draggable 提升到左半边整个容器，包含图标、复选框和名称 */}
                     <div 
-                      className="flex items-center gap-2 flex-1 min-w-0 cursor-grab active:cursor-grabbing hover:bg-neutral-100 dark:hover:bg-neutral-800 p-1 -ml-1 rounded transition-colors"
-                      draggable 
-                      onDragStart={(e) => { e.dataTransfer.setData('text/plain', v.id); e.dataTransfer.effectAllowed = 'move'; }}
-                      onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
-                      onDrop={(e) => {
+                      className={`flex items-center gap-2 flex-1 min-w-0 p-1 -ml-1 rounded transition-colors ${readOnlyViewLayers ? 'cursor-default' : 'cursor-grab active:cursor-grabbing hover:bg-neutral-100 dark:hover:bg-neutral-800'}`}
+                      draggable={!readOnlyViewLayers}
+                      onDragStart={readOnlyViewLayers ? undefined : (e) => { e.dataTransfer.setData('text/plain', v.id); e.dataTransfer.effectAllowed = 'move'; }}
+                      onDragOver={readOnlyViewLayers ? undefined : (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                      onDrop={readOnlyViewLayers ? undefined : (e) => {
                         e.preventDefault();
                         const sourceId = e.dataTransfer.getData('text/plain');
                         if (sourceId && sourceId !== v.id) {
@@ -464,7 +471,7 @@ export function RightPanel({
                           setLayerOrder(newOrder); // 触发 Z-Index 重排
                         }
                       }}
-                      title={t('rightPanel.dragToReorder')}
+                      title={readOnlyViewLayers ? t('trackIdWindow.viewLayersReadOnly') : t('rightPanel.dragToReorder')}
                     >
                       <Frame className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
 
@@ -474,7 +481,8 @@ export function RightPanel({
                            type="checkbox" 
                            className="w-3 h-3 accent-blue-500 cursor-pointer shrink-0"
                            checked={!!visibleLayers[v.id]}
-                           onChange={(e) => setVisibleLayers(p => ({ ...p, [v.id]: e.target.checked }))}
+                           disabled={readOnlyViewLayers}
+                           onChange={(e) => { if (!readOnlyViewLayers) setVisibleLayers(p => ({ ...p, [v.id]: e.target.checked })); }}
                            onClick={(e) => e.stopPropagation()} // 🌟 防止点击复选框时干扰外层
                            title={t('rightPanel.showAsOverlay')}
                          />
@@ -493,11 +501,13 @@ export function RightPanel({
                     <div className="flex items-center gap-1.5 shrink-0">
                       {/* 🌟 修改 2：将 RGB/GRAY 标签升级为可点击的交互按钮，并绑定展开状态 */}
                       <button 
+                        disabled={readOnlyViewLayers}
                         onClick={(e) => { 
+                          if (readOnlyViewLayers) return;
                           e.stopPropagation(); 
                           setOpenLayerId(isOpen ? null : v.id); 
                         }}
-                        className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded transition-colors mr-1 ${
+                        className={`text-[9px] font-mono uppercase px-1.5 py-0.5 rounded transition-colors mr-1 disabled:cursor-default disabled:opacity-90 ${
                           isOpen 
                             ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400 font-bold shadow-inner' 
                             : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 hover:bg-neutral-200 dark:hover:bg-neutral-700'
@@ -526,6 +536,7 @@ export function RightPanel({
                       </button>
                       
                       <button 
+                        disabled={readOnlyViewLayers}
                         onClick={(e) => { e.stopPropagation(); setFocusedViewId(focusedViewId === v.id ? null : v.id); }} 
                         className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${focusedViewId === v.id ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
                         title={focusedViewId === v.id ? t('rightPanel.exitSingleView') : t('rightPanel.isolateView')}
@@ -535,6 +546,7 @@ export function RightPanel({
 
                       {!v.isMain && (
                         <button 
+                          disabled={readOnlyViewLayers}
                           onClick={(e) => { e.stopPropagation(); toggleFullExtent(v.id); }} 
                           className={`w-5 h-5 flex items-center justify-center rounded transition-colors ${showFullExtent[v.id] ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400' : 'text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
                           title={showFullExtent[v.id] ? t('rightPanel.showCrop') : t('rightPanel.showFullExtent')}
@@ -549,7 +561,7 @@ export function RightPanel({
                   </div>
 
                   {/* === DIY 滑块调节面板（仅展开时显示） === */}
-                  {isOpen && (
+                  {isOpen && !readOnlyViewLayers && (
                     <div className="p-3 pt-1 border-t border-neutral-100 dark:border-neutral-800 space-y-4 bg-neutral-50/50 dark:bg-black/20">
                       {(() => {
                         // 🌟 1. 获取全局和本地配置进行合并
@@ -842,6 +854,24 @@ export function RightPanel({
               );
             })}
           </div>
+        )}
+
+        {/* Track ID editor is intentionally part of the standard right-panel layout. */}
+        {trackIdMode && (
+          <>
+            <SectionHeader
+              title={t('trackIdWindow.editorTitle')}
+              icon={Route}
+              isExpanded={expanded.trackId}
+              onToggle={() => toggleSection('trackId')}
+              colorClass="text-blue-500"
+            />
+            {expanded.trackId && (
+              <div className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/30">
+                {trackIdEditor}
+              </div>
+            )}
+          </>
         )}
 
         {/* === 🌟 Taxonomy Manager === */}

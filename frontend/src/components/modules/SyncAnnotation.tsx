@@ -24,6 +24,7 @@ import { reloadProjectAnnotation } from '../../lib/annotationUtils';
 import { createAnnotationId } from '../../lib/annotationIds';
 import { showDialog } from '../../store/useDialogStore';
 import { toast } from '../../store/useToastStore';
+import { TrackIdAnnotationModal } from '../modals/TrackIdAnnotationModal';
 
 export interface SAMPoint {
   x: number;
@@ -46,8 +47,10 @@ const getControlPoints = (anno: any) => {
 interface SyncAnnotationProps {
   autoSave: () => Promise<boolean>;
   onOpenTrackIdWindow: () => void;
+  trackIdWindowOpen: boolean;
+  onCloseTrackIdWindow: () => void;
 }
-export function SyncAnnotation({ autoSave, onOpenTrackIdWindow }: SyncAnnotationProps) {
+export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpen, onCloseTrackIdWindow }: SyncAnnotationProps) {
   const { t } = useTranslation();
   const [formAttributes, setFormAttributes] = useState<Record<string, any>>({});
   const { pushAction, performGlobalUndo, performGlobalRedo, undoCount, redoCount } = useActionHistory();
@@ -1717,7 +1720,69 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       window.removeEventListener('pointerup', handleUp);
     };
   }, [isToolbarDragging]);
+
+  const trackIdCanvasProps = {
+    view: mainViewConfig || views[0],
+    annotations,
+    activeAnnotationId,
+    setActiveAnnotationId,
+    viewport,
+    setViewport,
+    taxonomyClasses: sortedClasses,
+    taxonomyAttributes,
+    theme,
+    folders,
+    mainWidth,
+    mainHeight,
+    tool,
+    setTool: handleToolChange,
+    currentPoints,
+    pendingAnnotation: tool === 'ai_anno' && tempActiveAnno ? tempActiveAnno : pendingAnnotation,
+    formLabel,
+    hoverPos,
+    onMouseDown: handleMouseDown,
+    onMouseMove: handleMouseMove,
+    onMouseUp: handleMouseUp,
+    onDoubleClick: handleDoubleClick,
+    onMouseLeave: handleMouseLeave,
+    canUndo: undoCount > 0 || currentPoints.length > 0,
+    canRedo: redoCount > 0 || undonePoints.length > 0,
+    canPaste: !!clipboard,
+    handlePrevStem,
+    handleNextStem,
+    handleUndo,
+    handleRedo,
+    handleCopy,
+    handlePaste,
+    handleDelete,
+    handleClear,
+    handleSave: autoSave,
+    editorSettings,
+    tempViewSettings,
+  };
+
+  const trackIdRightPanelProps = {
+    tool,
+    showFullExtent,
+    toggleFullExtent,
+    pushAction,
+    focusedViewId,
+    setFocusedViewId,
+    layerOrder,
+    setLayerOrder,
+    visibleLayers,
+    setVisibleLayers,
+    hiddenAnnotations,
+    toggleAnnotationVisibility,
+    handleClear,
+    handleSave: autoSave,
+    handleRefreshAnnotations: handleRefreshCurrentAnnotations,
+    isRefreshingAnnotations,
+    onOpenTrackIdWindow,
+  };
+
   return (
+    <>
     <div 
     className="flex h-full overflow-hidden bg-white dark:bg-neutral-900 text-neutral-900 dark:text-neutral-100 relative"
     style={{ cursor: cursorStyle }}
@@ -2042,5 +2107,12 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
         )}
       </div>
     </div>
+    <TrackIdAnnotationModal
+      open={trackIdWindowOpen}
+      onClose={onCloseTrackIdWindow}
+      rightPanelProps={trackIdRightPanelProps}
+      canvasProps={trackIdCanvasProps}
+    />
+    </>
   );
 }

@@ -37,7 +37,6 @@ import { LocalVisualization } from './components/modules/LocalVisualization';
 import { GlobalConfirmDialog } from './components/modals/GlobalConfirmDialog';
 import { ViewLayoutSettingsModal } from './components/modals/settings/ViewLayoutSettingsModal';
 import { DrawingObjectEditorSettingsModal } from './components/modals/settings/DrawingObjectEditorSettingsModal';
-import { TrackIdAnnotationModal } from './components/modals/TrackIdAnnotationModal';
 import { ToastContainer } from './components/ui/toast';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { loadAllProjectAnnotations, loadProjectAnnotationsForStems } from './lib/annotationUtils';
@@ -1205,7 +1204,12 @@ export default function App() {
 
       {/* Main Content Area - Always Workspace */}
       <main className="flex-grow overflow-hidden relative">
-        <SyncAnnotation autoSave={autoSave} onOpenTrackIdWindow={() => setTrackIdWindowOpen(true)} />
+        <SyncAnnotation
+          autoSave={autoSave}
+          onOpenTrackIdWindow={() => setTrackIdWindowOpen(true)}
+          trackIdWindowOpen={trackIdWindowOpen}
+          onCloseTrackIdWindow={() => setTrackIdWindowOpen(false)}
+        />
       </main>
 
       {/* ============== Dialog Containers ============== */}
@@ -1339,10 +1343,6 @@ export default function App() {
       <AISettingsModal
         open={aiSettingsModalOpen}
         onClose={() => setAiSettingsModalOpen(false)}
-      />
-      <TrackIdAnnotationModal
-        open={trackIdWindowOpen}
-        onClose={() => setTrackIdWindowOpen(false)}
       />
       <GlobalConfirmDialog />
       <ToastContainer />

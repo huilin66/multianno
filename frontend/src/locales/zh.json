@@ -22,6 +22,10 @@
     "open": "打开 Track ID 标注",
     "singleModality": "单模态",
     "noFolder": "没有图像文件夹",
+    "mainScene": "主场景",
+    "syncViews": "同步视图",
+    "syncViewsOn": "第 1、3 帧跟随可编辑帧的缩放和平移",
+    "syncViewsOff": "第 1、3 帧分别保持适合窗口显示",
     "threeFrameView": "三帧视图",
     "noCurrentScene": "没有当前场景",
     "frameNavigationHint": "A / D：场景 · W / S：帧",
@@ -41,6 +45,10 @@
     "editorTitle": "Track ID 编辑器",
     "editorDescription": "选择已有 ID，或准备一个新的序列。",
     "trackId": "Track ID",
+    "mainId": "主 ID",
+    "partId": "部件 ID",
+    "mainIdPlaceholder": "例如：1",
+    "partIdPlaceholder": "例如：a",
     "trackIdPlaceholder": "例如：1-a",
     "selectTrackId": "使用此 Track ID",
     "existingTrackIds": "已有 Track ID",
@@ -57,6 +65,7 @@
     "interpolateReid": "插值 + ReID",
     "scaffoldNotice": "第一版先提供窗口结构和入口。对象锁定、缺失帧标记、插值与 ReID 将在下一步接入。",
     "notImplemented": "尚未接入"
+    ,"viewLayersReadOnly": "Track ID 标注中 View Layers 为只读"
   },
   "header": {
     "appName": "欢迎使用 Multianno!",
