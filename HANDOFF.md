@@ -589,6 +589,110 @@ Before changing AI, alignment, or canvas rendering, inspect:
 - `canvasRenderer.ts`
 - `ViewExtentCheck.tsx`
 
+### 6.9 Two-Stage Instance Annotation Model (Design Baseline)
+
+To handle low frame rates, occlusion, viewpoint changes, and continuous structures that appear as multiple visible fragments, instance annotation follows a two-stage model:
+
+```text
+Stage 1: image-level annotation
+  visible geometry + class + attributes + optional local track_id
+                              ↓
+Stage 2: spatial consistency correction
+  GPS/road coordinates/optional point cloud → merge, split, review, and group_id
+```
+
+#### Stage 1: Image-Level Annotation
+
+- In each scene group and its multi-view context, annotate the geometry actually visible in the image (`bbox`, polygon, line, etc.), together with class and attributes.
+- `track_id` may represent a locally continuous track across neighboring scenes, but Stage 1 does not require a final global identity.
+- Geometry must describe the visible portion in the current image; do not draw a fictitious large box across an occluded region merely to preserve identity.
+- Discrete objects such as signs and poles can use a local track as an association candidate. Continuous structures such as fences, guardrails, and walls may remain as multiple visible fragments until spatial merging.
+- Stage 1 follows the normal object-detection/attribute workflow; attributes and instance-association metadata remain separate concerns.
+
+The core Stage 1 interaction constraints are now defined below. The UI, state transitions, and APIs are not implemented yet and still require implementation-level detail and validation.
+
+#### Confirmed Stage 1 Interaction Constraints
+
+- ID annotation uses a separate window rather than changing the normal annotation workspace mode in place.
+- The first version selects one modality only; multiple modalities are not opened together in the ID window.
+- Exactly three temporal slots are displayed: frame 1, frame 2, and frame 3. Frame 2 is the editable frame; frames 1 and 3 are read-only.
+- Frames 1 and 3 can independently switch between `previous/next frame` and `start/end frame` display.
+- Frame 2 is used to find a scene group, select an object, and draw or edit a box. The thumbnail filmstrip at the bottom is for fast navigation and does not replace the clear three-canvas display.
+
+Keyboard behavior follows the main workspace:
+
+- `A/D`: change the current editable scene group. In synchronized browsing, all three temporal slots move with the center frame.
+- `W/S`: move through the previous/next temporal slots in browsing mode, or switch/load the start/end anchors in endpoint mode. `W` means previous/start direction and `S` means next/end direction.
+- Global shortcuts must not fire while a text input, Track ID input, or other editable control has focus.
+
+The right panel should reuse the main annotation panel structure as much as possible:
+
+- Keep Object List, Object Editor, class, text, and attributes.
+- Make View Layers read-only. It shows the selected single modality but does not allow adding, removing, or switching view layers.
+- Add a Track ID Editor for selecting existing IDs, creating/editing IDs, managing sequences, locking endpoint objects, marking missing frames, and starting interpolation + ReID.
+- The current track, sequence, and object must not reset unexpectedly when changing scene groups or browsing frames. If the object is absent in the current frame, retain the track context and show a missing state.
+
+Single-track workflow:
+
+1. Select an existing Track ID or enter a new one.
+2. Select an object in frame 2 and set it as a start or end candidate.
+3. Frames 1 and 3 show the corresponding scene group and box while remaining read-only.
+4. Double-click the highlighted object or click the lock control to commit the endpoint.
+5. Repeat for the other endpoint.
+6. Add observations for the same track at any other scene and use them as keyframes.
+7. Add multiple independent sequences to the same Track ID. Each sequence has its own start frame, end frame, keyframes, and missing frames.
+8. Run interpolation + ReID explicitly. Generated results remain pending review and must not overwrite manually confirmed boxes.
+
+The missing state belongs to a Track ID, a sequence, and a scene; it is not a global object deletion. A missing frame should not create an empty box, and interpolation must not cross a missing interval by default. `occluded`, `truncated`, and track missing are separate states.
+
+Track IDs support an entity/part hierarchy, for example:
+
+```text
+Entity ID: 1
+1-a: sign
+1-b: pole
+```
+
+Here `1` is the entity root, `a/b` are parts, and `1-a`/`1-b` are local Stage 1 Track IDs. Later, parts may be merged into one `group_id`, or expanded to numeric suffixes such as `1-1` and `1-2`. Letter-to-number conversion must be explicit and must not renumber existing IDs automatically after deletion or sorting.
+
+Implementation prerequisites:
+
+- Every shape must have a persistent stable ID. The current frontend has a runtime `id`, but legacy loading regenerates it and saving does not reliably write it back, so it cannot yet serve as a cross-scene reference. Persist UUIDs and provide a compatibility fallback for legacy data.
+- `track_id` and future `group_id` must retain string semantics; editors and APIs must not force numeric conversion.
+- Stage 2 should add a `group_id` mapping without destroying the original `track_id`, sequence, or review history.
+
+#### Stage 2: Spatial Consistency Correction
+
+- Use GPS, road/trajectory coordinates, and optional point-cloud or 2D-map information to merge, split, and manually review local tracks and visible fragments from Stage 1.
+- Create or revise a global `group_id` across scenes and views, and detect duplicate, broken, or conflicting associations.
+- Implement 2D map/top-down correction first. 3D point-cloud association is optional later because the current point-cloud registration may be imperfect.
+- Spatial correction should not rewrite per-image visible geometry by default. Any write-back must be an explicit user action and preserve source references.
+
+#### ID Semantics
+
+| ID | Meaning | Scope |
+| --- | --- | --- |
+| `id` | Unique ID of one annotation shape | One image annotation record |
+| `track_id` | Local track ID across a continuous sequence | Neighboring scenes or a local tracklet |
+| `group_id` | Global ID of the same physical object or facility | Final association across scenes and views |
+
+For a continuous facility such as a fence, `group_id` represents the same spatial facility or facility segment; it does not require one shape per image. For a discrete object such as a sign, `group_id` can identify one physical sign. When cross-image identity is not reliable, keep only `id` rather than forcing a `track_id` or `group_id`.
+
+#### Spatial Association Layer
+
+Each scene's native JSON continues to store image-level shapes. Stage 2 should use a separate spatial-association layer instead of putting cross-image identity into `project_meta.json`. A candidate path is `<workspace>/annos/spatial_groups.json`; the final path and schema must be confirmed together with the Stage 1 interaction design. It should be able to store at least:
+
+- `group_id`, class, and optional facility type.
+- Source references such as `stem`, shape `id`, and `track_id`.
+- 2D map geometry and optional future 3D geometry.
+- GPS/road coordinates, association confidence, and review state.
+
+#### Constraints from the Current Data
+
+- At 0.5–1 FPS, conventional frame-to-frame MOT/ReID can generate local candidates, but cannot be the sole basis for global identity.
+- With imperfect point-cloud registration, do not depend on exact pixel projection or exact point overlap; use tolerance bands, local transforms, and manual correction.
+- Detection-training labels must remain the visible geometry in each image. `group_id` is a separate cross-image relationship and must not replace detection boxes.
+
 ## 7. Backend API Groups
 
 Backend entry:
