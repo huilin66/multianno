@@ -150,7 +150,7 @@ export function ObjectEditorForm({
             <div className="flex items-center gap-2 flex-1">
               <Label className="text-[11px] text-neutral-500 w-14 shrink-0">{t('objectEditor.trackID')}</Label>
               <Input
-                type="number" value={trackId || ''} onChange={(e) => onTrackIdChange(e.target.value)}
+                type="text" value={trackId || ''} onChange={(e) => onTrackIdChange(e.target.value)}
                 placeholder="-" className="h-6 text-xs flex-1 bg-neutral-50 dark:bg-black font-mono"
               />
             </div>

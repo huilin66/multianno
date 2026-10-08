@@ -5,14 +5,17 @@ import {
   configureTrackIdReID,
   checkTrackIdReIDStatus,
   getPreviewImageUrl,
-  runTrackIdReID,
+  getTrackIdReIDJob,
+  startTrackIdReID,
   type TrackIdReIDCandidate,
+  type TrackIdReIDJob,
   type TrackIdReIDStatus,
 } from '../../api/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { OperationProgress } from '../ui/OperationProgress';
 import { CanvasView } from '../modules/annotation/CanvasView';
 import { RightPanel, type RightPanelProps } from '../modules/annotation/RightPanel';
 import { LeftToolbar } from '../modules/annotation/LeftToolbar';
@@ -23,6 +26,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Film,
+  Hash,
   Loader2,
   Link2,
   Link2Off,
@@ -119,6 +123,7 @@ function TrackIdFrameCanvas({
   fitRef,
   syncViewport,
   syncViewportEnabled,
+  showTrackId,
   onTrackObjectDoubleClick,
 }: {
   slot: FrameSlot;
@@ -129,6 +134,7 @@ function TrackIdFrameCanvas({
   fitRef?: React.MutableRefObject<(() => void) | null>;
   syncViewport?: ViewportState;
   syncViewportEnabled?: boolean;
+  showTrackId: boolean;
   onTrackObjectDoubleClick?: (annotation: any, stem: string) => void;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -138,6 +144,10 @@ function TrackIdFrameCanvas({
   });
   const [viewportOverride, setViewportOverride] = React.useState({ panX: 0, panY: 0, zoom: 1 });
   const view = canvasProps.view;
+  const frameEditorSettings = React.useMemo(() => ({
+    ...(canvasProps.editorSettings || {}),
+    showTrackId,
+  }), [canvasProps.editorSettings, showTrackId]);
 
   const fitFrame = React.useCallback(() => {
     const container = containerRef.current;
@@ -260,6 +270,7 @@ function TrackIdFrameCanvas({
         pendingAnnotation={editable ? canvasProps.pendingAnnotation : null}
         hoverPos={editable ? canvasProps.hoverPos : null}
         tool={editable ? (canvasProps.tool || 'select') : 'pan'}
+        editorSettings={frameEditorSettings}
         onMouseDown={editable ? canvasProps.onMouseDown : undefined}
         onMouseMove={editable && canvasProps.onMouseMove ? (event: React.MouseEvent) => canvasProps.onMouseMove(event, view.id) : undefined}
         onMouseUp={editable ? canvasProps.onMouseUp : undefined}
@@ -361,6 +372,7 @@ function TrackIdEditor({
   onToggleCandidateLock,
   reidStatus,
   reidRunning,
+  reidProgress,
   reidMessage,
   reidSettings,
   onUpdateReidSettings,
@@ -390,6 +402,7 @@ function TrackIdEditor({
   onToggleCandidateLock: (kind: 'start' | 'end', sequenceId?: number) => void;
   reidStatus: TrackIdReIDStatus | null;
   reidRunning: boolean;
+  reidProgress: TrackIdReIDJob | null;
   reidMessage: string;
   reidSettings: TrackIdReIDSettings;
   onUpdateReidSettings: (settings: Partial<TrackIdReIDSettings>) => void;
@@ -647,6 +660,23 @@ function TrackIdEditor({
               {reidSettingsMessage && <p className="text-[10px] leading-relaxed text-neutral-500">{reidSettingsMessage}</p>}
             </div>
           )}
+          {reidRunning && reidProgress && (
+            <div className="mt-2 rounded-md border border-blue-100 bg-blue-50/50 p-2 dark:border-blue-900/50 dark:bg-blue-950/20">
+              <OperationProgress
+                stageIndex={reidProgress.stage_index}
+                stageCount={reidProgress.stage_count}
+                stageName={reidProgress.stage_name}
+                current={reidProgress.current}
+                total={reidProgress.total}
+                stageLabel={t('common.stage')}
+              />
+              {reidProgress.message && (
+                <p className="mt-1 truncate text-[9px] text-neutral-500" title={reidProgress.message}>
+                  {reidProgress.message}
+                </p>
+              )}
+            </div>
+          )}
           <Button
             type="button"
             variant="outline"
@@ -693,9 +723,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [activeSequence, setActiveSequence] = React.useState(1);
   const [sequences, setSequences] = React.useState<TrackSequence[]>([createTrackSequence(1)]);
   const [syncFrames, setSyncFrames] = React.useState(true);
+  const [showTrackIds, setShowTrackIds] = React.useState(true);
   const [frameContextMode, setFrameContextMode] = React.useState<'locked' | 'adjacent'>('locked');
   const [reidStatus, setReidStatus] = React.useState<TrackIdReIDStatus | null>(null);
   const [reidRunning, setReidRunning] = React.useState(false);
+  const [reidProgress, setReidProgress] = React.useState<TrackIdReIDJob | null>(null);
   const [reidMessage, setReidMessage] = React.useState('');
   const [reidSettingsOpen, setReidSettingsOpen] = React.useState(false);
   const [reidPathDraft, setReidPathDraft] = React.useState('');
@@ -703,6 +735,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [reidSettingsMessage, setReidSettingsMessage] = React.useState('');
   const centerFitRef = React.useRef<(() => void) | null>(null);
   const previousViewportRef = React.useRef<any>(null);
+  const reidAbortControllerRef = React.useRef<AbortController | null>(null);
 
   React.useEffect(() => {
     if (!open) return;
@@ -720,9 +753,15 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     if (!open) return;
     setSequences([createTrackSequence(1)]);
     setActiveSequence(1);
+    setShowTrackIds(true);
+    setReidProgress(null);
     setReidMessage('');
     setReidSettingsOpen(false);
     setReidSettingsMessage('');
+    return () => {
+      reidAbortControllerRef.current?.abort();
+      reidAbortControllerRef.current = null;
+    };
   }, [open]);
 
   React.useEffect(() => {
@@ -916,10 +955,14 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         .map(toCandidate),
     }));
 
+    const controller = new AbortController();
+    reidAbortControllerRef.current?.abort();
+    reidAbortControllerRef.current = controller;
     setReidRunning(true);
+    setReidProgress(null);
     setReidMessage('');
     try {
-      const result = await runTrackIdReID({
+      let job = await startTrackIdReID({
         track_id: trackId,
         start: toCandidate(startAnnotation),
         end: toCandidate(endAnnotation),
@@ -927,16 +970,38 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         min_similarity: Number(trackIdReIDSettings?.minSimilarity ?? 0.5),
         location_weight: Number(trackIdReIDSettings?.locationWeight ?? 0.2),
         same_label_only: trackIdReIDSettings?.sameLabelOnly ?? true,
-      });
-      const updatedAnnotationIds = new Set<string>();
+      }, controller.signal);
+      setReidProgress(job);
+
+      for (let attempt = 0; attempt < 7200 && (job.status === 'queued' || job.status === 'running'); attempt += 1) {
+        await new Promise((resolve) => window.setTimeout(resolve, 500));
+        job = await getTrackIdReIDJob(job.job_id, controller.signal);
+        setReidProgress(job);
+      }
+      if (job.status === 'queued' || job.status === 'running') {
+        throw new Error('ReID job timed out.');
+      }
+      if (job.status === 'failed') {
+        throw new Error(job.error || job.message || 'ReID job failed.');
+      }
+      const result = job.result;
+      if (!result) throw new Error('ReID job returned no result.');
+
+      const matchedAnnotations = new Map<string, any>();
       result.assignments.forEach((assignment) => {
         const annotation = annotations.find((item: any) => (
-          String(item.id) === assignment.annotation_id && item.stem === assignment.stem
+          String(item.id) === String(assignment.annotation_id) && item.stem === assignment.stem
         ));
-        if (!annotation || updatedAnnotationIds.has(String(annotation.id))) return;
-        updatedAnnotationIds.add(String(annotation.id));
+        if (annotation) matchedAnnotations.set(`${annotation.stem}:${annotation.id}`, annotation);
+      });
+      // The backend normally returns both anchors, but keep the two locked
+      // objects explicit so Auto Track always persists their Track ID too.
+      matchedAnnotations.set(`${startAnnotation.stem}:${startAnnotation.id}`, startAnnotation);
+      matchedAnnotations.set(`${endAnnotation.stem}:${endAnnotation.id}`, endAnnotation);
+      matchedAnnotations.forEach((annotation) => {
         updateAnnotation(annotation.id, { track_id: result.track_id });
       });
+      setSelectedTrackId(result.track_id);
       const missingText = result.missing_stems.length > 0
         ? ` ${t('trackIdWindow.reidMissing', { count: result.missing_stems.length })}`
         : '';
@@ -945,9 +1010,13 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         total: result.total_frames,
       }) + missingText);
     } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
       const message = error instanceof Error ? error.message : String(error);
       setReidMessage(`${t('trackIdWindow.reidFailed')}: ${message}`);
     } finally {
+      if (reidAbortControllerRef.current === controller) {
+        reidAbortControllerRef.current = null;
+      }
       setReidRunning(false);
     }
   };
@@ -975,6 +1044,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       onToggleCandidateLock={toggleCandidateLock}
       reidStatus={reidStatus}
       reidRunning={reidRunning}
+      reidProgress={reidProgress}
       reidMessage={reidMessage}
       reidSettings={trackIdReIDSettings || {
         modelPath: '',
@@ -1047,6 +1117,18 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                 <Button
                   type="button"
                   size="sm"
+                  variant={showTrackIds ? 'default' : 'outline'}
+                  className="h-7 gap-1.5 px-2 text-[10px]"
+                  onClick={() => setShowTrackIds((value) => !value)}
+                  aria-pressed={showTrackIds}
+                  title={t(showTrackIds ? 'trackIdWindow.showTrackIdOn' : 'trackIdWindow.showTrackIdOff')}
+                >
+                  <Hash className="h-3.5 w-3.5" />
+                  {t('trackIdWindow.showTrackId')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
                   variant={frameContextMode === 'locked' ? 'default' : 'outline'}
                   className="h-7 px-2 text-[10px]"
                   onClick={() => setFrameContextMode((value) => value === 'locked' ? 'adjacent' : 'locked')}
@@ -1097,6 +1179,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                           fitRef={editable ? centerFitRef : undefined}
                           syncViewport={canvasProps.viewport}
                           syncViewportEnabled={syncFrames}
+                          showTrackId={showTrackIds}
                           onTrackObjectDoubleClick={handleTrackObjectDoubleClick}
                         />
                       </div>

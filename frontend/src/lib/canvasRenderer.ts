@@ -163,9 +163,14 @@ function drawAnnotationLabel(
   const classLabel = String(annotation.label ?? '');
   const groupId = annotation.group_id;
   const hasGroupId = groupId !== null && groupId !== undefined && String(groupId).trim() !== '';
-  const label = editorSettings?.showGroupId === true && hasGroupId
+  const baseLabel = editorSettings?.showGroupId === true && hasGroupId
     ? `${String(groupId)}:${classLabel}`
     : classLabel;
+  const trackId = annotation.track_id;
+  const hasTrackId = trackId !== null && trackId !== undefined && String(trackId).trim() !== '';
+  const label = editorSettings?.showTrackId === true && hasTrackId
+    ? `${baseLabel} · ${String(trackId)}`
+    : baseLabel;
   const showAttributes = editorSettings?.att_show === true;
   const attributeEntries = showAttributes
     ? getAnnotationAttributeEntries(

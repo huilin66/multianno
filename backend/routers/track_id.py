@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import math
+import threading
+import time
+import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 from fastapi import APIRouter, HTTPException
@@ -22,6 +26,87 @@ from utils.reid import (
 
 router = APIRouter(prefix="/api/track-id/reid", tags=["Track ID ReID"])
 logger = get_logger("track_id")
+
+REID_STAGE_COUNT = 4
+ReIDProgressCallback = Callable[[int, str, int, int, str], None]
+_reid_jobs: dict[str, dict[str, Any]] = {}
+_reid_tasks: dict[str, asyncio.Task[Any]] = {}
+_reid_jobs_lock = threading.Lock()
+
+
+def _prune_reid_jobs() -> None:
+    cutoff = time.time() - 1800
+    with _reid_jobs_lock:
+        expired = [
+            job_id for job_id, job in _reid_jobs.items()
+            if job.get("status") in {"completed", "failed"}
+            and float(job.get("updated_at", 0)) < cutoff
+        ]
+        for job_id in expired:
+            _reid_jobs.pop(job_id, None)
+
+
+def _create_reid_job() -> dict[str, Any]:
+    _prune_reid_jobs()
+    job_id = uuid.uuid4().hex
+    now = time.time()
+    job = {
+        "job_id": job_id,
+        "status": "queued",
+        "stage_index": 1,
+        "stage_count": REID_STAGE_COUNT,
+        "stage_name": "Preparing frames",
+        "current": 0,
+        "total": 1,
+        "percent": 0,
+        "message": "Queued",
+        "result": None,
+        "error": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    with _reid_jobs_lock:
+        _reid_jobs[job_id] = job
+    return dict(job)
+
+
+def _get_reid_job(job_id: str) -> Optional[dict[str, Any]]:
+    with _reid_jobs_lock:
+        job = _reid_jobs.get(job_id)
+        return dict(job) if job is not None else None
+
+
+def _update_reid_job(job_id: str, **updates: Any) -> None:
+    with _reid_jobs_lock:
+        job = _reid_jobs.get(job_id)
+        if job is None:
+            return
+        job.update(updates)
+        job["updated_at"] = time.time()
+
+
+def _publish_reid_progress(
+    job_id: str,
+    stage_index: int,
+    stage_name: str,
+    current: int,
+    total: int,
+    message: str = "",
+) -> None:
+    safe_total = max(0, int(total))
+    safe_current = min(safe_total, max(0, int(current))) if safe_total else 0
+    percent = int((safe_current / safe_total) * 100) if safe_total else 0
+    _update_reid_job(
+        job_id,
+        status="running",
+        stage_index=stage_index,
+        stage_count=REID_STAGE_COUNT,
+        stage_name=stage_name,
+        current=safe_current,
+        total=safe_total,
+        percent=percent,
+        message=message,
+    )
 
 
 def _find_frame(frames: list[TrackIdFrame], stem: str) -> Optional[TrackIdFrame]:
@@ -126,8 +211,7 @@ async def configure_reid(req: TrackIdReIDConfigRequest):
     return status
 
 
-@router.post("/associate")
-async def associate_track_id(req: TrackIdReIDRequest):
+def _validate_track_id_request(req: TrackIdReIDRequest) -> tuple[TrackIdFrame, TrackIdFrame]:
     if not req.track_id.strip():
         raise HTTPException(status_code=400, detail="Track ID is required.")
     if len(req.frames) < 2:
@@ -141,18 +225,40 @@ async def associate_track_id(req: TrackIdReIDRequest):
         raise HTTPException(status_code=400, detail="The start candidate is not present in its frame.")
     if _find_candidate(end_frame, req.end.annotation_id) is None:
         raise HTTPException(status_code=400, detail="The end candidate is not present in its frame.")
+    return start_frame, end_frame
+
+
+def _associate_track_id_sync(
+    req: TrackIdReIDRequest,
+    progress_callback: Optional[ReIDProgressCallback] = None,
+) -> dict[str, Any]:
+    def report(stage_index: int, stage_name: str, current: int, total: int, message: str = "") -> None:
+        if progress_callback is not None:
+            progress_callback(stage_index, stage_name, current, total, message)
+
+    report(1, "Preparing frames", 0, 1, "Validating start and end candidates")
+    start_frame, end_frame = _validate_track_id_request(req)
+    report(1, "Preparing frames", 1, 1, f"{len(req.frames)} frames")
 
     logger.info(
-        "REID_ASSOCIATE_START track_id=%s frames=%s start=%s end=%s",
+        "REID_ASSOCIATE_START track_id=%s frames=%s start=%s end=%s min_similarity=%s location_weight=%s same_label_only=%s",
         shorten(req.track_id, 200),
         len(req.frames),
         shorten(req.start.annotation_id, 200),
         shorten(req.end.annotation_id, 200),
+        req.min_similarity,
+        req.location_weight,
+        req.same_label_only,
     )
     try:
+        report(2, "Loading ReID model", 0, 1, "Loading ONNX model")
         encoder.load()
+        report(2, "Loading ReID model", 1, 1, "Model ready")
+        report(3, "Extracting anchor features", 0, 2, "Start candidate")
         start_embedding = encoder.embed(start_frame.image_path, req.start.points)
+        report(3, "Extracting anchor features", 1, 2, "End candidate")
         end_embedding = encoder.embed(end_frame.image_path, req.end.points)
+        report(3, "Extracting anchor features", 2, 2, "Reference feature ready")
         reference = np.asarray(start_embedding + end_embedding, dtype=np.float32)
         reference = reference / max(float(np.linalg.norm(reference)), 1e-8)
     except (OSError, ValueError, ReIDUnavailableError) as exc:
@@ -183,6 +289,8 @@ async def associate_track_id(req: TrackIdReIDRequest):
         },
     ]
     missing_stems: list[str] = []
+    candidate_plans: list[dict[str, Any]] = []
+    total_reid_candidates = 0
 
     for frame_index, frame in enumerate(req.frames):
         if frame.stem in {req.start.stem, req.end.stem}:
@@ -219,9 +327,27 @@ async def associate_track_id(req: TrackIdReIDRequest):
             len(overlapping_candidates),
             len(reid_candidates),
         )
+        candidate_plans.append({
+            "frame": frame,
+            "candidates": reid_candidates,
+            "candidate_ious": candidate_ious,
+            "expected_bbox": expected_bbox,
+            "expected_center": expected_center,
+        })
+        total_reid_candidates += len(reid_candidates)
+
+    progress_total = max(total_reid_candidates, 1)
+    report(4, "Matching candidates", 0, progress_total, "IoU candidates ready")
+    processed_candidates = 0
+    for plan in candidate_plans:
+        frame = plan["frame"]
+        candidates = plan["candidates"]
+        candidate_ious = plan["candidate_ious"]
+        expected_bbox = plan["expected_bbox"]
+        expected_center = plan["expected_center"]
         best: Optional[tuple[float, float, TrackIdCandidate]] = None
         best_iou = 0.0
-        for candidate in reid_candidates:
+        for candidate in candidates:
             try:
                 embedding = encoder.embed(frame.image_path, candidate.points)
             except (OSError, ValueError, ReIDUnavailableError) as exc:
@@ -231,6 +357,8 @@ async def associate_track_id(req: TrackIdReIDRequest):
                     candidate.annotation_id,
                     shorten(str(exc), 800),
                 )
+                processed_candidates += 1
+                report(4, "Matching candidates", processed_candidates, progress_total, frame.stem)
                 continue
             similarity = cosine_similarity(reference, embedding)
             candidate_iou = candidate_ious.get(candidate.annotation_id, 0.0)
@@ -240,6 +368,8 @@ async def associate_track_id(req: TrackIdReIDRequest):
             if best is None or score[:2] > best[:2]:
                 best = score
                 best_iou = candidate_iou
+            processed_candidates += 1
+            report(4, "Matching candidates", processed_candidates, progress_total, frame.stem)
 
         if best is None or best[1] < req.min_similarity:
             missing_stems.append(frame.stem)
@@ -276,3 +406,63 @@ async def associate_track_id(req: TrackIdReIDRequest):
         len(missing_stems),
     )
     return result
+
+
+async def _run_reid_job(job_id: str, req: TrackIdReIDRequest) -> None:
+    _update_reid_job(job_id, status="running", message="Starting ReID")
+
+    def progress_callback(stage_index: int, stage_name: str, current: int, total: int, message: str) -> None:
+        _publish_reid_progress(job_id, stage_index, stage_name, current, total, message)
+
+    try:
+        result = await asyncio.to_thread(_associate_track_id_sync, req, progress_callback)
+        _update_reid_job(
+            job_id,
+            status="completed",
+            stage_index=REID_STAGE_COUNT,
+            stage_count=REID_STAGE_COUNT,
+            stage_name="Completed",
+            current=1,
+            total=1,
+            percent=100,
+            message="ReID completed",
+            result=result,
+            error=None,
+        )
+    except HTTPException as exc:
+        message = str(exc.detail)
+        logger.warning("REID_JOB_ERROR job_id=%s status=%s error=%s", job_id, exc.status_code, shorten(message, 1500))
+        _update_reid_job(job_id, status="failed", message=message, error=message)
+    except Exception as exc:
+        logger.exception("REID_JOB_UNEXPECTED_ERROR job_id=%s error=%s", job_id, exc)
+        message = str(exc) or "Unexpected ReID error."
+        _update_reid_job(job_id, status="failed", message=message, error=message)
+    finally:
+        _reid_tasks.pop(job_id, None)
+
+
+@router.post("/associate", status_code=202)
+async def associate_track_id(req: TrackIdReIDRequest) -> dict[str, Any]:
+    """Start ReID association in a background task and return its job state."""
+    # Validate the request before creating a job so malformed input still gets
+    # an immediate 4xx response instead of an asynchronous failure.
+    _validate_track_id_request(req)
+    job = _create_reid_job()
+    job_id = job["job_id"]
+    _reid_tasks[job_id] = asyncio.create_task(_run_reid_job(job_id, req))
+    logger.info(
+        "REID_JOB_START job_id=%s track_id=%s frames=%s",
+        job_id,
+        shorten(req.track_id, 200),
+        len(req.frames),
+    )
+    return job
+
+
+@router.get("/jobs/{job_id}")
+async def get_reid_job(job_id: str) -> dict[str, Any]:
+    """Return the current state and, when complete, result of a ReID job."""
+    job = _get_reid_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="ReID job not found.")
+    return job

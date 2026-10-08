@@ -29,7 +29,8 @@ const get = async (url: string, init?: RequestInit) => {
   let response: Response;
   try {
     response = await fetch(url, init);
-  } catch {
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') throw error;
     throw new Error('Backend unreachable. Please check if the server is running.');
   }
   if (!response.ok) {
@@ -429,18 +430,41 @@ export interface TrackIdReIDResult {
   model_name: string;
 }
 
-export const runTrackIdReID = (
-  payload: {
-    track_id: string;
-    start: TrackIdReIDCandidate;
-    end: TrackIdReIDCandidate;
-    frames: TrackIdReIDFrame[];
-    min_similarity?: number;
-    location_weight?: number;
-    same_label_only?: boolean;
-  },
+export type TrackIdReIDJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+
+export interface TrackIdReIDJob {
+  job_id: string;
+  status: TrackIdReIDJobStatus;
+  stage_index: number;
+  stage_count: number;
+  stage_name: string;
+  current: number;
+  total: number;
+  percent: number;
+  message: string;
+  result?: TrackIdReIDResult | null;
+  error?: string | null;
+}
+
+export interface TrackIdReIDRequest {
+  track_id: string;
+  start: TrackIdReIDCandidate;
+  end: TrackIdReIDCandidate;
+  frames: TrackIdReIDFrame[];
+  min_similarity?: number;
+  location_weight?: number;
+  same_label_only?: boolean;
+}
+
+export const startTrackIdReID = (
+  payload: TrackIdReIDRequest,
   signal?: AbortSignal,
-): Promise<TrackIdReIDResult> => post(`${TRACK_ID_REID_API_URL}/associate`, payload, signal);
+): Promise<TrackIdReIDJob> => post(`${TRACK_ID_REID_API_URL}/associate`, payload, signal);
+
+export const getTrackIdReIDJob = (
+  jobId: string,
+  signal?: AbortSignal,
+): Promise<TrackIdReIDJob> => get(`${TRACK_ID_REID_API_URL}/jobs/${encodeURIComponent(jobId)}`, { signal });
 
 export interface VLMAttributeResult {
   name: string;

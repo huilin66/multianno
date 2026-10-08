@@ -1171,7 +1171,7 @@ export function RightPanel({
                         label={activeAnno.label} onLabelChange={(val) => updateAnnotation(activeAnno.id, { label: val })}
                         text={activeAnno.text || ''} onTextChange={(val) => updateAnnotation(activeAnno.id, { text: val })}
                         groupId={activeAnno.group_id || ''} onGroupIdChange={(val) => updateAnnotation(activeAnno.id, { group_id: val ? Number(val) : null })}
-                        trackId={activeAnno.track_id || ''} onTrackIdChange={(val) => updateAnnotation(activeAnno.id, { track_id: val ? Number(val) : null })}
+                        trackId={activeAnno.track_id || ''} onTrackIdChange={(val) => updateAnnotation(activeAnno.id, { track_id: val || null })}
                         difficult={!!activeAnno.difficult} onDifficultChange={(val) => updateAnnotation(activeAnno.id, { difficult: val })}
                         occluded={!!activeAnno.occluded} onOccludedChange={(val) => updateAnnotation(activeAnno.id, { occluded: val })}
                         truncated={!!activeAnno.truncated} onTruncatedChange={(val) => updateAnnotation(activeAnno.id, { truncated: val })}
