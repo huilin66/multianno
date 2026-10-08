@@ -94,6 +94,7 @@ class ReIDEncoder:
         self.model_mtime_ns: int | None = None
         self.input_name = ""
         self.input_shape: list[Any] = []
+        self.input_batch_size: int | None = None
         self.input_layout = "nchw"
         self.input_height = 256
         self.input_width = 128
@@ -152,12 +153,15 @@ class ReIDEncoder:
 
     def _resolve_input_layout(self, shape: list[Any]) -> None:
         self.input_shape = list(shape or [])
+        self.input_batch_size = None
         if len(shape) != 4:
             self.input_layout = "nchw"
             self.input_height = 256
             self.input_width = 128
             return
 
+        parsed_batch_size = _shape_dimension(shape[0], 0)
+        self.input_batch_size = parsed_batch_size or None
         channel_first = shape[1] in (1, 3) or str(shape[1]) in {"1", "3"}
         channel_last = shape[-1] in (1, 3) or str(shape[-1]) in {"1", "3"}
         self.input_layout = "nhwc" if channel_last and not channel_first else "nchw"
@@ -167,6 +171,13 @@ class ReIDEncoder:
         else:
             self.input_height = _shape_dimension(shape[2], 256)
             self.input_width = _shape_dimension(shape[3], 128)
+
+    def effective_batch_size(self, requested: int) -> int:
+        """Return a batch size supported by the loaded model input."""
+        requested_size = max(1, int(requested))
+        # A fixed ONNX batch dimension takes precedence. Dynamic models use
+        # the user-selected value from the Track ID settings.
+        return self.input_batch_size or requested_size
 
     def load(self) -> None:
         configured_path = self.configured_path()
@@ -248,6 +259,9 @@ class ReIDEncoder:
         image = render_preview_rgb(image_path)
         if image is None or image.size == 0:
             raise ReIDUnavailableError(f"Unable to read image: {image_path}")
+        return self._crop_from_image(image, bbox, image_path)
+
+    def _crop_from_image(self, image: np.ndarray, bbox: list[float], image_path: str = "") -> np.ndarray:
         height, width = image.shape[:2]
         left, top, right, bottom = bbox
         object_width = max(1.0, right - left)
@@ -259,20 +273,70 @@ class ReIDEncoder:
         right = min(width, int(np.ceil(right + margin_x)))
         bottom = min(height, int(np.ceil(bottom + margin_y)))
         if right <= left or bottom <= top:
-            raise ReIDUnavailableError(f"The ReID crop is outside the image: {image_path}")
+            detail = f": {image_path}" if image_path else ""
+            raise ReIDUnavailableError(f"The ReID crop is outside the image{detail}")
         return image[top:bottom, left:right, :3]
 
-    def embed(self, image_path: str, points: list[Any]) -> np.ndarray:
-        bbox = _bbox_from_points(points)
-        if bbox is None:
-            raise ReIDUnavailableError("A candidate object has no valid geometry.")
-        crop = self._read_crop(image_path, bbox)
-        outputs = self.session.run(None, {self.input_name: self._preprocess(crop)})
+    def embed_batch(self, items: list[tuple[str, list[Any]]]) -> list[Optional[np.ndarray]]:
+        """Embed several image crops with one ONNX call when supported."""
+        if not items:
+            return []
+
+        results: list[Optional[np.ndarray]] = [None] * len(items)
+        tensors: list[np.ndarray] = []
+        valid_indices: list[int] = []
+        image_cache: dict[str, np.ndarray] = {}
+
+        for index, (image_path, points) in enumerate(items):
+            bbox = _bbox_from_points(points)
+            if bbox is None:
+                continue
+            try:
+                if image_path not in image_cache:
+                    image = render_preview_rgb(image_path)
+                    if image is None or image.size == 0:
+                        raise ReIDUnavailableError(f"Unable to read image: {image_path}")
+                    image_cache[image_path] = image
+                crop = self._crop_from_image(image_cache[image_path], bbox, image_path)
+                tensors.append(self._preprocess(crop)[0])
+                valid_indices.append(index)
+            except (OSError, ValueError, ReIDUnavailableError):
+                continue
+
+        if not tensors:
+            return results
+
+        actual_count = len(tensors)
+        model_input = np.stack(tensors, axis=0)
+        if self.input_batch_size and actual_count < self.input_batch_size:
+            padding_shape = (self.input_batch_size - actual_count, *model_input.shape[1:])
+            padding = np.zeros(padding_shape, dtype=model_input.dtype)
+            model_input = np.concatenate([model_input, padding], axis=0)
+
+        outputs = self.session.run(None, {self.input_name: model_input})
         numeric_outputs = [np.asarray(output) for output in outputs if np.asarray(output).size]
         if not numeric_outputs:
             raise ReIDUnavailableError("The ReID model returned no embedding.")
-        embedding = max(numeric_outputs, key=lambda output: output.size)
-        return _normalise_embedding(embedding)
+        embedding_output = max(numeric_outputs, key=lambda output: output.size)
+
+        if actual_count == 1 and embedding_output.ndim == 1:
+            vectors = [embedding_output]
+        elif embedding_output.ndim >= 1 and embedding_output.shape[0] >= actual_count:
+            vectors = [embedding_output[index] for index in range(actual_count)]
+        else:
+            raise ReIDUnavailableError(
+                f"The ReID model returned an incompatible batch output shape: {embedding_output.shape}"
+            )
+
+        for original_index, vector in zip(valid_indices, vectors):
+            results[original_index] = _normalise_embedding(vector)
+        return results
+
+    def embed(self, image_path: str, points: list[Any]) -> np.ndarray:
+        embedding = self.embed_batch([(image_path, points)])[0]
+        if embedding is None:
+            raise ReIDUnavailableError("Unable to create a ReID embedding for the candidate.")
+        return embedding
 
 
 encoder = ReIDEncoder()

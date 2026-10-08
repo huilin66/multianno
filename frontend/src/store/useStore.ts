@@ -277,6 +277,7 @@ export interface AppState {
       minSimilarity: number;
       locationWeight: number;
       sameLabelOnly: boolean;
+      batchSize: number;
     };
   // VLM API settings.  Only non-secret metadata is persisted; the API key
   // stays in the backend process and is represented here by hasApiKey.
@@ -436,6 +437,7 @@ export const useStore = create<AppState>()(
         minSimilarity: 0.5,
         locationWeight: 0.2,
         sameLabelOnly: true,
+        batchSize: 8,
       },
       vlmSettings: {
         baseUrl: VLM_ENV_DEFAULTS.baseUrl,

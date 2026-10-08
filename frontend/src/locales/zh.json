@@ -89,6 +89,7 @@
     "reidPathFailed": "ReID 模型路径更新失败",
     "reidThreshold": "ReID 阈值",
     "spatialWeight": "空间权重",
+    "batchSize": "批处理大小",
     "sameLabelOnly": "仅匹配相同类别",
     "autoTrack": "自动跟踪",
     "reidReady": "ReID：ready",

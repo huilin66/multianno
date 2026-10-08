@@ -454,6 +454,7 @@ export interface TrackIdReIDRequest {
   min_similarity?: number;
   location_weight?: number;
   same_label_only?: boolean;
+  batch_size?: number;
 }
 
 export const startTrackIdReID = (

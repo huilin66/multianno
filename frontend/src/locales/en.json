@@ -89,6 +89,7 @@
     "reidPathFailed": "Could not update ReID model path",
     "reidThreshold": "ReID threshold",
     "spatialWeight": "Spatial weight",
+    "batchSize": "Batch size",
     "sameLabelOnly": "Match the same class only",
     "autoTrack": "Auto track",
     "reidReady": "ReID: ready",

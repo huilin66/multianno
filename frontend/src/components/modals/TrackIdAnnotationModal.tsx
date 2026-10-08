@@ -65,6 +65,7 @@ interface TrackIdReIDSettings {
   minSimilarity: number;
   locationWeight: number;
   sameLabelOnly: boolean;
+  batchSize: number;
 }
 
 interface TrackSequence {
@@ -620,7 +621,7 @@ function TrackIdEditor({
                   </Button>
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <Label className="text-[9px] uppercase tracking-wider text-neutral-400">{t('trackIdWindow.reidThreshold')}</Label>
                   <Input
@@ -645,6 +646,19 @@ function TrackIdEditor({
                     onChange={(event) => onUpdateReidSettings({ locationWeight: Math.min(1, Math.max(0, Number(event.target.value) || 0)) })}
                     className="mt-1 h-7 text-[10px]"
                     aria-label={t('trackIdWindow.spatialWeight')}
+                  />
+                </div>
+                <div>
+                  <Label className="text-[9px] uppercase tracking-wider text-neutral-400">{t('trackIdWindow.batchSize')}</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={64}
+                    step={1}
+                    value={reidSettings.batchSize ?? 8}
+                    onChange={(event) => onUpdateReidSettings({ batchSize: Math.min(64, Math.max(1, Number(event.target.value) || 1)) })}
+                    className="mt-1 h-7 text-[10px]"
+                    aria-label={t('trackIdWindow.batchSize')}
                   />
                 </div>
               </div>
@@ -970,6 +984,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         min_similarity: Number(trackIdReIDSettings?.minSimilarity ?? 0.5),
         location_weight: Number(trackIdReIDSettings?.locationWeight ?? 0.2),
         same_label_only: trackIdReIDSettings?.sameLabelOnly ?? true,
+        batch_size: Math.min(64, Math.max(1, Number(trackIdReIDSettings?.batchSize ?? 8) || 8)),
       }, controller.signal);
       setReidProgress(job);
 
@@ -1051,6 +1066,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         minSimilarity: 0.5,
         locationWeight: 0.2,
         sameLabelOnly: true,
+        batchSize: 8,
       }}
       onUpdateReidSettings={(settings) => setTrackIdReIDSettings(settings)}
       reidSettingsOpen={reidSettingsOpen}

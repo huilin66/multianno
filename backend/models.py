@@ -120,6 +120,7 @@ class TrackIdReIDRequest(BaseModel):
     min_similarity: float = Field(default=0.5, ge=0.0, le=1.0)
     location_weight: float = Field(default=0.2, ge=0.0, le=1.0)
     same_label_only: bool = True
+    batch_size: int = Field(default=8, ge=1, le=64)
 
 
 class VLMConfigRequest(BaseModel):

@@ -241,7 +241,7 @@ def _associate_track_id_sync(
     report(1, "Preparing frames", 1, 1, f"{len(req.frames)} frames")
 
     logger.info(
-        "REID_ASSOCIATE_START track_id=%s frames=%s start=%s end=%s min_similarity=%s location_weight=%s same_label_only=%s",
+        "REID_ASSOCIATE_START track_id=%s frames=%s start=%s end=%s min_similarity=%s location_weight=%s same_label_only=%s batch_size=%s",
         shorten(req.track_id, 200),
         len(req.frames),
         shorten(req.start.annotation_id, 200),
@@ -249,15 +249,21 @@ def _associate_track_id_sync(
         req.min_similarity,
         req.location_weight,
         req.same_label_only,
+        req.batch_size,
     )
     try:
         report(2, "Loading ReID model", 0, 1, "Loading ONNX model")
         encoder.load()
         report(2, "Loading ReID model", 1, 1, "Model ready")
         report(3, "Extracting anchor features", 0, 2, "Start candidate")
-        start_embedding = encoder.embed(start_frame.image_path, req.start.points)
+        anchor_embeddings = encoder.embed_batch([
+            (start_frame.image_path, req.start.points),
+            (end_frame.image_path, req.end.points),
+        ])
+        start_embedding, end_embedding = anchor_embeddings
+        if start_embedding is None or end_embedding is None:
+            raise ReIDUnavailableError("Unable to create ReID embeddings for the locked anchors.")
         report(3, "Extracting anchor features", 1, 2, "End candidate")
-        end_embedding = encoder.embed(end_frame.image_path, req.end.points)
         report(3, "Extracting anchor features", 2, 2, "Reference feature ready")
         reference = np.asarray(start_embedding + end_embedding, dtype=np.float32)
         reference = reference / max(float(np.linalg.norm(reference)), 1e-8)
@@ -333,44 +339,88 @@ def _associate_track_id_sync(
             "candidate_ious": candidate_ious,
             "expected_bbox": expected_bbox,
             "expected_center": expected_center,
+            "best": None,
+            "best_iou": 0.0,
         })
         total_reid_candidates += len(reid_candidates)
 
     progress_total = max(total_reid_candidates, 1)
     report(4, "Matching candidates", 0, progress_total, "IoU candidates ready")
     processed_candidates = 0
-    for plan in candidate_plans:
-        frame = plan["frame"]
-        candidates = plan["candidates"]
-        candidate_ious = plan["candidate_ious"]
-        expected_bbox = plan["expected_bbox"]
-        expected_center = plan["expected_center"]
-        best: Optional[tuple[float, float, TrackIdCandidate]] = None
-        best_iou = 0.0
-        for candidate in candidates:
-            try:
-                embedding = encoder.embed(frame.image_path, candidate.points)
-            except (OSError, ValueError, ReIDUnavailableError) as exc:
-                logger.warning(
-                    "REID_CANDIDATE_SKIP stem=%s annotation=%s error=%s",
-                    frame.stem,
-                    candidate.annotation_id,
-                    shorten(str(exc), 800),
-                )
+    candidate_work: list[tuple[dict[str, Any], TrackIdCandidate]] = [
+        (plan, candidate)
+        for plan in candidate_plans
+        for candidate in plan["candidates"]
+    ]
+    requested_batch_size = max(1, int(req.batch_size))
+    effective_batch_size = encoder.effective_batch_size(requested_batch_size)
+    logger.info(
+        "REID_BATCH_CONFIG requested=%s effective=%s model_batch=%s candidates=%s",
+        requested_batch_size,
+        effective_batch_size,
+        encoder.input_batch_size or "dynamic",
+        len(candidate_work),
+    )
+
+    def embed_with_single_fallback(
+        work_batch: list[tuple[dict[str, Any], TrackIdCandidate]],
+    ) -> list[Optional[np.ndarray]]:
+        items = [
+            (plan["frame"].image_path, candidate.points)
+            for plan, candidate in work_batch
+        ]
+        try:
+            return encoder.embed_batch(items)
+        except Exception as exc:
+            logger.warning(
+                "REID_BATCH_FALLBACK batch=%s error=%s",
+                len(work_batch),
+                shorten(str(exc), 1000),
+            )
+            embeddings: list[Optional[np.ndarray]] = []
+            for plan, candidate in work_batch:
+                try:
+                    embeddings.append(encoder.embed(plan["frame"].image_path, candidate.points))
+                except Exception as single_exc:
+                    logger.warning(
+                        "REID_CANDIDATE_SKIP stem=%s annotation=%s error=%s",
+                        plan["frame"].stem,
+                        candidate.annotation_id,
+                        shorten(str(single_exc), 800),
+                    )
+                    embeddings.append(None)
+            return embeddings
+
+    for batch_start in range(0, len(candidate_work), effective_batch_size):
+        work_batch = candidate_work[batch_start:batch_start + effective_batch_size]
+        embeddings = embed_with_single_fallback(work_batch)
+        for (plan, candidate), embedding in zip(work_batch, embeddings):
+            frame = plan["frame"]
+            if embedding is None:
                 processed_candidates += 1
                 report(4, "Matching candidates", processed_candidates, progress_total, frame.stem)
                 continue
+
             similarity = cosine_similarity(reference, embedding)
-            candidate_iou = candidate_ious.get(candidate.annotation_id, 0.0)
-            location = candidate_iou if expected_bbox is not None and candidate_iou > 0.0 else _location_score(candidate, expected_center)
+            candidate_iou = plan["candidate_ious"].get(candidate.annotation_id, 0.0)
+            location = (
+                candidate_iou
+                if plan["expected_bbox"] is not None and candidate_iou > 0.0
+                else _location_score(candidate, plan["expected_center"])
+            )
             combined = similarity * (1.0 - req.location_weight) + location * req.location_weight
             score = (combined, similarity, candidate)
+            best = plan["best"]
             if best is None or score[:2] > best[:2]:
-                best = score
-                best_iou = candidate_iou
+                plan["best"] = score
+                plan["best_iou"] = candidate_iou
             processed_candidates += 1
             report(4, "Matching candidates", processed_candidates, progress_total, frame.stem)
 
+    for plan in candidate_plans:
+        frame = plan["frame"]
+        best = plan["best"]
+        best_iou = plan["best_iou"]
         if best is None or best[1] < req.min_similarity:
             missing_stems.append(frame.stem)
             continue
