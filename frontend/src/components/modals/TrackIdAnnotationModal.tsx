@@ -90,11 +90,11 @@ export function TrackIdAnnotationModal({ open, onClose }: TrackIdAnnotationModal
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
       <DialogContent
-        className="flex max-h-[min(92vh,900px)] w-[calc(100vw-2rem)] max-w-7xl flex-col gap-0 overflow-hidden border-neutral-200 p-0 dark:border-neutral-800"
+        className="flex max-h-[min(92vh,900px)] w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-hidden border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-7xl"
         showCloseButton
       >
         <DialogHeader className="shrink-0 border-b border-neutral-200 bg-white px-5 py-4 dark:border-neutral-800 dark:bg-neutral-950">
-          <div className="flex min-w-0 items-start justify-between gap-4 pr-6">
+          <div className="flex min-w-0 flex-wrap items-start justify-between gap-3 pr-6">
             <div className="min-w-0">
               <DialogTitle className="flex items-center gap-2 text-base font-semibold">
                 <Route className="h-4 w-4 text-blue-500" />
@@ -104,11 +104,11 @@ export function TrackIdAnnotationModal({ open, onClose }: TrackIdAnnotationModal
                 {t('trackIdWindow.description')}
               </DialogDescription>
             </div>
-            <div className="flex shrink-0 items-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
+            <div className="flex min-w-0 max-w-full shrink-0 items-center gap-2 rounded-md border border-blue-100 bg-blue-50 px-2.5 py-1.5 text-[10px] text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/30 dark:text-blue-300">
               <ScanLine className="h-3.5 w-3.5" />
               <span>{t('trackIdWindow.singleModality')}</span>
               <span className="text-blue-400">·</span>
-              <span>{mainFolder?.path || t('trackIdWindow.noFolder')}</span>
+              <span className="max-w-[18rem] truncate" title={mainFolder?.path || undefined}>{mainFolder?.path || t('trackIdWindow.noFolder')}</span>
             </div>
           </div>
         </DialogHeader>
