@@ -154,6 +154,95 @@ export const exportData = (payload: any, signal?: AbortSignal) =>
 export const importData = (payload: any) =>
   post(`${API_BASE_URL}/exchange/import`, payload);
 
+export interface ImportProgressEvent {
+  current: number;
+  total: number;
+  percent: number;
+  format?: string;
+  stem?: string;
+}
+
+export const importDataStream = async (
+  payload: any,
+  onProgress?: (event: ImportProgressEvent) => void,
+  signal?: AbortSignal,
+) => {
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/exchange/import/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    });
+  } catch (error: any) {
+    if (error?.name === 'AbortError') throw error;
+    throw new Error('Backend unreachable. Please check if the server is running.');
+  }
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || err.error || `Import failed (${response.status})`);
+  }
+  if (!response.body) throw new Error('No import progress stream');
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  const consumeEvent = (line: string) => {
+    if (!line.trim()) return null;
+    const data = JSON.parse(line);
+    if (data.type === 'progress') {
+      onProgress?.({
+        current: Number(data.current) || 0,
+        total: Number(data.total) || 0,
+        percent: Number(data.percent) || 0,
+        format: data.format,
+        stem: data.stem,
+      });
+      return null;
+    }
+    if (data.type === 'heartbeat') return null;
+    if (data.type === 'error') throw new Error(data.message || 'Annotation import failed');
+    if (data.type === 'complete') {
+      const { type: _type, ...result } = data;
+      return result.result ?? result;
+    }
+    return null;
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) {
+        buffer += decoder.decode();
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+      for (const line of lines) {
+        const result = consumeEvent(line);
+        if (result !== null) {
+          await reader.cancel();
+          return result;
+        }
+      }
+    }
+
+    if (buffer.trim()) {
+      const result = consumeEvent(buffer);
+      if (result !== null) return result;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  throw new Error('Import progress stream ended before completion');
+};
+
 export const checkDirectoryStatus = (path: string) =>
   get(`${API_BASE_URL}/fs/dir_status?path=${encodeURIComponent(path)}`);
 

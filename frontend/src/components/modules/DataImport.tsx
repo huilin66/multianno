@@ -7,7 +7,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
-import { importData, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
+import { importDataStream, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
 import { Legend } from '../ui/legend';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, type TaskType } from '../../config/supportedFormats';
@@ -167,7 +167,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
     }
 
     try {
-      const res = await importData({
+      const res = await importDataStream({
         source_path: sourceDataPath,
         target_dir: targetWorkspaceDir,
         format,
@@ -184,6 +184,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
           format === 'yolo' && taskType === 'object_detection'
             ? (attributeFile || undefined)
             : undefined,
+      }, (progress) => {
+        setImportStageProgress({ current: progress.current, total: progress.total });
       });
 
       setImportStage('refreshing');

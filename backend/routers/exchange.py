@@ -179,6 +179,13 @@ def _complete_event(exported: int, **extra):
     ) + "\n"
 
 
+def _report_import_progress(progress_callback, current: int, total: int, format_name: str, stem: str):
+    """Report one completed import scene when a streaming caller is present."""
+
+    if progress_callback is not None:
+        progress_callback(current, total, format_name, stem)
+
+
 def _write_classes_file(target_dir: str, selected_classes: list[str]):
     with open(os.path.join(target_dir, "classes.txt"), "w", encoding="utf-8") as cf:
         cf.write("\n".join(selected_classes))
@@ -1680,20 +1687,130 @@ async def handle_import(req: ImportRequest):
     if not os.path.exists(req.target_dir):
         os.makedirs(req.target_dir, exist_ok=True)
 
+    return await asyncio.to_thread(_run_import_in_worker, req, None)
+
+
+async def _dispatch_import(req: ImportRequest, progress_callback=None):
     if req.format == "yolo":
-        return await import_from_yolo(req)
+        return await import_from_yolo(req, progress_callback)
     elif req.format == "coco":
-        return await import_from_coco(req)
+        return await import_from_coco(req, progress_callback)
     # 🌟 新增的两种格式分发
     elif req.format == "multianno":
-        return await import_from_multianno(req)
+        return await import_from_multianno(req, progress_callback)
     elif req.format in ("images_only", "mask"):
-        return await import_from_images_only(req)
+        return await import_from_images_only(req, progress_callback)
     else:
         raise HTTPException(status_code=400, detail="不支持的导入格式")
 
 
-async def import_from_yolo(req: ImportRequest):
+def _run_import_in_worker(req: ImportRequest, progress_callback):
+    """Run the existing async import implementation outside the API event loop."""
+
+    return asyncio.run(_dispatch_import(req, progress_callback))
+
+
+@router.post("/import/stream")
+async def handle_import_stream(req: ImportRequest):
+    """Import annotations with per-scene progress and periodic heartbeats."""
+
+    logger.info(
+        "IMPORT_STREAM_REQUEST format=%s strategy=%s source=%s target=%s stems=%d",
+        req.format,
+        req.merge_strategy,
+        shorten(req.source_path, 1500),
+        shorten(req.target_dir, 1500),
+        len(req.stems),
+    )
+    if not os.path.exists(req.target_dir):
+        os.makedirs(req.target_dir, exist_ok=True)
+
+    event_queue: asyncio.Queue = asyncio.Queue()
+    loop = asyncio.get_running_loop()
+    stream_end = object()
+
+    def publish_progress(current: int, total: int, format_name: str, stem: str):
+        event = {
+            "type": "progress",
+            "current": current,
+            "total": total,
+            "percent": int((current / total) * 100) if total else 100,
+            "format": format_name,
+            "stem": stem,
+        }
+        loop.call_soon_threadsafe(event_queue.put_nowait, event)
+
+    async def run_worker():
+        try:
+            result = await asyncio.to_thread(
+                _run_import_in_worker,
+                req,
+                publish_progress,
+            )
+            complete_event = {"type": "complete"}
+            if isinstance(result, dict):
+                complete_event.update(result)
+            else:
+                complete_event["result"] = result
+            loop.call_soon_threadsafe(event_queue.put_nowait, complete_event)
+        except asyncio.CancelledError:
+            logger.warning("IMPORT_STREAM_WORKER_CANCELLED target=%s", shorten(req.target_dir, 1500))
+            raise
+        except Exception as exc:
+            message = exc.detail if isinstance(exc, HTTPException) else str(exc)
+            logger.exception(
+                "IMPORT_STREAM_ERROR format=%s source=%s target=%s error=%s",
+                req.format,
+                shorten(req.source_path, 1500),
+                shorten(req.target_dir, 1500),
+                message,
+            )
+            loop.call_soon_threadsafe(
+                event_queue.put_nowait,
+                {"type": "error", "message": message or "Annotation import failed"},
+            )
+        finally:
+            loop.call_soon_threadsafe(event_queue.put_nowait, stream_end)
+
+    worker_task = asyncio.create_task(run_worker())
+
+    async def event_stream():
+        client_disconnected = False
+        try:
+            while True:
+                try:
+                    event = await asyncio.wait_for(event_queue.get(), timeout=5)
+                except asyncio.TimeoutError:
+                    # Keep proxies and the frontend health check from treating
+                    # a slow image read as a dead backend.
+                    yield json.dumps({"type": "heartbeat"}) + "\n"
+                    continue
+
+                if event is stream_end:
+                    break
+                yield json.dumps(event, ensure_ascii=False) + "\n"
+        except asyncio.CancelledError:
+            client_disconnected = True
+            logger.info(
+                "IMPORT_STREAM_CLIENT_DISCONNECTED target=%s; worker continues",
+                shorten(req.target_dir, 1500),
+            )
+            raise
+        finally:
+            # Keep a strong reference to the worker if the client closes the
+            # stream. The import is intentionally allowed to finish so a
+            # transient browser/network disconnect cannot leave half a merge.
+            if client_disconnected and not worker_task.done():
+                logger.info("IMPORT_STREAM_WORKER_ACTIVE_AFTER_DISCONNECT target=%s", shorten(req.target_dir, 1500))
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def import_from_yolo(req: ImportRequest, progress_callback=None):
     if not os.path.exists(req.source_path):
         raise HTTPException(status_code=404, detail="YOLO目录不存在")
     classes_map = []
@@ -1778,6 +1895,7 @@ async def import_from_yolo(req: ImportRequest):
                 len(stems),
                 stem,
             )
+            _report_import_progress(progress_callback, index, len(stems), "YOLO", stem)
             continue
 
         # YOLO 坐标是相对于原图宽高归一化的。优先读取前端传来的
@@ -1823,6 +1941,7 @@ async def import_from_yolo(req: ImportRequest):
             shorten(image_path, 1500) if image_path else "fallback/no-image",
             (asyncio.get_running_loop().time() - scene_started) * 1000,
         )
+        _report_import_progress(progress_callback, index, len(stems), "YOLO", stem)
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
@@ -1856,7 +1975,7 @@ async def import_from_yolo(req: ImportRequest):
     }
 
 
-async def import_from_coco(req: ImportRequest):
+async def import_from_coco(req: ImportRequest, progress_callback=None):
     if not os.path.exists(req.source_path) or not req.source_path.endswith(".json"):
         raise HTTPException(status_code=400, detail="COCO文件无效")
     with open(req.source_path, "r", encoding="utf-8") as f:
@@ -1941,6 +2060,7 @@ async def import_from_coco(req: ImportRequest):
                 len(stems),
                 stem,
             )
+            _report_import_progress(progress_callback, index, len(stems), "COCO", stem)
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
@@ -1985,6 +2105,7 @@ async def import_from_coco(req: ImportRequest):
             shorten(image_path, 1500) if image_path else "fallback/no-image",
             (asyncio.get_running_loop().time() - scene_started) * 1000,
         )
+        _report_import_progress(progress_callback, index, len(stems), "COCO", stem)
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
@@ -2016,7 +2137,7 @@ async def import_from_coco(req: ImportRequest):
 # ==========================================
 # 🌟 新增：导入 MultiAnno
 # ==========================================
-async def import_from_multianno(req: ImportRequest):
+async def import_from_multianno(req: ImportRequest, progress_callback=None):
     """
     直接导入原生的 JSON 标注文件，重点在于处理冲突合并策略、ID去重、以及 Stem 校准
     """
@@ -2084,6 +2205,7 @@ async def import_from_multianno(req: ImportRequest):
                 len(stems),
                 stem,
             )
+            _report_import_progress(progress_callback, index, len(stems), "MultiAnno", stem)
             continue
 
         # 1. 读取外部 JSON
@@ -2101,6 +2223,7 @@ async def import_from_multianno(req: ImportRequest):
                 len(stems),
                 stem,
             )
+            _report_import_progress(progress_callback, index, len(stems), "MultiAnno", stem)
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
@@ -2156,6 +2279,7 @@ async def import_from_multianno(req: ImportRequest):
             shorten(image_path, 1500) if image_path else "fallback/no-image",
             (asyncio.get_running_loop().time() - scene_started) * 1000,
         )
+        _report_import_progress(progress_callback, index, len(stems), "MultiAnno", stem)
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":
@@ -2192,7 +2316,7 @@ async def import_from_multianno(req: ImportRequest):
 # ==========================================
 # 🌟 新增：导入纯图像 (Semantic Mask 逆向解析)
 # ==========================================
-async def import_from_images_only(req: ImportRequest):
+async def import_from_images_only(req: ImportRequest, progress_callback=None):
     """
     从灰度掩码图像中提取多边形
     """
@@ -2274,6 +2398,7 @@ async def import_from_images_only(req: ImportRequest):
                 len(stems),
                 stem,
             )
+            _report_import_progress(progress_callback, index, len(stems), "Mask", stem)
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
@@ -2319,6 +2444,7 @@ async def import_from_images_only(req: ImportRequest):
             shorten(image_path, 1500) if image_path else "fallback/no-image",
             (asyncio.get_running_loop().time() - scene_started) * 1000,
         )
+        _report_import_progress(progress_callback, index, len(stems), "Mask", stem)
 
     cleaned_count = 0
     if req.merge_strategy == "mirror":

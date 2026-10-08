@@ -19,7 +19,7 @@ import {
   analyzeWorkspaceFolders,
   checkWorkspaceJson,
   detectAnnotationSources,
-  importData,
+  importDataStream,
   inferSuffix,
   type AnnotationSourceCandidate,
 } from '../../api/client';
@@ -823,7 +823,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
           if (fileName) imagePaths[stem] = `${mainFolderPath}/${fileName}`;
         });
 
-        const importResult = await importData({
+        const importResult = await importDataStream({
           source_path: selectedAnnotationCandidate.source_path,
           target_dir: finalPath,
           format: selectedAnnotationCandidate.format,
@@ -837,6 +837,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
           image_paths: imagePaths,
           image_raw_profile: mainViewFolder.rawProfile,
           attributes_file: selectedAnnotationCandidate.attributes_file || undefined,
+        }, (progress) => {
+          setOperationProgress({ current: progress.current, total: progress.total });
         });
 
         const importedAttributeDefinitions = Array.isArray(importResult?.attribute_definitions)
