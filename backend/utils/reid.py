@@ -89,6 +89,7 @@ class ReIDEncoder:
 
     def __init__(self) -> None:
         self.session: Any = None
+        self.model_path_override = ""
         self.model_path = ""
         self.model_mtime_ns: int | None = None
         self.input_name = ""
@@ -103,14 +104,38 @@ class ReIDEncoder:
     def is_loaded(self) -> bool:
         return self.session is not None
 
+    def configured_path(self) -> str:
+        return self.model_path_override or configured_model_path()
+
+    def configure_model_path(self, model_path: str) -> dict[str, Any]:
+        """Set a process-local model path override used by the Track ID UI."""
+        normalized = str(model_path or "").strip()
+        if normalized:
+            path = Path(normalized).expanduser()
+            if not path.is_file():
+                raise ValueError(f"ReID model file was not found: {normalized}")
+            normalized = str(path)
+
+        previous_path = self.configured_path()
+        self.model_path_override = normalized
+        if previous_path != self.configured_path():
+            self.session = None
+            self.model_path = ""
+            self.model_mtime_ns = None
+            self.input_name = ""
+            self.input_shape = []
+            self.providers = []
+        return self.status()
+
     def status(self) -> dict[str, Any]:
-        configured_path = configured_model_path()
+        configured_path = self.configured_path()
         path = Path(configured_path) if configured_path else None
         return {
             "runtime_available": ort is not None,
             "configured": bool(configured_path),
             "model_exists": bool(path and path.is_file()),
             "loaded": self.is_loaded,
+            "model_path": configured_path,
             "model_name": path.name if path else "",
             "providers": list(self.providers),
             "detail": self._status_detail(configured_path, path),
@@ -144,7 +169,7 @@ class ReIDEncoder:
             self.input_width = _shape_dimension(shape[3], 128)
 
     def load(self) -> None:
-        configured_path = configured_model_path()
+        configured_path = self.configured_path()
         if not configured_path:
             raise ReIDUnavailableError("Set REID_MODEL_PATH in .env before using ReID.")
         if ort is None:

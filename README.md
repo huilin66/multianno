@@ -111,7 +111,7 @@ VITE_AI_CLASSES_PATH=E:/models/classes.txt
 REID_MODEL_PATH=E:/model_weights/reid_model.onnx
 ```
 
-The vision paths are used as defaults in `Settings > AI`; the model is loaded when you confirm the AI settings. `REID_MODEL_PATH` is loaded lazily when you run `Interpolate + ReID` in Track ID Annotation. VLM endpoint settings use `MULTIANNO_VLM_*`. Keep API keys in `MULTIANNO_VLM_API_KEY` or `OPENAI_API_KEY` only—never use a `VITE_` prefix for secrets.
+The vision paths are used as defaults in `Settings > AI`; the model is loaded when you confirm the AI settings. `REID_MODEL_PATH` is loaded lazily when you run `Auto track` in Track ID Annotation. The Track ID ReID settings also allow a process-local model-path override, similarity threshold, spatial weight, and same-class filtering. VLM endpoint settings use `MULTIANNO_VLM_*`. Keep API keys in `MULTIANNO_VLM_API_KEY` or `OPENAI_API_KEY` only—never use a `VITE_` prefix for secrets.
 
 1. **Create a new project:**
    * Set up your project meta path.

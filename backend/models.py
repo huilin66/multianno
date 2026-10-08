@@ -108,12 +108,18 @@ class TrackIdFrame(BaseModel):
     candidates: List[TrackIdCandidate] = Field(default_factory=list)
 
 
+class TrackIdReIDConfigRequest(BaseModel):
+    model_path: str = ""
+
+
 class TrackIdReIDRequest(BaseModel):
     track_id: str
     start: TrackIdCandidate
     end: TrackIdCandidate
     frames: List[TrackIdFrame] = Field(default_factory=list)
-    min_similarity: float = Field(default=0.25, ge=-1.0, le=1.0)
+    min_similarity: float = Field(default=0.5, ge=0.0, le=1.0)
+    location_weight: float = Field(default=0.2, ge=0.0, le=1.0)
+    same_label_only: bool = True
 
 
 class VLMConfigRequest(BaseModel):

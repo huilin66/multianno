@@ -272,6 +272,12 @@ export interface AppState {
       outputType: 'polygon' | 'bbox',
       filterThreshold: number,
     };
+  trackIdReIDSettings: {
+      modelPath: string;
+      minSimilarity: number;
+      locationWeight: number;
+      sameLabelOnly: boolean;
+    };
   // VLM API settings.  Only non-secret metadata is persisted; the API key
   // stays in the backend process and is represented here by hasApiKey.
   vlmSettings: {
@@ -353,6 +359,7 @@ export interface AppState {
   updateShortcutSettings: (tool: string, settings: { key: string; shift?: boolean; ctrl?: boolean }) => void;
   resetShortcutSettings: () => void;
   setAISettings: (settings: Partial<AppState['aiSettings']>) => void;
+  setTrackIdReIDSettings: (settings: Partial<AppState['trackIdReIDSettings']>) => void;
   setVLMSettings: (settings: Partial<AppState['vlmSettings']>) => void;
 
   // display function
@@ -423,6 +430,12 @@ export const useStore = create<AppState>()(
         inferenceSize: 644,
         outputType: 'polygon',
         filterThreshold: 1
+      },
+      trackIdReIDSettings: {
+        modelPath: '',
+        minSimilarity: 0.5,
+        locationWeight: 0.2,
+        sameLabelOnly: true,
       },
       vlmSettings: {
         baseUrl: VLM_ENV_DEFAULTS.baseUrl,
@@ -839,6 +852,9 @@ export const useStore = create<AppState>()(
       setAISettings: (newSettings) => set((state) => ({
         aiSettings: { ...state.aiSettings, ...newSettings }
       })),
+      setTrackIdReIDSettings: (newSettings) => set((state) => ({
+        trackIdReIDSettings: { ...state.trackIdReIDSettings, ...newSettings }
+      })),
       setVLMSettings: (newSettings) => set((state) => ({
         vlmSettings: { ...state.vlmSettings, ...newSettings }
       })),
@@ -888,6 +904,7 @@ export const useStore = create<AppState>()(
         editorSettings: state.editorSettings,
         shortcutsSettings: state.shortcutsSettings,
         aiSettings: state.aiSettings,
+        trackIdReIDSettings: state.trackIdReIDSettings,
         vlmSettings: state.vlmSettings,
         hiddenClasses: state.hiddenClasses,
         hiddenAnnotations: state.hiddenAnnotations,
@@ -918,6 +935,9 @@ export const useStore = create<AppState>()(
       merge: (persistedState, currentState) => {
         const persisted = (persistedState || {}) as Partial<AppState>;
         const persistedEditorSettings = (persisted.editorSettings || {}) as Partial<EditorSettings>;
+        const persistedAISettings = (persisted.aiSettings || {}) as Partial<AppState['aiSettings']>;
+        const persistedTrackIdReIDSettings = (persisted.trackIdReIDSettings || {}) as Partial<AppState['trackIdReIDSettings']>;
+        const hasConfiguredAIEnv = Boolean(AI_ENV_DEFAULTS.modelPath);
 
         return {
           ...currentState,
@@ -932,6 +952,26 @@ export const useStore = create<AppState>()(
               ...currentState.editorSettings.gridLayout,
               ...(persistedEditorSettings.gridLayout || {}),
             },
+          },
+          // A configured .env is the restart-time source of truth for the
+          // model paths. Without this override, an older Zustand cache can
+          // restore a stale path (for example an old workflow script) over
+          // the current VITE_AI_MODEL_PATH value.
+          aiSettings: {
+            ...currentState.aiSettings,
+            ...persistedAISettings,
+            ...(hasConfiguredAIEnv
+              ? {
+                  model: AI_ENV_DEFAULTS.model,
+                  modelPath: AI_ENV_DEFAULTS.modelPath,
+                  classFilePath: AI_ENV_DEFAULTS.classFilePath,
+                  isConfigured: true,
+                }
+              : {}),
+          },
+          trackIdReIDSettings: {
+            ...currentState.trackIdReIDSettings,
+            ...persistedTrackIdReIDSettings,
           },
         };
       },

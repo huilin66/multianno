@@ -9,7 +9,7 @@ from typing import Any, Optional
 import numpy as np
 from fastapi import APIRouter, HTTPException
 
-from models import TrackIdCandidate, TrackIdFrame, TrackIdReIDRequest
+from models import TrackIdCandidate, TrackIdFrame, TrackIdReIDConfigRequest, TrackIdReIDRequest
 from utils.logging_config import get_logger, shorten
 from utils.reid import (
     ReIDUnavailableError,
@@ -67,6 +67,22 @@ async def get_reid_status():
         status["model_exists"],
         status["loaded"],
         status["model_name"] or "-",
+    )
+    return status
+
+
+@router.post("/config")
+async def configure_reid(req: TrackIdReIDConfigRequest):
+    try:
+        status = encoder.configure_model_path(req.model_path)
+    except (OSError, ValueError) as exc:
+        logger.warning("REID_CONFIG_ERROR path=%s error=%s", shorten(req.model_path, 1500), shorten(str(exc), 1500))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    logger.info(
+        "REID_CONFIG path=%s exists=%s",
+        shorten(status.get("model_path") or "<env>", 1500),
+        status["model_exists"],
     )
     return status
 
@@ -133,7 +149,7 @@ async def associate_track_id(req: TrackIdReIDRequest):
         if frame.stem in {req.start.stem, req.end.stem}:
             continue
         candidates = frame.candidates
-        if anchor_label:
+        if req.same_label_only and anchor_label:
             same_label = [candidate for candidate in candidates if candidate.label.strip() == anchor_label]
             if same_label:
                 candidates = same_label
@@ -157,7 +173,7 @@ async def associate_track_id(req: TrackIdReIDRequest):
                 continue
             similarity = cosine_similarity(reference, embedding)
             location = _location_score(candidate, expected_center)
-            combined = similarity * 0.8 + location * 0.2
+            combined = similarity * (1.0 - req.location_weight) + location * req.location_weight
             score = (combined, similarity, candidate)
             if best is None or score[:2] > best[:2]:
                 best = score

@@ -374,6 +374,7 @@ export interface TrackIdReIDStatus {
   configured: boolean;
   model_exists: boolean;
   loaded: boolean;
+  model_path?: string;
   model_name: string;
   providers: string[];
   detail?: string | null;
@@ -394,6 +395,9 @@ export const checkTrackIdReIDStatus = async (): Promise<TrackIdReIDStatus> => {
     };
   }
 };
+
+export const configureTrackIdReID = (payload: { model_path: string }): Promise<TrackIdReIDStatus> =>
+  post(`${TRACK_ID_REID_API_URL}/config`, payload);
 
 export interface TrackIdReIDCandidate {
   stem: string;
@@ -431,6 +435,8 @@ export const runTrackIdReID = (
     end: TrackIdReIDCandidate;
     frames: TrackIdReIDFrame[];
     min_similarity?: number;
+    location_weight?: number;
+    same_label_only?: boolean;
   },
   signal?: AbortSignal,
 ): Promise<TrackIdReIDResult> => post(`${TRACK_ID_REID_API_URL}/associate`, payload, signal);
