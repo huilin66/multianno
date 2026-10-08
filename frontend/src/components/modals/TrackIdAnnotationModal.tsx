@@ -84,6 +84,25 @@ const createTrackSequence = (id: number): TrackSequence => ({
   endLocked: false,
 });
 
+const createLocalReidProgress = (
+  current: number,
+  total: number,
+  stageName: string,
+  message: string,
+): TrackIdReIDJob => ({
+  job_id: 'local-collection',
+  status: 'running',
+  stage_index: 1,
+  stage_count: 4,
+  stage_name: stageName,
+  current,
+  total,
+  percent: total > 0 ? Math.round((current / total) * 100) : 0,
+  message,
+  result: null,
+  error: null,
+});
+
 const getTrackIdLabel = (value: string | number | null | undefined) => String(value ?? '').trim();
 
 const parseTrackId = (value: string | number | null | undefined) => {
@@ -426,6 +445,23 @@ function TrackIdEditor({
 
   return (
     <div className="min-h-0 overflow-y-auto custom-scrollbar">
+      {reidRunning && reidProgress && (
+        <div className="border-b border-blue-100 bg-blue-50/60 px-3 py-2 dark:border-blue-900/50 dark:bg-blue-950/20">
+          <OperationProgress
+            stageIndex={reidProgress.stage_index}
+            stageCount={reidProgress.stage_count}
+            stageName={reidProgress.stage_name}
+            current={reidProgress.current}
+            total={reidProgress.total}
+            stageLabel={t('common.stage')}
+          />
+          {reidProgress.message && (
+            <p className="mt-1 truncate text-[9px] text-neutral-500" title={reidProgress.message}>
+              {reidProgress.message}
+            </p>
+          )}
+        </div>
+      )}
       <div className="border-b border-neutral-200 px-3 py-3 dark:border-neutral-800">
         <Label className="block text-[10px] uppercase tracking-wider text-neutral-500">{t('trackIdWindow.trackId')}</Label>
         <div className="mt-1.5 flex items-end gap-1.5">
@@ -672,23 +708,6 @@ function TrackIdEditor({
                 {t('trackIdWindow.sameLabelOnly')}
               </label>
               {reidSettingsMessage && <p className="text-[10px] leading-relaxed text-neutral-500">{reidSettingsMessage}</p>}
-            </div>
-          )}
-          {reidRunning && reidProgress && (
-            <div className="mt-2 rounded-md border border-blue-100 bg-blue-50/50 p-2 dark:border-blue-900/50 dark:bg-blue-950/20">
-              <OperationProgress
-                stageIndex={reidProgress.stage_index}
-                stageCount={reidProgress.stage_count}
-                stageName={reidProgress.stage_name}
-                current={reidProgress.current}
-                total={reidProgress.total}
-                stageLabel={t('common.stage')}
-              />
-              {reidProgress.message && (
-                <p className="mt-1 truncate text-[9px] text-neutral-500" title={reidProgress.message}>
-                  {reidProgress.message}
-                </p>
-              )}
             </div>
           )}
           <Button
@@ -961,21 +980,48 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       points: Array.isArray(annotation.points) ? annotation.points : [],
     });
 
-    const frames = frameStems.map((stem: string) => ({
-      stem,
-      image_path: getFrameImagePath(stem, canvasProps),
-      candidates: annotations
-        .filter((annotation: any) => annotation.stem === stem)
-        .map(toCandidate),
-    }));
-
     const controller = new AbortController();
     reidAbortControllerRef.current?.abort();
     reidAbortControllerRef.current = controller;
     setReidRunning(true);
-    setReidProgress(null);
+    const collectionTotal = Math.max(frameStems.length, 1);
+    setReidProgress(createLocalReidProgress(0, collectionTotal, t('trackIdWindow.collectingBoxes'), t('trackIdWindow.collectingBoxes')));
     setReidMessage('');
     try {
+      const annotationsByStem = new Map<string, any[]>();
+      (annotations as any[]).forEach((annotation) => {
+        const items = annotationsByStem.get(annotation.stem) || [];
+        items.push(annotation);
+        annotationsByStem.set(annotation.stem, items);
+      });
+      const frames: Array<{
+        stem: string;
+        image_path: string;
+        candidates: TrackIdReIDCandidate[];
+      }> = [];
+      const collectionStep = Math.max(1, Math.ceil(collectionTotal / 40));
+      for (let index = 0; index < frameStems.length; index += 1) {
+        if (controller.signal.aborted) {
+          throw new DOMException('ReID request was aborted.', 'AbortError');
+        }
+        const stem = frameStems[index];
+        frames.push({
+          stem,
+          image_path: getFrameImagePath(stem, canvasProps),
+          candidates: (annotationsByStem.get(stem) || []).map(toCandidate),
+        });
+        const current = index + 1;
+        if (current === collectionTotal || current === 1 || current % collectionStep === 0) {
+          setReidProgress(createLocalReidProgress(
+            current,
+            collectionTotal,
+            t('trackIdWindow.collectingBoxes'),
+            `${t('trackIdWindow.collectingBoxes')}: ${stem}`,
+          ));
+          await new Promise((resolve) => window.setTimeout(resolve, 0));
+        }
+      }
+
       let job = await startTrackIdReID({
         track_id: trackId,
         start: toCandidate(startAnnotation),

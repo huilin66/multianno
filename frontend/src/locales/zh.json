@@ -96,6 +96,7 @@
     "reidUnavailable": "ReID：unavailable",
     "reidLoaded": "已加载",
     "reidRunning": "正在运行 ReID…",
+    "collectingBoxes": "正在收集候选框",
     "reidCandidatesMissing": "锁定的候选对象已不存在。",
     "reidResult": "已匹配 {{matched}} / {{total}} 帧。",
     "reidMissing": "还有 {{count}} 帧需要检查。",

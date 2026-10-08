@@ -96,6 +96,7 @@
     "reidUnavailable": "ReID: unavailable",
     "reidLoaded": "loaded",
     "reidRunning": "Running ReID...",
+    "collectingBoxes": "Collecting candidate boxes",
     "reidCandidatesMissing": "The locked candidates are no longer available.",
     "reidResult": "Matched {{matched}} / {{total}} frames.",
     "reidMissing": "{{count}} frame(s) need review.",

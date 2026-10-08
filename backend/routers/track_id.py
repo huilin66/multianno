@@ -55,7 +55,7 @@ def _create_reid_job() -> dict[str, Any]:
         "status": "queued",
         "stage_index": 1,
         "stage_count": REID_STAGE_COUNT,
-        "stage_name": "Preparing frames",
+        "stage_name": "Collecting candidate boxes",
         "current": 0,
         "total": 1,
         "percent": 0,
@@ -236,9 +236,9 @@ def _associate_track_id_sync(
         if progress_callback is not None:
             progress_callback(stage_index, stage_name, current, total, message)
 
-    report(1, "Preparing frames", 0, 1, "Validating start and end candidates")
+    collection_total = max(len(req.frames), 1)
+    report(1, "Collecting candidate boxes", 0, collection_total, "Validating start and end candidates")
     start_frame, end_frame = _validate_track_id_request(req)
-    report(1, "Preparing frames", 1, 1, f"{len(req.frames)} frames")
 
     logger.info(
         "REID_ASSOCIATE_START track_id=%s frames=%s start=%s end=%s min_similarity=%s location_weight=%s same_label_only=%s batch_size=%s",
@@ -251,29 +251,6 @@ def _associate_track_id_sync(
         req.same_label_only,
         req.batch_size,
     )
-    try:
-        report(2, "Loading ReID model", 0, 1, "Loading ONNX model")
-        encoder.load()
-        report(2, "Loading ReID model", 1, 1, "Model ready")
-        report(3, "Extracting anchor features", 0, 2, "Start candidate")
-        anchor_embeddings = encoder.embed_batch([
-            (start_frame.image_path, req.start.points),
-            (end_frame.image_path, req.end.points),
-        ])
-        start_embedding, end_embedding = anchor_embeddings
-        if start_embedding is None or end_embedding is None:
-            raise ReIDUnavailableError("Unable to create ReID embeddings for the locked anchors.")
-        report(3, "Extracting anchor features", 1, 2, "End candidate")
-        report(3, "Extracting anchor features", 2, 2, "Reference feature ready")
-        reference = np.asarray(start_embedding + end_embedding, dtype=np.float32)
-        reference = reference / max(float(np.linalg.norm(reference)), 1e-8)
-    except (OSError, ValueError, ReIDUnavailableError) as exc:
-        logger.warning("REID_ASSOCIATE_SETUP_ERROR error=%s", shorten(str(exc), 1500))
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.exception("REID_ASSOCIATE_SETUP_UNEXPECTED_ERROR error=%s", exc)
-        raise HTTPException(status_code=500, detail="Unexpected ReID model error.") from exc
-
     start_index = next(index for index, frame in enumerate(req.frames) if frame.stem == req.start.stem)
     end_index = next(index for index, frame in enumerate(req.frames) if frame.stem == req.end.stem)
     index_distance = end_index - start_index
@@ -296,10 +273,14 @@ def _associate_track_id_sync(
     ]
     missing_stems: list[str] = []
     candidate_plans: list[dict[str, Any]] = []
+    candidate_work: list[tuple[dict[str, Any], TrackIdCandidate]] = []
     total_reid_candidates = 0
+    collected_frames = 0
 
     for frame_index, frame in enumerate(req.frames):
         if frame.stem in {req.start.stem, req.end.stem}:
+            collected_frames += 1
+            report(1, "Collecting candidate boxes", collected_frames, collection_total, frame.stem)
             continue
         candidates = frame.candidates
         if req.same_label_only and anchor_label:
@@ -308,6 +289,8 @@ def _associate_track_id_sync(
                 candidates = same_label
         if not candidates:
             missing_stems.append(frame.stem)
+            collected_frames += 1
+            report(1, "Collecting candidate boxes", collected_frames, collection_total, f"{frame.stem}: no boxes")
             continue
 
         progress = (frame_index - start_index) / index_distance if index_distance else 0.5
@@ -342,16 +325,45 @@ def _associate_track_id_sync(
             "best": None,
             "best_iou": 0.0,
         })
+        candidate_work.extend((candidate_plans[-1], candidate) for candidate in reid_candidates)
         total_reid_candidates += len(reid_candidates)
+        collected_frames += 1
+        report(
+            1,
+            "Collecting candidate boxes",
+            collected_frames,
+            collection_total,
+            f"{frame.stem}: {len(reid_candidates)} boxes",
+        )
+
+    report(1, "Collecting candidate boxes", collection_total, collection_total, f"{len(candidate_work)} boxes collected")
+
+    try:
+        report(2, "Loading ReID model", 0, 1, "Loading ONNX model")
+        encoder.load()
+        report(2, "Loading ReID model", 1, 1, "Model ready")
+        report(3, "Extracting anchor features", 0, 2, "Start candidate")
+        anchor_embeddings = encoder.embed_batch([
+            (start_frame.image_path, req.start.points),
+            (end_frame.image_path, req.end.points),
+        ])
+        start_embedding, end_embedding = anchor_embeddings
+        if start_embedding is None or end_embedding is None:
+            raise ReIDUnavailableError("Unable to create ReID embeddings for the locked anchors.")
+        report(3, "Extracting anchor features", 1, 2, "End candidate")
+        report(3, "Extracting anchor features", 2, 2, "Reference feature ready")
+        reference = np.asarray(start_embedding + end_embedding, dtype=np.float32)
+        reference = reference / max(float(np.linalg.norm(reference)), 1e-8)
+    except (OSError, ValueError, ReIDUnavailableError) as exc:
+        logger.warning("REID_ASSOCIATE_SETUP_ERROR error=%s", shorten(str(exc), 1500))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("REID_ASSOCIATE_SETUP_UNEXPECTED_ERROR error=%s", exc)
+        raise HTTPException(status_code=500, detail="Unexpected ReID model error.") from exc
 
     progress_total = max(total_reid_candidates, 1)
-    report(4, "Matching candidates", 0, progress_total, "IoU candidates ready")
+    report(4, "Running ReID", 0, progress_total, f"{len(candidate_work)} boxes ready")
     processed_candidates = 0
-    candidate_work: list[tuple[dict[str, Any], TrackIdCandidate]] = [
-        (plan, candidate)
-        for plan in candidate_plans
-        for candidate in plan["candidates"]
-    ]
     requested_batch_size = max(1, int(req.batch_size))
     effective_batch_size = encoder.effective_batch_size(requested_batch_size)
     logger.info(
@@ -398,7 +410,7 @@ def _associate_track_id_sync(
             frame = plan["frame"]
             if embedding is None:
                 processed_candidates += 1
-                report(4, "Matching candidates", processed_candidates, progress_total, frame.stem)
+                report(4, "Running ReID", processed_candidates, progress_total, frame.stem)
                 continue
 
             similarity = cosine_similarity(reference, embedding)
@@ -415,7 +427,7 @@ def _associate_track_id_sync(
                 plan["best"] = score
                 plan["best_iou"] = candidate_iou
             processed_candidates += 1
-            report(4, "Matching candidates", processed_candidates, progress_total, frame.stem)
+            report(4, "Running ReID", processed_candidates, progress_total, frame.stem)
 
     for plan in candidate_plans:
         frame = plan["frame"]
