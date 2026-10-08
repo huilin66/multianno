@@ -88,6 +88,7 @@
     "dataUpdateScan": "Scan & add new images",
     "dataUpdateScanHint": "Rescan the configured image folders and append newly discovered scenes without resetting the current annotation session.",
     "dataUpdateScanning": "Updating data...",
+    "dataUpdateLoadingAnnotations": "Loading new annotations...",
     "dataUpdateNoFolders": "There are no configured image folders to scan",
     "dataUpdateNoScenes": "No complete scenes found. Check the image folders and multi-view suffixes.",
     "dataUpdateSuccess": "Data update complete: added {{addedScenes}} scenes, scanned {{scannedScenes}}, loaded {{loadedObjects}} objects",
@@ -703,6 +704,7 @@
       "noWorkspace": "Please set a target workspace path."
     },
     "importing": "Importing...",
+    "refreshing": "Refreshing project data...",
     "success": "Import successful",
     "failed": "Import failed",
     "ready": "Ready to import",
@@ -1113,6 +1115,7 @@
     "truncated": "Truncated"
   },
   "common": {
+    "stage": "Stage",
     "confirm": "Confirm",
     "cancel": "Cancel",
     "edit": "Edit",

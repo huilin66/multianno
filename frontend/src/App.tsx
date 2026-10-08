@@ -43,6 +43,7 @@ import { loadAllProjectAnnotations, loadProjectAnnotationsForStems } from './lib
 import { hasAnnotationAttributeContent } from './lib/annotationAttributeUtils';
 import { showDialog } from './store/useDialogStore';
 import { toast } from './store/useToastStore';
+import { OperationProgress } from './components/ui/OperationProgress';
 
 const getDisplayLocale = (language: string) => language.startsWith('zh') ? 'zh-CN' : 'en-US';
 
@@ -176,7 +177,8 @@ function DataUpdateSettings({
     scannedScenes: number;
     loadedObjects: number;
   } | null>(null);
-  const [operationProgress, setOperationProgress] = useState(0);
+  const [operationProgress, setOperationProgress] = useState({ current: 0, total: 0 });
+  const [operationStage, setOperationStage] = useState({ index: 1, count: 1 });
 
   const saveDirs = workspacePath
     ? [workspacePath]
@@ -232,7 +234,8 @@ function DataUpdateSettings({
     }
 
     setIsUpdating(true);
-    setOperationProgress(10);
+    setOperationStage({ index: 1, count: 2 });
+    setOperationProgress({ current: 0, total: 0 });
     setUpdateResult(null);
     try {
       const result = await analyzeWorkspaceFolders(imageFolders.map((folder: any) => ({
@@ -241,7 +244,7 @@ function DataUpdateSettings({
         rawProfile: folder.rawProfile,
       })));
       const scannedStems = Array.isArray(result?.commonStems) ? result.commonStems : [];
-      setOperationProgress(45);
+      setOperationProgress({ current: 1, total: 1 });
 
       if (scannedStems.length === 0) {
         toast.warning(t('headerSetting.dataUpdateNoScenes'));
@@ -283,15 +286,24 @@ function DataUpdateSettings({
       );
 
       let loadedObjects = 0;
+      setOperationStage({ index: 2, count: 2 });
       if (addedStems.length > 0) {
         const annotationDirectory = workspacePath || mainFolder?.path || '';
         if (annotationDirectory) {
-          const loaded = await loadProjectAnnotationsForStems(addedStems, annotationDirectory);
+          setOperationProgress({ current: 0, total: addedStems.length });
+          const loaded = await loadProjectAnnotationsForStems(
+            addedStems,
+            annotationDirectory,
+            (current, total) => setOperationProgress({ current, total }),
+          );
           loadedObjects = loaded.annotationCount;
+        } else {
+          setOperationProgress({ current: 1, total: 1 });
         }
+      } else {
+        setOperationProgress({ current: 1, total: 1 });
       }
 
-      setOperationProgress(90);
       useStore.getState().setStatsCacheValid(false);
       const summary = {
         addedScenes: addedStems.length,
@@ -299,7 +311,6 @@ function DataUpdateSettings({
         loadedObjects,
       };
       setUpdateResult(summary);
-      setOperationProgress(100);
       toast.success(t('headerSetting.dataUpdateSuccess', summary));
     } catch (error: any) {
       toast.error(t('headerSetting.dataUpdateError', {
@@ -322,7 +333,8 @@ function DataUpdateSettings({
     }
 
     setIsScanningRepairs(true);
-    setOperationProgress(15);
+    setOperationStage({ index: 1, count: 1 });
+    setOperationProgress({ current: 0, total: 0 });
     setRepairPreview(null);
     setRepairResult(null);
     try {
@@ -334,7 +346,7 @@ function DataUpdateSettings({
         mainFolder?.rawProfile,
         true,
       );
-      setOperationProgress(100);
+      setOperationProgress({ current: 1, total: 1 });
       setRepairPreview((result?.details || {}) as RepairScanDetails);
     } catch (error: any) {
       toast.error(t('headerSetting.dataRepairScanError', {
@@ -367,7 +379,8 @@ function DataUpdateSettings({
     if (!confirmed) return;
 
     setIsRepairing(true);
-    setOperationProgress(15);
+    setOperationStage({ index: 1, count: 1 });
+    setOperationProgress({ current: 0, total: 0 });
     setRepairResult(null);
     try {
       const result = await repairData(
@@ -377,7 +390,7 @@ function DataUpdateSettings({
         getMainImagePaths(),
         mainFolder?.rawProfile,
       );
-      setOperationProgress(100);
+      setOperationProgress({ current: 1, total: 1 });
       const summary = summarizeRepairResult(result);
       setRepairResult(summary);
       setRepairPreview((result?.details || repairPreview) as RepairScanDetails);
@@ -518,22 +531,20 @@ function DataUpdateSettings({
 
               {(isScanningRepairs || isRepairing || isUpdating) && (
                 <div className="mt-3 space-y-1.5">
-                  <div className="flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-                    <span>
-                      {isUpdating
-                        ? t('headerSetting.dataUpdateScanning')
-                        : isScanningRepairs
-                          ? t('headerSetting.dataRepairScanning')
-                          : t('headerSetting.dataRepairRunning')}
-                    </span>
-                    <span>{operationProgress}%</span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className="h-full rounded-full bg-primary transition-[width] duration-300"
-                      style={{ width: `${Math.max(4, operationProgress)}%` }}
-                    />
-                  </div>
+                  <OperationProgress
+                    stageIndex={operationStage.index}
+                    stageCount={operationStage.count}
+                    stageName={isUpdating
+                      ? t(operationStage.index === 2
+                        ? 'headerSetting.dataUpdateLoadingAnnotations'
+                        : 'headerSetting.dataUpdateScanning')
+                      : isScanningRepairs
+                        ? t('headerSetting.dataRepairScanning')
+                        : t('headerSetting.dataRepairRunning')}
+                    current={operationProgress.current}
+                    total={operationProgress.total}
+                    stageLabel={t('common.stage')}
+                  />
                 </div>
               )}
 

@@ -19,6 +19,7 @@ import {
 } from '../../lib/projectHistory';
 import { useTranslation } from 'react-i18next';
 import { showDialog } from '../../store/useDialogStore';
+import { OperationProgress } from '../ui/OperationProgress';
 
 type LoadStage = 'metadata' | 'analyzing' | 'annotations' | 'complete';
 
@@ -150,6 +151,19 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
     }
   };
 
+  const loadStageIndex = loadStage === 'metadata'
+    ? 1
+    : loadStage === 'analyzing'
+      ? 2
+      : 3;
+  const loadStageName = loadStage === 'annotations'
+    ? t('loadProject.loadingAnnotations')
+    : loadStage === 'complete'
+      ? t('loadProject.loadComplete')
+      : loadStage === 'analyzing'
+        ? t('loadProject.analyzingImages')
+        : t('loadProject.loadingProject');
+
   return (
     <div className="p-5 pt-1 space-y-5 h-full flex flex-col">
       <div className="flex-1 space-y-4">
@@ -230,32 +244,14 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
       <div className="flex items-center justify-between pt-2 border-t border-border">
         {isLoading ? (
           <div className="flex items-center gap-3 flex-1 mr-4">
-            <div className="min-w-0 flex-1">
-              <div className="mb-1 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-                <span className="truncate">
-                  {loadStage === 'annotations'
-                    ? t('loadProject.loadingAnnotations')
-                    : loadStage === 'complete'
-                      ? t('loadProject.loadComplete')
-                      : loadStage === 'analyzing'
-                        ? t('loadProject.analyzingImages')
-                        : t('loadProject.loadingProject')}
-                </span>
-                {loadProgress.total > 0 && (
-                  <span className="shrink-0 font-mono font-bold text-foreground">
-                    {loadProgress.current}/{loadProgress.total}
-                  </span>
-                )}
-              </div>
-              <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div
-                className={`h-full bg-primary rounded-full transition-all duration-300 ${loadProgress.total > 0 ? '' : 'w-1/2 animate-pulse'}`}
-                style={loadProgress.total > 0
-                  ? { width: `${Math.min(100, (loadProgress.current / loadProgress.total) * 100)}%` }
-                  : undefined}
-              />
-              </div>
-            </div>
+            <OperationProgress
+              stageIndex={loadStageIndex}
+              stageCount={3}
+              stageName={loadStageName}
+              current={loadProgress.current}
+              total={loadProgress.total}
+              stageLabel={t('common.stage')}
+            />
           </div>
         ) : (
           <span />

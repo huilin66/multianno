@@ -12,6 +12,7 @@ import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { getFileContent, exportDataStream, checkDirectoryStatus } from '../../api/client';
 import { saveCurrentAnnotations } from '../../lib/annotationSaveService';
 import { showDialog } from '../../store/useDialogStore';
+import { OperationProgress } from '../ui/OperationProgress';
 import {
   SUPPORTED_TASKS,
   FORMAT_DETAILS,
@@ -1470,16 +1471,14 @@ useEffect(() => {
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
         {exportStatus === 'exporting' ? (
           <div className="flex items-center gap-3 flex-1 mr-4">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              {t('dataExport.exporting')}
-              <span className="font-mono font-bold text-foreground ml-1">
-                {Math.round(exportStems.length * exportProgress / 100)}/{exportStems.length}
-              </span>
-            </span>
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${exportProgress}%` }} />
-            </div>
+            <OperationProgress
+              stageIndex={1}
+              stageCount={1}
+              stageName={t('dataExport.exporting')}
+              current={Math.round(exportStems.length * exportProgress / 100)}
+              total={exportStems.length}
+              stageLabel={t('common.stage')}
+            />
           </div>
         ) : exportStatus === 'done' ? (
           <div className="flex items-center gap-2 text-xs text-emerald-600">

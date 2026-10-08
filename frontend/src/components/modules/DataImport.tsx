@@ -12,6 +12,7 @@ import { Legend } from '../ui/legend';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, type TaskType } from '../../config/supportedFormats';
 import { showDialog } from '../../store/useDialogStore';
+import { OperationProgress } from '../ui/OperationProgress';
 import {
   Folder, FileText, Image, Check, X,
   ChevronRight, RotateCcw, FolderSearch, AlertCircle, Tag
@@ -77,7 +78,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   // --- 通用 ---
   const [isImporting, setIsImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
-  const [importProgress, setImportProgress] = useState(0);
+  const [importStage, setImportStage] = useState<'importing' | 'refreshing'>('importing');
+  const [importStageProgress, setImportStageProgress] = useState({ current: 0, total: 0 });
 
   // --- 文件浏览器 ---
   const [explorerConfig, setExplorerConfig] = useState<{
@@ -143,7 +145,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
 
     setIsImporting(true);
     setImportStatus('importing');
-    setImportProgress(0);
+    setImportStage('importing');
+    setImportStageProgress({ current: 0, total: 0 });
 
     // 传递主视图每个 stem 的真实图像路径。YOLO 标签只有归一化坐标，
     // 后端必须读取对应原图尺寸后才能还原成像素坐标。
@@ -162,11 +165,6 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         if (fileName) imagePaths[stem] = `${basePath}/${fileName}`;
       });
     }
-
-    // 模拟进度动画
-    const progressTimer = setInterval(() => {
-      setImportProgress(prev => Math.min(prev + 5, 90));
-    }, 300);
 
     try {
       const res = await importData({
@@ -188,8 +186,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
             : undefined,
       });
 
-      clearInterval(progressTimer);
-      setImportProgress(100);
+      setImportStage('refreshing');
+      setImportStageProgress({ current: 0, total: 0 });
 
       // 热重载
       const { projectMetaPath } = useStore.getState();
@@ -214,7 +212,11 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
 
               const loadPath = useStore.getState().workspacePath || mainFolder?.path || '';
               if (loadPath) {
-                loadAllProjectAnnotations(sortedStems, loadPath);
+                await loadAllProjectAnnotations(
+                  sortedStems,
+                  loadPath,
+                  (current, total) => setImportStageProgress({ current, total }),
+                );
               }
             }
           }
@@ -222,6 +224,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
           console.error("Refresh failed:", refreshErr);
         }
       }
+
+      setImportStageProgress({ current: 1, total: 1 });
 
       // 属性配置由后端按实际导入的 attributes.yaml 解析后返回。
       // 必须在 project meta 热重载之后注册，否则热重载会覆盖刚导入的定义。
@@ -662,16 +666,14 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
         {importStatus === 'importing' ? (
           <div className="flex items-center gap-3 flex-1 mr-4">
-            <span className="text-xs text-muted-foreground whitespace-nowrap">
-              {t('dataImport.importing')}
-              <span className="font-mono font-bold text-foreground ml-1">
-                {Math.round(stems.length * importProgress / 100)}/{stems.length}
-              </span>
-            </span>
-            <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-primary rounded-full transition-all duration-300"
-                style={{ width: `${importProgress}%` }} />
-            </div>
+            <OperationProgress
+              stageIndex={importStage === 'importing' ? 1 : 2}
+              stageCount={2}
+              stageName={t(importStage === 'importing' ? 'dataImport.importing' : 'dataImport.refreshing')}
+              current={importStageProgress.current}
+              total={importStageProgress.total}
+              stageLabel={t('common.stage')}
+            />
           </div>
         ) : importStatus === 'done' ? (
           <div className="flex items-center gap-2 text-xs text-emerald-600">

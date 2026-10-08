@@ -88,6 +88,7 @@
     "dataUpdateScan": "扫描并添加新图像",
     "dataUpdateScanHint": "重新扫描已配置的图像文件夹，只追加新发现的场景，不重置当前标注会话。",
     "dataUpdateScanning": "更新数据中...",
+    "dataUpdateLoadingAnnotations": "正在加载新增标注...",
     "dataUpdateNoFolders": "当前没有可扫描的图像文件夹",
     "dataUpdateNoScenes": "没有发现完整场景，请检查图像文件夹和多视图后缀。",
     "dataUpdateSuccess": "数据更新完成：新增 {{addedScenes}} 个场景，扫描 {{scannedScenes}} 个，加载 {{loadedObjects}} 个对象",
@@ -703,6 +704,7 @@
       "noWorkspace": "请设置目标工作空间路径。"
     },
     "importing": "导入中...",
+    "refreshing": "正在刷新项目数据...",
     "success": "导入成功",
     "failed": "导入失败",
     "ready": "准备导入",
@@ -1113,6 +1115,7 @@
     "truncated": "截断"
   },
   "common": {
+    "stage": "阶段",
     "confirm": "确认",
     "cancel": "取消",
     "edit": "编辑",

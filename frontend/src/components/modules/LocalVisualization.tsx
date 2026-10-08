@@ -12,6 +12,7 @@ import { Loader2, Download, Info, Trash2, FolderOpen,
 import { requestVisPreview, requestVisExportStream, getFileContent, analyzeWorkspaceFolders} from '../../api/client';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
+import { OperationProgress } from '../ui/OperationProgress';
 
 interface ViewMeta {
   name: string;
@@ -1120,17 +1121,16 @@ export function LocalVisualization() {
         {/* Bottom action bar */}
         <div className="p-4 bg-background border-t border-border space-y-3">
           {isExporting && exportProgress !== null && (
-            <div className="space-y-1.5 animate-in fade-in slide-in-from-bottom-2">
-              <div className="flex justify-between text-[10px] font-black text-emerald-600 uppercase tracking-tighter">
-                <span>{t('localVis.export.processing')}</span>
-                <span>{exportProgress}%</span>
-              </div>
-              <div className="w-full h-2 bg-muted rounded-full overflow-hidden border border-emerald-100 dark:border-emerald-900/30">
-                <div
-                  className="h-full bg-emerald-500 transition-all duration-500 ease-out shadow-[0_0_8px_rgba(16,185,129,0.4)]"
-                  style={{ width: `${exportProgress}%` }}
-                />
-              </div>
+            <div className="animate-in fade-in slide-in-from-bottom-2">
+              <OperationProgress
+                stageIndex={1}
+                stageCount={1}
+                stageName={t('localVis.export.processing')}
+                current={Math.round(scannedStems.length * exportProgress / 100)}
+                total={scannedStems.length}
+                stageLabel={t('common.stage')}
+                barClassName="bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
+              />
             </div>
           )}
           <Button

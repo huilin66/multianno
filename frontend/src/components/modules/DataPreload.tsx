@@ -16,6 +16,7 @@ import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { rememberRecentProject } from '../../lib/projectHistory';
 import { saveProjectMeta, analyzeWorkspaceFolders, checkWorkspaceJson, inferSuffix } from '../../api/client';
 import { showDialog } from '../../store/useDialogStore';
+import { OperationProgress } from '../ui/OperationProgress';
 import {
   FolderOpen, Plus, Trash2, Info, UploadCloud, History,
   ChevronRight, RotateCcw, Search
@@ -89,13 +90,14 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   const [isWorkspaceLocked, setIsWorkspaceLocked] = useState(false);
   const [isCheckingWorkspace, setIsCheckingWorkspace] = useState(false);
   const [isLoadingWorkspaceAnnotations, setIsLoadingWorkspaceAnnotations] = useState(false);
-  const [workspaceLoadProgress, setWorkspaceLoadProgress] = useState({ current: 0, total: 0 });
   const [projectNameDraft, setProjectNameDraft] = useState(() => projectName || t('createProject.defaultName'));
   const [projectMetaSaveDir, setProjectMetaSaveDir] = useState('');
   const [metaSaveDirExplorerOpen, setMetaSaveDirExplorerOpen] = useState(false);
 
   const [isGlobalConfirming, setIsGlobalConfirming] = useState(false);
   const [progressStage, setProgressStage] = useState<PreloadProgressStage>('idle');
+  const [progressStageIndex, setProgressStageIndex] = useState(1);
+  const [progressStageCount, setProgressStageCount] = useState(1);
   const [operationProgress, setOperationProgress] = useState({ current: 0, total: 0 });
 
   const maxViews = editorSettings.maxViews || 9;
@@ -325,6 +327,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     if (!item.path.trim()) return;
     setIsConfirming(true);
     setProgressStage('analyzing');
+    setProgressStageIndex(1);
+    setProgressStageCount(1);
     setOperationProgress({ current: 0, total: 0 });
     try {
       const existingFolders = folders.map(f => ({
@@ -477,6 +481,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     if (!folder?.path) return;
     setIsConfirming(true);
     setProgressStage('analyzing');
+    setProgressStageIndex(1);
+    setProgressStageCount(1);
     setOperationProgress({ current: 0, total: 0 });
     try {
       const allFolders = folders.map(f => ({
@@ -568,13 +574,18 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   // ==========================================
   // 全局操作
   // ==========================================
-  const loadExistingWorkspaceAnnotations = async (saveDir: string) => {
+  const loadExistingWorkspaceAnnotations = async (
+    saveDir: string,
+    stageIndex = 1,
+    stageCount = 1,
+  ) => {
     const stemsToLoad = useStore.getState().stems;
     if (stemsToLoad.length === 0) return null;
 
     setIsLoadingWorkspaceAnnotations(true);
     setProgressStage('loadingAnnotations');
-    setWorkspaceLoadProgress({ current: 0, total: stemsToLoad.length });
+    setProgressStageIndex(stageIndex);
+    setProgressStageCount(stageCount);
     setOperationProgress({ current: 0, total: stemsToLoad.length });
     useStore.setState({
       annotations: [],
@@ -590,7 +601,6 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
         stemsToLoad,
         saveDir,
         (current, total) => {
-          setWorkspaceLoadProgress({ current, total });
           setOperationProgress({ current, total });
         },
         10,
@@ -645,6 +655,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
 
     setIsGlobalConfirming(true);
     setProgressStage('preparing');
+    setProgressStageIndex(1);
+    setProgressStageCount(2);
     setOperationProgress({ current: 0, total: 2 });
     try {
       const finalPath = isWorkspaceCustom ? workspacePath.trim() : defaultWorkspacePath;
@@ -689,12 +701,16 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       }
 
       let loadedWorkspaceStats: Awaited<ReturnType<typeof loadExistingWorkspaceAnnotations>> = null;
+      const totalStages = shouldLoadExistingAnnotations ? 3 : 2;
+      setProgressStageCount(totalStages);
       if (finalPath && shouldLoadExistingAnnotations) {
-        loadedWorkspaceStats = await loadExistingWorkspaceAnnotations(finalPath);
+        loadedWorkspaceStats = await loadExistingWorkspaceAnnotations(finalPath, 2, totalStages);
       }
 
       if (finalPath) setWorkspaceStorePath(finalPath);
       setProgressStage('saving');
+      setProgressStageIndex(shouldLoadExistingAnnotations ? 3 : 2);
+      setProgressStageCount(totalStages);
       setOperationProgress({ current: 0, total: 1 });
       const projectMeta = generateProjectMetaConfig(useStore.getState());
       if (metaPath) await saveProjectMeta({ file_path: metaPath, content: projectMeta });
@@ -719,6 +735,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
         });
       }
 
+      setProgressStageIndex(totalStages);
+      setProgressStageCount(totalStages);
       setActiveModule(shouldEnterAnnotationDirectly ? 'workspace' : 'extent');
     } catch (err) {
       console.error("Failed:", err);
@@ -1127,6 +1145,16 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     }
   };
 
+  const progressStageName = progressStage === 'analyzing'
+    ? t('dataPreload.progress.analyzing')
+    : progressStage === 'preparing'
+      ? t('dataPreload.progress.preparing')
+      : progressStage === 'loadingAnnotations'
+        ? t('dataPreload.workspace.loadingAnnotations')
+        : progressStage === 'saving'
+          ? t('dataPreload.progress.saving')
+          : t('dataPreload.progress.complete');
+
   // ==========================================
   // 主渲染
   // ==========================================
@@ -1218,41 +1246,16 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
               {workspaceStatus === 'default' ? 'default' : 'defined'}
             </span>
           </div>
-          {isLoadingWorkspaceAnnotations && workspaceLoadProgress.total > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {t('dataPreload.workspace.loadingAnnotations')} {workspaceLoadProgress.current}/{workspaceLoadProgress.total}
-            </span>
-          )}
           {(isConfirming || isGlobalConfirming || isLoadingWorkspaceAnnotations) && (
             <div className="flex min-w-[220px] max-w-[320px] flex-1 items-center gap-2">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-                  <span className="truncate">
-                    {progressStage === 'analyzing'
-                      ? t('dataPreload.progress.analyzing')
-                      : progressStage === 'preparing'
-                        ? t('dataPreload.progress.preparing')
-                        : progressStage === 'loadingAnnotations'
-                          ? t('dataPreload.workspace.loadingAnnotations')
-                          : progressStage === 'saving'
-                            ? t('dataPreload.progress.saving')
-                            : t('dataPreload.progress.complete')}
-                  </span>
-                  {operationProgress.total > 0 && (
-                    <span className="shrink-0 font-mono">
-                      {operationProgress.current}/{operationProgress.total}
-                    </span>
-                  )}
-                </div>
-                <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                  <div
-                    className={`h-full rounded-full bg-primary transition-all duration-300 ${operationProgress.total > 0 ? '' : 'w-1/2 animate-pulse'}`}
-                    style={operationProgress.total > 0
-                      ? { width: `${Math.min(100, (operationProgress.current / operationProgress.total) * 100)}%` }
-                      : undefined}
-                  />
-                </div>
-              </div>
+              <OperationProgress
+                stageIndex={progressStageIndex}
+                stageCount={progressStageCount}
+                stageName={progressStageName}
+                current={operationProgress.current}
+                total={operationProgress.total}
+                stageLabel={t('common.stage')}
+              />
             </div>
           )}
         </div>
