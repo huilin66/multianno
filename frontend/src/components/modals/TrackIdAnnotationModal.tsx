@@ -54,6 +54,15 @@ interface ViewportState {
   zoom: number;
 }
 
+interface TrackIdViewPacket {
+  view: Record<string, any> | null | undefined;
+  interaction: {
+    editable: boolean;
+    synchronized: boolean;
+    browsable: boolean;
+  };
+}
+
 interface TrackCandidate {
   stem: string;
   annotationId: string;
@@ -136,23 +145,21 @@ const getFrameImagePath = (stem: string, canvasProps: Record<string, any>) => {
 function TrackIdFrameCanvas({
   slot,
   index,
-  editable,
+  viewPacket,
   canvasProps,
   t,
   fitRef,
   syncViewport,
-  syncViewportEnabled,
   showTrackId,
   onTrackObjectDoubleClick,
 }: {
   slot: FrameSlot;
   index: number;
-  editable: boolean;
+  viewPacket: TrackIdViewPacket;
   canvasProps: Record<string, any>;
   t: (key: string, options?: any) => string;
   fitRef?: React.MutableRefObject<(() => void) | null>;
   syncViewport?: ViewportState;
-  syncViewportEnabled?: boolean;
   showTrackId: boolean;
   onTrackObjectDoubleClick?: (annotation: any, stem: string) => void;
 }) {
@@ -162,7 +169,8 @@ function TrackIdFrameCanvas({
     height: Number(canvasProps.mainHeight) || 1024,
   });
   const [viewportOverride, setViewportOverride] = React.useState({ panX: 0, panY: 0, zoom: 1 });
-  const view = canvasProps.view;
+  const { view, interaction } = viewPacket;
+  const { editable, synchronized } = interaction;
   const frameEditorSettings = React.useMemo(() => ({
     ...(canvasProps.editorSettings || {}),
     showTrackId,
@@ -212,7 +220,7 @@ function TrackIdFrameCanvas({
     };
   }, [editable, fitFrame, fitRef]);
 
-  const isSynchronized = !editable && syncViewportEnabled && !!syncViewport;
+  const isSynchronized = !editable && synchronized && !!syncViewport;
 
   React.useEffect(() => {
     if (!isSynchronized || !syncViewport) return;
@@ -1240,6 +1248,14 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
               <div className="grid min-w-[900px] grid-cols-3 gap-3">
                 {frameSlots.map((slot, index) => {
                   const editable = slot.offset === 0;
+                  const viewPacket: TrackIdViewPacket = {
+                    view: canvasProps.view || null,
+                    interaction: {
+                      editable,
+                      synchronized: !editable && syncFrames,
+                      browsable: true,
+                    },
+                  };
                   const frameLabel = slot.role === 'start'
                     ? t('trackIdWindow.startFrame')
                     : slot.role === 'end'
@@ -1254,11 +1270,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                       <div className="flex items-center gap-2 border-b border-neutral-100 px-3 py-2 dark:border-neutral-800"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-100 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{index + 1}</span><span className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100">{frameLabel}</span></div>
                       <div
                         role="button"
-                        tabIndex={slot.stem ? 0 : -1}
-                        aria-disabled={!slot.stem}
-                        onClick={() => jumpToStem(slot.stem)}
+                        tabIndex={slot.stem && viewPacket.interaction.browsable ? 0 : -1}
+                        aria-disabled={!slot.stem || !viewPacket.interaction.browsable}
+                        onClick={() => viewPacket.interaction.browsable && jumpToStem(slot.stem)}
                         onKeyDown={(event) => {
-                          if (slot.stem && (event.key === 'Enter' || event.key === ' ')) {
+                          if (slot.stem && viewPacket.interaction.browsable && (event.key === 'Enter' || event.key === ' ')) {
                             event.preventDefault();
                             jumpToStem(slot.stem);
                           }
@@ -1269,12 +1285,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                         <TrackIdFrameCanvas
                           slot={slot}
                           index={index}
-                          editable={editable}
+                          viewPacket={viewPacket}
                           canvasProps={canvasProps}
                           t={t}
-                          fitRef={editable ? centerFitRef : undefined}
+                          fitRef={viewPacket.interaction.editable ? centerFitRef : undefined}
                           syncViewport={canvasProps.viewport}
-                          syncViewportEnabled={syncFrames}
                           showTrackId={showTrackIds}
                           onTrackObjectDoubleClick={handleTrackObjectDoubleClick}
                         />
