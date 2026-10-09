@@ -412,7 +412,7 @@ function TrackIdEditor({
   setMainIdDraft: (value: string) => void;
   setPartIdDraft: (value: string) => void;
   selectTrackId: (value: string) => void;
-  applyTrackId: () => void;
+  applyTrackId: (value?: string) => void;
   activeAnnotation: any;
   activeSequence: number;
   sequences: TrackSequence[];
@@ -505,6 +505,8 @@ function TrackIdEditor({
               key={trackId}
               type="button"
               onClick={() => selectTrackId(trackId)}
+              onDoubleClick={() => applyTrackId(trackId)}
+              title={t('trackIdWindow.assignTrackId')}
               className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left text-[10px] transition-colors ${
                 selectedTrackId === trackId
                   ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
@@ -858,8 +860,13 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     setPartIdDraft(parsed.partId);
   };
 
-  const applyTrackId = () => {
-    const value = composeTrackId(mainIdDraft, partIdDraft);
+  const applyTrackId = (valueOverride?: string) => {
+    const value = valueOverride?.trim() || composeTrackId(mainIdDraft, partIdDraft);
+    if (valueOverride) {
+      const parsed = parseTrackId(value);
+      setMainIdDraft(parsed.mainId);
+      setPartIdDraft(parsed.partId);
+    }
     setSelectedTrackId(value || null);
     if (activeAnnotation && value) updateAnnotation(activeAnnotation.id, { track_id: value });
   };

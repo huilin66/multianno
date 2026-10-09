@@ -63,6 +63,7 @@
     "partIdPlaceholder": "例如：a",
     "trackIdPlaceholder": "例如：1-a",
     "selectTrackId": "使用此 Track ID",
+    "assignTrackId": "双击将此 Track ID 分配给当前选中对象",
     "existingTrackIds": "已有 Track ID",
     "existingTrackIdsShort": "已有 ID",
     "noTrackIds": "当前项目中没有 Track ID",

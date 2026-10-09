@@ -63,6 +63,7 @@
     "partIdPlaceholder": "e.g. a",
     "trackIdPlaceholder": "e.g. 1-a",
     "selectTrackId": "Use this track ID",
+    "assignTrackId": "Double-click to assign this Track ID to the selected object",
     "existingTrackIds": "Existing track IDs",
     "existingTrackIdsShort": "IDs",
     "noTrackIds": "No track IDs in the current project",
