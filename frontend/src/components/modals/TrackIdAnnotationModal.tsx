@@ -831,7 +831,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       ...(annotations as any[]).map((annotation) => getTrackIdLabel(annotation.track_id)),
       ...manualTrackIds,
     ].filter(Boolean);
-    return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+    return Array.from(new Set(values)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
   }, [annotations, manualTrackIds]);
 
   const frameSlots = React.useMemo<FrameSlot[]>(() => {
