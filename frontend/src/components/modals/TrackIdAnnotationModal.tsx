@@ -24,6 +24,8 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CornerDownLeft,
   Film,
   Loader2,
@@ -768,6 +770,8 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [manualTrackIds, setManualTrackIds] = React.useState<string[]>([]);
   const [activeSequence, setActiveSequence] = React.useState(1);
   const [sequences, setSequences] = React.useState<TrackSequence[]>([createTrackSequence(1)]);
+  const [leftPanelOpen, setLeftPanelOpen] = React.useState(true);
+  const [rightPanelOpen, setRightPanelOpen] = React.useState(true);
   const [syncFrames, setSyncFrames] = React.useState(true);
   const [showTrackIds, setShowTrackIds] = React.useState(true);
   const [frameContextMode, setFrameContextMode] = React.useState<'locked' | 'adjacent'>('locked');
@@ -1208,7 +1212,32 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         <div className="flex min-h-0 flex-1 overflow-hidden bg-neutral-50/70 dark:bg-neutral-950/50">
           <section className="flex min-w-0 flex-1 flex-col border-r border-neutral-200 dark:border-neutral-800">
             <div className="flex min-h-0 flex-1">
-              <div className="relative shrink-0">{centerToolbar}</div>
+              <div className={`relative shrink-0 ${leftPanelOpen ? '' : 'w-6'}`}>
+                {leftPanelOpen ? (
+                  centerToolbar
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanelOpen(true)}
+                    className="flex h-full w-6 items-center justify-center border-r border-neutral-200 bg-neutral-100 transition-colors hover:bg-neutral-200 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                    title={t('annotation.expandLeftPanel')}
+                    aria-label={t('annotation.expandLeftPanel')}
+                  >
+                    <ChevronRight className="h-4 w-4 text-neutral-500" />
+                  </button>
+                )}
+                {leftPanelOpen && (
+                  <button
+                    type="button"
+                    onClick={() => setLeftPanelOpen(false)}
+                    className="absolute top-2 -right-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-neutral-200 bg-white shadow-sm transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+                    title={t('annotation.collapseLeftPanel')}
+                    aria-label={t('annotation.collapseLeftPanel')}
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5 text-neutral-500" />
+                  </button>
+                )}
+              </div>
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="min-h-0 flex-1 overflow-auto p-3">
                   <div className="grid min-w-[900px] grid-cols-3 gap-3">
@@ -1318,7 +1347,32 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
             </div>
           </section>
 
-          <aside className="w-80 min-w-80 shrink-0 overflow-hidden bg-white dark:bg-neutral-950"><RightPanel {...rightPanelProps} readOnlyViewLayers trackIdMode trackIdEditor={editor} /></aside>
+          <aside className={`relative shrink-0 overflow-hidden bg-white dark:bg-neutral-950 ${rightPanelOpen ? 'w-80 min-w-80' : 'w-6 min-w-6'}`}>
+            {rightPanelOpen ? (
+              <>
+                <RightPanel {...rightPanelProps} readOnlyViewLayers trackIdMode trackIdEditor={editor} />
+                <button
+                  type="button"
+                  onClick={() => setRightPanelOpen(false)}
+                  className="absolute top-2 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-neutral-200 bg-white shadow-sm transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+                  title={t('annotation.collapseRightPanel')}
+                  aria-label={t('annotation.collapseRightPanel')}
+                >
+                  <ChevronRight className="h-3.5 w-3.5 text-neutral-500" />
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRightPanelOpen(true)}
+                className="flex h-full w-6 items-center justify-center border-l border-neutral-200 bg-neutral-100 transition-colors hover:bg-neutral-200 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+                title={t('annotation.expandRightPanel')}
+                aria-label={t('annotation.expandRightPanel')}
+              >
+                <ChevronLeft className="h-4 w-4 text-neutral-500" />
+              </button>
+            )}
+          </aside>
         </div>
       </DialogContent>
     </Dialog>
