@@ -39,6 +39,7 @@
     "endFrame": "终止帧",
     "lockedFrames": "锁定帧",
     "adjacentFrames": "前后帧",
+    "verticalLayout": "纵向布局",
     "switchToLockedFrames": "显示锁定的起始帧和终止帧",
     "switchToAdjacentFrames": "显示当前帧的前后帧",
     "editable": "可编辑",

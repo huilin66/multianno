@@ -783,6 +783,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [syncFrames, setSyncFrames] = React.useState(true);
   const [showTrackIds, setShowTrackIds] = React.useState(true);
   const [frameContextMode, setFrameContextMode] = React.useState<'locked' | 'adjacent'>('locked');
+  const [verticalFrameLayout, setVerticalFrameLayout] = React.useState(false);
   const [reidStatus, setReidStatus] = React.useState<TrackIdReIDStatus | null>(null);
   const [reidRunning, setReidRunning] = React.useState(false);
   const [reidProgress, setReidProgress] = React.useState<TrackIdReIDJob | null>(null);
@@ -1248,7 +1249,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
               </div>
               <div className="flex min-w-0 flex-1 flex-col">
                 <div className="min-h-0 flex-1 overflow-auto p-3">
-                  <div className="grid min-w-[900px] grid-cols-3 gap-3">
+                  <div className={`grid gap-3 ${verticalFrameLayout ? 'min-w-0 grid-cols-1' : 'min-w-[900px] grid-cols-3'}`}>
                 {frameSlots.map((slot, index) => {
                   const editable = slot.offset === 0;
                   const viewPacket: TrackIdViewPacket = {
@@ -1339,6 +1340,16 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                         title={t(frameContextMode === 'locked' ? 'trackIdWindow.switchToAdjacentFrames' : 'trackIdWindow.switchToLockedFrames')}
                       />
                     </div>
+                    <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                      <Label className="text-xs">{t('trackIdWindow.verticalLayout')}</Label>
+                      <Switch
+                        className="scale-90 origin-right"
+                        checked={verticalFrameLayout}
+                        onCheckedChange={setVerticalFrameLayout}
+                        aria-label={t('trackIdWindow.verticalLayout')}
+                        title={t('trackIdWindow.verticalLayout')}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1355,14 +1366,14 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
             </div>
           </section>
 
-          <aside className={`relative shrink-0 overflow-hidden bg-white dark:bg-neutral-950 ${rightPanelOpen ? 'w-80 min-w-80' : 'w-6 min-w-6'}`}>
+          <aside className={`relative shrink-0 overflow-visible bg-white dark:bg-neutral-950 ${rightPanelOpen ? 'w-80 min-w-80' : 'w-6 min-w-6'}`}>
             {rightPanelOpen ? (
               <>
                 <RightPanel {...rightPanelProps} readOnlyViewLayers trackIdMode trackIdEditor={editor} />
                 <button
                   type="button"
                   onClick={() => setRightPanelOpen(false)}
-                  className="absolute top-2 -left-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-neutral-200 bg-white shadow-sm transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+                  className="absolute top-2 -left-3 z-30 flex h-6 w-6 items-center justify-center rounded-full border border-neutral-200 bg-white shadow-sm transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
                   title={t('annotation.collapseRightPanel')}
                   aria-label={t('annotation.collapseRightPanel')}
                 >

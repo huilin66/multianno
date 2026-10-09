@@ -39,6 +39,7 @@
     "endFrame": "End",
     "lockedFrames": "Locked frames",
     "adjacentFrames": "Prev / next",
+    "verticalLayout": "Vertical layout",
     "switchToLockedFrames": "Show locked start and end frames",
     "switchToAdjacentFrames": "Show the previous and next frames",
     "editable": "Editable",
