@@ -61,6 +61,11 @@
     "partId": "部件 ID",
     "mainIdPlaceholder": "例如：1",
     "partIdPlaceholder": "例如：a",
+    "trackIdInvalid": {
+      "required": "请输入主 ID。",
+      "whitespace": "Track ID 不能包含空白字符。",
+      "tooLong": "Track ID 不能超过 128 个字符。"
+    },
     "trackIdPlaceholder": "例如：1-a",
     "selectTrackId": "使用此 Track ID",
     "assignTrackId": "双击将此 Track ID 分配给当前选中对象",

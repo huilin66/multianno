@@ -29,8 +29,15 @@ logger = get_logger("track_id")
 
 REID_STAGE_COUNT = 4
 ReIDProgressCallback = Callable[[int, str, int, int, str], None]
+
+
+class ReIDCancelledError(Exception):
+    """Raised when the client cancels a running association job."""
+
+
 _reid_jobs: dict[str, dict[str, Any]] = {}
 _reid_tasks: dict[str, asyncio.Task[Any]] = {}
+_reid_cancel_events: dict[str, threading.Event] = {}
 _reid_jobs_lock = threading.Lock()
 
 
@@ -39,7 +46,7 @@ def _prune_reid_jobs() -> None:
     with _reid_jobs_lock:
         expired = [
             job_id for job_id, job in _reid_jobs.items()
-            if job.get("status") in {"completed", "failed"}
+            if job.get("status") in {"completed", "failed", "cancelled"}
             and float(job.get("updated_at", 0)) < cutoff
         ]
         for job_id in expired:
@@ -67,6 +74,7 @@ def _create_reid_job() -> dict[str, Any]:
     }
     with _reid_jobs_lock:
         _reid_jobs[job_id] = job
+        _reid_cancel_events[job_id] = threading.Event()
     return dict(job)
 
 
@@ -85,6 +93,12 @@ def _update_reid_job(job_id: str, **updates: Any) -> None:
         job["updated_at"] = time.time()
 
 
+def _is_reid_cancelled(job_id: str) -> bool:
+    with _reid_jobs_lock:
+        cancel_event = _reid_cancel_events.get(job_id)
+        return cancel_event.is_set() if cancel_event is not None else False
+
+
 def _publish_reid_progress(
     job_id: str,
     stage_index: int,
@@ -93,6 +107,8 @@ def _publish_reid_progress(
     total: int,
     message: str = "",
 ) -> None:
+    if _is_reid_cancelled(job_id):
+        return
     safe_total = max(0, int(total))
     safe_current = min(safe_total, max(0, int(current))) if safe_total else 0
     percent = int((safe_current / safe_total) * 100) if safe_total else 0
@@ -231,10 +247,17 @@ def _validate_track_id_request(req: TrackIdReIDRequest) -> tuple[TrackIdFrame, T
 def _associate_track_id_sync(
     req: TrackIdReIDRequest,
     progress_callback: Optional[ReIDProgressCallback] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> dict[str, Any]:
     def report(stage_index: int, stage_name: str, current: int, total: int, message: str = "") -> None:
+        if cancel_check is not None and cancel_check():
+            raise ReIDCancelledError()
         if progress_callback is not None:
             progress_callback(stage_index, stage_name, current, total, message)
+
+    def ensure_not_cancelled() -> None:
+        if cancel_check is not None and cancel_check():
+            raise ReIDCancelledError()
 
     collection_total = max(len(req.frames), 1)
     report(1, "Collecting candidate boxes", 0, collection_total, "Validating start and end candidates")
@@ -278,6 +301,7 @@ def _associate_track_id_sync(
     collected_frames = 0
 
     for frame_index, frame in enumerate(req.frames):
+        ensure_not_cancelled()
         if frame.stem in {req.start.stem, req.end.stem}:
             collected_frames += 1
             report(1, "Collecting candidate boxes", collected_frames, collection_total, frame.stem)
@@ -288,8 +312,7 @@ def _associate_track_id_sync(
         candidates = [
             candidate
             for candidate in frame.candidates
-            if anchor_label
-            and candidate.label.strip() == anchor_label
+            if (not req.same_label_only or (anchor_label and candidate.label.strip() == anchor_label))
             and not (candidate.track_id or "").strip()
         ]
         if not candidates:
@@ -344,6 +367,7 @@ def _associate_track_id_sync(
     report(1, "Collecting candidate boxes", collection_total, collection_total, f"{len(candidate_work)} boxes collected")
 
     try:
+        ensure_not_cancelled()
         report(2, "Loading ReID model", 0, 1, "Loading ONNX model")
         encoder.load()
         report(2, "Loading ReID model", 1, 1, "Model ready")
@@ -416,9 +440,11 @@ def _associate_track_id_sync(
             return embeddings
 
     for batch_start in range(0, len(candidate_work), effective_batch_size):
+        ensure_not_cancelled()
         work_batch = candidate_work[batch_start:batch_start + effective_batch_size]
         embeddings = embed_with_single_fallback(work_batch)
         for (plan, candidate), embedding in zip(work_batch, embeddings):
+            ensure_not_cancelled()
             frame = plan["frame"]
             if embedding is None:
                 processed_candidates += 1
@@ -489,7 +515,14 @@ async def _run_reid_job(job_id: str, req: TrackIdReIDRequest) -> None:
         _publish_reid_progress(job_id, stage_index, stage_name, current, total, message)
 
     try:
-        result = await asyncio.to_thread(_associate_track_id_sync, req, progress_callback)
+        result = await asyncio.to_thread(
+            _associate_track_id_sync,
+            req,
+            progress_callback,
+            lambda: _is_reid_cancelled(job_id),
+        )
+        if _is_reid_cancelled(job_id):
+            raise ReIDCancelledError()
         _update_reid_job(
             job_id,
             status="completed",
@@ -503,6 +536,15 @@ async def _run_reid_job(job_id: str, req: TrackIdReIDRequest) -> None:
             result=result,
             error=None,
         )
+    except ReIDCancelledError:
+        logger.info("REID_JOB_CANCELLED job_id=%s", job_id)
+        _update_reid_job(
+            job_id,
+            status="cancelled",
+            stage_name="Cancelled",
+            message="ReID job cancelled",
+            error=None,
+        )
     except HTTPException as exc:
         message = str(exc.detail)
         logger.warning("REID_JOB_ERROR job_id=%s status=%s error=%s", job_id, exc.status_code, shorten(message, 1500))
@@ -513,6 +555,8 @@ async def _run_reid_job(job_id: str, req: TrackIdReIDRequest) -> None:
         _update_reid_job(job_id, status="failed", message=message, error=message)
     finally:
         _reid_tasks.pop(job_id, None)
+        with _reid_jobs_lock:
+            _reid_cancel_events.pop(job_id, None)
 
 
 @router.post("/associate", status_code=202)
@@ -540,3 +584,27 @@ async def get_reid_job(job_id: str) -> dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail="ReID job not found.")
     return job
+
+
+@router.delete("/jobs/{job_id}", status_code=202)
+async def cancel_reid_job(job_id: str) -> dict[str, Any]:
+    """Request cooperative cancellation of a running ReID job."""
+    job = _get_reid_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="ReID job not found.")
+    if job.get("status") in {"completed", "failed", "cancelled"}:
+        return job
+
+    with _reid_jobs_lock:
+        cancel_event = _reid_cancel_events.get(job_id)
+        if cancel_event is not None:
+            cancel_event.set()
+    _update_reid_job(
+        job_id,
+        status="cancelled",
+        stage_name="Cancelled",
+        message="Cancellation requested",
+        error=None,
+    )
+    logger.info("REID_JOB_CANCEL_REQUEST job_id=%s", job_id)
+    return _get_reid_job(job_id) or job

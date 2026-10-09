@@ -682,6 +682,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       activeAnnotationId: null,
       pendingAnnotationFocus: null,
       isAnnotationDirty: false,
+      dirtyAnnotationStems: [],
       statsCacheValid: false,
     });
 

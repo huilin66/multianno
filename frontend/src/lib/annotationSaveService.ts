@@ -48,41 +48,91 @@ export const waitForPendingAnnotationSaves = async () => {
 
 const shapesMatch = (left: any[], right: any[]) => JSON.stringify(left) === JSON.stringify(right);
 
-/** 保存当前场景的最新前端状态，并等待队列中更早的保存完成。 */
-export const saveCurrentAnnotations = async () => {
-  const state = useStore.getState();
+const getDirtyStems = (state: StoreState) => {
+  const explicitDirtyStems = Array.isArray(state.dirtyAnnotationStems)
+    ? state.dirtyAnnotationStems.filter(Boolean)
+    : [];
+  // Keep compatibility with older callers that only set the legacy boolean.
+  if (explicitDirtyStems.length > 0) return Array.from(new Set(explicitDirtyStems));
+  return state.isAnnotationDirty && state.currentStem ? [state.currentStem] : [];
+};
 
-  if (!state.currentStem || !state.isAnnotationDirty) {
-    await waitForPendingAnnotationSaves();
-    return;
-  }
+const getAnnotationProjectIdentity = (state: StoreState) => JSON.stringify({
+  meta: state.projectMetaPath || '',
+  workspace: state.workspacePath || '',
+  saveDir: getSaveDirectory(state),
+  name: state.projectName || '',
+});
 
+const buildAnnotationSavePayload = (state: StoreState, stem: string): AnnotationSavePayload => {
   const saveDir = getSaveDirectory(state);
   if (!saveDir) {
     throw new Error('Annotation save directory is not configured.');
   }
 
-  const stem = state.currentStem;
-  const payload = generateAnnotationPayload(state, stem);
-  const imagePath = getMainImagePath(state, stem);
-  await enqueueAnnotationSave({
+  return {
     save_dir: saveDir,
     file_name: `${stem}.json`,
-    content: payload,
-    image_path: imagePath,
+    content: generateAnnotationPayload(state, stem),
+    image_path: getMainImagePath(state, stem),
     image_raw_profile: state.folders.find(
       (folder: any) => folder.id === state.views.find((view: any) => view.isMain)?.folderId,
     )?.rawProfile,
-  });
+  };
+};
 
-  // 如果保存期间没有新的编辑，确认 dirty 状态；否则保留 dirty，
-  // 让下一次自动保存继续写入更新后的内容。
+const saveAnnotationStems = async (state: StoreState, stems: string[]) => {
+  const projectIdentity = getAnnotationProjectIdentity(state);
+  const payloads = stems.map((stem) => ({
+    stem,
+    payload: buildAnnotationSavePayload(state, stem),
+  }));
+
+  // Enqueue all snapshots from the same immutable state. This means browsing
+  // to another scene while the requests are in flight cannot redirect a save
+  // to the newly active scene.
+  await Promise.all(payloads.map(({ payload }) => enqueueAnnotationSave(payload)));
   await waitForPendingAnnotationSaves();
+
   const latestState = useStore.getState();
-  if (
-    latestState.currentStem === stem &&
-    shapesMatch(generateAnnotationPayload(latestState, stem).shapes, payload.shapes)
-  ) {
-    latestState.clearAnnotationDirty();
+  // A project can be switched while a queued request is still writing. Never
+  // clear dirty flags belonging to the new project based on the old snapshot.
+  if (getAnnotationProjectIdentity(latestState) !== projectIdentity) return;
+  payloads.forEach(({ stem, payload }) => {
+    const latestPayload = generateAnnotationPayload(latestState, stem);
+    if (shapesMatch(latestPayload.shapes, payload.content.shapes)) {
+      latestState.clearAnnotationDirty(stem);
+    }
+  });
+};
+
+/**
+ * Save all dirty scenes. Keep this name for existing toolbar/export callers,
+ * but no longer limit a manual save to whichever scene happens to be active.
+ */
+export const saveCurrentAnnotations = async () => {
+  const state = useStore.getState();
+  const dirtyStems = getDirtyStems(state);
+  if (dirtyStems.length === 0) {
+    await waitForPendingAnnotationSaves();
+    return;
   }
+
+  await saveAnnotationStems(state, dirtyStems);
+};
+
+/**
+ * Save every dirty scene from one immutable store snapshot.
+ * Track ID editing changes the active scene repeatedly, so saving only the
+ * current scene is not sufficient when the window is closed or exported.
+ */
+export const saveDirtyAnnotations = async () => {
+  const state = useStore.getState();
+  const dirtyStems = getDirtyStems(state);
+  if (dirtyStems.length === 0) {
+    await waitForPendingAnnotationSaves();
+    return;
+  }
+
+  await saveAnnotationStems(state, dirtyStems);
 };

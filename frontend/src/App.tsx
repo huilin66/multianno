@@ -801,6 +801,7 @@ export default function App() {
       hiddenAnnotations: [],
       activeAnnotationId: null,
       isAnnotationDirty: false,
+      dirtyAnnotationStems: [],
     });
 
     try {

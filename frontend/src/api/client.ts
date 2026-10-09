@@ -40,6 +40,20 @@ const get = async (url: string, init?: RequestInit) => {
   return response.json();
 };
 
+const del = async (url: string) => {
+  let response: Response;
+  try {
+    response = await fetch(url, { method: 'DELETE' });
+  } catch {
+    throw new Error('Backend unreachable. Please check if the server is running.');
+  }
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || err.error || `Request failed (${response.status})`);
+  }
+  return response.json();
+};
+
 const compactQueryObject = (value?: Record<string, any>) => {
   if (!value) return undefined;
   const compacted = Object.fromEntries(
@@ -431,7 +445,7 @@ export interface TrackIdReIDResult {
   model_name: string;
 }
 
-export type TrackIdReIDJobStatus = 'queued' | 'running' | 'completed' | 'failed';
+export type TrackIdReIDJobStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface TrackIdReIDJob {
   job_id: string;
@@ -467,6 +481,9 @@ export const getTrackIdReIDJob = (
   jobId: string,
   signal?: AbortSignal,
 ): Promise<TrackIdReIDJob> => get(`${TRACK_ID_REID_API_URL}/jobs/${encodeURIComponent(jobId)}`, { signal });
+
+export const cancelTrackIdReID = (jobId: string): Promise<TrackIdReIDJob> =>
+  del(`${TRACK_ID_REID_API_URL}/jobs/${encodeURIComponent(jobId)}`);
 
 export interface VLMAttributeResult {
   name: string;

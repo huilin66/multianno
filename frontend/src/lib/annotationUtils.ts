@@ -91,11 +91,14 @@ export const reloadProjectAnnotation = async (
   mainFolderPath: string,
 ): Promise<{ found: boolean; annotationCount: number }> => {
   const currentState = useStore.getState();
+  const remainingDirtyStems = (currentState.dirtyAnnotationStems || [])
+    .filter((dirtyStem) => dirtyStem !== stem);
 
   // Zustand persist 会同步更新 localStorage；先移除旧缓存，避免读取失败时继续显示旧数据。
   useStore.setState({
     annotations: currentState.annotations.filter((annotation) => annotation.stem !== stem),
-    isAnnotationDirty: false,
+    isAnnotationDirty: remainingDirtyStems.length > 0,
+    dirtyAnnotationStems: remainingDirtyStems,
     activeAnnotationId: null,
   });
 
@@ -113,12 +116,14 @@ export const reloadProjectAnnotation = async (
       .map((annotation) => annotation.id),
   );
   const normalizedAnnotations = ensureUniqueAnnotationIds(result.annotations, reservedIds);
+  const latestDirtyStems = latestState.dirtyAnnotationStems.filter((dirtyStem) => dirtyStem !== stem);
   useStore.setState({
     annotations: [
       ...latestState.annotations.filter((annotation) => annotation.stem !== stem),
       ...normalizedAnnotations,
     ],
-    isAnnotationDirty: false,
+    isAnnotationDirty: latestDirtyStems.length > 0,
+    dirtyAnnotationStems: latestDirtyStems,
     activeAnnotationId: null,
   });
 

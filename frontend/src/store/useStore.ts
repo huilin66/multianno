@@ -106,6 +106,14 @@ export interface Annotation {
   sourceIndex?: number;              // 原始 JSON shapes 中的序号，用于跨窗口定位对象
 }
 
+const mergeDirtyAnnotationStems = (
+  existing: string[] | undefined,
+  stems: Iterable<string>,
+) => Array.from(new Set([
+  ...(existing || []),
+  ...Array.from(stems).filter(Boolean),
+]));
+
 // 🌟 2. 新增：单张图像 (Stem) 级别的全局属性
 export interface StemMetadata {
   tags: string[];                  // 对应 JSON 里的 image_tags
@@ -253,6 +261,7 @@ export interface AppState {
   activeAnnotationId: string | null;
   pendingAnnotationFocus: { stem: string; index: number } | null;
   isAnnotationDirty: boolean;
+  dirtyAnnotationStems: string[];
   isAIPanelOpen: boolean;
   aiPrompts: { x: number, y: number, label: number }[]; 
   statsCacheValid: boolean;
@@ -342,8 +351,8 @@ export interface AppState {
   removeAnnotation: (id: string) => void;
   setActiveAnnotationId: (id: string | null) => void;
   setPendingAnnotationFocus: (request: { stem: string; index: number } | null) => void;
-  markAnnotationDirty: () => void;
-  clearAnnotationDirty: () => void;
+  markAnnotationDirty: (stem?: string) => void;
+  clearAnnotationDirty: (stem?: string) => void;
   setAIPanelOpen: (open: boolean) => void;
   setAiPrompts: (ptspts: { x: number, y: number, label: number }[]) => void;
   setStatsCacheValid: (valid: boolean) => void;
@@ -398,6 +407,7 @@ export const useStore = create<AppState>()(
       activeAnnotationId: null,
       pendingAnnotationFocus: null,
       isAnnotationDirty: false,
+      dirtyAnnotationStems: [],
       isAIPanelOpen: false,
       aiPrompts: [],
       statsCacheValid: false,
@@ -522,6 +532,8 @@ export const useStore = create<AppState>()(
 
           annotations: [],
           pendingAnnotationFocus: null,
+          isAnnotationDirty: false,
+          dirtyAnnotationStems: [],
           stemMetadata: {}, 
           completedViews: [],
         });
@@ -535,6 +547,8 @@ export const useStore = create<AppState>()(
         stems: [],
         currentStem: null,      // 类型必须是 null 而不是 ''
         annotations: [],
+        isAnnotationDirty: false,
+        dirtyAnnotationStems: [],
         taxonomyClasses: [],    
         taxonomyAttributes: [],
         stemMetadata: {},
@@ -626,7 +640,17 @@ export const useStore = create<AppState>()(
             a.label === oldClass.name ? { ...a, label: updates.name as string } : a
           );
         }
-        return { taxonomyClasses: newClasses, annotations: newAnnotations };
+        const changedStems = oldClass && updates.name && oldClass.name !== updates.name
+          ? state.annotations.filter((annotation) => annotation.label === oldClass.name).map((annotation) => annotation.stem)
+          : [];
+        const dirtyAnnotationStems = mergeDirtyAnnotationStems(state.dirtyAnnotationStems, changedStems);
+        return {
+          taxonomyClasses: newClasses,
+          annotations: newAnnotations,
+          ...(changedStems.length > 0
+            ? { isAnnotationDirty: true, dirtyAnnotationStems }
+            : {}),
+        };
       }),
       deleteTaxonomyClass: (id, deleteAnnotations) => set((state) => {
         const classToDelete = state.taxonomyClasses.find(c => c.id === id);
@@ -642,10 +666,19 @@ export const useStore = create<AppState>()(
             a.label === classToDelete.name ? { ...a, label: 'background' } : a
           );
         }
+        const changedStems = state.annotations
+          .filter((annotation) => annotation.label === classToDelete.name)
+          .map((annotation) => annotation.stem);
         return { 
           taxonomyClasses: newClasses, 
           annotations: newAnnotations,
           classOrder: state.classOrder.filter(cid => cid !== id),
+          ...(changedStems.length > 0
+            ? {
+                isAnnotationDirty: true,
+                dirtyAnnotationStems: mergeDirtyAnnotationStems(state.dirtyAnnotationStems, changedStems),
+              }
+            : {}),
         };
       }),
       mergeTaxonomyClasses: (sourceNames, targetName) => set((state) => {
@@ -656,10 +689,19 @@ export const useStore = create<AppState>()(
         const deletedIds = state.taxonomyClasses
         .filter(c => sourceNames.includes(c.name))
         .map(c => c.id);
+        const changedStems = state.annotations
+          .filter((annotation) => sourceNames.includes(annotation.label))
+          .map((annotation) => annotation.stem);
         return { 
           taxonomyClasses: newClasses, 
           annotations: newAnnotations,
           classOrder: state.classOrder.filter(cid => !deletedIds.includes(cid)),
+          ...(changedStems.length > 0
+            ? {
+                isAnnotationDirty: true,
+                dirtyAnnotationStems: mergeDirtyAnnotationStems(state.dirtyAnnotationStems, changedStems),
+              }
+            : {}),
         };
       }),
       mergeTaxonomyClassesWithAttributes: (
@@ -691,12 +733,21 @@ export const useStore = create<AppState>()(
           c => !classesToRemove.find(rc => rc.id === c.id)
         );
         
+        const changedStems = state.annotations
+          .filter((annotation) => oldNames.includes(annotation.label))
+          .map((annotation) => annotation.stem);
         return {
           annotations: newAnnotations,
           taxonomyClasses: newClasses,
           classOrder: state.classOrder.filter(
             id => !classesToRemove.find(c => c.id === id)
           ),
+          ...(changedStems.length > 0
+            ? {
+                isAnnotationDirty: true,
+                dirtyAnnotationStems: mergeDirtyAnnotationStems(state.dirtyAnnotationStems, changedStems),
+              }
+            : {}),
         };
       }),
       addTaxonomyAttribute: (attr) => set((state) => ({ 
@@ -774,10 +825,19 @@ export const useStore = create<AppState>()(
           delete newAttributes[attrToDelete.name];
           return { ...a, attributes: newAttributes };
         });
+        const changedStems = state.annotations
+          .filter((annotation) => Object.prototype.hasOwnProperty.call(annotation.attributes || {}, attrToDelete.name))
+          .map((annotation) => annotation.stem);
         return { 
           taxonomyAttributes: newAttrs, 
           annotations: newAnnotations,
           attributeOrder: state.attributeOrder.filter(aid => aid !== id),
+          ...(changedStems.length > 0
+            ? {
+                isAnnotationDirty: true,
+                dirtyAnnotationStems: mergeDirtyAnnotationStems(state.dirtyAnnotationStems, changedStems),
+              }
+            : {}),
         };
       }),
       setClassOrder: (order) => set({ classOrder: order }),
@@ -801,22 +861,50 @@ export const useStore = create<AppState>()(
         return {
           annotations: [...state.annotations, normalizedAnnotation],
           isAnnotationDirty: true,
+          dirtyAnnotationStems: mergeDirtyAnnotationStems(state.dirtyAnnotationStems, [normalizedAnnotation.stem]),
         };
       }),
-      updateAnnotation: (id, data) => set((state) => ({
+      updateAnnotation: (id, data) => set((state) => {
+        const target = state.annotations.find((annotation) => annotation.id === id);
         // Shape identity is immutable. Geometry and metadata may change, but
         // an edit must never silently replace the ID used by future tracks.
-        annotations: state.annotations.map(a => a.id === id ? { ...a, ...data, id: a.id } : a),
-        isAnnotationDirty: true
-      })),
-      removeAnnotation: (id) => set((state) => ({ 
-        annotations: state.annotations.filter(a => a.id !== id), 
-        isAnnotationDirty: true
-      })),
+        return {
+          annotations: state.annotations.map(a => a.id === id ? { ...a, ...data, id: a.id } : a),
+          isAnnotationDirty: true,
+          dirtyAnnotationStems: target
+            ? mergeDirtyAnnotationStems(state.dirtyAnnotationStems, [target.stem])
+            : state.dirtyAnnotationStems,
+        };
+      }),
+      removeAnnotation: (id) => set((state) => {
+        const target = state.annotations.find((annotation) => annotation.id === id);
+        return {
+          annotations: state.annotations.filter(a => a.id !== id),
+          isAnnotationDirty: true,
+          dirtyAnnotationStems: target
+            ? mergeDirtyAnnotationStems(state.dirtyAnnotationStems, [target.stem])
+            : state.dirtyAnnotationStems,
+        };
+      }),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
       setPendingAnnotationFocus: (request) => set({ pendingAnnotationFocus: request }),
-      markAnnotationDirty: () => set({ isAnnotationDirty: true }),
-      clearAnnotationDirty: () => set({ isAnnotationDirty: false }),
+      markAnnotationDirty: (stem) => set((state) => {
+        const targetStem = stem || state.currentStem;
+        return {
+          isAnnotationDirty: true,
+          dirtyAnnotationStems: targetStem
+            ? mergeDirtyAnnotationStems(state.dirtyAnnotationStems, [targetStem])
+            : state.dirtyAnnotationStems,
+        };
+      }),
+      clearAnnotationDirty: (stem) => set((state) => {
+        if (!stem) return { isAnnotationDirty: false, dirtyAnnotationStems: [] };
+        const dirtyAnnotationStems = state.dirtyAnnotationStems.filter((dirtyStem) => dirtyStem !== stem);
+        return {
+          dirtyAnnotationStems,
+          isAnnotationDirty: dirtyAnnotationStems.length > 0,
+        };
+      }),
       setAIPanelOpen: (open) => set({ isAIPanelOpen: open }),
       setAiPrompts: (ptspts) => set({ aiPrompts: ptspts }),
 

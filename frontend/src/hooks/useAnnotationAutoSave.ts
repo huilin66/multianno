@@ -1,18 +1,21 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStore } from '../store/useStore';
-import { saveCurrentAnnotations } from '../lib/annotationSaveService';
+import { saveDirtyAnnotations } from '../lib/annotationSaveService';
 
 export function useAnnotationAutoSave() {
   const [annotationSaveStatus, setAnnotationSaveStatus] = useState<'idle' | 'saving' | 'error'>('idle');
   const currentStem = useStore((s) => s.currentStem);
-  const annotations = useStore((s) => s.annotations);
   const isAnnotationDirty = useStore((s) => s.isAnnotationDirty);
+  const dirtyAnnotationStems = useStore((s) => s.dirtyAnnotationStems);
   const setAnnotationLastSavedTime = useStore((s) => s.setAnnotationLastSavedTime);
   const autoSave = useCallback(async (): Promise<boolean> => {
-    if (!useStore.getState().currentStem) return true;
+    if (!useStore.getState().isAnnotationDirty) return true;
     setAnnotationSaveStatus('saving');
     try {
-      await saveCurrentAnnotations();
+      // Track ID editing can dirty several scenes while the active scene
+      // changes. Flush the complete dirty set instead of saving only the
+      // currently visible scene.
+      await saveDirtyAnnotations();
       setAnnotationLastSavedTime(new Date().toISOString());
       setAnnotationSaveStatus('idle');
       return true;
@@ -24,13 +27,13 @@ export function useAnnotationAutoSave() {
 
   useEffect(() => {
     if (!currentStem) return;
-    if (!isAnnotationDirty) return;
+    if (!isAnnotationDirty || dirtyAnnotationStems.length === 0) return;
 
     const timer = setTimeout(() => {
       void autoSave();
     }, 1000); 
 
     return () => clearTimeout(timer);
-  }, [annotations, currentStem, isAnnotationDirty, autoSave]);
+  }, [currentStem, dirtyAnnotationStems, isAnnotationDirty, autoSave]);
   return { annotationSaveStatus, autoSave};
 }

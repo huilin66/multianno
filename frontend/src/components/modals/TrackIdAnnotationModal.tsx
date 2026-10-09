@@ -4,6 +4,7 @@ import { useStore } from '../../store/useStore';
 import {
   configureTrackIdReID,
   checkTrackIdReIDStatus,
+  cancelTrackIdReID,
   getPreviewImageUrl,
   getTrackIdReIDJob,
   startTrackIdReID,
@@ -20,6 +21,7 @@ import { OperationProgress } from '../ui/OperationProgress';
 import { CanvasView } from '../modules/annotation/CanvasView';
 import { RightPanel, type RightPanelProps } from '../modules/annotation/RightPanel';
 import { LeftToolbar } from '../modules/annotation/LeftToolbar';
+import { findTopmostAnnotationAtPoint } from '../../lib/annotationHitTest';
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -73,6 +75,7 @@ interface TrackIdReIDSettings {
   modelPath: string;
   minSimilarity: number;
   locationWeight: number;
+  sameLabelOnly: boolean;
   batchSize: number;
 }
 
@@ -83,6 +86,73 @@ interface TrackSequence {
   startLocked: boolean;
   endLocked: boolean;
 }
+
+interface PersistedTrackIdDraft {
+  sequences: TrackSequence[];
+  activeSequence: number;
+  updatedAt: number;
+}
+
+type TrackIdDraftCache = Record<string, PersistedTrackIdDraft>;
+
+const TRACK_ID_DRAFT_STORAGE_KEY = 'multianno.track-id-drafts.v1';
+const TRACK_ID_DRAFT_MAX_ENTRIES = 200;
+const TRACK_ID_DRAFT_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 90;
+
+const getTrackIdDraftProjectKey = (state: any) => JSON.stringify({
+  meta: String(state.projectMetaPath || '').trim(),
+  workspace: String(state.workspacePath || '').trim(),
+  name: String(state.projectName || '').trim(),
+});
+
+const getTrackIdDraftKey = (projectKey: string, trackId: string) => `${projectKey}::${trackId || '__new__'}`;
+
+const readTrackIdDraft = (projectKey: string, trackId: string): PersistedTrackIdDraft | null => {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = window.localStorage.getItem(TRACK_ID_DRAFT_STORAGE_KEY);
+    if (!raw) return null;
+    const cache = JSON.parse(raw) as TrackIdDraftCache;
+    const draft = cache[getTrackIdDraftKey(projectKey, trackId)];
+    if (!draft || !Array.isArray(draft.sequences)) return null;
+    return draft;
+  } catch {
+    return null;
+  }
+};
+
+const writeTrackIdDraft = (projectKey: string, trackId: string, draft: PersistedTrackIdDraft) => {
+  if (typeof window === 'undefined') return;
+  try {
+    const raw = window.localStorage.getItem(TRACK_ID_DRAFT_STORAGE_KEY);
+    const cache = raw ? (JSON.parse(raw) as TrackIdDraftCache) : {};
+    const currentKey = getTrackIdDraftKey(projectKey, trackId);
+    cache[currentKey] = draft;
+    const cutoff = Date.now() - TRACK_ID_DRAFT_MAX_AGE_MS;
+    const retainedEntries = Object.entries(cache)
+      .filter(([key, value]) => (
+        key === currentKey
+        || (Number.isFinite(value?.updatedAt) && value.updatedAt >= cutoff)
+      ))
+      .sort(([, left], [, right]) => Number(right?.updatedAt || 0) - Number(left?.updatedAt || 0))
+      .slice(0, TRACK_ID_DRAFT_MAX_ENTRIES);
+    window.localStorage.setItem(
+      TRACK_ID_DRAFT_STORAGE_KEY,
+      JSON.stringify(Object.fromEntries(retainedEntries)),
+    );
+  } catch {
+    // Local storage is an optional convenience; annotation edits must still work
+    // when the browser blocks storage or the cache becomes unavailable.
+  }
+};
+
+const validateTrackId = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized) return { value: '', error: 'required' as const };
+  if (/\s/.test(normalized)) return { value: '', error: 'whitespace' as const };
+  if (normalized.length > 128) return { value: '', error: 'tooLong' as const };
+  return { value: normalized, error: null };
+};
 
 const createTrackSequence = (id: number): TrackSequence => ({
   id,
@@ -142,7 +212,7 @@ const getFrameImagePath = (stem: string, canvasProps: Record<string, any>) => {
   return `${String(folder.path).replace(/[\\/]+$/, '')}\\${fileName}`;
 };
 
-function TrackIdFrameCanvas({
+function TrackIdFrameCanvasInner({
   slot,
   index,
   viewPacket,
@@ -151,6 +221,7 @@ function TrackIdFrameCanvas({
   fitRef,
   syncViewport,
   showTrackId,
+  annotationsByStem,
   onTrackObjectDoubleClick,
 }: {
   slot: FrameSlot;
@@ -161,6 +232,7 @@ function TrackIdFrameCanvas({
   fitRef?: React.MutableRefObject<(() => void) | null>;
   syncViewport?: ViewportState;
   showTrackId: boolean;
+  annotationsByStem: Map<string, any[]>;
   onTrackObjectDoubleClick?: (annotation: any, stem: string) => void;
 }) {
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -242,7 +314,7 @@ function TrackIdFrameCanvas({
     );
   }
 
-  const frameAnnotations = (canvasProps.annotations || []).filter((annotation: any) => annotation.stem === slot.stem);
+  const frameAnnotations = annotationsByStem.get(slot.stem) || [];
   const frameClass = editable
     ? 'border-blue-300 ring-1 ring-blue-100 dark:border-blue-700 dark:ring-blue-950'
     : 'border-neutral-200 dark:border-neutral-800';
@@ -272,17 +344,12 @@ function TrackIdFrameCanvas({
         const rect = event.currentTarget.getBoundingClientRect();
         const x = (event.clientX - rect.left - renderViewport.panX) / renderViewport.zoom;
         const y = (event.clientY - rect.top - renderViewport.panY) / renderViewport.zoom;
-        const target = [...frameAnnotations].reverse().find((annotation: any) => {
-          const points = Array.isArray(annotation.points) ? annotation.points : [];
-          if (points.length === 0) return false;
-          const xs = points.map((point: any) => point.x);
-          const ys = points.map((point: any) => point.y);
-          const minX = Math.min(...xs);
-          const maxX = Math.max(...xs);
-          const minY = Math.min(...ys);
-          const maxY = Math.max(...ys);
-          return x >= minX && x <= maxX && y >= minY && y <= maxY;
-        });
+        const target = findTopmostAnnotationAtPoint(
+          frameAnnotations,
+          x,
+          y,
+          { tolerance: 8 / Math.max(renderViewport.zoom, 0.01) },
+        );
         canvasProps.setActiveAnnotationId(target?.id || null);
         if (target) onTrackObjectDoubleClick?.(target, slot.stem);
       }
@@ -331,7 +398,45 @@ function TrackIdFrameCanvas({
   );
 }
 
-function TrackFrameThumbnail({
+const TrackIdFrameCanvas = React.memo(TrackIdFrameCanvasInner, (previous, next) => {
+  const previousCanvas = previous.canvasProps;
+  const nextCanvas = next.canvasProps;
+  const commonPropsEqual = (
+    previous.slot.stem === next.slot.stem
+    && previous.slot.role === next.slot.role
+    && previous.showTrackId === next.showTrackId
+    && previous.syncViewport === next.syncViewport
+    && previous.viewPacket.view?.id === next.viewPacket.view?.id
+    && previous.viewPacket.view === next.viewPacket.view
+    && previous.annotationsByStem === next.annotationsByStem
+    && previousCanvas.folders === nextCanvas.folders
+    && previousCanvas.sceneGroups === nextCanvas.sceneGroups
+    && previousCanvas.theme === nextCanvas.theme
+    && previousCanvas.editorSettings === nextCanvas.editorSettings
+    && previousCanvas.tempViewSettings === nextCanvas.tempViewSettings
+    && previousCanvas.onMouseDown === nextCanvas.onMouseDown
+    && previousCanvas.onMouseMove === nextCanvas.onMouseMove
+    && previousCanvas.onMouseUp === nextCanvas.onMouseUp
+    && previousCanvas.onDoubleClick === nextCanvas.onDoubleClick
+    && previousCanvas.onMouseLeave === nextCanvas.onMouseLeave
+  );
+  if (!commonPropsEqual) return false;
+  if (!previous.viewPacket.interaction.editable && !next.viewPacket.interaction.editable) return true;
+
+  return (
+    previousCanvas.viewport === nextCanvas.viewport
+    && previousCanvas.activeAnnotationId === nextCanvas.activeAnnotationId
+    && previousCanvas.currentPoints === nextCanvas.currentPoints
+    && previousCanvas.pendingAnnotation === nextCanvas.pendingAnnotation
+    && previousCanvas.hoverPos === nextCanvas.hoverPos
+    && previousCanvas.isPanning === nextCanvas.isPanning
+    && previousCanvas.mouseQuad === nextCanvas.mouseQuad
+    && previousCanvas.cursorStyle === nextCanvas.cursorStyle
+    && previousCanvas.tool === nextCanvas.tool
+  );
+});
+
+const TrackFrameThumbnail = React.memo(function TrackFrameThumbnail({
   stem,
   current,
   canvasProps,
@@ -384,7 +489,13 @@ function TrackFrameThumbnail({
       <span className="absolute inset-x-0 bottom-0 truncate bg-black/60 px-1.5 py-1 text-[9px] text-white">{stem}</span>
     </button>
   );
-}
+}, (previous, next) => (
+  previous.stem === next.stem
+  && previous.current === next.current
+  && previous.canvasProps.view === next.canvasProps.view
+  && previous.canvasProps.folders === next.canvasProps.folders
+  && previous.canvasProps.sceneGroups === next.canvasProps.sceneGroups
+));
 
 function TrackIdEditor({
   t,
@@ -392,6 +503,7 @@ function TrackIdEditor({
   selectedTrackId,
   mainIdDraft,
   partIdDraft,
+  trackIdValidationError,
   setMainIdDraft,
   setPartIdDraft,
   selectTrackId,
@@ -422,6 +534,7 @@ function TrackIdEditor({
   selectedTrackId: string | null;
   mainIdDraft: string;
   partIdDraft: string;
+  trackIdValidationError: string | null;
   setMainIdDraft: (value: string) => void;
   setPartIdDraft: (value: string) => void;
   selectTrackId: (value: string) => void;
@@ -507,6 +620,11 @@ function TrackIdEditor({
             <CornerDownLeft className="h-3.5 w-3.5" />
           </Button>
         </div>
+        {trackIdValidationError && (
+          <p className="mt-1.5 text-[10px] leading-relaxed text-red-500" role="alert">
+            {trackIdValidationError}
+          </p>
+        )}
       </div>
 
       <div className="border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
@@ -741,7 +859,7 @@ function TrackIdEditor({
             {reidRunning && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
             {reidRunning ? t('trackIdWindow.reidRunning') : t('trackIdWindow.autoTrack')}
           </Button>
-          {reidProgress && (reidRunning || reidProgress.status === 'completed' || reidProgress.status === 'failed') && (
+          {reidProgress && (reidRunning || reidProgress.status === 'completed' || reidProgress.status === 'failed' || reidProgress.status === 'cancelled') && (
             <div className="mt-2 rounded-md border border-blue-100 bg-blue-50/50 p-2 dark:border-blue-900/50 dark:bg-blue-950/20">
               <OperationProgress
                 stageIndex={reidProgress.stage_index}
@@ -767,13 +885,24 @@ function TrackIdEditor({
 
 export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasProps }: TrackIdAnnotationModalProps) {
   const { t } = useTranslation();
-  const {
-    stems = [], currentStem, setCurrentStem, annotations = [], activeAnnotationId, updateAnnotation,
-    viewport, setViewport, trackIdReIDSettings, setTrackIdReIDSettings,
-  } = useStore() as any;
+  const stems = useStore((state) => state.stems);
+  const currentStem = useStore((state) => state.currentStem);
+  const setCurrentStem = useStore((state) => state.setCurrentStem);
+  const annotations = useStore((state) => state.annotations);
+  const activeAnnotationId = useStore((state) => state.activeAnnotationId);
+  const setActiveAnnotationId = useStore((state) => state.setActiveAnnotationId);
+  const updateAnnotation = useStore((state) => state.updateAnnotation);
+  const viewport = useStore((state) => state.viewport);
+  const setViewport = useStore((state) => state.setViewport);
+  const trackIdReIDSettings = useStore((state) => state.trackIdReIDSettings);
+  const setTrackIdReIDSettings = useStore((state) => state.setTrackIdReIDSettings);
+  const projectName = useStore((state) => state.projectName);
+  const projectMetaPath = useStore((state) => state.projectMetaPath);
+  const workspacePath = useStore((state) => state.workspacePath);
 
   const [mainIdDraft, setMainIdDraft] = React.useState('');
   const [partIdDraft, setPartIdDraft] = React.useState('');
+  const [trackIdValidationError, setTrackIdValidationError] = React.useState<'required' | 'whitespace' | 'tooLong' | null>(null);
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null);
   const [manualTrackIds, setManualTrackIds] = React.useState<string[]>([]);
   const [activeSequence, setActiveSequence] = React.useState(1);
@@ -794,32 +923,84 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [reidSettingsMessage, setReidSettingsMessage] = React.useState('');
   const centerFitRef = React.useRef<(() => void) | null>(null);
   const previousViewportRef = React.useRef<any>(null);
+  const previousCurrentStemRef = React.useRef<string | null>(null);
+  const previousActiveAnnotationIdRef = React.useRef<string | null>(null);
+  const draftHydrationRef = React.useRef<{ key: string; signature: string } | null>(null);
+  const previousDraftProjectKeyRef = React.useRef<string | null>(null);
   const reidAbortControllerRef = React.useRef<AbortController | null>(null);
+  const reidJobIdRef = React.useRef<string | null>(null);
+  const reidRunTokenRef = React.useRef(0);
+
+  const draftProjectKey = React.useMemo(() => getTrackIdDraftProjectKey({
+    projectMetaPath,
+    workspacePath,
+    projectName,
+  }), [projectMetaPath, projectName, workspacePath]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const previousProjectKey = previousDraftProjectKeyRef.current;
+    if (previousProjectKey && previousProjectKey !== draftProjectKey) {
+      // The modal component stays mounted while projects are switched. Do not
+      // carry a manually-created ID or the selected ID into the new project.
+      setSelectedTrackId(null);
+      setManualTrackIds([]);
+      setMainIdDraft('');
+      setPartIdDraft('');
+      setTrackIdValidationError(null);
+      setSequences([createTrackSequence(1)]);
+      setActiveSequence(1);
+    }
+    previousDraftProjectKeyRef.current = draftProjectKey;
+  }, [draftProjectKey, open]);
 
   React.useEffect(() => {
     if (!open) return;
     previousViewportRef.current = viewport;
+    previousCurrentStemRef.current = currentStem;
+    previousActiveAnnotationIdRef.current = activeAnnotationId;
     return () => {
-      const previousViewport = previousViewportRef.current;
-      if (previousViewport && setViewport) {
-        setViewport(previousViewport.zoom, previousViewport.panX, previousViewport.panY);
+      const restoreMainState = () => {
+        const previousViewport = previousViewportRef.current;
+        if (previousViewport && setViewport) {
+          setViewport(previousViewport.zoom, previousViewport.panX, previousViewport.panY);
+        }
+        if (setCurrentStem) setCurrentStem(previousCurrentStemRef.current);
+        if (setActiveAnnotationId) {
+          const previousAnnotationId = previousActiveAnnotationIdRef.current;
+          const previousAnnotation = useStore.getState().annotations.find((annotation) => annotation.id === previousAnnotationId);
+          setActiveAnnotationId(previousAnnotation?.id || null);
+        }
+        previousViewportRef.current = null;
+        previousCurrentStemRef.current = null;
+        previousActiveAnnotationIdRef.current = null;
+      };
+
+      // Save the scene that is currently being edited before restoring the
+      // scene from which the Track ID window was opened. Otherwise an edit on
+      // a browsed frame could be saved against the wrong current scene.
+      if (useStore.getState().isAnnotationDirty && rightPanelProps.handleSave) {
+        void rightPanelProps.handleSave().finally(restoreMainState);
+      } else {
+        restoreMainState();
       }
-      previousViewportRef.current = null;
     };
-  }, [open, setViewport]);
+  }, [open, rightPanelProps.handleSave, setActiveAnnotationId, setCurrentStem, setViewport]);
 
   React.useEffect(() => {
     if (!open) return;
-    setSequences([createTrackSequence(1)]);
-    setActiveSequence(1);
     setShowTrackIds(true);
     setReidProgress(null);
     setReidMessage('');
     setReidSettingsOpen(false);
     setReidSettingsMessage('');
     return () => {
+      reidRunTokenRef.current += 1;
+      const jobId = reidJobIdRef.current;
+      if (jobId) void cancelTrackIdReID(jobId).catch(() => undefined);
       reidAbortControllerRef.current?.abort();
       reidAbortControllerRef.current = null;
+      reidJobIdRef.current = null;
     };
   }, [open]);
 
@@ -853,6 +1034,70 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     ].filter(Boolean);
     return Array.from(new Set(values)).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
   }, [annotations, manualTrackIds]);
+
+  const annotationsByStem = React.useMemo(() => {
+    const index = new Map<string, any[]>();
+    annotations.forEach((annotation) => {
+      const frameAnnotations = index.get(annotation.stem) || [];
+      frameAnnotations.push(annotation);
+      index.set(annotation.stem, frameAnnotations);
+    });
+    return index;
+  }, [annotations]);
+
+  const draftIdentity = React.useMemo(() => (
+    selectedTrackId
+    || getTrackIdLabel(activeAnnotation?.track_id)
+    || (!activeAnnotation ? trackIds[0] || '' : '')
+  ), [activeAnnotation?.track_id, selectedTrackId, trackIds]);
+  const draftStorageKey = React.useMemo(
+    () => getTrackIdDraftKey(draftProjectKey, draftIdentity),
+    [draftIdentity, draftProjectKey],
+  );
+
+  React.useEffect(() => {
+    if (!open) return;
+    draftHydrationRef.current = null;
+    const restored = readTrackIdDraft(draftProjectKey, draftIdentity);
+    const restoredSequences = restored?.sequences
+      ?.filter((sequence) => sequence && Number.isFinite(Number(sequence.id)))
+      .map((sequence) => ({
+        ...createTrackSequence(Number(sequence.id)),
+        startCandidate: sequence.startCandidate || null,
+        endCandidate: sequence.endCandidate || null,
+        startLocked: Boolean(sequence.startLocked && sequence.startCandidate),
+        endLocked: Boolean(sequence.endLocked && sequence.endCandidate),
+      })) || [];
+    const nextSequences = restoredSequences.length > 0 ? restoredSequences : [createTrackSequence(1)];
+    const nextActiveSequence = restored?.activeSequence && nextSequences.some((sequence) => sequence.id === restored.activeSequence)
+      ? restored.activeSequence
+      : nextSequences[0].id;
+    draftHydrationRef.current = {
+      key: draftStorageKey,
+      signature: JSON.stringify({ sequences: nextSequences, activeSequence: nextActiveSequence }),
+    };
+    setSequences(nextSequences);
+    setActiveSequence(nextActiveSequence);
+  }, [draftIdentity, draftProjectKey, draftStorageKey, open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const signature = JSON.stringify({ sequences, activeSequence });
+    const pendingHydration = draftHydrationRef.current;
+    if (pendingHydration?.key === draftStorageKey && pendingHydration.signature !== signature) {
+      // The hydration effect has just replaced state. Wait for that state
+      // update before writing, otherwise the old sequence could overwrite the
+      // newly restored draft for one render.
+      draftHydrationRef.current = null;
+      return;
+    }
+    if (pendingHydration?.key === draftStorageKey) draftHydrationRef.current = null;
+    writeTrackIdDraft(draftProjectKey, draftIdentity, {
+      sequences,
+      activeSequence,
+      updatedAt: Date.now(),
+    });
+  }, [activeSequence, draftIdentity, draftProjectKey, draftStorageKey, open, sequences]);
 
   const frameSlots = React.useMemo<FrameSlot[]>(() => {
     const previousStem = currentIndex >= 0 ? stems[currentIndex - 1] || null : null;
@@ -888,9 +1133,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     const parsed = parseTrackId(getTrackIdLabel(activeAnnotation?.track_id) || selectedTrackId || trackIds[0] || '');
     setMainIdDraft(parsed.mainId);
     setPartIdDraft(parsed.partId);
+    setTrackIdValidationError(null);
   }, [activeAnnotation?.track_id, open, selectedTrackId, trackIds]);
 
   const selectTrackId = (value: string) => {
+    setTrackIdValidationError(null);
     setSelectedTrackId(value);
     const parsed = parseTrackId(value);
     setMainIdDraft(parsed.mainId);
@@ -898,8 +1145,13 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   };
 
   const applyTrackId = (valueOverride?: string) => {
-    const value = valueOverride?.trim() || composeTrackId(mainIdDraft, partIdDraft);
-    if (!value) return;
+    const validation = validateTrackId(valueOverride?.trim() || composeTrackId(mainIdDraft, partIdDraft));
+    if (validation.error) {
+      setTrackIdValidationError(validation.error);
+      return;
+    }
+    const value = validation.value;
+    setTrackIdValidationError(null);
     if (valueOverride) {
       const parsed = parseTrackId(value);
       setMainIdDraft(parsed.mainId);
@@ -1016,6 +1268,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       track_id: getTrackIdLabel(annotation.track_id) || undefined,
       points: Array.isArray(annotation.points) ? annotation.points : [],
     });
+    const sameLabelOnly = Boolean(trackIdReIDSettings?.sameLabelOnly ?? true);
 
     if (frameStems.length <= 2) {
       const anchorAnnotations = new Map<string, any>();
@@ -1031,19 +1284,18 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     }
 
     const controller = new AbortController();
+    const runToken = reidRunTokenRef.current + 1;
+    reidRunTokenRef.current = runToken;
+    const previousJobId = reidJobIdRef.current;
+    if (previousJobId) void cancelTrackIdReID(previousJobId).catch(() => undefined);
     reidAbortControllerRef.current?.abort();
     reidAbortControllerRef.current = controller;
     setReidRunning(true);
     const collectionTotal = Math.max(frameStems.length, 1);
     setReidProgress(createLocalReidProgress(0, collectionTotal, t('trackIdWindow.collectingBoxes'), t('trackIdWindow.collectingBoxes')));
     setReidMessage('');
+    let startedJobId: string | null = null;
     try {
-      const annotationsByStem = new Map<string, any[]>();
-      (annotations as any[]).forEach((annotation) => {
-        const items = annotationsByStem.get(annotation.stem) || [];
-        items.push(annotation);
-        annotationsByStem.set(annotation.stem, items);
-      });
       const frames: Array<{
         stem: string;
         image_path: string;
@@ -1066,7 +1318,10 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
               );
               return isLockedAnchor || (
                 !getTrackIdLabel(annotation.track_id)
-                && String(annotation.label || '').trim() === String(startAnnotation.label || '').trim()
+                && (
+                  !sameLabelOnly
+                  || String(annotation.label || '').trim() === String(startAnnotation.label || '').trim()
+                )
               );
             })
             .map(toCandidate),
@@ -1090,9 +1345,12 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         frames,
         min_similarity: Number(trackIdReIDSettings?.minSimilarity ?? 0.5),
         location_weight: Number(trackIdReIDSettings?.locationWeight ?? 0.2),
-        same_label_only: true,
+        same_label_only: sameLabelOnly,
         batch_size: Math.min(64, Math.max(1, Number(trackIdReIDSettings?.batchSize ?? 8) || 8)),
       }, controller.signal);
+      if (reidRunTokenRef.current !== runToken) return;
+      startedJobId = job.job_id;
+      reidJobIdRef.current = startedJobId;
       setReidProgress(job);
 
       for (let attempt = 0; attempt < 7200 && (job.status === 'queued' || job.status === 'running'); attempt += 1) {
@@ -1100,6 +1358,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
           await new Promise((resolve) => window.setTimeout(resolve, 100));
         }
         job = await getTrackIdReIDJob(job.job_id, controller.signal);
+        if (reidRunTokenRef.current !== runToken) return;
         setReidProgress(job);
       }
       if (job.status === 'queued' || job.status === 'running') {
@@ -1110,6 +1369,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       }
       const result = job.result;
       if (!result) throw new Error('ReID job returned no result.');
+      if (reidRunTokenRef.current !== runToken) return;
 
       const matchedAnnotations = new Map<string, any>();
       result.assignments.forEach((assignment) => {
@@ -1135,11 +1395,16 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       }) + missingText);
     } catch (error) {
       if (error instanceof DOMException && error.name === 'AbortError') return;
+      if (reidRunTokenRef.current !== runToken) return;
       const message = error instanceof Error ? error.message : String(error);
       setReidMessage(`${t('trackIdWindow.reidFailed')}: ${message}`);
     } finally {
+      if (reidRunTokenRef.current !== runToken) return;
       if (reidAbortControllerRef.current === controller) {
         reidAbortControllerRef.current = null;
+      }
+      if (reidJobIdRef.current === startedJobId) {
+        reidJobIdRef.current = null;
       }
       setReidRunning(false);
     }
@@ -1156,8 +1421,15 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       selectedTrackId={selectedTrackId}
       mainIdDraft={mainIdDraft}
       partIdDraft={partIdDraft}
-      setMainIdDraft={setMainIdDraft}
-      setPartIdDraft={setPartIdDraft}
+      trackIdValidationError={trackIdValidationError ? t(`trackIdWindow.trackIdInvalid.${trackIdValidationError}`) : null}
+      setMainIdDraft={(value) => {
+        setTrackIdValidationError(null);
+        setMainIdDraft(value);
+      }}
+      setPartIdDraft={(value) => {
+        setTrackIdValidationError(null);
+        setPartIdDraft(value);
+      }}
       selectTrackId={selectTrackId}
       applyTrackId={applyTrackId}
       activeAnnotation={activeAnnotation}
@@ -1174,6 +1446,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         modelPath: '',
         minSimilarity: 0.5,
         locationWeight: 0.2,
+        sameLabelOnly: true,
         batchSize: 8,
       }}
       onUpdateReidSettings={(settings) => setTrackIdReIDSettings(settings)}
@@ -1299,6 +1572,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                           fitRef={viewPacket.interaction.editable ? centerFitRef : undefined}
                           syncViewport={canvasProps.viewport}
                           showTrackId={showTrackIds}
+                          annotationsByStem={annotationsByStem}
                           onTrackObjectDoubleClick={handleTrackObjectDoubleClick}
                         />
                       </div>

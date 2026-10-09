@@ -25,6 +25,7 @@ import { createAnnotationId } from '../../lib/annotationIds';
 import { showDialog } from '../../store/useDialogStore';
 import { toast } from '../../store/useToastStore';
 import { TrackIdAnnotationModal } from '../modals/TrackIdAnnotationModal';
+import { findAnnotationIdsAtPoint } from '../../lib/annotationHitTest';
 
 export interface SAMPoint {
   x: number;
@@ -139,9 +140,9 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
   }, [currentStem]);
 
   // CanvasView 图片加载完成
-  const handleImageLoaded = () => {
+  const handleImageLoaded = useCallback(() => {
       setRenderState('ready');
-  };
+  }, []);
 // 🌟 2. 新增：原生纯 JS 多边形折线切割算法
   const splitPolygonPureJS = (poly: {x: number, y: number}[], line: {x: number, y: number}[]) => {
     const getIntersection = (A: any, B: any, C: any, D: any) => {
@@ -840,55 +841,13 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
             }
          }
       }
-      // 🌟 过滤掉隐藏的标注
-      const visibleAnnotations = currentAnnotations.filter(
-        (a: any) => !hiddenClasses.includes(a.label) && !hiddenAnnotations.includes(a.id)
-      );
-      // 🌟 第二层检测：常规选中逻辑 (点击图形主体进行选中)
-      let hitIds: string[] = [];
-      for (let i = visibleAnnotations.length - 1; i >= 0; i--) {
-        const ann = visibleAnnotations[i];
-        
-        // 1. 矩形、椭圆、圆
-        if (ann.type === 'bbox' || ann.type === 'ellipse' || ann.type === 'circle') {
-          const [p1, p2] = ann.points;
-          const minX = Math.min(p1.x, p2.x), maxX = Math.max(p1.x, p2.x);
-          const minY = Math.min(p1.y, p2.y), maxY = Math.max(p1.y, p2.y);
-          if (mainX >= minX && mainX <= maxX && mainY >= minY && mainY <= maxY) {
-            hitIds.push(ann.id);
-          }
-        } 
-        // 2. 多边形、旋转框、3D立方体 (射线法)
-        else if (ann.type === 'polygon' || ann.type === 'oriented_bbox' || ann.type === 'cuboid') {
-          let inside = false;
-          for (let j = 0, k = ann.points.length - 1; j < ann.points.length; k = j++) {
-            const xi = ann.points[j].x, yi = ann.points[j].y;
-            const xj = ann.points[k].x, yj = ann.points[k].y;
-            const intersect = ((yi > mainY) !== (yj > mainY)) && (mainX < (xj - xi) * (mainY - yi) / (yj - yi) + xi);
-            if (intersect) inside = !inside;
-          }
-          if (inside) hitIds.push(ann.id);
-        }
-        // 3. 线段
-        else if (ann.type === 'line') {
-          let hit = false;
-          for (let j = 0; j < ann.points.length - 1; j++) {
-            const p1 = ann.points[j], p2 = ann.points[j+1];
-            const l2 = Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2);
-            let t = l2 === 0 ? 0 : ((mainX - p1.x) * (p2.x - p1.x) + (mainY - p1.y) * (p2.y - p1.y)) / l2;
-            t = Math.max(0, Math.min(1, t)); 
-            const projX = p1.x + t * (p2.x - p1.x), projY = p1.y + t * (p2.y - p1.y);
-            if (Math.hypot(mainX - projX, mainY - projY) < 6 / viewport.zoom) { hit = true; break; }
-          }
-          if (hit) hitIds.push(ann.id);
-        }
-        // 4. 单点
-        else if (ann.type === 'point') {
-          if (ann.points.length > 0 && Math.hypot(mainX - ann.points[0].x, mainY - ann.points[0].y) < 8 / viewport.zoom) {
-            hitIds.push(ann.id);
-          }
-        }
-      }
+      // The main canvas and Track ID canvas share the same geometry-aware hit
+      // testing rules, including hidden-object filtering and top-most order.
+      const hitIds = findAnnotationIdsAtPoint(currentAnnotations, mainX, mainY, {
+        tolerance: 8 / Math.max(viewport.zoom, 0.01),
+        hiddenClasses,
+        hiddenAnnotations,
+      });
 
       // 🌟 如果有命中，循环切换
       if (hitIds.length > 0) {

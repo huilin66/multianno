@@ -61,6 +61,11 @@
     "partId": "Part ID",
     "mainIdPlaceholder": "e.g. 1",
     "partIdPlaceholder": "e.g. a",
+    "trackIdInvalid": {
+      "required": "Enter a main ID.",
+      "whitespace": "Track ID cannot contain whitespace.",
+      "tooLong": "Track ID cannot exceed 128 characters."
+    },
     "trackIdPlaceholder": "e.g. 1-a",
     "selectTrackId": "Use this track ID",
     "assignTrackId": "Double-click to assign this Track ID to the selected object",

@@ -90,7 +90,9 @@ const CanvasViewInner=({
 }: any) => {
   
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { viewport: storeViewport, sceneGroups, stems } = useStore();
+  const storeViewport = useStore((state) => state.viewport);
+  const sceneGroups = useStore((state) => state.sceneGroups);
+  const stems = useStore((state) => state.stems);
   const viewport = viewportOverride || storeViewport;
   const [imageObj, setImageObj] = useState<HTMLImageElement | null>(null);
 
@@ -668,24 +670,68 @@ return (
   );
 }
 
-export const CanvasView = React.memo(CanvasViewInner, (prev, next) => {
-    return (
-        prev.annotations === next.annotations &&
-        prev.activeAnnotationId === next.activeAnnotationId &&
-        prev.currentPoints === next.currentPoints &&
-        prev.tool === next.tool &&
-        prev.hoverPos === next.hoverPos &&
-        prev.pendingAnnotation === next.pendingAnnotation &&
-        prev.currentStem === next.currentStem &&
-        prev.view.id === next.view.id &&
-        prev.cursorStyle === next.cursorStyle &&
-        prev.aiPrompts === next.aiPrompts &&
-        prev.isPanning === next.isPanning &&
-        prev.formLabel === next.formLabel &&
-        prev.editorSettings === next.editorSettings &&
-        prev.taxonomyAttributes === next.taxonomyAttributes &&
-        prev.mainWidth === next.mainWidth &&
-        prev.mainHeight === next.mainHeight &&
-        prev.viewportOverride === next.viewportOverride
-    );
-});
+const shallowArrayEqual = (left: any[] | undefined, right: any[] | undefined) => {
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  return left.every((value, index) => value === right[index]);
+};
+
+const shallowRecordEqual = (
+  left: Record<string, any> | undefined,
+  right: Record<string, any> | undefined,
+) => {
+  if (left === right) return true;
+  if (!left || !right) return false;
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) return false;
+  return leftKeys.every((key) => left[key] === right[key]);
+};
+
+const viewListEqual = (left: any[] | undefined, right: any[] | undefined) => {
+  if (left === right) return true;
+  if (!left || !right || left.length !== right.length) return false;
+  // View settings are nested on each view object. Compare the references so a
+  // changed overlay view cannot be hidden by an unchanged ID.
+  return left.every((view, index) => view === right[index]);
+};
+
+export const CanvasView = React.memo(CanvasViewInner, (prev, next) => (
+  prev.view === next.view
+  && prev.annotations === next.annotations
+  && prev.activeAnnotationId === next.activeAnnotationId
+  && prev.taxonomyClasses === next.taxonomyClasses
+  && prev.taxonomyAttributes === next.taxonomyAttributes
+  && prev.currentPoints === next.currentPoints
+  && prev.tool === next.tool
+  && prev.theme === next.theme
+  && prev.folders === next.folders
+  && prev.currentStem === next.currentStem
+  && prev.isPanning === next.isPanning
+  && prev.mainWidth === next.mainWidth
+  && prev.mainHeight === next.mainHeight
+  && prev.isFullExtent === next.isFullExtent
+  && prev.formLabel === next.formLabel
+  && prev.pendingAnnotation === next.pendingAnnotation
+  && prev.hoverPos === next.hoverPos
+  && prev.mouseQuad === next.mouseQuad
+  && prev.editorSettings === next.editorSettings
+  && prev.cursorStyle === next.cursorStyle
+  && prev.aiPrompts === next.aiPrompts
+  && prev.onMouseDown === next.onMouseDown
+  && prev.onMouseMove === next.onMouseMove
+  && prev.onMouseUp === next.onMouseUp
+  && prev.onDoubleClick === next.onDoubleClick
+  && prev.onMouseLeave === next.onMouseLeave
+  && prev.onImageLoaded === next.onImageLoaded
+  && prev.onImageDimensions === next.onImageDimensions
+  && prev.onWheel === next.onWheel
+  && shallowArrayEqual(prev.layerOrder, next.layerOrder)
+  && shallowRecordEqual(prev.visibleLayers, next.visibleLayers)
+  && shallowRecordEqual(prev.layerConfigs, next.layerConfigs)
+  && viewListEqual(prev.allViews, next.allViews)
+  && shallowRecordEqual(prev.showFullExtent, next.showFullExtent)
+  && prev.tempViewSettings === next.tempViewSettings
+  && prev.isSingleViewMode === next.isSingleViewMode
+  && prev.viewportOverride === next.viewportOverride
+));
