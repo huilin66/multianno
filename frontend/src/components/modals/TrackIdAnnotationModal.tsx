@@ -7,7 +7,9 @@ import {
   cancelTrackIdReID,
   getPreviewImageUrl,
   getTrackIdReIDJob,
+  loadTrackIdReID,
   startTrackIdReID,
+  unloadTrackIdReID,
   type TrackIdReIDCandidate,
   type TrackIdReIDJob,
   type TrackIdReIDStatus,
@@ -515,6 +517,7 @@ function TrackIdEditor({
   onAddSequence,
   onToggleCandidateLock,
   reidStatus,
+  reidLifecycleAction,
   reidRunning,
   reidProgress,
   reidMessage,
@@ -527,6 +530,8 @@ function TrackIdEditor({
   reidPathSaving,
   reidSettingsMessage,
   onConfirmReidPath,
+  onLoadReid,
+  onUnloadReid,
   onRunReid,
 }: {
   t: (key: string, options?: any) => string;
@@ -546,6 +551,7 @@ function TrackIdEditor({
   onAddSequence: () => void;
   onToggleCandidateLock: (kind: 'start' | 'end', sequenceId?: number) => void;
   reidStatus: TrackIdReIDStatus | null;
+  reidLifecycleAction: 'load' | 'unload' | null;
   reidRunning: boolean;
   reidProgress: TrackIdReIDJob | null;
   reidMessage: string;
@@ -558,6 +564,8 @@ function TrackIdEditor({
   reidPathSaving: boolean;
   reidSettingsMessage: string;
   onConfirmReidPath: () => void;
+  onLoadReid: () => void;
+  onUnloadReid: () => void;
   onRunReid: () => void;
 }) {
   const renderCandidate = (candidate: TrackCandidate | null) => candidate
@@ -567,6 +575,10 @@ function TrackIdEditor({
   const activeStartLocked = activeSequenceData?.startLocked ?? false;
   const activeEndLocked = activeSequenceData?.endLocked ?? false;
   const currentTrackId = selectedTrackId || composeTrackId(mainIdDraft, partIdDraft);
+  const reidAvailable = Boolean(
+    reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists,
+  );
+  const reidLoaded = reidStatus?.loaded === true;
 
   return (
     <div className="min-h-0 overflow-y-auto custom-scrollbar">
@@ -751,12 +763,14 @@ function TrackIdEditor({
 
           <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-neutral-500">
             <span
-              className={`min-w-0 truncate font-semibold ${reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists ? 'text-emerald-600' : 'text-amber-600'}`}
+              className={`min-w-0 truncate font-semibold ${reidAvailable ? 'text-emerald-600' : 'text-amber-600'}`}
               title={reidStatus?.detail || undefined}
             >
-              {reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists
-                ? t('trackIdWindow.reidReady')
-                : t('trackIdWindow.reidUnavailable')}
+              {reidLoaded
+                ? t('trackIdWindow.reidLoaded')
+                : reidAvailable
+                  ? t('trackIdWindow.reidReady')
+                  : t('trackIdWindow.reidUnavailable')}
             </span>
             <Button
               type="button"
@@ -837,6 +851,39 @@ function TrackIdEditor({
                   />
                 </div>
               </div>
+              <div className="grid grid-cols-2 gap-1.5">
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  className="h-7 text-[10px]"
+                  disabled={
+                    reidLifecycleAction !== null
+                    || reidPathSaving
+                    || !reidAvailable
+                    || reidLoaded
+                  }
+                  onClick={onLoadReid}
+                >
+                  {reidLifecycleAction === 'load' && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {reidLifecycleAction === 'load' ? t('trackIdWindow.reidLoading') : t('trackIdWindow.reidLoad')}
+                </Button>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  className="h-7 text-[10px]"
+                  disabled={
+                    reidLifecycleAction !== null
+                    || reidRunning
+                    || !reidLoaded
+                  }
+                  onClick={onUnloadReid}
+                >
+                  {reidLifecycleAction === 'unload' && <Loader2 className="h-3 w-3 animate-spin" />}
+                  {reidLifecycleAction === 'unload' ? t('trackIdWindow.reidReleasing') : t('trackIdWindow.reidRelease')}
+                </Button>
+              </div>
               {reidSettingsMessage && <p className="text-[10px] leading-relaxed text-neutral-500">{reidSettingsMessage}</p>}
             </div>
           )}
@@ -846,7 +893,8 @@ function TrackIdEditor({
             size="sm"
             className="mt-1 h-7 w-full text-[10px]"
             disabled={
-              reidRunning
+              reidLifecycleAction !== null
+              || reidRunning
               || !reidStatus?.runtime_available
               || !reidStatus.configured
               || !reidStatus.model_exists
@@ -914,6 +962,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [frameContextMode, setFrameContextMode] = React.useState<'locked' | 'adjacent'>('locked');
   const [verticalFrameLayout, setVerticalFrameLayout] = React.useState(false);
   const [reidStatus, setReidStatus] = React.useState<TrackIdReIDStatus | null>(null);
+  const [reidLifecycleAction, setReidLifecycleAction] = React.useState<'load' | 'unload' | null>(null);
   const [reidRunning, setReidRunning] = React.useState(false);
   const [reidProgress, setReidProgress] = React.useState<TrackIdReIDJob | null>(null);
   const [reidMessage, setReidMessage] = React.useState('');
@@ -930,12 +979,26 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const reidAbortControllerRef = React.useRef<AbortController | null>(null);
   const reidJobIdRef = React.useRef<string | null>(null);
   const reidRunTokenRef = React.useRef(0);
+  const reidLifecycleQueueRef = React.useRef<Promise<unknown>>(Promise.resolve());
 
   const draftProjectKey = React.useMemo(() => getTrackIdDraftProjectKey({
     projectMetaPath,
     workspacePath,
     projectName,
   }), [projectMetaPath, projectName, workspacePath]);
+
+  const queueReidLifecycle = React.useCallback((operation: () => Promise<TrackIdReIDStatus>) => {
+    const next = reidLifecycleQueueRef.current
+      .catch(() => undefined)
+      .then(operation);
+    reidLifecycleQueueRef.current = next;
+    return next;
+  }, []);
+
+  const applyReidStatus = React.useCallback((status: TrackIdReIDStatus) => {
+    setReidStatus(status);
+    setReidPathDraft(trackIdReIDSettings?.modelPath || status.model_path || '');
+  }, [trackIdReIDSettings?.modelPath]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -997,27 +1060,38 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     return () => {
       reidRunTokenRef.current += 1;
       const jobId = reidJobIdRef.current;
-      if (jobId) void cancelTrackIdReID(jobId).catch(() => undefined);
       reidAbortControllerRef.current?.abort();
       reidAbortControllerRef.current = null;
       reidJobIdRef.current = null;
+      void queueReidLifecycle(async () => {
+        if (jobId) await cancelTrackIdReID(jobId).catch(() => undefined);
+        return unloadTrackIdReID();
+      }).catch(() => undefined);
     };
-  }, [open]);
+  }, [open, queueReidLifecycle]);
 
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
     setReidStatus(null);
-    checkTrackIdReIDStatus().then((status) => {
-      if (!cancelled) {
-        setReidStatus(status);
-        setReidPathDraft(trackIdReIDSettings?.modelPath || status.model_path || '');
-      }
+    setReidLifecycleAction('load');
+    void queueReidLifecycle(async () => {
+      const status = await checkTrackIdReIDStatus();
+      if (!status.runtime_available || !status.configured || !status.model_exists) return status;
+      return loadTrackIdReID();
+    }).then((status) => {
+      if (!cancelled) applyReidStatus(status);
+    }).catch((error) => {
+      if (cancelled) return;
+      const message = error instanceof Error ? error.message : String(error);
+      setReidSettingsMessage(`${t('trackIdWindow.reidLoadFailed')}: ${message}`);
+    }).finally(() => {
+      if (!cancelled) setReidLifecycleAction(null);
     });
     return () => {
       cancelled = true;
     };
-  }, [open, trackIdReIDSettings?.modelPath]);
+  }, [applyReidStatus, open, queueReidLifecycle, t, trackIdReIDSettings?.modelPath]);
 
   const currentIndex = currentStem ? stems.indexOf(currentStem) : -1;
   const activeAnnotation = annotations.find((annotation: any) => annotation.id === activeAnnotationId) || null;
@@ -1218,12 +1292,44 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     setActiveSequence(nextId);
   };
 
+  const handleLoadReid = React.useCallback(() => {
+    if (reidLifecycleAction !== null) return;
+    setReidLifecycleAction('load');
+    setReidSettingsMessage('');
+    void queueReidLifecycle(() => loadTrackIdReID())
+      .then((status) => {
+        applyReidStatus(status);
+        setReidSettingsMessage(t('trackIdWindow.reidLoadSuccess'));
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        setReidSettingsMessage(`${t('trackIdWindow.reidLoadFailed')}: ${message}`);
+      })
+      .finally(() => setReidLifecycleAction(null));
+  }, [applyReidStatus, queueReidLifecycle, reidLifecycleAction, t]);
+
+  const handleUnloadReid = React.useCallback(() => {
+    if (reidLifecycleAction !== null || reidRunning) return;
+    setReidLifecycleAction('unload');
+    setReidSettingsMessage('');
+    void queueReidLifecycle(() => unloadTrackIdReID())
+      .then((status) => {
+        applyReidStatus(status);
+        setReidSettingsMessage(t('trackIdWindow.reidReleaseSuccess'));
+      })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        setReidSettingsMessage(`${t('trackIdWindow.reidReleaseFailed')}: ${message}`);
+      })
+      .finally(() => setReidLifecycleAction(null));
+  }, [applyReidStatus, queueReidLifecycle, reidLifecycleAction, reidRunning, t]);
+
   const confirmReidPath = async () => {
     setReidPathSaving(true);
     setReidSettingsMessage('');
     try {
-      const status = await configureTrackIdReID({ model_path: reidPathDraft.trim() });
-      setReidStatus(status);
+      const status = await queueReidLifecycle(() => configureTrackIdReID({ model_path: reidPathDraft.trim() }));
+      applyReidStatus(status);
       const configuredPath = status.model_path || '';
       setReidPathDraft(configuredPath);
       setTrackIdReIDSettings({ modelPath: configuredPath });
@@ -1406,6 +1512,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       if (reidJobIdRef.current === startedJobId) {
         reidJobIdRef.current = null;
       }
+      void checkTrackIdReIDStatus()
+        .then((status) => {
+          if (reidRunTokenRef.current === runToken) applyReidStatus(status);
+        })
+        .catch(() => undefined);
       setReidRunning(false);
     }
   };
@@ -1439,6 +1550,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       onAddSequence={addSequence}
       onToggleCandidateLock={toggleCandidateLock}
       reidStatus={reidStatus}
+      reidLifecycleAction={reidLifecycleAction}
       reidRunning={reidRunning}
       reidProgress={reidProgress}
       reidMessage={reidMessage}
@@ -1457,6 +1569,8 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       reidPathSaving={reidPathSaving}
       reidSettingsMessage={reidSettingsMessage}
       onConfirmReidPath={confirmReidPath}
+      onLoadReid={handleLoadReid}
+      onUnloadReid={handleUnloadReid}
       onRunReid={runReid}
     />
   );

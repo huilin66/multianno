@@ -414,6 +414,12 @@ export const checkTrackIdReIDStatus = async (): Promise<TrackIdReIDStatus> => {
 export const configureTrackIdReID = (payload: { model_path: string }): Promise<TrackIdReIDStatus> =>
   post(`${TRACK_ID_REID_API_URL}/config`, payload);
 
+export const loadTrackIdReID = (): Promise<TrackIdReIDStatus> =>
+  post(`${TRACK_ID_REID_API_URL}/load`, {});
+
+export const unloadTrackIdReID = (): Promise<TrackIdReIDStatus> =>
+  post(`${TRACK_ID_REID_API_URL}/unload`, {});
+
 export interface TrackIdReIDCandidate {
   stem: string;
   annotation_id: string;

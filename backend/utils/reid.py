@@ -7,7 +7,9 @@ does not disable ordinary annotation workflows.
 
 from __future__ import annotations
 
+import gc
 import os
+import threading
 from pathlib import Path
 from typing import Any, Optional
 
@@ -130,6 +132,8 @@ class ReIDEncoder:
     """Generic embedding adapter for common NCHW/NHWC ONNX ReID models."""
 
     def __init__(self) -> None:
+        self._condition = threading.Condition(threading.RLock())
+        self._active_inferences = 0
         self.session: Any = None
         self.model_path_override = ""
         self.model_path = ""
@@ -145,7 +149,8 @@ class ReIDEncoder:
 
     @property
     def is_loaded(self) -> bool:
-        return self.session is not None
+        with self._condition:
+            return self.session is not None
 
     def configured_path(self) -> str:
         return self.model_path_override or configured_model_path()
@@ -162,27 +167,57 @@ class ReIDEncoder:
         previous_path = self.configured_path()
         self.model_path_override = normalized
         if previous_path != self.configured_path():
-            self.session = None
-            self.model_path = ""
-            self.model_mtime_ns = None
-            self.input_name = ""
-            self.input_shape = []
-            self.providers = []
+            self.unload()
         return self.status()
 
     def status(self) -> dict[str, Any]:
-        configured_path = self.configured_path()
-        path = Path(configured_path) if configured_path else None
+        with self._condition:
+            configured_path = self.configured_path()
+            path = Path(configured_path) if configured_path else None
+            loaded = self.session is not None
+            providers = list(self.providers)
         return {
             "runtime_available": ort is not None,
             "configured": bool(configured_path),
             "model_exists": bool(path and path.is_file()),
-            "loaded": self.is_loaded,
+            "loaded": loaded,
             "model_path": configured_path,
             "model_name": path.name if path else "",
-            "providers": list(self.providers),
+            "providers": providers,
             "detail": self._status_detail(configured_path, path),
         }
+
+    def _reset_session_state(self) -> None:
+        """Clear all state derived from the currently loaded ONNX session."""
+        self.session = None
+        self.model_path = ""
+        self.model_mtime_ns = None
+        self.input_name = ""
+        self.input_shape = []
+        self.input_batch_size = None
+        self.input_layout = "nchw"
+        self.input_height = 256
+        self.input_width = 128
+        self.input_dtype = np.float32
+        self.providers = []
+
+    def unload(self) -> None:
+        """Release the ONNX session and allow CUDA memory to be reclaimed.
+
+        Releasing waits for an in-flight inference to finish.  This prevents a
+        manual release or window-close cleanup from invalidating the session
+        while the worker thread is still inside ``session.run``.
+        """
+        with self._condition:
+            while self._active_inferences > 0:
+                self._condition.wait()
+            session = self.session
+            self._reset_session_state()
+
+        if session is not None:
+            del session
+            gc.collect()
+            logger.info("REID_MODEL_UNLOAD_END")
 
     def _status_detail(self, configured_path: str, path: Optional[Path]) -> Optional[str]:
         if ort is None:
@@ -222,6 +257,10 @@ class ReIDEncoder:
         return self.input_batch_size or requested_size
 
     def load(self) -> None:
+        with self._condition:
+            self._load_unlocked()
+
+    def _load_unlocked(self) -> None:
         configured_path = self.configured_path()
         if not configured_path:
             raise ReIDUnavailableError("Set REID_MODEL_PATH in .env before using ReID.")
@@ -355,7 +394,20 @@ class ReIDEncoder:
             padding = np.zeros(padding_shape, dtype=model_input.dtype)
             model_input = np.concatenate([model_input, padding], axis=0)
 
-        outputs = self.session.run(None, {self.input_name: model_input})
+        with self._condition:
+            session = self.session
+            input_name = self.input_name
+            if session is None:
+                raise ReIDUnavailableError("The ReID model is not loaded.")
+            self._active_inferences += 1
+        try:
+            outputs = session.run(None, {input_name: model_input})
+        finally:
+            with self._condition:
+                self._active_inferences -= 1
+                if self._active_inferences <= 0:
+                    self._active_inferences = 0
+                    self._condition.notify_all()
         numeric_outputs = [np.asarray(output) for output in outputs if np.asarray(output).size]
         if not numeric_outputs:
             raise ReIDUnavailableError("The ReID model returned no embedding.")

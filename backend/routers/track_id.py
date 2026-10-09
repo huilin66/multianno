@@ -211,6 +211,44 @@ async def get_reid_status():
     return status
 
 
+@router.post("/load")
+async def load_reid_model():
+    try:
+        await asyncio.to_thread(encoder.load)
+    except ReIDUnavailableError as exc:
+        logger.warning("REID_MODEL_LOAD_REQUEST_ERROR error=%s", shorten(str(exc), 1500))
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("REID_MODEL_LOAD_REQUEST_ERROR error=%s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to load the ReID model: {exc}") from exc
+
+    status = encoder.status()
+    logger.info(
+        "REID_MODEL_LOAD_REQUEST_DONE loaded=%s model=%s providers=%s",
+        status["loaded"],
+        status["model_name"] or "-",
+        status["providers"],
+    )
+    return status
+
+
+@router.post("/unload")
+async def unload_reid_model():
+    try:
+        await asyncio.to_thread(encoder.unload)
+    except Exception as exc:
+        logger.exception("REID_MODEL_UNLOAD_REQUEST_ERROR error=%s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to release the ReID model: {exc}") from exc
+
+    status = encoder.status()
+    logger.info(
+        "REID_MODEL_UNLOAD_REQUEST_DONE loaded=%s model=%s",
+        status["loaded"],
+        status["model_name"] or "-",
+    )
+    return status
+
+
 @router.post("/config")
 async def configure_reid(req: TrackIdReIDConfigRequest):
     try:
