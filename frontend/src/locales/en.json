@@ -296,6 +296,9 @@
   "aiSettings": {
     "title": "AI Settings",
     "description": "Configure a vision model for automatic or interactive AI annotation.",
+    "connections": "Model Connections",
+    "visionConnection": "Vision model",
+    "vlmConnection": "VLM endpoint",
     "modelConfiguration": "Model Configuration",
     "modelConfigurationDescription": "Choose the type that matches the model file and set its path.",
     "inferenceConfiguration": "Inference Configuration",
@@ -351,6 +354,7 @@
     "vlmUnsavedChanges": "There are unsaved VLM configuration changes.",
     "vlmStatusChecking": "Checking",
     "vlmStatusReady": "Ready",
+    "vlmStatusUnsaved": "Unsaved",
     "vlmStatusNotConfigured": "Not configured",
     "vlmStatusUnavailable": "Unavailable",
     "vlmConfigurationMissingTitle": "VLM configuration is incomplete",

@@ -296,6 +296,9 @@
   "aiSettings": {
     "title": "AI 设置",
     "description": "配置视觉模型，用于自动或交互式 AI 标注。",
+    "connections": "模型接入",
+    "visionConnection": "视觉模型",
+    "vlmConnection": "VLM 接口",
     "modelConfiguration": "模型配置",
     "modelConfigurationDescription": "选择与模型文件匹配的类型，并设置模型路径。",
     "inferenceConfiguration": "推理配置",
@@ -351,6 +354,7 @@
     "vlmUnsavedChanges": "VLM 配置有未保存的修改。",
     "vlmStatusChecking": "检查中",
     "vlmStatusReady": "就绪",
+    "vlmStatusUnsaved": "未保存",
     "vlmStatusNotConfigured": "未配置",
     "vlmStatusUnavailable": "不可用",
     "vlmConfigurationMissingTitle": "VLM 配置不完整",

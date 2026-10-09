@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   CloudLightning,
-  FileText,
   FolderSearch,
   Globe2,
   History,
@@ -49,7 +48,7 @@ const VISION_MODEL_OPTIONS = [
   { value: 'LocateAnything', label: 'NVIDIA LocateAnything', disabled: true },
 ];
 
-function SectionHeading({ icon: Icon, title, description }: { icon: LucideIcon; title: string; description?: string }) {
+function SectionHeading({ icon: Icon, title }: { icon: LucideIcon; title: string }) {
   return (
     <div className="flex items-start gap-2.5">
       <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -57,7 +56,6 @@ function SectionHeading({ icon: Icon, title, description }: { icon: LucideIcon; 
       </span>
       <div className="min-w-0">
         <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">{title}</h2>
-        {description && <p className="mt-0.5 text-[10px] leading-relaxed text-muted-foreground">{description}</p>}
       </div>
     </div>
   );
@@ -69,6 +67,40 @@ function FieldLabel({ children, required = false }: { children: string; required
       {children}
       {required && <span className="ml-1 text-primary">*</span>}
     </Label>
+  );
+}
+
+function ModelConnectionCard({
+  title,
+  model,
+  path,
+  status,
+  statusClass,
+  pathTitle,
+}: {
+  title: string;
+  model: string;
+  path: string;
+  status: string;
+  statusClass: string;
+  pathTitle: string;
+}) {
+  return (
+    <div className="min-w-0 rounded-lg border border-border bg-background/70 p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-[11px] font-semibold text-foreground">{title}</span>
+        <span className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-semibold ${statusClass}`}>
+          {status}
+        </span>
+      </div>
+      <div className="mt-1 truncate font-mono text-[10px] text-foreground/80" title={path || undefined}>
+        {path || '—'}
+      </div>
+      <div className="mt-0.5 truncate text-[10px] text-muted-foreground" title={model || undefined}>
+        {model || '—'}
+      </div>
+      <span className="sr-only">{pathTitle}</span>
+    </div>
   );
 }
 
@@ -134,6 +166,12 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       : vlmStatus === 'unavailable'
         ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300'
         : 'border-border bg-muted text-muted-foreground';
+  const vlmDisplayStatusLabel = isVLMConfigDirty
+    ? t('aiSettings.vlmStatusUnsaved')
+    : vlmStatusLabel;
+  const vlmDisplayStatusClass = isVLMConfigDirty
+    ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300'
+    : vlmStatusClass;
   const statusLabel = isUnsupportedModel
     ? t('aiSettings.statusUnavailable')
     : isConfigDirty
@@ -354,7 +392,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
               </span>
               <div className="min-w-0 flex-1">
                 <DialogTitle className="text-base">{t('aiSettings.title')}</DialogTitle>
-                <DialogDescription className="mt-0.5 text-xs">
+                <DialogDescription className="sr-only">
                   {t('aiSettings.description')}
                 </DialogDescription>
               </div>
@@ -365,15 +403,36 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
           </DialogHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
-            <div className="space-y-4 p-4 sm:p-5">
-              <section className="rounded-xl border border-border bg-muted/20 p-4">
+            <div className="space-y-3 p-3 sm:p-4">
+              <section className="rounded-xl border border-border bg-muted/20 p-3">
+                <SectionHeading icon={CloudLightning} title={t('aiSettings.connections')} />
+                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                  <ModelConnectionCard
+                    title={t('aiSettings.visionConnection')}
+                    model={localSettings.model}
+                    path={localSettings.modelPath}
+                    status={statusLabel}
+                    statusClass={statusClass}
+                    pathTitle={t('aiSettings.modelPath')}
+                  />
+                  <ModelConnectionCard
+                    title={t('aiSettings.vlmConnection')}
+                    model={localVLMSettings.model}
+                    path={localVLMSettings.baseUrl}
+                    status={vlmDisplayStatusLabel}
+                    statusClass={vlmDisplayStatusClass}
+                    pathTitle={t('aiSettings.vlmBaseUrl')}
+                  />
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-border bg-muted/20 p-3">
                 <SectionHeading
                   icon={Settings2}
                   title={t('aiSettings.modelConfiguration')}
-                  description={t('aiSettings.modelConfigurationDescription')}
                 />
 
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
                   <div className="space-y-1.5">
                     <FieldLabel>{t('aiSettings.modelType')}</FieldLabel>
                     <Select
@@ -400,9 +459,6 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                         ))}
                       </SelectContent>
                     </Select>
-                    <p className="text-[10px] leading-relaxed text-muted-foreground">
-                      {t('aiSettings.modelTypeHint')}
-                    </p>
                   </div>
 
                   <div className="space-y-1.5">
@@ -455,7 +511,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                 </div>
 
                 {isYoloModel && (
-                  <div className="mt-4 border-t border-border/70 pt-4">
+                  <div className="mt-3 border-t border-border/70 pt-3">
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
                         <FieldLabel>{t('aiSettings.classFile')}</FieldLabel>
@@ -483,15 +539,11 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                           <FolderSearch className="h-3.5 w-3.5" />
                         </button>
                       </div>
-                      <p className="flex items-start gap-1.5 text-[10px] leading-relaxed text-muted-foreground">
-                        <FileText className="mt-0.5 h-3 w-3 shrink-0" />
-                        <span>{t('aiSettings.classFileHint')}</span>
-                      </p>
                     </div>
                   </div>
                 )}
 
-                <div className={`mt-4 flex items-start gap-2.5 rounded-lg border px-3 py-2.5 ${statusClass}`} role="status">
+                <div className={`mt-3 flex items-center gap-2 rounded-lg border px-3 py-2 ${statusClass}`} role="status">
                   {isUnsupportedModel ? (
                     <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   ) : isBackendModelLoaded ? (
@@ -501,18 +553,10 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                   ) : (
                     <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   )}
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold">{statusLabel}</p>
-                    <p className="mt-0.5 truncate text-[10px] opacity-80" title={localSettings.modelPath}>
-                      {isUnsupportedModel
-                        ? t('aiSettings.modelUnavailableDescription')
-                        : isConfigDirty && aiSettings.isConfigured
-                          ? t('aiSettings.unsavedChanges')
-                          : aiSettings.isConfigured && backendStatus === 'checking'
-                            ? t('aiSettings.statusChecking')
-                            : aiSettings.isConfigured && backendStatus === 'notLoaded'
-                              ? t('aiSettings.backendNotLoadedDescription')
-                            : modelFileName}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[11px] font-semibold">{statusLabel}</p>
+                    <p className="truncate text-[10px] opacity-80" title={localSettings.modelPath}>
+                      {modelFileName || t('aiSettings.noModelSelected')}
                     </p>
                   </div>
                 </div>
@@ -522,10 +566,9 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                 <SectionHeading
                   icon={Settings2}
                   title={t('aiSettings.inferenceConfiguration')}
-                  description={t('aiSettings.inferenceConfigurationDescription')}
                 />
 
-                <div className="mt-4 rounded-lg border border-border bg-muted/20 p-3">
+                <div className="mt-3 rounded-lg border border-border bg-muted/20 p-3">
                   <div className="flex items-center justify-between gap-3">
                     <FieldLabel>{t('aiSettings.confidence')}</FieldLabel>
                     <span className="rounded-md border border-primary/20 bg-primary/10 px-2 py-1 font-mono text-xs font-bold text-primary">
@@ -549,9 +592,6 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                     <span>0.5</span>
                     <span>1.0</span>
                   </div>
-                  <p className="mt-2 text-[10px] leading-relaxed text-muted-foreground">
-                    {t('aiSettings.confidenceHint')}
-                  </p>
                 </div>
               </section>
 
@@ -560,14 +600,13 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                   <SectionHeading
                     icon={Globe2}
                     title={t('aiSettings.vlmConfiguration')}
-                    description={t('aiSettings.vlmConfigurationDescription')}
                   />
-                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${vlmStatusClass}`}>
-                    {vlmStatusLabel}
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${vlmDisplayStatusClass}`}>
+                    {vlmDisplayStatusLabel}
                   </span>
                 </div>
 
-                <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                <div className="mt-3 grid gap-3 lg:grid-cols-2">
                   <div className="space-y-1.5 lg:col-span-2">
                     <FieldLabel required>{t('aiSettings.vlmBaseUrl')}</FieldLabel>
                     <Input
@@ -649,11 +688,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                   </div>
                 </div>
 
-                <div className="mt-3 flex flex-col gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex min-w-0 items-start gap-2 text-[10px] leading-relaxed text-muted-foreground">
-                    <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-                    <span>{t('aiSettings.vlmApiKeyHint')}</span>
-                  </div>
+                <div className="mt-3 flex justify-end">
                   <Button
                     type="button"
                     size="sm"
@@ -672,17 +707,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
             </div>
           </div>
 
-          <div className="flex shrink-0 flex-col gap-3 border-t border-border px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
-              <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              <span className="truncate">
-                {isConfigDirty
-                  ? t('aiSettings.unsavedChanges')
-                  : aiSettings.isConfigured && backendStatus === 'notLoaded'
-                    ? t('aiSettings.backendNotLoadedDescription')
-                    : t('aiSettings.saveHint')}
-              </span>
-            </div>
+          <div className="flex shrink-0 flex-col gap-3 border-t border-border px-5 py-3.5 sm:flex-row sm:items-center sm:justify-end">
             <div className="flex shrink-0 items-center justify-end gap-2">
               <Button variant="outline" size="sm" onClick={handleCancel}>
                 {t('common.cancel')}
