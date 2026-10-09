@@ -23,7 +23,6 @@
     "open": "打开 Track ID 标注",
     "singleModality": "单模态",
     "noFolder": "没有图像文件夹",
-    "mainScene": "主场景",
     "syncViews": "视图同步",
     "syncViewsOn": "第 1、3 帧跟随可编辑帧的缩放和平移",
     "syncViewsOff": "第 1、3 帧分别保持适合窗口显示",

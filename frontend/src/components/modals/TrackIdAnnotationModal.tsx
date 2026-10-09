@@ -1210,11 +1210,6 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
             <div className="flex min-h-0 flex-1">
               <div className="relative shrink-0">{centerToolbar}</div>
               <div className="flex min-w-0 flex-1 flex-col">
-                <div className="shrink-0 border-b border-neutral-200 bg-white px-4 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">{t('trackIdWindow.mainScene')}</div>
-                  <div className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100" title={currentStem || undefined}>{currentStem || t('trackIdWindow.noCurrentScene')}</div>
-                </div>
-
                 <div className="min-h-0 flex-1 overflow-auto p-3">
                   <div className="grid min-w-[900px] grid-cols-3 gap-3">
                 {frameSlots.map((slot, index) => {

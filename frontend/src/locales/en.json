@@ -23,7 +23,6 @@
     "open": "Open Track ID Annotation",
     "singleModality": "Single modality",
     "noFolder": "No image folder",
-    "mainScene": "Main scene",
     "syncViews": "View sync",
     "syncViewsOn": "Frame 1 and Frame 3 follow the editable frame's zoom and pan",
     "syncViewsOff": "Keep the read-only frames fitted independently",
