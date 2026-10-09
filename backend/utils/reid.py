@@ -20,6 +20,48 @@ from utils.logging_config import get_logger, shorten
 
 logger = get_logger("reid")
 
+_REID_DLL_HANDLES: list[Any] = []
+
+
+def _configure_runtime_dll_path() -> None:
+    """Make optional CUDA/cuDNN DLLs visible to this backend process only."""
+    configured = os.getenv("REID_CUDA_DLL_PATH", "").strip()
+    if not configured:
+        return
+
+    path_entries = os.environ.get("PATH", "").split(os.pathsep)
+    for raw_path in configured.split(os.pathsep):
+        path_text = raw_path.strip().strip('"')
+        if not path_text:
+            continue
+
+        dll_path = Path(path_text).expanduser()
+        if not dll_path.is_dir():
+            logger.warning("REID_CUDA_DLL_PATH_MISSING path=%s", shorten(str(dll_path), 1000))
+            continue
+
+        normalized = str(dll_path)
+        if normalized not in path_entries:
+            path_entries.insert(0, normalized)
+
+        add_dll_directory = getattr(os, "add_dll_directory", None)
+        if add_dll_directory is not None and os.name == "nt":
+            try:
+                _REID_DLL_HANDLES.append(add_dll_directory(normalized))
+            except OSError as exc:
+                logger.warning(
+                    "REID_CUDA_DLL_REGISTER_FAILED path=%s error=%s",
+                    shorten(normalized, 1000),
+                    shorten(str(exc), 1000),
+                )
+
+        logger.info("REID_CUDA_DLL_PATH_ADDED path=%s", shorten(normalized, 1000))
+
+    os.environ["PATH"] = os.pathsep.join(path_entries)
+
+
+_configure_runtime_dll_path()
+
 try:
     import onnxruntime as ort
 except (ImportError, OSError) as exc:  # pragma: no cover - environment dependent
