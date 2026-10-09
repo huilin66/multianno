@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Switch } from '../ui/switch';
 import { OperationProgress } from '../ui/OperationProgress';
 import { CanvasView } from '../modules/annotation/CanvasView';
 import { RightPanel, type RightPanelProps } from '../modules/annotation/RightPanel';
@@ -23,16 +24,13 @@ import {
   ArrowLeftToLine,
   ArrowRightToLine,
   Check,
-  ChevronLeft,
-  ChevronRight,
+  CornerDownLeft,
   Film,
-  Hash,
   Loader2,
   Link2,
   Link2Off,
   Plus,
   Settings2,
-  Unlink2,
 } from 'lucide-react';
 
 interface TrackIdAnnotationModalProps {
@@ -458,7 +456,12 @@ function TrackIdEditor({
   return (
     <div className="min-h-0 overflow-y-auto custom-scrollbar">
       <div className="border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
-        <Label className="block text-[10px] uppercase tracking-wider text-neutral-500">{t('trackIdWindow.trackId')}</Label>
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-[10px] uppercase tracking-wider text-neutral-500">{t('trackIdWindow.trackId')}</Label>
+          <span className="min-w-0 truncate text-[10px] text-neutral-400" title={activeAnnotation?.label || undefined}>
+            {activeAnnotation ? `${activeAnnotation.label || 'object'} · ${t('trackIdWindow.selected')}` : t('trackIdWindow.selectObject')}
+          </span>
+        </div>
         <div className="mt-1.5 flex items-end gap-1.5">
           <div className="min-w-0 flex-1">
             <span className="mb-1 block text-[9px] uppercase tracking-wider text-neutral-400">{t('trackIdWindow.mainId')}</span>
@@ -499,12 +502,9 @@ function TrackIdEditor({
             title={t('trackIdWindow.selectTrackId')}
             aria-label={t('trackIdWindow.selectTrackId')}
           >
-            <Check className="h-3.5 w-3.5" />
+            <CornerDownLeft className="h-3.5 w-3.5" />
           </Button>
         </div>
-        <p className="mt-1.5 text-[10px] text-neutral-400">
-          {activeAnnotation ? `${activeAnnotation.label || 'object'} · ${t('trackIdWindow.selected')}` : t('trackIdWindow.selectObject')}
-        </p>
       </div>
 
       <div className="border-b border-neutral-200 px-3 py-2.5 dark:border-neutral-800">
@@ -570,11 +570,6 @@ function TrackIdEditor({
                     <span className="min-w-0 flex-1 truncate text-[10px] text-neutral-600 dark:text-neutral-300" title={sequence.startCandidate?.stem}>
                       {renderCandidate(sequence.startCandidate)}
                     </span>
-                    <span className="shrink-0 text-[10px] text-neutral-400" aria-hidden="true">-</span>
-                    <ArrowRightToLine className="h-3.5 w-3.5 shrink-0 text-blue-500" aria-hidden="true" />
-                    <span className="min-w-0 flex-1 truncate text-[10px] text-neutral-600 dark:text-neutral-300" title={sequence.endCandidate?.stem}>
-                      {renderCandidate(sequence.endCandidate)}
-                    </span>
                   </button>
                   <Button
                     type="button"
@@ -589,6 +584,7 @@ function TrackIdEditor({
                   >
                     {sequence.startLocked ? <Link2 className="h-3.5 w-3.5 text-blue-500" /> : <Link2Off className="h-3.5 w-3.5 text-neutral-400" />}
                   </Button>
+                  <span className="shrink-0 text-[10px] text-neutral-300 dark:text-neutral-600" aria-hidden="true">|</span>
                   <Button
                     type="button"
                     size="icon-xs"
@@ -602,9 +598,27 @@ function TrackIdEditor({
                   >
                     {sequence.endLocked ? <Link2 className="h-3.5 w-3.5 text-blue-500" /> : <Link2Off className="h-3.5 w-3.5 text-neutral-400" />}
                   </Button>
+                  <button
+                    type="button"
+                    className="flex min-w-0 flex-1 items-center gap-1 text-left"
+                    onClick={() => setActiveSequence(sequence.id)}
+                    title={t('trackIdWindow.selectSequence')}
+                    aria-pressed={isActive}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-[10px] text-neutral-600 dark:text-neutral-300" title={sequence.endCandidate?.stem}>
+                      {renderCandidate(sequence.endCandidate)}
+                    </span>
+                    <ArrowRightToLine className="h-3.5 w-3.5 shrink-0 text-blue-500" aria-hidden="true" />
+                  </button>
                 </div>
               );
             })}
+          </div>
+
+          <div className="mt-2 flex justify-end">
+            <Button type="button" size="icon-xs" variant="outline" onClick={onAddSequence} title={t('trackIdWindow.addSequence')} aria-label={t('trackIdWindow.addSequence')}>
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
           </div>
 
           <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-neutral-500">
@@ -736,13 +750,6 @@ function TrackIdEditor({
           )}
           {reidMessage && <p className="mt-1.5 text-[10px] leading-relaxed text-neutral-500">{reidMessage}</p>}
         </div>
-
-        <div className="flex justify-end">
-          <Button type="button" size="icon-xs" variant="outline" onClick={onAddSequence} title={t('trackIdWindow.addSequence')} aria-label={t('trackIdWindow.addSequence')}>
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-
       </div>
     </div>
   );
@@ -1203,49 +1210,13 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
             <div className="flex min-h-0 flex-1">
               <div className="relative shrink-0">{centerToolbar}</div>
               <div className="flex min-w-0 flex-1 flex-col">
-              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-neutral-200 bg-white px-4 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">
-              <div className="min-w-0"><div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">{t('trackIdWindow.mainScene')}</div><div className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100" title={currentStem || undefined}>{currentStem || t('trackIdWindow.noCurrentScene')}</div></div>
-              <div className="flex shrink-0 items-center gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={syncFrames ? 'default' : 'outline'}
-                  className="h-7 gap-1.5 px-2 text-[10px]"
-                  onClick={() => setSyncFrames((value) => !value)}
-                  aria-pressed={syncFrames}
-                  title={t(syncFrames ? 'trackIdWindow.syncViewsOn' : 'trackIdWindow.syncViewsOff')}
-                >
-                  {syncFrames ? <Link2 className="h-3.5 w-3.5" /> : <Unlink2 className="h-3.5 w-3.5" />}
-                  {t('trackIdWindow.syncViews')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={showTrackIds ? 'default' : 'outline'}
-                  className="h-7 gap-1.5 px-2 text-[10px]"
-                  onClick={() => setShowTrackIds((value) => !value)}
-                  aria-pressed={showTrackIds}
-                  title={t(showTrackIds ? 'trackIdWindow.showTrackIdOn' : 'trackIdWindow.showTrackIdOff')}
-                >
-                  <Hash className="h-3.5 w-3.5" />
-                  {t('trackIdWindow.showTrackId')}
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={frameContextMode === 'locked' ? 'default' : 'outline'}
-                  className="h-7 px-2 text-[10px]"
-                  onClick={() => setFrameContextMode((value) => value === 'locked' ? 'adjacent' : 'locked')}
-                  title={t(frameContextMode === 'locked' ? 'trackIdWindow.switchToAdjacentFrames' : 'trackIdWindow.switchToLockedFrames')}
-                  aria-pressed={frameContextMode === 'locked'}
-                >
-                  {t(frameContextMode === 'locked' ? 'trackIdWindow.lockedFrames' : 'trackIdWindow.adjacentFrames')}
-                </Button>
-              </div>
-            </div>
+                <div className="shrink-0 border-b border-neutral-200 bg-white px-4 py-2.5 dark:border-neutral-800 dark:bg-neutral-950">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">{t('trackIdWindow.mainScene')}</div>
+                  <div className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100" title={currentStem || undefined}>{currentStem || t('trackIdWindow.noCurrentScene')}</div>
+                </div>
 
-            <div className="min-h-0 flex-1 overflow-auto p-3">
-              <div className="grid min-w-[900px] grid-cols-3 gap-3">
+                <div className="min-h-0 flex-1 overflow-auto p-3">
+                  <div className="grid min-w-[900px] grid-cols-3 gap-3">
                 {frameSlots.map((slot, index) => {
                   const editable = slot.offset === 0;
                   const viewPacket: TrackIdViewPacket = {
@@ -1267,7 +1238,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                           : t('trackIdWindow.frameTwo');
                   return (
                     <article key={`${slot.offset}-${slot.stem || 'empty'}`} className={`overflow-hidden rounded-lg border bg-white shadow-sm dark:bg-neutral-900 ${editable ? 'border-blue-300 ring-1 ring-blue-100 dark:border-blue-700 dark:ring-blue-950' : 'border-neutral-200 dark:border-neutral-800'}`}>
-                      <div className="flex items-center gap-2 border-b border-neutral-100 px-3 py-2 dark:border-neutral-800"><span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-100 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{index + 1}</span><span className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100">{frameLabel}</span></div>
+                      <div className="flex min-w-0 items-center gap-2 border-b border-neutral-100 px-3 py-2 dark:border-neutral-800">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-neutral-100 text-[10px] font-semibold text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{index + 1}</span>
+                        <span className="truncate text-xs font-semibold text-neutral-800 dark:text-neutral-100">{frameLabel}</span>
+                        {slot.stem && <span className="min-w-0 truncate text-[10px] font-normal text-neutral-500 dark:text-neutral-400" title={slot.stem}>· {slot.stem}</span>}
+                      </div>
                       <div
                         role="button"
                         tabIndex={slot.stem && viewPacket.interaction.browsable ? 0 : -1}
@@ -1294,22 +1269,56 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                           onTrackObjectDoubleClick={handleTrackObjectDoubleClick}
                         />
                       </div>
-                      <div className="flex items-center justify-between gap-2 border-t border-neutral-100 px-3 py-2 text-[10px] dark:border-neutral-800"><span className="truncate text-neutral-500" title={slot.stem || undefined}>{slot.stem || t('trackIdWindow.frameUnavailable')}</span>{slot.role === 'previous' && <ChevronLeft className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}{slot.role === 'next' && <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" />}</div>
                     </article>
                   );
                 })}
-              </div>
-            </div>
+                  </div>
+                </div>
 
-            <div className="shrink-0 border-t border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
-              <div className="mb-1.5 flex items-center justify-between text-[10px] text-neutral-500"><span>{t('trackIdWindow.filmstrip')}</span><span>{currentIndex >= 0 ? `${currentIndex + 1}/${stems.length}` : `0/${stems.length}`}</span></div>
-              <div className="flex max-w-full gap-1.5 overflow-x-scroll pb-2 custom-scrollbar">
-                {stems.map((stem: string) => (
-                  <TrackFrameThumbnail key={stem} stem={stem} current={stem === currentStem} canvasProps={canvasProps} onClick={() => jumpToStem(stem)} />
-                ))}
-                {stems.length === 0 && <span className="py-2 text-[10px] text-neutral-400">{t('trackIdWindow.noFrames')}</span>}
-              </div>
-            </div>
+                <div className="shrink-0 border-t border-neutral-200 bg-white px-4 py-2 dark:border-neutral-800 dark:bg-neutral-950">
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                    <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                      <Label className="text-xs">{t('trackIdWindow.syncViews')}</Label>
+                      <Switch
+                        className="scale-90 origin-right"
+                        checked={syncFrames}
+                        onCheckedChange={setSyncFrames}
+                        aria-label={t('trackIdWindow.syncViews')}
+                        title={t(syncFrames ? 'trackIdWindow.syncViewsOn' : 'trackIdWindow.syncViewsOff')}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                      <Label className="text-xs">{t('trackIdWindow.showTrackId')}</Label>
+                      <Switch
+                        className="scale-90 origin-right"
+                        checked={showTrackIds}
+                        onCheckedChange={setShowTrackIds}
+                        aria-label={t('trackIdWindow.showTrackId')}
+                        title={t(showTrackIds ? 'trackIdWindow.showTrackIdOn' : 'trackIdWindow.showTrackIdOff')}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                      <Label className="text-xs">{t(frameContextMode === 'locked' ? 'trackIdWindow.lockedFrames' : 'trackIdWindow.adjacentFrames')}</Label>
+                      <Switch
+                        className="scale-90 origin-right"
+                        checked={frameContextMode === 'locked'}
+                        onCheckedChange={(checked) => setFrameContextMode(checked ? 'locked' : 'adjacent')}
+                        aria-label={t(frameContextMode === 'locked' ? 'trackIdWindow.lockedFrames' : 'trackIdWindow.adjacentFrames')}
+                        title={t(frameContextMode === 'locked' ? 'trackIdWindow.switchToAdjacentFrames' : 'trackIdWindow.switchToLockedFrames')}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="shrink-0 border-t border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
+                  <div className="mb-1.5 flex items-center justify-between text-[10px] text-neutral-500"><span>{t('trackIdWindow.filmstrip')}</span><span>{currentIndex >= 0 ? `${currentIndex + 1}/${stems.length}` : `0/${stems.length}`}</span></div>
+                  <div className="flex max-w-full gap-1.5 overflow-x-scroll pb-2 custom-scrollbar">
+                    {stems.map((stem: string) => (
+                      <TrackFrameThumbnail key={stem} stem={stem} current={stem === currentStem} canvasProps={canvasProps} onClick={() => jumpToStem(stem)} />
+                    ))}
+                    {stems.length === 0 && <span className="py-2 text-[10px] text-neutral-400">{t('trackIdWindow.noFrames')}</span>}
+                  </div>
+                </div>
               </div>
             </div>
           </section>

@@ -856,24 +856,6 @@ export function RightPanel({
           </div>
         )}
 
-        {/* Track ID editor is intentionally part of the standard right-panel layout. */}
-        {trackIdMode && (
-          <>
-            <SectionHeader
-              title={t('trackIdWindow.editorTitle')}
-              icon={Route}
-              isExpanded={expanded.trackId}
-              onToggle={() => toggleSection('trackId')}
-              colorClass="text-blue-500"
-            />
-            {expanded.trackId && (
-              <div className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/30">
-                {trackIdEditor}
-              </div>
-            )}
-          </>
-        )}
-
         {/* === 🌟 Taxonomy Manager === */}
         <SectionHeader 
           title={t('rightPanel.taxonomy')}
@@ -1127,10 +1109,28 @@ export function RightPanel({
           </>
         )}
 
+        {/* Track ID editor stays immediately before Object Editor in the annotation workflow. */}
+        {trackIdMode && (
+          <>
+            <SectionHeader
+              title={t('trackIdWindow.editorTitle')}
+              icon={Route}
+              isExpanded={expanded.trackId}
+              onToggle={() => toggleSection('trackId')}
+              colorClass="text-blue-500"
+            />
+            {expanded.trackId && (
+              <div className="border-b border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900/30">
+                {trackIdEditor}
+              </div>
+            )}
+          </>
+        )}
+
         {/* 4. Active Object Editor (仅选中时显示 Header 和 内容) */}
           <>
             <SectionHeader 
-              title={t('workspace.editorTitle')} icon={Edit3} 
+              title={t('workspace.editorTitle')} icon={Route}
               isExpanded={expanded.editor} onToggle={() => toggleSection('editor')} 
               colorClass="text-blue-500"
               actionNode={(
@@ -1141,7 +1141,7 @@ export function RightPanel({
                   title={t('trackIdWindow.open')}
                   aria-label={t('trackIdWindow.open')}
                 >
-                  <Hash className="h-3.5 w-3.5" />
+                  <Route className="h-3.5 w-3.5" />
                 </button>
               )}
             />
