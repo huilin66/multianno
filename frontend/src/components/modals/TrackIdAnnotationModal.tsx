@@ -167,6 +167,9 @@ function TrackIdFrameCanvas({
     ...(canvasProps.editorSettings || {}),
     showTrackId,
   }), [canvasProps.editorSettings, showTrackId]);
+  const frameTool = canvasProps.tool === 'ai_anno' && canvasProps.activeAITab !== 'semi'
+    ? 'pan'
+    : (canvasProps.tool || 'select');
 
   const fitFrame = React.useCallback(() => {
     const container = containerRef.current;
@@ -288,8 +291,10 @@ function TrackIdFrameCanvas({
         currentPoints={editable ? (canvasProps.currentPoints || []) : []}
         pendingAnnotation={editable ? canvasProps.pendingAnnotation : null}
         hoverPos={editable ? canvasProps.hoverPos : null}
-        tool={editable ? (canvasProps.tool || 'select') : 'pan'}
+        tool={editable ? frameTool : 'pan'}
+        isPanning={editable ? !!canvasProps.isPanning : false}
         editorSettings={frameEditorSettings}
+        mouseQuad={editable ? canvasProps.mouseQuad?.[view.id] : undefined}
         onMouseDown={editable ? canvasProps.onMouseDown : undefined}
         onMouseMove={editable && canvasProps.onMouseMove ? (event: React.MouseEvent) => canvasProps.onMouseMove(event, view.id) : undefined}
         onMouseUp={editable ? canvasProps.onMouseUp : undefined}
@@ -301,7 +306,7 @@ function TrackIdFrameCanvas({
         allViews={[view]}
         isSingleViewMode={false}
         showFullExtent={{}}
-        cursorStyle="default"
+        cursorStyle={editable ? (canvasProps.cursorStyle || 'default') : 'default'}
         aiPrompts={[]}
         onWheel={handleWheel}
         viewportOverride={renderViewport}
@@ -482,7 +487,7 @@ function TrackIdEditor({
             type="button"
             size="icon-sm"
             variant="outline"
-            onClick={applyTrackId}
+            onClick={() => applyTrackId()}
             title={t('trackIdWindow.selectTrackId')}
             aria-label={t('trackIdWindow.selectTrackId')}
           >
@@ -745,6 +750,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [mainIdDraft, setMainIdDraft] = React.useState('');
   const [partIdDraft, setPartIdDraft] = React.useState('');
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null);
+  const [manualTrackIds, setManualTrackIds] = React.useState<string[]>([]);
   const [activeSequence, setActiveSequence] = React.useState(1);
   const [sequences, setSequences] = React.useState<TrackSequence[]>([createTrackSequence(1)]);
   const [syncFrames, setSyncFrames] = React.useState(true);
@@ -813,9 +819,12 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const endLocked = activeSequenceData.endLocked;
 
   const trackIds = React.useMemo(() => {
-    const values = (annotations as any[]).map((annotation) => getTrackIdLabel(annotation.track_id)).filter(Boolean);
+    const values = [
+      ...(annotations as any[]).map((annotation) => getTrackIdLabel(annotation.track_id)),
+      ...manualTrackIds,
+    ].filter(Boolean);
     return Array.from(new Set(values)).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-  }, [annotations]);
+  }, [annotations, manualTrackIds]);
 
   const frameSlots = React.useMemo<FrameSlot[]>(() => {
     const previousStem = currentIndex >= 0 ? stems[currentIndex - 1] || null : null;
@@ -862,13 +871,15 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
 
   const applyTrackId = (valueOverride?: string) => {
     const value = valueOverride?.trim() || composeTrackId(mainIdDraft, partIdDraft);
+    if (!value) return;
     if (valueOverride) {
       const parsed = parseTrackId(value);
       setMainIdDraft(parsed.mainId);
       setPartIdDraft(parsed.partId);
     }
+    setManualTrackIds((current) => current.includes(value) ? current : [...current, value]);
     setSelectedTrackId(value || null);
-    if (activeAnnotation && value) updateAnnotation(activeAnnotation.id, { track_id: value });
+    if (activeAnnotation) updateAnnotation(activeAnnotation.id, { track_id: value });
   };
 
   const makeCandidate = (annotation: any, stem = annotation?.stem || currentStem): TrackCandidate | null => {
