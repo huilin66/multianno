@@ -617,8 +617,16 @@ function TrackIdEditor({
             })}
           </div>
 
-          <div className="mt-2 flex justify-end">
-            <Button type="button" size="icon-xs" variant="outline" onClick={onAddSequence} title={t('trackIdWindow.addSequence')} aria-label={t('trackIdWindow.addSequence')}>
+          <div className="mt-2">
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              className="h-6 w-full justify-center border-blue-200 bg-white/50 px-0 text-blue-600 hover:bg-white hover:text-blue-700 dark:border-blue-900/60 dark:bg-neutral-900/40 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
+              onClick={onAddSequence}
+              title={t('trackIdWindow.addSequence')}
+              aria-label={t('trackIdWindow.addSequence')}
+            >
               <Plus className="h-3.5 w-3.5" />
             </Button>
           </div>
