@@ -404,6 +404,7 @@ export interface TrackIdReIDCandidate {
   stem: string;
   annotation_id: string;
   label?: string;
+  track_id?: string;
   points: Array<{ x: number; y: number } | [number, number]>;
 }
 

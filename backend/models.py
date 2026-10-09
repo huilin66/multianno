@@ -99,6 +99,7 @@ class TrackIdCandidate(BaseModel):
     stem: str
     annotation_id: str
     label: str = ""
+    track_id: Optional[str] = None
     points: List[Any] = Field(default_factory=list)
 
 

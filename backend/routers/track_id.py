@@ -282,11 +282,16 @@ def _associate_track_id_sync(
             collected_frames += 1
             report(1, "Collecting candidate boxes", collected_frames, collection_total, frame.stem)
             continue
-        candidates = frame.candidates
-        if req.same_label_only and anchor_label:
-            same_label = [candidate for candidate in candidates if candidate.label.strip() == anchor_label]
-            if same_label:
-                candidates = same_label
+        # Track ID association is intentionally restricted to the anchor
+        # class. Existing Track IDs are reserved and must not be reused as
+        # intermediate candidates in a new association pass.
+        candidates = [
+            candidate
+            for candidate in frame.candidates
+            if anchor_label
+            and candidate.label.strip() == anchor_label
+            and not (candidate.track_id or "").strip()
+        ]
         if not candidates:
             missing_stems.append(frame.stem)
             collected_frames += 1

@@ -64,7 +64,6 @@ interface TrackIdReIDSettings {
   modelPath: string;
   minSimilarity: number;
   locationWeight: number;
-  sameLabelOnly: boolean;
   batchSize: number;
 }
 
@@ -681,15 +680,6 @@ function TrackIdEditor({
                   />
                 </div>
               </div>
-              <label className="flex items-center gap-1.5 text-[10px] text-neutral-600 dark:text-neutral-300">
-                <input
-                  type="checkbox"
-                  checked={reidSettings.sameLabelOnly}
-                  onChange={(event) => onUpdateReidSettings({ sameLabelOnly: event.target.checked })}
-                  className="h-3.5 w-3.5 accent-blue-600"
-                />
-                {t('trackIdWindow.sameLabelOnly')}
-              </label>
               {reidSettingsMessage && <p className="text-[10px] leading-relaxed text-neutral-500">{reidSettingsMessage}</p>}
             </div>
           )}
@@ -977,8 +967,22 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       stem: annotation.stem,
       annotation_id: String(annotation.id),
       label: annotation.label || '',
+      track_id: getTrackIdLabel(annotation.track_id) || undefined,
       points: Array.isArray(annotation.points) ? annotation.points : [],
     });
+
+    if (frameStems.length <= 2) {
+      const anchorAnnotations = new Map<string, any>();
+      anchorAnnotations.set(`${startAnnotation.stem}:${startAnnotation.id}`, startAnnotation);
+      anchorAnnotations.set(`${endAnnotation.stem}:${endAnnotation.id}`, endAnnotation);
+      anchorAnnotations.forEach((annotation) => {
+        updateAnnotation(annotation.id, { track_id: trackId });
+      });
+      setSelectedTrackId(trackId);
+      setReidProgress(null);
+      setReidMessage(t('trackIdWindow.directTrackResult', { count: anchorAnnotations.size }));
+      return;
+    }
 
     const controller = new AbortController();
     reidAbortControllerRef.current?.abort();
@@ -1008,7 +1012,18 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         frames.push({
           stem,
           image_path: getFrameImagePath(stem, canvasProps),
-          candidates: (annotationsByStem.get(stem) || []).map(toCandidate),
+          candidates: (annotationsByStem.get(stem) || [])
+            .filter((annotation) => {
+              const isLockedAnchor = (
+                (stem === startAnnotation.stem && String(annotation.id) === String(startAnnotation.id))
+                || (stem === endAnnotation.stem && String(annotation.id) === String(endAnnotation.id))
+              );
+              return isLockedAnchor || (
+                !getTrackIdLabel(annotation.track_id)
+                && String(annotation.label || '').trim() === String(startAnnotation.label || '').trim()
+              );
+            })
+            .map(toCandidate),
         });
         const current = index + 1;
         if (current === collectionTotal || current === 1 || current % collectionStep === 0) {
@@ -1029,7 +1044,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         frames,
         min_similarity: Number(trackIdReIDSettings?.minSimilarity ?? 0.5),
         location_weight: Number(trackIdReIDSettings?.locationWeight ?? 0.2),
-        same_label_only: trackIdReIDSettings?.sameLabelOnly ?? true,
+        same_label_only: true,
         batch_size: Math.min(64, Math.max(1, Number(trackIdReIDSettings?.batchSize ?? 8) || 8)),
       }, controller.signal);
       setReidProgress(job);
@@ -1113,7 +1128,6 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         modelPath: '',
         minSimilarity: 0.5,
         locationWeight: 0.2,
-        sameLabelOnly: true,
         batchSize: 8,
       }}
       onUpdateReidSettings={(settings) => setTrackIdReIDSettings(settings)}

@@ -99,6 +99,7 @@
     "collectingBoxes": "正在收集候选框",
     "reidCandidatesMissing": "锁定的候选对象已不存在。",
     "reidResult": "已匹配 {{matched}} / {{total}} 帧。",
+    "directTrackResult": "已直接为 {{count}} 个起止对象分配 Track ID。",
     "reidMissing": "还有 {{count}} 帧需要检查。",
     "reidFailed": "ReID 失败",
     "viewLayersReadOnly": "Track ID 标注中 View Layers 为只读"

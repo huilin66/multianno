@@ -99,6 +99,7 @@
     "collectingBoxes": "Collecting candidate boxes",
     "reidCandidatesMissing": "The locked candidates are no longer available.",
     "reidResult": "Matched {{matched}} / {{total}} frames.",
+    "directTrackResult": "Assigned the Track ID directly to {{count}} anchor object(s).",
     "reidMissing": "{{count}} frame(s) need review.",
     "reidFailed": "ReID failed",
     "viewLayersReadOnly": "View Layers are read-only in Track ID Annotation"
