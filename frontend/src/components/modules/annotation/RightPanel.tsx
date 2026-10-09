@@ -36,6 +36,7 @@ export interface RightPanelProps {
   handleRefreshAnnotations: () => void;
   isRefreshingAnnotations: boolean;
   onOpenTrackIdWindow: () => void;
+  panelWidth?: number;
   readOnlyViewLayers?: boolean;
   trackIdMode?: boolean;
   trackIdEditor?: React.ReactNode;
@@ -105,6 +106,7 @@ export function RightPanel({
   hiddenAnnotations, toggleAnnotationVisibility, handleClear, handleSave,
   handleRefreshAnnotations, isRefreshingAnnotations,
   onOpenTrackIdWindow,
+  panelWidth,
   readOnlyViewLayers = false,
   trackIdMode = false,
   trackIdEditor,
@@ -410,7 +412,10 @@ export function RightPanel({
     setPendingAnnotationFocus(null);
   }, [currentAnnotations, currentStem, pendingAnnotationFocus, setPendingAnnotationFocus, zoomToAnnotation]);
   return (
-    <div className="w-80 h-full border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-xl z-10">
+    <div
+      className={`${panelWidth ? '' : 'w-80'} h-full border-l border-neutral-200 dark:border-neutral-800 bg-neutral-50 dark:bg-neutral-950 flex flex-col shrink-0 overflow-hidden shadow-xl z-10`}
+      style={panelWidth ? { width: `${panelWidth}px`, minWidth: `${panelWidth}px` } : undefined}
+    >
 
       {/* 1. Project Meta (固定不折叠) */}
       <div onClick={() => setActiveModule('meta')} className="h-10 px-2.5 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-100 dark:bg-neutral-800 hover:bg-neutral-200/70 dark:hover:bg-neutral-700 cursor-pointer transition-all group flex items-center justify-between shrink-0">

@@ -1116,6 +1116,7 @@
     "collapseLeftPanel": "折叠左侧面板",
     "expandRightPanel": "展开右侧面板",
     "collapseRightPanel": "折叠右侧面板",
+    "resizeRightPanel": "调整右侧面板宽度",
     "singleView": "单视图",
     "noneDisableFx": "无 (禁用特效)",
     "opacity": "透明度",

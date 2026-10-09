@@ -51,6 +51,29 @@ interface SyncAnnotationProps {
   trackIdWindowOpen: boolean;
   onCloseTrackIdWindow: () => void;
 }
+
+const RIGHT_PANEL_WIDTH_STORAGE_KEY = 'multianno_annotation_right_panel_width';
+const RIGHT_PANEL_MIN_WIDTH = 280;
+const RIGHT_PANEL_DEFAULT_WIDTH = 320;
+const RIGHT_PANEL_MAX_WIDTH = 560;
+
+const clampRightPanelWidth = (width: number) => Math.min(
+  RIGHT_PANEL_MAX_WIDTH,
+  Math.max(RIGHT_PANEL_MIN_WIDTH, Math.round(width)),
+);
+
+const readStoredRightPanelWidth = () => {
+  if (typeof window === 'undefined') return RIGHT_PANEL_DEFAULT_WIDTH;
+  try {
+    const rawStored = window.localStorage.getItem(RIGHT_PANEL_WIDTH_STORAGE_KEY);
+    if (!rawStored) return RIGHT_PANEL_DEFAULT_WIDTH;
+    const stored = Number(rawStored);
+    return Number.isFinite(stored) ? clampRightPanelWidth(stored) : RIGHT_PANEL_DEFAULT_WIDTH;
+  } catch {
+    return RIGHT_PANEL_DEFAULT_WIDTH;
+  }
+};
+
 export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpen, onCloseTrackIdWindow }: SyncAnnotationProps) {
   const { t } = useTranslation();
   const [formAttributes, setFormAttributes] = useState<Record<string, any>>({});
@@ -77,6 +100,95 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
   );
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
+  const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
+  const [isRightPanelResizing, setIsRightPanelResizing] = useState(false);
+  const rightPanelResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+
+  const handleRightPanelResizeStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (!rightPanelOpen) return;
+    event.preventDefault();
+    event.stopPropagation();
+    rightPanelResizeRef.current = {
+      startX: event.clientX,
+      startWidth: rightPanelWidth,
+    };
+    setIsRightPanelResizing(true);
+  }, [rightPanelOpen, rightPanelWidth]);
+
+  const handleRightPanelResizeKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!rightPanelOpen) return;
+    let nextWidth: number | null = null;
+    if (event.key === 'ArrowLeft') nextWidth = rightPanelWidth + 16;
+    if (event.key === 'ArrowRight') nextWidth = rightPanelWidth - 16;
+    if (event.key === 'Home') nextWidth = RIGHT_PANEL_MIN_WIDTH;
+    if (event.key === 'End') nextWidth = RIGHT_PANEL_MAX_WIDTH;
+    if (nextWidth === null) return;
+    event.preventDefault();
+    setRightPanelWidth(clampRightPanelWidth(nextWidth));
+  }, [rightPanelOpen, rightPanelWidth]);
+
+  useEffect(() => {
+    if (!isRightPanelResizing) return;
+
+    const drag = rightPanelResizeRef.current;
+    if (!drag) return;
+
+    let pendingWidth: number | null = null;
+    let animationFrame: number | null = null;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    const applyPendingWidth = () => {
+      if (pendingWidth !== null) {
+        setRightPanelWidth(pendingWidth);
+        pendingWidth = null;
+      }
+      animationFrame = null;
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      event.preventDefault();
+      pendingWidth = clampRightPanelWidth(drag.startWidth - (event.clientX - drag.startX));
+      if (animationFrame === null) {
+        animationFrame = window.requestAnimationFrame(applyPendingWidth);
+      }
+    };
+
+    const stopResize = () => {
+      if (animationFrame !== null) {
+        window.cancelAnimationFrame(animationFrame);
+        animationFrame = null;
+      }
+      applyPendingWidth();
+      rightPanelResizeRef.current = null;
+      setIsRightPanelResizing(false);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', handlePointerMove, { passive: false });
+    window.addEventListener('pointerup', stopResize);
+    window.addEventListener('pointercancel', stopResize);
+
+    return () => {
+      if (animationFrame !== null) window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopResize);
+      window.removeEventListener('pointercancel', stopResize);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+  }, [isRightPanelResizing]);
+
+  useEffect(() => {
+    if (isRightPanelResizing) return;
+    try {
+      window.localStorage.setItem(RIGHT_PANEL_WIDTH_STORAGE_KEY, String(rightPanelWidth));
+    } catch {
+      // Ignore storage failures; resizing remains available for this session.
+    }
+  }, [isRightPanelResizing, rightPanelWidth]);
+
   const hiddenClasses = useStore((s) => (s).hiddenClasses);
   const hiddenAnnotations = useStore((s) => (s).hiddenAnnotations);
   const toggleAnnotationVisibility = useStore((s) => s.toggleAnnotationVisibility);
@@ -2031,9 +2143,26 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
       </div>
       
       {/* 👉 Right Panel */}
-      <div className="relative">
+      <div className="relative shrink-0">
         {rightPanelOpen ? (
-          <RightPanel 
+          <>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t('annotation.resizeRightPanel')}
+            aria-valuemin={RIGHT_PANEL_MIN_WIDTH}
+            aria-valuemax={RIGHT_PANEL_MAX_WIDTH}
+            aria-valuenow={rightPanelWidth}
+            tabIndex={0}
+            onPointerDown={handleRightPanelResizeStart}
+            onKeyDown={handleRightPanelResizeKeyDown}
+            className={`group absolute -left-1.5 top-10 z-30 flex h-[calc(100%-2.5rem)] w-3 cursor-col-resize items-center justify-center outline-none ${isRightPanelResizing ? 'bg-blue-500/10' : 'hover:bg-blue-500/5'}`}
+            title={t('annotation.resizeRightPanel')}
+          >
+            <span className={`h-12 w-1 rounded-full transition-colors ${isRightPanelResizing ? 'bg-blue-500' : 'bg-neutral-300/0 group-hover:bg-blue-400/70 dark:bg-neutral-700/0 dark:group-hover:bg-blue-500/70'}`} />
+          </div>
+          <RightPanel
+            panelWidth={rightPanelWidth}
             tool={tool} 
             showFullExtent={showFullExtent} toggleFullExtent={toggleFullExtent} 
             pushAction={pushAction}
@@ -2048,6 +2177,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             isRefreshingAnnotations={isRefreshingAnnotations}
             onOpenTrackIdWindow={onOpenTrackIdWindow}
           />
+          </>
         ) : (
           <button
             onClick={() => setRightPanelOpen(true)}

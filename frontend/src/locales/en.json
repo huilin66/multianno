@@ -1116,6 +1116,7 @@
     "collapseLeftPanel": "Collapse Left Panel",
     "expandRightPanel": "Expand Right Panel",
     "collapseRightPanel": "Collapse Right Panel",
+    "resizeRightPanel": "Resize Right Panel",
     "singleView": "Single View",
     "noneDisableFx": "None (Disable FX)",
     "opacity": "Opacity",
