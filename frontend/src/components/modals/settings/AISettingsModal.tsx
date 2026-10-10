@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   CloudLightning,
+  Cpu,
   FolderSearch,
   Globe2,
   History,
@@ -15,10 +16,15 @@ import {
 import { useTranslation } from 'react-i18next';
 
 import {
+  checkTrackIdReIDStatus,
   checkVisionAIStatus,
   checkVLMStatus,
+  configureTrackIdReID,
+  loadTrackIdReID,
+  unloadTrackIdReID,
   updateAIConfig,
   updateVLMConfig,
+  type TrackIdReIDStatus,
 } from '../../../api/client';
 import { useStore } from '../../../store/useStore';
 import { VLM_ENV_DEFAULTS } from '../../../config/env';
@@ -30,6 +36,7 @@ import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
 import { Slider } from '../../ui/slider';
+import { Switch } from '../../ui/switch';
 
 interface AISettingsModalProps {
   open: boolean; 
@@ -121,6 +128,8 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const { t } = useTranslation();
   const aiSettings = useStore((s) => s.aiSettings);
   const setAISettings = useStore((s) => s.setAISettings);
+  const trackIdReIDSettings = useStore((s) => s.trackIdReIDSettings);
+  const setTrackIdReIDSettings = useStore((s) => s.setTrackIdReIDSettings);
   const vlmSettings = useStore((s) => s.vlmSettings || DEFAULT_VLM_SETTINGS);
   const setVLMSettings = useStore((s) => s.setVLMSettings);
   
@@ -134,6 +143,11 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const [vlmApiKey, setVlmApiKey] = useState('');
   const [vlmStatus, setVlmStatus] = useState<'checking' | 'configured' | 'notConfigured' | 'unavailable'>('notConfigured');
   const [isSavingVLM, setIsSavingVLM] = useState(false);
+  const [localReIDSettings, setLocalReIDSettings] = useState(trackIdReIDSettings);
+  const [reidPathDraft, setReidPathDraft] = useState(trackIdReIDSettings.modelPath || '');
+  const [reidStatus, setReidStatus] = useState<TrackIdReIDStatus | null>(null);
+  const [reidAction, setReidAction] = useState<'checking' | 'configuring' | 'loading' | 'unloading' | null>(null);
+  const [reidMessage, setReidMessage] = useState('');
 
   const isYoloModel = String(localSettings.model || '').toLowerCase().startsWith('yolo');
   const isUnsupportedModel = localSettings.model === 'LocateAnything';
@@ -152,6 +166,14 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
     Number(localVLMSettings.temperature) !== Number(vlmSettings.temperature) ||
     Number(localVLMSettings.maxTokens) !== Number(vlmSettings.maxTokens) ||
     Boolean(vlmApiKey.trim());
+  const isReIDConfigDirty =
+    normalizeComparablePath(reidPathDraft) !== normalizeComparablePath(trackIdReIDSettings.modelPath || '') ||
+    Number(localReIDSettings.minSimilarity) !== Number(trackIdReIDSettings.minSimilarity) ||
+    Number(localReIDSettings.locationWeight) !== Number(trackIdReIDSettings.locationWeight) ||
+    Boolean(localReIDSettings.sameLabelOnly) !== Boolean(trackIdReIDSettings.sameLabelOnly) ||
+    Number(localReIDSettings.batchSize) !== Number(trackIdReIDSettings.batchSize);
+  const reidDisplayPath = reidPathDraft || reidStatus?.model_path || '';
+  const reidModelName = reidStatus?.model_name || (reidDisplayPath ? getFileName(reidDisplayPath) : '');
   const vlmStatusLabel = vlmStatus === 'checking'
     ? t('aiSettings.vlmStatusChecking')
     : vlmStatus === 'configured'
@@ -172,6 +194,34 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
   const vlmDisplayStatusClass = isVLMConfigDirty
     ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300'
     : vlmStatusClass;
+  const reidStatusLabel = reidAction === 'checking'
+    ? t('aiSettings.reidStatusChecking')
+    : reidAction === 'configuring'
+      ? t('aiSettings.reidStatusSaving')
+      : reidAction === 'loading'
+        ? t('aiSettings.reidStatusLoading')
+        : reidAction === 'unloading'
+          ? t('aiSettings.reidStatusReleasing')
+          : isReIDConfigDirty
+            ? t('aiSettings.reidStatusUnsaved')
+            : reidStatus?.loaded
+              ? t('aiSettings.reidStatusLoaded')
+              : reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists
+                ? t('aiSettings.reidStatusReady')
+                : reidStatus?.runtime_available
+                  ? t('aiSettings.reidStatusNotConfigured')
+                  : t('aiSettings.reidStatusUnavailable');
+  const reidStatusClass = reidAction === 'checking' || reidAction === 'configuring' || reidAction === 'loading' || reidAction === 'unloading'
+    ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300'
+    : isReIDConfigDirty
+      ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/30 dark:bg-blue-500/10 dark:text-blue-300'
+      : reidStatus?.loaded
+        ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+        : reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists
+          ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+          : reidStatus?.runtime_available
+            ? 'border-border bg-muted text-muted-foreground'
+            : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300';
   const statusLabel = isUnsupportedModel
     ? t('aiSettings.statusUnavailable')
     : isConfigDirty
@@ -200,6 +250,11 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       setLocalSettings(aiSettings);
       setLocalVLMSettings(vlmSettings);
       setVlmApiKey('');
+      setLocalReIDSettings(trackIdReIDSettings);
+      setReidPathDraft(trackIdReIDSettings.modelPath || '');
+      setReidStatus(null);
+      setReidAction('checking');
+      setReidMessage('');
       const savedHistory = localStorage.getItem('multiAnno_aiModelPaths');
       if (savedHistory) {
         try {
@@ -244,6 +299,20 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                 : 'notConfigured',
           );
         }
+      });
+
+      checkTrackIdReIDStatus().then((status) => {
+        if (cancelled) return;
+        const backendPath = (status.model_path || '').trim();
+        const resolvedPath = backendPath || trackIdReIDSettings.modelPath || '';
+        setReidStatus(status);
+        setReidPathDraft(resolvedPath);
+        setLocalReIDSettings({ ...trackIdReIDSettings, modelPath: resolvedPath });
+        if (backendPath && normalizeComparablePath(backendPath) !== normalizeComparablePath(trackIdReIDSettings.modelPath || '')) {
+          setTrackIdReIDSettings({ modelPath: backendPath });
+        }
+      }).finally(() => {
+        if (!cancelled) setReidAction(null);
       });
 
       return () => {
@@ -374,8 +443,65 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
     }
   };
 
+  const handleSaveReID = async () => {
+    setReidAction('configuring');
+    setReidMessage('');
+    try {
+      const status = await configureTrackIdReID({ model_path: reidPathDraft.trim() });
+      const configuredPath = status.model_path || reidPathDraft.trim();
+      const nextSettings = {
+        ...localReIDSettings,
+        modelPath: configuredPath,
+      };
+      setLocalReIDSettings(nextSettings);
+      setReidPathDraft(configuredPath);
+      setTrackIdReIDSettings(nextSettings);
+      setReidStatus(status);
+      setReidMessage(t('aiSettings.reidConfigurationSaved'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setReidMessage(`${t('aiSettings.reidConfigurationFailed')}: ${message}`);
+    } finally {
+      setReidAction(null);
+    }
+  };
+
+  const handleLoadReID = async () => {
+    if (isReIDConfigDirty) return;
+    setReidAction('loading');
+    setReidMessage('');
+    try {
+      const status = await loadTrackIdReID();
+      setReidStatus(status);
+      setReidMessage(status.loaded ? t('aiSettings.reidLoadSuccess') : (status.detail || t('aiSettings.reidLoadFailed')));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setReidMessage(`${t('aiSettings.reidLoadFailed')}: ${message}`);
+    } finally {
+      setReidAction(null);
+    }
+  };
+
+  const handleUnloadReID = async () => {
+    setReidAction('unloading');
+    setReidMessage('');
+    try {
+      const status = await unloadTrackIdReID();
+      setReidStatus(status);
+      setReidMessage(t('aiSettings.reidReleaseSuccess'));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setReidMessage(`${t('aiSettings.reidReleaseFailed')}: ${message}`);
+    } finally {
+      setReidAction(null);
+    }
+  };
+
   const handleCancel = () => {
     setLocalSettings(aiSettings);
+    setLocalReIDSettings(trackIdReIDSettings);
+    setReidPathDraft(trackIdReIDSettings.modelPath || '');
+    setReidMessage('');
     setLocalVLMSettings(vlmSettings);
     setVlmApiKey('');
     onClose();
@@ -406,7 +532,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
             <div className="space-y-3 p-3 sm:p-4">
               <section className="rounded-xl border border-border bg-muted/20 p-3">
                 <SectionHeading icon={CloudLightning} title={t('aiSettings.connections')} />
-                <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <div className="mt-2 grid gap-2 sm:grid-cols-3">
                   <ModelConnectionCard
                     title={t('aiSettings.visionConnection')}
                     model={localSettings.model}
@@ -422,6 +548,14 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                     status={vlmDisplayStatusLabel}
                     statusClass={vlmDisplayStatusClass}
                     pathTitle={t('aiSettings.vlmBaseUrl')}
+                  />
+                  <ModelConnectionCard
+                    title={t('aiSettings.reidConnection')}
+                    model={reidModelName}
+                    path={reidDisplayPath}
+                    status={reidStatusLabel}
+                    statusClass={reidStatusClass}
+                    pathTitle={t('aiSettings.reidModelPath')}
                   />
                 </div>
               </section>
@@ -559,6 +693,136 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
                       {modelFileName || t('aiSettings.noModelSelected')}
                     </p>
                   </div>
+                </div>
+              </section>
+
+              <section className="rounded-xl border border-border bg-background p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <SectionHeading
+                    icon={Cpu}
+                    title={t('aiSettings.reidConfiguration')}
+                  />
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-semibold ${reidStatusClass}`}>
+                    {reidStatusLabel}
+                  </span>
+                </div>
+
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-1.5">
+                    <FieldLabel>{t('aiSettings.reidModelPath')}</FieldLabel>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        id="reid-model-path"
+                        className="h-9 min-w-0 flex-1 font-mono text-xs"
+                        value={reidPathDraft}
+                        onChange={(event) => setReidPathDraft(event.target.value)}
+                        title={reidPathDraft || undefined}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={handleSaveReID}
+                        disabled={reidAction !== null}
+                      >
+                        {reidAction === 'configuring' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                        {reidAction === 'configuring' ? t('aiSettings.reidSaving') : t('aiSettings.reidApply')}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <FieldLabel>{t('aiSettings.reidThreshold')}</FieldLabel>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={localReIDSettings.minSimilarity}
+                        onChange={(event) => setLocalReIDSettings((current) => ({
+                          ...current,
+                          minSimilarity: Math.min(1, Math.max(0, Number(event.target.value) || 0)),
+                        }))}
+                        className="h-8 text-xs"
+                        aria-label={t('aiSettings.reidThreshold')}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <FieldLabel>{t('aiSettings.reidLocationWeight')}</FieldLabel>
+                      <Input
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={localReIDSettings.locationWeight}
+                        onChange={(event) => setLocalReIDSettings((current) => ({
+                          ...current,
+                          locationWeight: Math.min(1, Math.max(0, Number(event.target.value) || 0)),
+                        }))}
+                        className="h-8 text-xs"
+                        aria-label={t('aiSettings.reidLocationWeight')}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <FieldLabel>{t('aiSettings.reidBatchSize')}</FieldLabel>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={64}
+                        step={1}
+                        value={localReIDSettings.batchSize}
+                        onChange={(event) => setLocalReIDSettings((current) => ({
+                          ...current,
+                          batchSize: Math.min(64, Math.max(1, Number(event.target.value) || 1)),
+                        }))}
+                        className="h-8 text-xs"
+                        aria-label={t('aiSettings.reidBatchSize')}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-3 py-2">
+                    <FieldLabel>{t('aiSettings.reidSameLabelOnly')}</FieldLabel>
+                    <Switch
+                      checked={localReIDSettings.sameLabelOnly}
+                      onCheckedChange={(checked) => setLocalReIDSettings((current) => ({ ...current, sameLabelOnly: checked }))}
+                      aria-label={t('aiSettings.reidSameLabelOnly')}
+                      className="scale-[0.8] origin-right"
+                    />
+                  </div>
+
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleLoadReID}
+                      disabled={
+                        reidAction !== null
+                        || isReIDConfigDirty
+                        || !reidStatus?.runtime_available
+                        || !reidStatus.configured
+                        || !reidStatus.model_exists
+                        || reidStatus.loaded
+                      }
+                    >
+                      {reidAction === 'loading' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                      {reidAction === 'loading' ? t('aiSettings.reidLoading') : t('aiSettings.reidLoad')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={handleUnloadReID}
+                      disabled={reidAction !== null || !reidStatus?.loaded}
+                    >
+                      {reidAction === 'unloading' && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                      {reidAction === 'unloading' ? t('aiSettings.reidReleasing') : t('aiSettings.reidRelease')}
+                    </Button>
+                  </div>
+                  {reidMessage && <p className="text-[10px] leading-relaxed text-muted-foreground">{reidMessage}</p>}
                 </div>
               </section>
 
