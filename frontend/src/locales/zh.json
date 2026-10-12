@@ -680,6 +680,7 @@
   "taxonomy": {
     "title": "标注体系管理器 (Taxonomy)",
     "taxonomyGroup": "分类体系",
+    "taxonomyManager": "分类体系管理器",
     "classes": "类别管理",
     "attributes": "属性字典",
     "addNewClass": "新增类别",

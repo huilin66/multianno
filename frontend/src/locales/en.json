@@ -680,6 +680,7 @@
   "taxonomy": {
     "title": "Taxonomy Manager",
     "taxonomyGroup": "Taxonomy",
+    "taxonomyManager": "Taxonomy Manager",
     "classes": "Classes",
     "attributes": "Attributes",
     "addNewClass": "Add New Class",

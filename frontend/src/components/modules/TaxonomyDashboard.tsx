@@ -2395,11 +2395,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               aria-expanded={expanded.taxonomy}
             >
               <Layers className="w-4 h-4 mr-2 text-blue-500" />
-              <span className="truncate">{t('taxonomy.taxonomyGroup', 'Taxonomy')}</span>
-              <span className="ml-auto flex items-center gap-2">
-                <span className="bg-white dark:bg-neutral-900 px-1.5 py-0.5 rounded text-[9px] text-neutral-500">
-                  {taxonomyClasses.length + taxonomyAttributes.length}
-                </span>
+              <span className="truncate">{t('taxonomy.taxonomyManager', 'Taxonomy Manager')}</span>
+              <span className="ml-auto flex items-center">
                 {expanded.taxonomy ? <ChevronDown className="w-4 h-4 text-neutral-400" /> : <ChevronRight className="w-4 h-4 text-neutral-400" />}
               </span>
             </Button>
