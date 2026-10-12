@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useStore, Annotation } from '../../store/useStore';
 import { useTranslation } from 'react-i18next';
 import { ClassFormPopover } from './annotation/ClassFormPopover';
+import { ObjectEditorPopover } from './annotation/ObjectEditorPopover';
 import { LeftToolbar } from './annotation/LeftToolbar';
 import { RightPanel } from './annotation/RightPanel';
 import { useActionHistory } from '../../hooks/useActionHistory';
@@ -257,6 +258,11 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [popoverPos, setPopoverPos] = useState({ x: 0, y: 0 });
   const [pendingAnnotation, setPendingAnnotation] = useState<any>(null);
+  const [floatingObjectEditor, setFloatingObjectEditor] = useState<{
+    annotationId: string;
+    x: number;
+    y: number;
+  } | null>(null);
 
   // 🌟 新增：单视图专注模式状态
   const [focusedViewId, setFocusedViewId] = useState<string | null>(null);
@@ -657,6 +663,12 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
         return;  // 弹窗打开时其他快捷键都不响应
       }
 
+      if (floatingObjectEditor && e.key === 'Escape') {
+        e.preventDefault();
+        setFloatingObjectEditor(null);
+        return;
+      }
+
             
       // Other dialogs own their keyboard controls. Keep the workspace shortcuts
       // from changing the scene underneath them.
@@ -733,7 +745,7 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isDrawing, handleUndo, handleRedo, handleCopy, handlePaste, selectedAnnotationIds, activeAnnotationId]);
+  }, [isDrawing, handleUndo, handleRedo, handleCopy, handlePaste, selectedAnnotationIds, activeAnnotationId, popoverOpen, floatingObjectEditor]);
   // 当切换图片(Stem)时，清空历史栈，防止跨图像撤销产生 Bug
   useEffect(() => {
     setUndonePoints([]);
@@ -760,11 +772,36 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
 
   const currentAnnotations = annotationsIndex.get(currentStem || '') || [];
 
+  const floatingAnnotation = floatingObjectEditor
+    ? currentAnnotations.find((annotation: any) => String(annotation.id) === floatingObjectEditor.annotationId)
+    : null;
+
+  const handleFloatingObjectUpdate = useCallback((updates: Record<string, any>) => {
+    if (!floatingObjectEditor || !floatingAnnotation) return;
+    updateAnnotation(floatingObjectEditor.annotationId, updates);
+  }, [floatingAnnotation, floatingObjectEditor, updateAnnotation]);
+
+  const closeFloatingObjectEditor = useCallback(() => {
+    setFloatingObjectEditor(null);
+  }, []);
+
   useEffect(() => {
     selectionGestureRef.current = null;
     setSelectedAnnotationIds([]);
     setSelectionBox(null);
+    setFloatingObjectEditor(null);
   }, [currentStem]);
+
+  // Keep the floating editor tied to the current single selection.
+  useEffect(() => {
+    if (!floatingObjectEditor) return;
+    const stillExists = currentAnnotations.some(
+      (annotation: any) => String(annotation.id) === floatingObjectEditor.annotationId,
+    );
+    if (!stillExists || String(activeAnnotationId || '') !== floatingObjectEditor.annotationId) {
+      setFloatingObjectEditor(null);
+    }
+  }, [activeAnnotationId, currentAnnotations, floatingObjectEditor]);
 
   useEffect(() => {
     if (tool !== 'select') {
@@ -1422,7 +1459,42 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       // 清空状态
       setCurrentPoints([]);
       setIsDrawing(false);
+      return;
     }
+
+    // In Select & Edit, a double-click narrows any existing multi-selection to
+    // the top-most object under the cursor and opens its floating editor.
+    if (tool !== 'select' || isDrawing || popoverOpen) return;
+
+    const canvas = e.currentTarget as HTMLCanvasElement;
+    const rect = canvas.getBoundingClientRect();
+    const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
+    const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
+    const hitIds = findAnnotationIdsAtPoint(currentAnnotations, mainX, mainY, {
+      tolerance: 8 / Math.max(viewport.zoom, 0.01),
+      hiddenClasses,
+      hiddenAnnotations,
+    });
+    const targetId = hitIds[0];
+    if (!targetId) return;
+
+    const editorWidth = 340;
+    const editorHeight = 480;
+    const padding = 12;
+    const x = Math.max(
+      padding,
+      Math.min(e.clientX + 14, window.innerWidth - editorWidth - padding),
+    );
+    const y = Math.max(
+      padding,
+      Math.min(e.clientY + 14, window.innerHeight - editorHeight - padding),
+    );
+
+    e.preventDefault();
+    e.stopPropagation();
+    setSelectedAnnotationIds([targetId]);
+    setActiveAnnotationId(targetId);
+    setFloatingObjectEditor({ annotationId: targetId, x, y });
   };
 
   const handleMouseLeave = (viewId: string) => {
@@ -2289,6 +2361,17 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           taxonomyClasses={sortedClasses}
         />,
         document.body
+      )}
+      {floatingObjectEditor && floatingAnnotation && createPortal(
+        <ObjectEditorPopover
+          annotation={floatingAnnotation}
+          position={{ x: floatingObjectEditor.x, y: floatingObjectEditor.y }}
+          taxonomyClasses={sortedClasses}
+          taxonomyAttributes={taxonomyAttributes}
+          onUpdate={handleFloatingObjectUpdate}
+          onClose={closeFloatingObjectEditor}
+        />,
+        document.body,
       )}
       </div>
       
