@@ -24,15 +24,22 @@ export const readProjectJsonFile = (file: File): Promise<ProjectMetaContract> =>
 };
 
 export function generateProjectMetaConfig(state: AppState): ProjectMetaContract {
-  const { folders, views, taxonomyClasses, taxonomyAttributes, sceneGroups } = state;
+  const { folders, views, taxonomyClasses, taxonomyAttributes, sceneGroups, classOrder } = state;
   const defaultCrop = { t: 0, r: 100, b: 100, l: 0 };
+  const classIds = (taxonomyClasses || []).map((c) => c.id);
+  const savedClassOrder = Array.isArray(classOrder) ? classOrder : [];
+  const normalizedClassOrder = [
+    ...savedClassOrder.filter((id) => classIds.includes(id)),
+    ...classIds.filter((id) => !savedClassOrder.includes(id)),
+  ];
 
   return {
-        schemaVersion: 1,
+        schemaVersion: 2,
         projectName: state.projectName || "Untitled Project",
         workspacePath: state.workspacePath || '',
         sceneGroups: sceneGroups || {},
         taxonomyClasses: taxonomyClasses || [],
+        classOrder: normalizedClassOrder,
         taxonomyAttributes: taxonomyAttributes || [],
         folders: folders.map((f, i) => ({
           Id: i + 1,

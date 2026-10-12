@@ -9,6 +9,7 @@ export function useMetaAutoSave() {
   const workspacePath = useStore((s) => s.workspacePath);
   const projectMetaPath = useStore((s) => s.projectMetaPath);
   const taxonomyClasses = useStore((s) => s.taxonomyClasses);
+  const classOrder = useStore((s) => s.classOrder);
   const taxonomyAttributes = useStore((s) => s.taxonomyAttributes);
   const sceneGroups = useStore((s) => s.sceneGroups);
   const folders = useStore((s) => s.folders);
@@ -30,6 +31,7 @@ export function useMetaAutoSave() {
     const currentSnapshot = JSON.stringify({
       workspacePath,
       taxonomyClasses: taxonomyClasses.map(c => ({ id: c.id, name: c.name, color: c.color })),
+      classOrder,
       taxonomyAttributes: taxonomyAttributes.map(a => ({ id: a.id, name: a.name, options: a.options })),
       sceneGroups,
       folders: folders.map(f => f.path).sort(),
@@ -53,7 +55,9 @@ export function useMetaAutoSave() {
 
   }, [
     projectMetaPath,
+    workspacePath,
     taxonomyClasses,
+    classOrder,
     taxonomyAttributes,
     sceneGroups,
     folders,
@@ -87,7 +91,7 @@ export function useMetaAutoSave() {
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [isDirtyRef.current]);
+  }, [isDirtyRef.current, projectMetaPath, classOrder]);
 
   return { 
     metaSaveStatus, 

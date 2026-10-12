@@ -108,6 +108,8 @@ export interface ProjectMetaContract {
     color: string;
     description?: string;
   }[];
+  /** Stable class IDs in the user's preferred display/export order. */
+  classOrder?: string[];
   taxonomyAttributes?: {
     id: string;
     name: string;

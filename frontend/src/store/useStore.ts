@@ -486,18 +486,22 @@ export const useStore = create<AppState>()(
         const loadedStems = meta.sceneGroups
           ? Object.keys(meta.sceneGroups).sort(naturalStringCompare)
           : [];
+        const loadedTaxonomyClasses = (meta.taxonomyClasses || []).filter((c: any, i: number, arr: any[]) => {
+          const key = (c.name || '').trim().toLowerCase();
+          return arr.findIndex((x: any) => (x.name || '').trim().toLowerCase() === key) === i;
+        });
+        const loadedClassIds = loadedTaxonomyClasses.map((c: any) => c.id);
+        const savedClassOrder = Array.isArray(meta.classOrder) ? meta.classOrder : [];
+        const restoredClassOrder = [
+          ...savedClassOrder.filter((id: string) => loadedClassIds.includes(id)),
+          ...loadedClassIds.filter((id: string) => !savedClassOrder.includes(id)),
+        ];
 
         set({
           projectName: meta.projectName || 'Untitled Project',
           sceneGroups: meta.sceneGroups || {},
-          taxonomyClasses: (meta.taxonomyClasses || []).filter((c: any, i: number, arr: any[]) => {
-            const key = (c.name || '').trim().toLowerCase();
-            return arr.findIndex((x: any) => (x.name || '').trim().toLowerCase() === key) === i;
-          }),
-          classOrder: (meta.taxonomyClasses || []).filter((c: any, i: number, arr: any[]) => {
-            const key = (c.name || '').trim().toLowerCase();
-            return arr.findIndex((x: any) => (x.name || '').trim().toLowerCase() === key) === i;
-          }).map((c: any) => c.id),
+          taxonomyClasses: loadedTaxonomyClasses,
+          classOrder: restoredClassOrder,
           taxonomyAttributes: meta.taxonomyAttributes || [],
           attributeOrder: (meta.taxonomyAttributes || []).map((a: any) => a.id),
           

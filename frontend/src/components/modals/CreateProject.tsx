@@ -30,8 +30,9 @@ export function CreateProject({ onClose }: { onClose: () => void }) {
       await saveProjectMeta({
         file_path: metaPath,
         content: {
+          schemaVersion: 2,
           projectName: name,
-          folders: [], views: [], taxonomyClasses: [], taxonomyAttributes: []
+          folders: [], views: [], taxonomyClasses: [], classOrder: [], taxonomyAttributes: []
         }
       });
       setActiveModule('preload');
