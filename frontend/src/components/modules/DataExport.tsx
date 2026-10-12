@@ -59,6 +59,12 @@ interface FieldProps {
   className?: string;  // 🆕 添加
 }
 
+interface ExportProgressState {
+  current: number;
+  total: number;
+  percent: number;
+}
+
 function Field({ label, children, className }: FieldProps) {
   return (
     <div className={`space-y-1.5 ${className || ''}`}>
@@ -149,7 +155,11 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
   // --- 通用 ---
   const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState(0);
+  const [exportProgress, setExportProgress] = useState<ExportProgressState>({
+    current: 0,
+    total: 0,
+    percent: 0,
+  });
 
   const selectedStemSet = useMemo(() => new Set(selectedStems), [selectedStems]);
   const exportStems = useMemo(
@@ -157,6 +167,31 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     [stems, selectedStemSet],
   );
   const currentStemIndex = currentStem ? stems.indexOf(currentStem) : -1;
+
+  const updateExportProgress = useCallback((current: number, total: number) => {
+    const safeTotal = Number.isFinite(total) && total > 0
+      ? Math.floor(total)
+      : exportStems.length;
+    const safeCurrent = safeTotal > 0
+      ? Math.min(safeTotal, Math.max(0, Math.floor(Number(current) || 0)))
+      : 0;
+    const nextPercent = safeTotal > 0 ? Math.round((safeCurrent / safeTotal) * 100) : 0;
+
+    setExportProgress(previous => ({
+      current: safeCurrent,
+      total: safeTotal,
+      // A stream must be monotonic from the user's point of view. This also
+      // protects the UI if a stale event arrives after a filtered total.
+      percent: Math.max(previous.percent, nextPercent),
+    }));
+  }, [exportStems.length]);
+
+  const completeExportProgress = useCallback(() => {
+    setExportProgress(previous => {
+      const total = previous.total || exportStems.length;
+      return { current: total, total, percent: 100 };
+    });
+  }, [exportStems.length]);
 
   useEffect(() => {
     setSelectedStems(stems);
@@ -422,7 +457,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
       setExportStatus('exporting');
       setIsExporting(true);
-      setExportProgress(0);
+      setExportProgress({ current: 0, total: exportStems.length, percent: 0 });
 
       // 导出端读取的是磁盘 JSON；先等待当前前端修改落盘，避免导出旧标注。
       await saveCurrentAnnotations();
@@ -474,11 +509,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           include_unlabeled_images: includeUnlabeledImages,
           export_attributes: mdetExportEnabled,
           attributes_file: mdetExportEnabled ? (attributeExportFile || undefined) : undefined,
-        }, (current, total) => {
-          setExportProgress(Math.round((current / total) * 100));
-        }, signal);
+        }, updateExportProgress, signal);
 
-        setExportProgress(100);
+        completeExportProgress();
         if (!signal.aborted) {
           setExportStatus('done');
           const exported = result?.exported ?? exportStems.length;
@@ -522,11 +555,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           include_unlabeled_images: includeUnlabeledImages,
           export_attributes: mdetExportEnabled,
           attributes_file: mdetExportEnabled ? (attributeExportFile || undefined) : undefined,
-        }, (current, total) => {
-          setExportProgress(Math.round((current / total) * 100));
-        }, signal);
+        }, updateExportProgress, signal);
 
-        setExportProgress(100);
+        completeExportProgress();
         if (!signal.aborted) {
           setExportStatus('done');
           const lines = [
@@ -1468,14 +1499,15 @@ useEffect(() => {
 
       {/* 底部按钮 */}
       <div className="flex items-center justify-between p-4 border-t border-border shrink-0">
-        {exportStatus === 'exporting' ? (
+          {exportStatus === 'exporting' ? (
           <div className="flex items-center gap-3 flex-1 mr-4">
             <OperationProgress
               stageIndex={1}
               stageCount={1}
               stageName={t('dataExport.exporting')}
-              current={Math.round(exportStems.length * exportProgress / 100)}
-              total={exportStems.length}
+              current={exportProgress.current}
+              total={exportProgress.total || exportStems.length}
+              overallPercent={exportProgress.percent}
               stageLabel={t('common.stage')}
             />
           </div>
