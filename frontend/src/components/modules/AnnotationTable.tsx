@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
+import { getAnnotationBounds } from '../../lib/annotationHitTest';
 import {
   findAnnotationOverlaps,
   getAnnotationOverlapKey,
@@ -33,6 +34,8 @@ interface AnnotationTableRow {
   sceneObjectIndex: number;
   attributesText: string;
   contentText: string;
+  boxWidth: number | null;
+  boxHeight: number | null;
 }
 
 const formatAttributeValue = (value: string | number | boolean) => {
@@ -51,6 +54,11 @@ const formatContent = (annotation: Annotation) => {
   }
   content.push(`${annotation.points?.length || 0} points`);
   return content.join(' · ');
+};
+
+const formatBoxDimension = (value: number | null) => {
+  if (value === null || !Number.isFinite(value)) return '—';
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.00$/, '');
 };
 
 const cloneAnnotations = (source: Annotation[]) => source.map((annotation) => ({
@@ -112,12 +120,15 @@ export const AnnotationTable = React.memo(function AnnotationTable({
           .map(([name, value]) => `${name}=${formatAttributeValue(value)}`)
           .join(' · ')
         : '—';
+      const bounds = getAnnotationBounds(annotation);
 
       return {
         annotation,
         sceneObjectIndex,
         attributesText,
         contentText: formatContent(annotation),
+        boxWidth: bounds ? Math.max(0, bounds.maxX - bounds.minX) : null,
+        boxHeight: bounds ? Math.max(0, bounds.maxY - bounds.minY) : null,
       };
     });
   }, [loadedAnnotations]);
@@ -487,13 +498,15 @@ export const AnnotationTable = React.memo(function AnnotationTable({
           </div>
         ) : (
           <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
-            <table className="w-full min-w-[980px] border-collapse text-xs">
+            <table className="w-full min-w-[1120px] border-collapse text-xs">
               <thead className="sticky top-0 z-10 bg-neutral-50 dark:bg-neutral-800/95 text-[10px] uppercase tracking-wider text-neutral-500">
                 <tr>
                   <th className="w-10 px-3 py-3 text-left font-black">#</th>
                   <th className="w-52 px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationId', 'Annotation ID')}</th>
                   <th className="w-44 px-3 py-3 text-left font-black">{t('taxonomyDashboard.className', 'Class')}</th>
                   <th className="w-28 px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationType', 'Type')}</th>
+                  <th className="w-24 px-3 py-3 text-right font-black" title={t('taxonomyDashboard.boxWidth', 'Box width')}>{t('taxonomyDashboard.boxWidthShort', 'Box W')}</th>
+                  <th className="w-24 px-3 py-3 text-right font-black" title={t('taxonomyDashboard.boxHeight', 'Box height')}>{t('taxonomyDashboard.boxHeightShort', 'Box H')}</th>
                   <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationContent', 'Annotation Content')}</th>
                   <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationAttributes', 'Attributes')}</th>
                   <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.sceneGroup', 'Scene Group')}</th>
@@ -537,6 +550,12 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                         <span className="rounded bg-neutral-100 dark:bg-neutral-800 px-2 py-1 text-[10px] font-mono text-neutral-600 dark:text-neutral-300">
                           {row.annotation.type}
                         </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={t('taxonomyDashboard.boxWidth', 'Box width')}>
+                        {formatBoxDimension(row.boxWidth)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={t('taxonomyDashboard.boxHeight', 'Box height')}>
+                        {formatBoxDimension(row.boxHeight)}
                       </td>
                       <td className="px-3 py-2.5 text-neutral-600 dark:text-neutral-400 max-w-[260px] truncate" title={row.contentText}>
                         {row.contentText}
