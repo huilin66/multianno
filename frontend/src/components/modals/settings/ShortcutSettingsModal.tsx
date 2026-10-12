@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 
 import { useToolNames } from '../../../hooks/useToolNames';
 import { useStore } from '../../../store/useStore';
+import type { ShortcutBinding, ShortcutSetting } from '../../../store/useStore';
+import { areShortcutsEqual, getShortcutBindings, normalizeShortcutKey } from '../../../lib/shortcuts';
 import { Button } from '../../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../ui/dialog';
 
@@ -25,16 +27,9 @@ export const KEY_LABELS: Record<string, string> = {
   'pagedown': 'Page Down',
 };
 
-type ShortcutSetting = { key: string; ctrl?: boolean; shift?: boolean };
 type ShortcutGroup = { label: string; items: [string, ShortcutSetting][] };
 
-const normalizeShortcutKey = (key: string) => {
-  const normalizedKey = key.toLowerCase();
-  if (normalizedKey === ' ' || normalizedKey === 'spacebar') return 'space';
-  return normalizedKey;
-};
-
-const getShortcutParts = (setting?: ShortcutSetting) => {
+const getShortcutParts = (setting?: ShortcutBinding) => {
   if (!setting?.key) return [];
   const normalizedKey = normalizeShortcutKey(setting.key);
   const key = KEY_LABELS[normalizedKey] || setting.key.toUpperCase();
@@ -56,41 +51,70 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
   const updateShortcutSettings = useStore((s) => s.updateShortcutSettings);
   const resetShortcutSettings = useStore((s) => s.resetShortcutSettings);
   
-  const [recordingTool, setRecordingTool] = useState<string | null>(null);
+  const [recordingTarget, setRecordingTarget] = useState<{ tool: string; slot: 'primary' | 'secondary' } | null>(null);
+  const [conflictMessage, setConflictMessage] = useState<string | null>(null);
   const toolNames = useToolNames();
   const recordingRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (recordingTool && recordingRef.current) {
+    if (recordingTarget && recordingRef.current) {
       const timeoutId = setTimeout(() => {
         recordingRef.current?.focus();
       }, 10);
       return () => clearTimeout(timeoutId);
     }
-  }, [recordingTool]);
+  }, [recordingTarget]);
 
-  const handleKeyDown = (e: KeyboardEvent<HTMLButtonElement>, tool: string) => {
+  const handleKeyDown = (
+    e: KeyboardEvent<HTMLButtonElement>,
+    tool: string,
+    slot: 'primary' | 'secondary',
+  ) => {
     e.preventDefault();
     e.stopPropagation();
     if (e.key === 'Escape') {
-      setRecordingTool(null);
+      setRecordingTarget(null);
       return;
     }
     if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) {
       return;
     }
-    updateShortcutSettings(tool, {
+    const nextBinding: ShortcutBinding = {
       key: normalizeShortcutKey(e.key),
       ctrl: e.ctrlKey || e.metaKey,
       shift: e.shiftKey,
-    });
-    setRecordingTool(null);
+    };
+    const currentSetting = shortcutsSettings[tool] || { key: '' };
+    const conflictTool = Object.entries(shortcutsSettings).find(([otherTool, otherSetting]) => {
+      if (otherSetting?.key === '__separator__') return false;
+
+      return getShortcutBindings(otherSetting).some((binding) => {
+        const isCurrentSlot = otherTool === tool
+          && ((slot === 'primary' && binding === currentSetting)
+            || (slot === 'secondary' && binding === currentSetting.secondary));
+        return !isCurrentSlot && areShortcutsEqual(binding, nextBinding);
+      });
+    })?.[0];
+
+    if (conflictTool) {
+      setConflictMessage(t('shortcuts.conflict', {
+        action: toolNames[conflictTool] || conflictTool,
+      }));
+      return;
+    }
+
+    updateShortcutSettings(tool, slot === 'primary'
+      ? { ...currentSetting, ...nextBinding }
+      : { ...currentSetting, secondary: nextBinding });
+    setConflictMessage(null);
+    setRecordingTarget(null);
   };
 
   const handleReset = () => {
     if (resetShortcutSettings) {
       resetShortcutSettings();
-      setRecordingTool(null);
+      setRecordingTarget(null);
+      setConflictMessage(null);
     }
   };
 
@@ -123,7 +147,13 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
   });
   appendCurrentGroup();
 
-  const shortcutCount = groups.reduce((count, group) => count + group.items.length, 0);
+  const shortcutCount = groups.reduce(
+    (count, group) => count + group.items.reduce(
+      (itemCount, [, setting]) => itemCount + 1 + (setting.secondary?.key ? 1 : 0),
+      0,
+    ),
+    0,
+  );
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -160,9 +190,7 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
                 </div>
 
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {group.items.map(([tool, setting]) => {
-                    const shortcutParts = getShortcutParts(setting);
-                    return (
+                  {group.items.map(([tool, setting]) => (
                       <div
                         key={tool}
                         className="flex min-h-[52px] items-center justify-between gap-3 rounded-lg border border-border/70 bg-background/70 px-3 py-2 transition-colors hover:border-primary/30 hover:bg-primary/[0.02]"
@@ -174,46 +202,60 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
                           {toolNames[tool] || tool}
                         </span>
 
-                        {recordingTool === tool ? (
-                          <button
-                            type="button"
-                            ref={recordingRef}
-                            className="flex h-8 min-w-[116px] shrink-0 cursor-default items-center justify-center rounded-lg bg-primary/10 px-3 text-center text-[10px] font-bold text-primary outline-none ring-2 ring-primary animate-pulse"
-                            tabIndex={0}
-                            onKeyDown={(e) => handleKeyDown(e, tool)}
-                            onBlur={() => setRecordingTool(null)}
-                            aria-label={t('shortcuts.pressKey')}
-                          >
-                            {t('shortcuts.pressKey')}
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setRecordingTool(tool)}
-                            className="group/key flex h-8 min-w-[116px] shrink-0 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-xs font-bold shadow-sm transition-colors hover:border-primary hover:text-primary"
-                            title={t('shortcuts.editHint')}
-                            aria-label={`${toolNames[tool] || tool}: ${shortcutParts.join(' + ')}`}
-                          >
-                            {shortcutParts.length > 0 ? (
-                              <span className="inline-flex items-center gap-1">
-                                {shortcutParts.map((part, index) => (
-                                  <span key={`${tool}-${part}-${index}`} className="inline-flex items-center gap-1">
-                                    {index > 0 && <span className="text-[10px] text-muted-foreground/60">+</span>}
-                                    <kbd className="min-w-[20px] rounded-md border border-border/80 bg-muted px-1.5 py-0.5 text-[10px] leading-none text-foreground group-hover/key:border-primary/30 group-hover/key:bg-primary/10">
-                                      {part}
-                                    </kbd>
-                                  </span>
-                                ))}
-                              </span>
+                        <div className="flex min-w-0 shrink-0 items-center gap-1">
+                          {(['primary', 'secondary'] as const).map((slot) => {
+                            const binding = slot === 'primary' ? setting : setting.secondary;
+                            const shortcutParts = getShortcutParts(binding);
+                            const isRecording = recordingTarget?.tool === tool && recordingTarget.slot === slot;
+                            const slotLabel = t(slot === 'primary' ? 'shortcuts.primary' : 'shortcuts.secondary');
+
+                            return isRecording ? (
+                              <button
+                                key={`${tool}-${slot}`}
+                                type="button"
+                                ref={recordingRef}
+                                className="flex h-8 min-w-[76px] shrink-0 cursor-default items-center justify-center rounded-lg bg-primary/10 px-2 text-center text-[10px] font-bold text-primary outline-none ring-2 ring-primary animate-pulse"
+                                tabIndex={0}
+                                onKeyDown={(e) => handleKeyDown(e, tool, slot)}
+                                onBlur={() => setRecordingTarget(null)}
+                                aria-label={`${slotLabel}: ${t('shortcuts.pressKey')}`}
+                              >
+                                {t('shortcuts.pressKey')}
+                              </button>
                             ) : (
-                              <span className="text-[10px] text-muted-foreground">—</span>
-                            )}
-                            <Pencil className="ml-0.5 h-3 w-3 text-muted-foreground/60 transition-colors group-hover/key:text-primary" aria-hidden="true" />
-                          </button>
-                        )}
+                              <button
+                                key={`${tool}-${slot}`}
+                                type="button"
+                                onClick={() => {
+                                  setConflictMessage(null);
+                                  setRecordingTarget({ tool, slot });
+                                }}
+                                className="group/key flex h-8 min-w-[58px] shrink-0 items-center justify-center gap-1 rounded-lg border border-border bg-background px-1.5 text-xs font-bold shadow-sm transition-colors hover:border-primary hover:text-primary"
+                                title={`${slotLabel} · ${t('shortcuts.editHint')}`}
+                                aria-label={`${toolNames[tool] || tool} · ${slotLabel}: ${shortcutParts.join(' + ') || '—'}`}
+                              >
+                                {shortcutParts.length > 0 ? (
+                                  <span className="inline-flex items-center gap-0.5">
+                                    {shortcutParts.map((part, index) => (
+                                      <span key={`${tool}-${slot}-${part}-${index}`} className="inline-flex items-center gap-0.5">
+                                        {index > 0 && <span className="text-[9px] text-muted-foreground/60">+</span>}
+                                        <kbd className="min-w-[18px] rounded-md border border-border/80 bg-muted px-1 py-0.5 text-[9px] leading-none text-foreground group-hover/key:border-primary/30 group-hover/key:bg-primary/10">
+                                          {part}
+                                        </kbd>
+                                      </span>
+                                    ))}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-muted-foreground">—</span>
+                                )}
+                                <Pencil className="ml-0.5 h-2.5 w-2.5 text-muted-foreground/60 transition-colors group-hover/key:text-primary" aria-hidden="true" />
+                              </button>
+                            );
+                          })}
+                          <span className="px-0.5 text-[9px] text-muted-foreground/60">{t('shortcuts.alternative')}</span>
+                        </div>
                       </div>
-                    );
-                  })}
+                  ))}
                 </div>
               </section>
             ))}
@@ -223,7 +265,10 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
         <div className="flex shrink-0 flex-col gap-3 border-t border-border px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
             <Keyboard className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <span className="truncate">{t('shortcuts.pressCombineKey')}</span>
+            <div className="min-w-0">
+              <span className="block truncate">{t('shortcuts.pressCombineKey')}</span>
+              {conflictMessage && <span className="block truncate text-destructive" role="alert">{conflictMessage}</span>}
+            </div>
           </div>
           <div className="flex shrink-0 items-center justify-end gap-2">
             <Button variant="outline" size="sm" onClick={handleReset} title={t('shortcuts.resetHint')}>

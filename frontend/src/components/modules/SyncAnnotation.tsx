@@ -26,6 +26,7 @@ import { showDialog } from '../../store/useDialogStore';
 import { toast } from '../../store/useToastStore';
 import { TrackIdAnnotationModal } from '../modals/TrackIdAnnotationModal';
 import { findAnnotationIdsAtPoint } from '../../lib/annotationHitTest';
+import { getShortcutBindings, shortcutMatchesEvent } from '../../lib/shortcuts';
 
 export interface SAMPoint {
   x: number;
@@ -124,6 +125,7 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
     if (event.key === 'End') nextWidth = RIGHT_PANEL_MAX_WIDTH;
     if (nextWidth === null) return;
     event.preventDefault();
+    event.stopPropagation();
     setRightPanelWidth(clampRightPanelWidth(nextWidth));
   }, [rightPanelOpen, rightPanelWidth]);
 
@@ -612,6 +614,10 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
       }
 
             
+      // Other dialogs own their keyboard controls. Keep the workspace shortcuts
+      // from changing the scene underneath them.
+      if (target.closest('[role="dialog"]')) return;
+
       // 安全锁 2：绘制中不切换
       if (isDrawing) return;
 
@@ -642,13 +648,7 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
         const setting = shortcutsSettings[tool];
         if (!setting) return false;
         
-        const keyMatch = setting.key === 'space' 
-          ? (e.key === ' ' || e.key === 'Spacebar')
-          : e.key.toLowerCase() === setting.key.toLowerCase();
-        const shiftMatch = setting.shift ? e.shiftKey : !e.shiftKey;
-        const ctrlMatch = setting.ctrl ? (e.ctrlKey || e.metaKey) : !e.ctrlKey && !e.metaKey;
-        
-        return keyMatch && shiftMatch && ctrlMatch;
+        return getShortcutBindings(setting).some((binding) => shortcutMatchesEvent(binding, e));
       });
 
       if (!matchedTool) return;

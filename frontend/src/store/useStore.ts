@@ -197,7 +197,17 @@ export interface EditorSettings {
   gridLayout: { rows: number; cols: number };
 }
 
-export const DEFAULT_SHORTCUTS_SETTINGS = {
+export interface ShortcutBinding {
+  key: string;
+  shift?: boolean;
+  ctrl?: boolean;
+}
+
+export interface ShortcutSetting extends ShortcutBinding {
+  secondary?: ShortcutBinding;
+}
+
+export const DEFAULT_SHORTCUTS_SETTINGS: Record<string, ShortcutSetting> = {
   bbox: {key:'r'},
   polygon: {key:'p'},
   ai_anno: {key:'i'},
@@ -220,8 +230,8 @@ export const DEFAULT_SHORTCUTS_SETTINGS = {
   _sep3: {key: '__separator__'} as any,
 
   home: {key:'space'},
-  prev: {key:'a'},
-  next: {key:'d'},
+  prev: {key:'a', secondary: { key: 'arrowleft' }},
+  next: {key:'d', secondary: { key: 'arrowright' }},
   _sep4: {key: '__separator__'} as any,
   undo: {key:'z', ctrl: true},
   redo: {key:'y', ctrl: true},
@@ -270,7 +280,7 @@ export interface AppState {
   theme: 'dark' | 'light';
   language: 'en' | 'zh';
   editorSettings: EditorSettings;
-  shortcutsSettings: Record<string, { key: string; shift?: boolean; ctrl?: boolean }>;
+  shortcutsSettings: Record<string, ShortcutSetting>;
   aiSettings: {
       model: string;
       modelPath: string;
@@ -366,7 +376,7 @@ export interface AppState {
   setTheme: (theme: 'dark' | 'light') => void;
   setLanguage: (lang: 'en' | 'zh') => void;
   updateEditorSettings: (settings: Partial<EditorSettings>) => void;
-  updateShortcutSettings: (tool: string, settings: { key: string; shift?: boolean; ctrl?: boolean }) => void;
+  updateShortcutSettings: (tool: string, settings: ShortcutSetting) => void;
   resetShortcutSettings: () => void;
   setAISettings: (settings: Partial<AppState['aiSettings']>) => void;
   setTrackIdReIDSettings: (settings: Partial<AppState['trackIdReIDSettings']>) => void;
@@ -1027,6 +1037,21 @@ export const useStore = create<AppState>()(
         const persistedEditorSettings = (persisted.editorSettings || {}) as Partial<EditorSettings>;
         const persistedAISettings = (persisted.aiSettings || {}) as Partial<AppState['aiSettings']>;
         const persistedTrackIdReIDSettings = (persisted.trackIdReIDSettings || {}) as Partial<AppState['trackIdReIDSettings']>;
+        const persistedShortcutSettings = persisted.shortcutsSettings || {};
+        const mergedShortcutSettings: Record<string, ShortcutSetting> = {
+          ...currentState.shortcutsSettings,
+          ...persistedShortcutSettings,
+        };
+        Object.entries(currentState.shortcutsSettings).forEach(([tool, defaultSetting]) => {
+          const persistedSetting = persistedShortcutSettings[tool];
+          if (defaultSetting.secondary && persistedSetting && !persistedSetting.secondary) {
+            mergedShortcutSettings[tool] = {
+              ...defaultSetting,
+              ...persistedSetting,
+              secondary: defaultSetting.secondary,
+            };
+          }
+        });
         const hasConfiguredAIEnv = Boolean(AI_ENV_DEFAULTS.modelPath);
 
         return {
@@ -1035,6 +1060,7 @@ export const useStore = create<AppState>()(
           stems: Array.isArray(persisted.stems)
             ? [...persisted.stems].sort(naturalStringCompare)
             : currentState.stems,
+          shortcutsSettings: mergedShortcutSettings,
           editorSettings: {
             ...currentState.editorSettings,
             ...persistedEditorSettings,
