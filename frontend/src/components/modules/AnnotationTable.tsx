@@ -10,11 +10,19 @@ import {
   getAnnotationOverlapKey,
 } from '../../lib/annotationOverlap';
 
+export interface AnnotationTableOverlapState {
+  active: boolean;
+  mode: 'iou' | 'ios';
+  threshold: number;
+}
+
 interface AnnotationTableProps {
   annotations: Annotation[];
   taxonomyClasses: TaxonomyClass[];
   taxonomyAttributes: TaxonomyAttribute[];
   onOpenAnnotation: (annotation: Annotation, sceneObjectIndex: number) => void;
+  overlapState?: AnnotationTableOverlapState;
+  onOverlapStateChange?: (state: AnnotationTableOverlapState) => void;
 }
 
 interface AnnotationTableRow {
@@ -47,6 +55,8 @@ export function AnnotationTable({
   taxonomyClasses,
   taxonomyAttributes,
   onOpenAnnotation,
+  overlapState,
+  onOverlapStateChange,
 }: AnnotationTableProps) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
@@ -58,13 +68,7 @@ export function AnnotationTable({
   const [overlapKeys, setOverlapKeys] = useState<Set<string> | null>(null);
   const [overlapCounts, setOverlapCounts] = useState<Map<string, number>>(new Map());
   const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
-
-  useEffect(() => {
-    // Annotation changes invalidate a previous global scan. Do not leave a
-    // stale result active after an object is edited or deleted.
-    setOverlapKeys(null);
-    setOverlapCounts(new Map());
-  }, [annotations]);
+  const overlapScanRequestRef = React.useRef(0);
 
   const rows = useMemo<AnnotationTableRow[]>(() => {
     const sceneObjectCounts = new Map<string, number>();
@@ -137,25 +141,63 @@ export function AnnotationTable({
     [overlapKeys, rows],
   );
 
-  const scanOverlaps = () => {
+  const scanOverlaps = React.useCallback((mode: 'iou' | 'ios', threshold: number) => {
+    const requestId = overlapScanRequestRef.current + 1;
+    overlapScanRequestRef.current = requestId;
     setIsScanningOverlaps(true);
 
     // Yield once so the table can render the scanning state before a large
     // project-wide pair scan begins.
     window.setTimeout(() => {
-      const result = findAnnotationOverlaps(annotations, overlapMode, overlapThreshold);
+      if (requestId !== overlapScanRequestRef.current) return;
+
+      const result = findAnnotationOverlaps(annotations, mode, threshold);
       setOverlapKeys(result.matchedKeys);
       setOverlapCounts(result.overlapCounts);
       setIsScanningOverlaps(false);
+      onOverlapStateChange?.({ active: true, mode, threshold });
     }, 0);
+  }, [annotations, onOverlapStateChange]);
+
+  // Keep the last completed scan active when the table is remounted. When the
+  // user deleted objects in the workspace, scan again with the saved criteria
+  // so the reopened result reflects the current annotations.
+  useEffect(() => {
+    const savedMode = overlapState?.mode || 'ios';
+    const savedThreshold = Math.max(10, Math.min(100, overlapState?.threshold ?? 80));
+
+    setOverlapMode(savedMode);
+    setOverlapThreshold(savedThreshold);
+
+    if (overlapState?.active) {
+      setOverlapPanelOpen(true);
+      scanOverlaps(savedMode, savedThreshold);
+      return;
+    }
+
+    overlapScanRequestRef.current += 1;
+    setOverlapKeys(null);
+    setOverlapCounts(new Map());
+    setIsScanningOverlaps(false);
+  }, [annotations, overlapState?.active, overlapState?.mode, overlapState?.threshold, scanOverlaps]);
+
+  const resetOverlapScan = () => {
+    overlapScanRequestRef.current += 1;
+    setOverlapKeys(null);
+    setOverlapCounts(new Map());
+    setIsScanningOverlaps(false);
+    onOverlapStateChange?.({
+      active: false,
+      mode: overlapMode,
+      threshold: overlapThreshold,
+    });
   };
 
   const clearFilters = () => {
     setQuery('');
     setClassFilter('all');
     setTypeFilter('all');
-    setOverlapKeys(null);
-    setOverlapCounts(new Map());
+    resetOverlapScan();
   };
 
   return (
@@ -290,7 +332,7 @@ export function AnnotationTable({
                 <Button
                   type="button"
                   className="h-8 text-xs font-bold"
-                  onClick={scanOverlaps}
+                  onClick={() => scanOverlaps(overlapMode, overlapThreshold)}
                   disabled={isScanningOverlaps}
                 >
                   <Copy className="mr-1.5 h-3.5 w-3.5" />
@@ -303,10 +345,7 @@ export function AnnotationTable({
                     type="button"
                     variant="outline"
                     className="h-8 text-xs"
-                    onClick={() => {
-                      setOverlapKeys(null);
-                      setOverlapCounts(new Map());
-                    }}
+                    onClick={resetOverlapScan}
                   >
                     {t('rightPanel.nmsReset', 'Reset')}
                   </Button>

@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
 import type { Annotation } from '../../store/useStore';
-import { AnnotationTable } from './AnnotationTable';
+import { AnnotationTable, type AnnotationTableOverlapState } from './AnnotationTable';
 import { 
   Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
   Plus, Check, X, Loader2, AlertCircle, Upload, Database, Activity,
@@ -26,6 +26,7 @@ type TaxonomyDashboardTab = 'overview' | 'annotationTable' | 'classes' | 'attrib
 
 interface TaxonomyDashboardViewState {
   activeTab?: TaxonomyDashboardTab;
+  annotationTableOverlap?: AnnotationTableOverlapState;
   selectedClassId?: string | null;
   selectedAttributeId?: string | null;
   selectedAttributeValue?: string | null;
@@ -907,6 +908,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const restoredAttributeIdRef = useRef<string | null>(null);
   const latestViewStateRef = useRef<TaxonomyDashboardViewState | null>(null);
   const [activeTab, setActiveTab] = useState<TaxonomyDashboardTab>('overview');
+  const [annotationTableOverlap, setAnnotationTableOverlap] = useState<AnnotationTableOverlapState>({
+    active: false,
+    mode: 'ios',
+    threshold: 80,
+  });
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
   const [selectedAttributeValue, setSelectedAttributeValue] = useState<string | null>(null);
@@ -957,6 +963,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   // browsing position even when React effects have not run yet.
   latestViewStateRef.current = {
     activeTab,
+    annotationTableOverlap,
     selectedClassId,
     selectedAttributeId,
     selectedAttributeValue: selectedAttributeValue ?? restoredAttributeValueRef.current,
@@ -976,6 +983,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     const saved = readTaxonomyViewState(taxonomyViewStateKey);
 
     setActiveTab(isTaxonomyDashboardTab(saved?.activeTab) ? saved.activeTab : 'overview');
+    const savedOverlap = saved?.annotationTableOverlap;
+    setAnnotationTableOverlap({
+      active: savedOverlap?.active === true,
+      mode: savedOverlap?.mode === 'iou' ? 'iou' : 'ios',
+      threshold: typeof savedOverlap?.threshold === 'number'
+        ? Math.max(10, Math.min(100, savedOverlap.threshold))
+        : 80,
+    });
     setSelectedClassId(typeof saved?.selectedClassId === 'string' ? saved.selectedClassId : null);
     const selectedAttributeId = typeof saved?.selectedAttributeId === 'string' ? saved.selectedAttributeId : null;
     const selectedAttributeValue = normalizeAttributeValue(saved?.selectedAttributeValue);
@@ -1007,6 +1022,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
     const viewState: TaxonomyDashboardViewState = {
       activeTab,
+      annotationTableOverlap,
       selectedClassId,
       selectedAttributeId,
       selectedAttributeValue: selectedAttributeValue ?? restoredAttributeValueRef.current,
@@ -1033,6 +1049,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     }
   }, [
     activeTab,
+    annotationTableOverlap,
     expanded.attributes,
     expanded.classes,
     expanded.taxonomy,
@@ -2800,6 +2817,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             taxonomyClasses={taxonomyClasses}
             taxonomyAttributes={taxonomyAttributes}
             onOpenAnnotation={handleOpenAnnotationFromTable}
+            overlapState={annotationTableOverlap}
+            onOverlapStateChange={setAnnotationTableOverlap}
           />
         )}
 
