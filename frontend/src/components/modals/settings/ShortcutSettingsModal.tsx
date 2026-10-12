@@ -189,7 +189,7 @@ export function ShortcutSettingsModal({ open, onClose }: ShortcutSettingsModalPr
                   </span>
                 </div>
 
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <div className="mt-3 grid gap-2">
                   {group.items.map(([tool, setting]) => (
                       <div
                         key={tool}
