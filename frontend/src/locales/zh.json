@@ -1184,6 +1184,7 @@
     "noOverlaps": "未发现重叠对象。",
     "scanningOverlaps": "扫描中…",
     "overlapScanResult": "{{scenes}} 个场景中有 {{objects}} 个重叠对象",
+    "overlapGroup": "重叠组",
     "overlapCount": "重叠数",
     "scenes": "场景",
     "classes": "类别",

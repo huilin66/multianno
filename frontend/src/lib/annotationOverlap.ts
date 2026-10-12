@@ -10,6 +10,7 @@ export interface AnnotationOverlapBounds extends AnnotationBounds {
 export interface AnnotationOverlapResult {
   matchedKeys: Set<string>;
   overlapCounts: Map<string, number>;
+  overlapGroups: Map<string, string>;
 }
 
 /**
@@ -93,8 +94,13 @@ export const findAnnotationOverlaps = (
 
   const matchedKeys = new Set<string>();
   const overlapCounts = new Map<string, number>();
+  const overlapGroups = new Map<string, string>();
+  let groupCount = 0;
 
   candidatesByStem.forEach((candidates) => {
+    const adjacency = new Map<string, Set<string>>();
+    candidates.forEach((candidate) => adjacency.set(candidate.key, new Set<string>()));
+
     for (let firstIndex = 0; firstIndex < candidates.length; firstIndex += 1) {
       const first = candidates[firstIndex];
       for (let secondIndex = firstIndex + 1; secondIndex < candidates.length; secondIndex += 1) {
@@ -117,9 +123,34 @@ export const findAnnotationOverlaps = (
         matchedKeys.add(second.key);
         overlapCounts.set(first.key, (overlapCounts.get(first.key) || 0) + 1);
         overlapCounts.set(second.key, (overlapCounts.get(second.key) || 0) + 1);
+        adjacency.get(first.key)?.add(second.key);
+        adjacency.get(second.key)?.add(first.key);
       }
     }
+
+    // Give each connected component one group id. This keeps transitive
+    // duplicates together: A overlaps B and B overlaps C means A/B/C are
+    // shown as one linked overlap group.
+    const visited = new Set<string>();
+    candidates.forEach((candidate) => {
+      if (visited.has(candidate.key) || !adjacency.get(candidate.key)?.size) return;
+
+      groupCount += 1;
+      const groupName = `OP_${groupCount}`;
+      const queue = [candidate.key];
+      visited.add(candidate.key);
+
+      while (queue.length > 0) {
+        const currentKey = queue.shift()!;
+        overlapGroups.set(currentKey, groupName);
+        adjacency.get(currentKey)?.forEach((neighborKey) => {
+          if (visited.has(neighborKey)) return;
+          visited.add(neighborKey);
+          queue.push(neighborKey);
+        });
+      }
+    });
   });
 
-  return { matchedKeys, overlapCounts };
+  return { matchedKeys, overlapCounts, overlapGroups };
 };

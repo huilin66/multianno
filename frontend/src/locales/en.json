@@ -1184,6 +1184,7 @@
     "noOverlaps": "No overlapping objects found.",
     "scanningOverlaps": "Scanning...",
     "overlapScanResult": "{{objects}} overlapping objects in {{scenes}} scenes",
+    "overlapGroup": "Overlap group",
     "overlapCount": "Overlaps",
     "scenes": "scenes",
     "classes": "classes",

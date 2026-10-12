@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Copy, ExternalLink, Filter, Search, X } from 'lucide-react';
+import { Copy, ExternalLink, Filter, Link2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, TaxonomyAttribute, TaxonomyClass } from '../../store/useStore';
 import { Button } from '../ui/button';
@@ -67,6 +67,7 @@ export function AnnotationTable({
   const [overlapThreshold, setOverlapThreshold] = useState(80);
   const [overlapKeys, setOverlapKeys] = useState<Set<string> | null>(null);
   const [overlapCounts, setOverlapCounts] = useState<Map<string, number>>(new Map());
+  const [overlapGroups, setOverlapGroups] = useState<Map<string, string>>(new Map());
   const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
   const overlapScanRequestRef = React.useRef(0);
 
@@ -154,6 +155,7 @@ export function AnnotationTable({
       const result = findAnnotationOverlaps(annotations, mode, threshold);
       setOverlapKeys(result.matchedKeys);
       setOverlapCounts(result.overlapCounts);
+      setOverlapGroups(result.overlapGroups);
       setIsScanningOverlaps(false);
       onOverlapStateChange?.({ active: true, mode, threshold });
     }, 0);
@@ -178,6 +180,7 @@ export function AnnotationTable({
     overlapScanRequestRef.current += 1;
     setOverlapKeys(null);
     setOverlapCounts(new Map());
+    setOverlapGroups(new Map());
     setIsScanningOverlaps(false);
   }, [annotations, overlapState?.active, overlapState?.mode, overlapState?.threshold, scanOverlaps]);
 
@@ -185,6 +188,7 @@ export function AnnotationTable({
     overlapScanRequestRef.current += 1;
     setOverlapKeys(null);
     setOverlapCounts(new Map());
+    setOverlapGroups(new Map());
     setIsScanningOverlaps(false);
     onOverlapStateChange?.({
       active: false,
@@ -199,6 +203,18 @@ export function AnnotationTable({
     setTypeFilter('all');
     resetOverlapScan();
   };
+
+  const displayRows = useMemo(() => {
+    if (overlapKeys === null) return filteredRows;
+
+    return [...filteredRows].sort((first, second) => {
+      const firstGroup = overlapGroups.get(getAnnotationOverlapKey(first.annotation)) || '';
+      const secondGroup = overlapGroups.get(getAnnotationOverlapKey(second.annotation)) || '';
+      return firstGroup.localeCompare(secondGroup, undefined, { numeric: true })
+        || first.annotation.stem.localeCompare(second.annotation.stem)
+        || first.annotation.id.localeCompare(second.annotation.id);
+    });
+  }, [filteredRows, overlapGroups, overlapKeys]);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
@@ -395,13 +411,13 @@ export function AnnotationTable({
                   <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationAttributes', 'Attributes')}</th>
                   <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.sceneGroup', 'Scene Group')}</th>
                   {overlapKeys !== null && (
-                    <th className="w-24 px-3 py-3 text-left font-black">{t('taxonomyDashboard.overlapCount', 'Overlaps')}</th>
+                    <th className="w-40 px-3 py-3 text-left font-black">{t('taxonomyDashboard.overlapGroup', 'Overlap group')}</th>
                   )}
                   <th className="w-12 px-3 py-3" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
-                {filteredRows.map((row, index) => {
+                {displayRows.map((row, index) => {
                   const classDefinition = taxonomyClasses.find((taxonomyClass) => taxonomyClass.name === row.annotation.label);
                   const knownAttributeCount = Object.keys(row.annotation.attributes || {})
                     .filter((name) => taxonomyAttributeNames.has(name)).length;
@@ -445,8 +461,12 @@ export function AnnotationTable({
                       </td>
                       {overlapKeys !== null && (
                         <td className="px-3 py-2.5">
-                          <span className="inline-flex min-w-7 items-center justify-center rounded-full bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 dark:bg-red-950/40 dark:text-red-300">
-                            {overlapCounts.get(getAnnotationOverlapKey(row.annotation)) || 0}
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
+                            <Link2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                            <span className="font-mono">{overlapGroups.get(getAnnotationOverlapKey(row.annotation)) || '—'}</span>
+                            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] dark:bg-red-900/50">
+                              {overlapCounts.get(getAnnotationOverlapKey(row.annotation)) || 0}
+                            </span>
                           </span>
                         </td>
                       )}
