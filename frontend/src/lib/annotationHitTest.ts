@@ -126,6 +126,92 @@ const isWithinBounds = (x: number, y: number, points: AnnotationPoint[]) => {
   );
 };
 
+export interface AnnotationBounds {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}
+
+const getGeometryPoints = (annotation: any): AnnotationPoint[] => {
+  const points = getPoints(annotation);
+  if (points.length === 0) return [];
+
+  let geometryPoints = points;
+  if (annotation.type === 'oriented_bbox' || annotation.type === 'rbbox') {
+    geometryPoints = getRotatedBoxPoints(points);
+  } else if (annotation.type === 'cuboid') {
+    geometryPoints = getCuboidFaces(points).flat();
+  }
+
+  const holes = Array.isArray(annotation.holes)
+    ? annotation.holes.flatMap((hole: any) => (Array.isArray(hole) ? hole.filter(isPoint) : []))
+    : [];
+  return [...geometryPoints, ...holes];
+};
+
+export const getAnnotationBounds = (annotation: any): AnnotationBounds | null => {
+  const points = getGeometryPoints(annotation);
+  if (points.length === 0) return null;
+
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+};
+
+/**
+ * Select objects whose geometry envelope intersects the drag rectangle.
+ * The envelope rule keeps selection predictable for every supported shape,
+ * including lines, points, cuboids, and annotations with holes.
+ */
+export const annotationIntersectsRect = (
+  annotation: any,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+) => {
+  const bounds = getAnnotationBounds(annotation);
+  if (!bounds) return false;
+
+  const minX = Math.min(x1, x2);
+  const minY = Math.min(y1, y2);
+  const maxX = Math.max(x1, x2);
+  const maxY = Math.max(y1, y2);
+  return (
+    bounds.maxX >= minX
+    && bounds.minX <= maxX
+    && bounds.maxY >= minY
+    && bounds.minY <= maxY
+  );
+};
+
+export const findAnnotationIdsInRect = (
+  annotations: any[],
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  options: Pick<HitTestOptions, 'hiddenClasses' | 'hiddenAnnotations'> = {},
+) => {
+  const hiddenClasses = new Set(options.hiddenClasses || []);
+  const hiddenAnnotations = new Set(Array.from(options.hiddenAnnotations || [], (id) => String(id)));
+
+  return annotations
+    .filter((annotation) => (
+      annotation
+      && !hiddenClasses.has(annotation.label)
+      && !hiddenAnnotations.has(String(annotation.id))
+      && annotationIntersectsRect(annotation, x1, y1, x2, y2)
+    ))
+    .map((annotation) => String(annotation.id));
+};
+
 /**
  * Use the same geometry hit rules in the main canvas and the Track ID canvas.
  * The drawing editor intentionally treats ellipse/circle as their editable

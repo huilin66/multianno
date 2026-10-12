@@ -13,6 +13,8 @@ export interface RenderParams {
   theme: 'dark' | 'light';
   annotations: any[];
   activeAnnotationId: string | null;
+  selectedAnnotationIds?: string[];
+  selectionBox?: { startX: number; startY: number; endX: number; endY: number; viewId?: string } | null;
   taxonomyClasses: any[];
   taxonomyAttributes?: any[];
   currentPoints: { x: number, y: number }[];
@@ -264,6 +266,7 @@ function drawSavedObjects(params: RenderParams, colors: any) {
     ctx,
     annotations,
     activeAnnotationId,
+    selectedAnnotationIds,
     taxonomyClasses,
     taxonomyAttributes,
     tool,
@@ -292,10 +295,12 @@ function drawSavedObjects(params: RenderParams, colors: any) {
     const clsDef = taxonomyClasses?.find((c: any) => c.name === ann.label);
     const baseColor = clsDef?.color || colors.annoDoneStroke;
     const isActive = ann.id === activeAnnotationId;
+    const isSelected = selectedAnnotationIds?.includes(String(ann.id)) || false;
+    const isHighlighted = isActive || isSelected;
     
-    ctx.strokeStyle = isActive ? '#FFFFFF' : baseColor;
-    ctx.lineWidth = (isActive ? 4 : 2) / viewport.zoom;
-    ctx.fillStyle = isActive ? `${baseColor}60` : `${baseColor}30`; 
+    ctx.strokeStyle = isHighlighted ? '#FFFFFF' : baseColor;
+    ctx.lineWidth = (isActive ? 4 : isSelected ? 3 : 2) / viewport.zoom;
+    ctx.fillStyle = isHighlighted ? `${baseColor}${isActive ? '60' : '45'}` : `${baseColor}30`;
 
     if (ann.type === 'bbox' && ann.points.length === 2) {
       const [p1, p2] = ann.points;
@@ -303,7 +308,7 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y);
       ctx.strokeRect(x, y, w, h); 
       if (fillShapes) ctx.fillRect(x, y, w, h);
-      drawLabel(ann, x, y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
+      drawLabel(ann, x, y - 6 / viewport.zoom, isHighlighted ? '#FFFFFF' : baseColor);
     } else if (ann.type === 'polygon' && ann.points.length > 0) {
       ctx.save();
 
@@ -332,7 +337,7 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       }
 
       // 🌟 由于第一重裁剪的保护，此时的 evenodd 填充，就是完美的 A 减 B (a')
-      ctx.fillStyle = isActive ? `${baseColor}60` : `${baseColor}30`;
+      ctx.fillStyle = isHighlighted ? `${baseColor}${isActive ? '60' : '45'}` : `${baseColor}30`;
       if (fillShapes) ctx.fill('evenodd');
 
       // 🌟 第二重裁剪：将接下来的描边也死死限制在 a' 的面积上！
@@ -340,8 +345,8 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       ctx.clip('evenodd'); 
 
       // 🌟 描边魔法：因为描边有一半的宽度会被剪裁掉，所以我们这里线宽 x 2
-      ctx.lineWidth = ((isActive ? 4 : 2) / viewport.zoom) * 2;
-      ctx.strokeStyle = isActive ? '#FFFFFF' : baseColor;
+      ctx.lineWidth = ((isActive ? 4 : isSelected ? 3 : 2) / viewport.zoom) * 2;
+      ctx.strokeStyle = isHighlighted ? '#FFFFFF' : baseColor;
 
       // 画 A 的边 (超出 a' 面积的线段会被切掉)
       ctx.beginPath();
@@ -366,12 +371,12 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       ctx.restore(); // 释放全部裁剪魔法
 
       // 绘制 Label 文字
-      drawLabel(ann, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
+      drawLabel(ann, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom, isHighlighted ? '#FFFFFF' : baseColor);
     } else if (ann.type === 'line' && ann.points.length > 0) {
       ctx.beginPath(); ctx.moveTo(ann.points[0].x, ann.points[0].y);
       for (let i = 1; i < ann.points.length; i++) ctx.lineTo(ann.points[i].x, ann.points[i].y);
       ctx.stroke();
-      drawLabel(ann, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
+      drawLabel(ann, ann.points[0].x, ann.points[0].y - 6 / viewport.zoom, isHighlighted ? '#FFFFFF' : baseColor);
     } else if ((ann.type === 'ellipse' || ann.type === 'circle') && ann.points.length === 2) {
       const [p1, p2] = ann.points;
       const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y);
@@ -384,12 +389,12 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       }
       if (fillShapes) ctx.fill();
       ctx.stroke();
-      drawLabel(ann, x, y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
+      drawLabel(ann, x, y - 6 / viewport.zoom, isHighlighted ? '#FFFFFF' : baseColor);
     } else if (ann.type === 'point' && ann.points.length > 0) {
       const p = ann.points[0];
       ctx.beginPath(); ctx.arc(p.x, p.y, 3 / viewport.zoom, 0, Math.PI * 2);
-      ctx.fillStyle = isActive ? '#FFFFFF' : baseColor; ctx.fill(); ctx.stroke();
-      drawLabel(ann, p.x + 8 / viewport.zoom, p.y - 8 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
+      ctx.fillStyle = isHighlighted ? '#FFFFFF' : baseColor; ctx.fill(); ctx.stroke();
+      drawLabel(ann, p.x + 8 / viewport.zoom, p.y - 8 / viewport.zoom, isHighlighted ? '#FFFFFF' : baseColor);
     } else if (ann.type === 'oriented_bbox' && ann.points.length >= 2) {
       const pts = getRbboxPoints(ann.points[0], ann.points[1], ann.points[2]);
       ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
@@ -397,13 +402,13 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       ctx.closePath(); 
       if (fillShapes) ctx.fill();
       ctx.stroke();
-      drawLabel(ann, pts[0].x, pts[0].y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
+      drawLabel(ann, pts[0].x, pts[0].y - 6 / viewport.zoom, isHighlighted ? '#FFFFFF' : baseColor);
 
     } else if (ann.type === 'cuboid' && ann.points.length >= 2) {
       drawCuboidEngine(ctx, ann.points[0], ann.points[1], ann.points[2]);
       const f1x = Math.min(ann.points[0].x, ann.points[1].x);
       const f1y = Math.min(ann.points[0].y, ann.points[1].y);
-      drawLabel(ann, f1x, f1y - 6 / viewport.zoom, isActive ? '#FFFFFF' : baseColor);
+      drawLabel(ann, f1x, f1y - 6 / viewport.zoom, isHighlighted ? '#FFFFFF' : baseColor);
     }
 
     // 绘制 Select 模式下的控制点
@@ -494,6 +499,25 @@ function drawSavedObjects(params: RenderParams, colors: any) {
       }
     }
   });
+}
+
+function drawSelectionBox(params: RenderParams) {
+  const { ctx, selectionBox, viewport, theme, view } = params;
+  if (!selectionBox || (selectionBox.viewId && selectionBox.viewId !== view.id)) return;
+
+  const x = Math.min(selectionBox.startX, selectionBox.endX);
+  const y = Math.min(selectionBox.startY, selectionBox.endY);
+  const width = Math.abs(selectionBox.endX - selectionBox.startX);
+  const height = Math.abs(selectionBox.endY - selectionBox.startY);
+
+  ctx.save();
+  ctx.fillStyle = theme === 'dark' ? 'rgba(96, 165, 250, 0.16)' : 'rgba(59, 130, 246, 0.12)';
+  ctx.strokeStyle = theme === 'dark' ? '#93C5FD' : '#2563EB';
+  ctx.lineWidth = 1.5 / viewport.zoom;
+  ctx.setLineDash([6 / viewport.zoom, 4 / viewport.zoom]);
+  ctx.fillRect(x, y, width, height);
+  ctx.strokeRect(x, y, width, height);
+  ctx.restore();
 }
 
 // 3. 绘制正在进行的草图
@@ -695,6 +719,7 @@ export function renderCanvasScene(params: RenderParams) {
   // 3. 执行纯粹的流水线渲染
   drawCanvasBackground(params, colors);
   drawSavedObjects(params, colors);
+  drawSelectionBox(params);
   drawDrawingDraft(params);
   drawPendingConfirm(params);
   // 🌟 核心：在这里显式调用准星绘制

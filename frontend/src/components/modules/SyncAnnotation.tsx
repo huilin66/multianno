@@ -25,7 +25,7 @@ import { createAnnotationId } from '../../lib/annotationIds';
 import { showDialog } from '../../store/useDialogStore';
 import { toast } from '../../store/useToastStore';
 import { TrackIdAnnotationModal } from '../modals/TrackIdAnnotationModal';
-import { findAnnotationIdsAtPoint } from '../../lib/annotationHitTest';
+import { findAnnotationIdsAtPoint, findAnnotationIdsInRect } from '../../lib/annotationHitTest';
 import { getShortcutBindings, shortcutMatchesEvent } from '../../lib/shortcuts';
 
 export interface SAMPoint {
@@ -224,6 +224,26 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
 // 🌟 1. 新增：用于记录当前正在拖拽的顶点信息，以及拖拽时的临时图形状态
   const [dragVertex, setDragVertex] = useState<{ index: number, type: 'point' | 'edge' } | null>(null);
   const [tempActiveAnno, setTempActiveAnno] = useState<any>(null);
+  type SelectionGesture = {
+    startX: number;
+    startY: number;
+    startClientX: number;
+    startClientY: number;
+    currentX: number;
+    currentY: number;
+    hitIds: string[];
+    viewId?: string;
+    isBoxSelecting: boolean;
+  };
+  const selectionGestureRef = useRef<SelectionGesture | null>(null);
+  const [selectedAnnotationIds, setSelectedAnnotationIds] = useState<string[]>([]);
+  const [selectionBox, setSelectionBox] = useState<{
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+    viewId?: string;
+  } | null>(null);
 
   const [currentPoints, setCurrentPoints] = useState<{ x: number, y: number }[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -633,6 +653,19 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
       }
       if (e.key === 'Escape') {
         e.preventDefault();
+
+        // Select & Edit uses Escape to cancel the transient multi-selection
+        // without leaving the selection tool. Drawing cancellation keeps its
+        // existing behavior below.
+        if (selectionGestureRef.current || selectedAnnotationIds.length > 0 || activeAnnotationId) {
+          selectionGestureRef.current = null;
+          setSelectionBox(null);
+          setSelectedAnnotationIds([]);
+          setActiveAnnotationId(null);
+          setCursorStyle('default');
+          return;
+        }
+
         handleCancelDrawing();
         setActiveAnnotationId(null);
         return;
@@ -676,7 +709,7 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
 
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [isDrawing, handleUndo, handleRedo, handleCopy, handlePaste]);
+  }, [isDrawing, handleUndo, handleRedo, handleCopy, handlePaste, selectedAnnotationIds, activeAnnotationId]);
   // 当切换图片(Stem)时，清空历史栈，防止跨图像撤销产生 Bug
   useEffect(() => {
     setUndonePoints([]);
@@ -702,6 +735,39 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
   }, [annotations]);
 
   const currentAnnotations = annotationsIndex.get(currentStem || '') || [];
+
+  useEffect(() => {
+    selectionGestureRef.current = null;
+    setSelectedAnnotationIds([]);
+    setSelectionBox(null);
+  }, [currentStem]);
+
+  useEffect(() => {
+    if (tool !== 'select') {
+      selectionGestureRef.current = null;
+      setSelectionBox(null);
+    }
+  }, [tool]);
+
+  const commitSelection = (ids: string[], event: React.MouseEvent) => {
+    const additive = event.shiftKey;
+    const subtractive = event.ctrlKey || event.metaKey;
+    const normalizedIds = Array.from(new Set(ids.map(String)));
+
+    const nextIds = subtractive
+      ? selectedAnnotationIds.filter((id) => !normalizedIds.includes(id))
+      : additive
+        ? Array.from(new Set([...selectedAnnotationIds, ...normalizedIds]))
+        : normalizedIds;
+
+    const activeId = subtractive
+      ? (activeAnnotationId && nextIds.includes(String(activeAnnotationId))
+        ? String(activeAnnotationId)
+        : nextIds[nextIds.length - 1] || null)
+      : normalizedIds[normalizedIds.length - 1] || nextIds[nextIds.length - 1] || null;
+    setSelectedAnnotationIds(nextIds);
+    setActiveAnnotationId(activeId);
+  };
   // 提取主视图的物理尺寸 (作为基准裁剪框)
   const mainViewConfig = views.find((v: any) => v.isMain);
   const mainViewFolder = folders?.find((f: any) => f.id === mainViewConfig?.folderId);
@@ -852,7 +918,7 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
 
 
 // 🌟 将这个函数完整替换，注意参数里连 viewId 都不要了
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: React.MouseEvent, viewId?: string) => {
     if (popoverOpen) {
       handleCancelDrawing();
       return; 
@@ -961,19 +1027,20 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
         hiddenAnnotations,
       });
 
-      // 🌟 如果有命中，循环切换
-      if (hitIds.length > 0) {
-        const currentIdx = hitIds.indexOf(activeAnnotationId);
-        // 如果当前选中的在命中列表中，切到下一个；否则选第一个
-        const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % hitIds.length : 0;
-        setActiveAnnotationId(hitIds[nextIdx]);
-        return;
-      }
-
-      // 什么都没点中 → 取消选中，进入漫游
-      setActiveAnnotationId(null);
-      setIsPanning(true);
-      setPanStart({ mouseX: e.clientX, mouseY: e.clientY, panX: viewport.panX, panY: viewport.panY });
+      // 延迟到 mouseup 再决定是单击还是框选。这样从对象上开始拖动
+      // 也可以框选，同时保留原有的重叠对象循环选择行为。
+      selectionGestureRef.current = {
+        startX: mainX,
+        startY: mainY,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
+        currentX: mainX,
+        currentY: mainY,
+        hitIds,
+        viewId,
+        isBoxSelecting: false,
+      };
+      setSelectionBox(null);
       return;
     }
     // 2. 漫游拦截
@@ -1059,6 +1126,32 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     // 🌟 核心：永远只获取纯正的主视图坐标系
     const mainX = (e.clientX - rect.left - viewport.panX) / viewport.zoom;
     const mainY = (e.clientY - rect.top - viewport.panY) / viewport.zoom;
+
+    const selectionGesture = selectionGestureRef.current;
+    if (tool === 'select' && selectionGesture && !dragVertex) {
+      selectionGesture.currentX = mainX;
+      selectionGesture.currentY = mainY;
+      const distance = Math.hypot(
+        e.clientX - selectionGesture.startClientX,
+        e.clientY - selectionGesture.startClientY,
+      );
+
+      if (!selectionGesture.isBoxSelecting && distance >= 4) {
+        selectionGesture.isBoxSelecting = true;
+        setCursorStyle('crosshair');
+      }
+
+      if (selectionGesture.isBoxSelecting) {
+        setSelectionBox({
+          startX: selectionGesture.startX,
+          startY: selectionGesture.startY,
+          endX: mainX,
+          endY: mainY,
+          viewId: selectionGesture.viewId,
+        });
+        return;
+      }
+    }
 
     // 🌟 智能光标反馈：悬停在控制点附近变空心光标
     if (tool === 'select' && activeAnnotationId && !dragVertex) {
@@ -1184,6 +1277,35 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
       setDragVertex(null);
       setTempActiveAnno(null);
       setCursorStyle('default'); 
+      return;
+    }
+
+    const selectionGesture = selectionGestureRef.current;
+    if (tool === 'select' && selectionGesture && !dragVertex) {
+      const wasBoxSelecting = selectionGesture.isBoxSelecting;
+      selectionGestureRef.current = null;
+      setSelectionBox(null);
+      setCursorStyle('default');
+
+      if (wasBoxSelecting) {
+        const selectedIds = findAnnotationIdsInRect(
+          currentAnnotations,
+          selectionGesture.startX,
+          selectionGesture.startY,
+          selectionGesture.currentX,
+          selectionGesture.currentY,
+          { hiddenClasses, hiddenAnnotations },
+        );
+        commitSelection(selectedIds, e);
+      } else if (selectionGesture.hitIds.length > 0) {
+        const hitIds = selectionGesture.hitIds;
+        const currentIdx = hitIds.indexOf(String(activeAnnotationId));
+        const nextIdx = currentIdx >= 0 ? (currentIdx + 1) % hitIds.length : 0;
+        const clickedId = hitIds[nextIdx];
+        commitSelection([clickedId], e);
+      } else if (!e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        commitSelection([], e);
+      }
       return;
     }
 
@@ -1796,6 +1918,8 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     view: mainViewConfig || views[0],
     annotations,
     activeAnnotationId,
+    selectedAnnotationIds,
+    selectionBox,
     setActiveAnnotationId,
     viewport,
     setViewport,
@@ -2078,6 +2202,8 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   }
                   onImageLoaded={handleImageLoaded}
                   activeAnnotationId={activeAnnotationId}
+                  selectedAnnotationIds={selectedAnnotationIds}
+                  selectionBox={selectionBox}
                   taxonomyClasses={sortedClasses}
                   taxonomyAttributes={taxonomyAttributes}
                   currentPoints={currentPoints}
@@ -2092,7 +2218,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
                   formLabel={formLabel}
                   pendingAnnotation={tool === 'ai_anno' && tempActiveAnno ? tempActiveAnno : pendingAnnotation}
                   onDoubleClick={handleDoubleClick}
-                  onMouseDown={handleMouseDown}
+                  onMouseDown={(e: any) => handleMouseDown(e, view.id)}
                   onMouseMove={(e: any) => handleMouseMove(e, view.id)}
                   onMouseUp={handleMouseUp}
                   hoverPos={hoverPos}

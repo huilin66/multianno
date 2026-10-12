@@ -79,7 +79,7 @@ function PixelInfoBadge({ hoverPos, imageObj, view, mouseQuad }: any) {
 
 // 2. 把 CanvasView 移过来，并 export 暴露出去
 const CanvasViewInner=({ 
-  view, annotations, activeAnnotationId, taxonomyClasses, taxonomyAttributes, currentPoints,
+  view, annotations, activeAnnotationId, selectedAnnotationIds, selectionBox, taxonomyClasses, taxonomyAttributes, currentPoints,
   tool, theme, folders, currentStem, isPanning,
   mainWidth, mainHeight, isFullExtent,
   onMouseDown, onMouseMove, onMouseUp,
@@ -385,7 +385,7 @@ const CanvasViewInner=({
     // 调用外部渲染引擎
     renderCanvasScene({
       canvas, ctx, view, viewport, isFullExtent, mainWidth, mainHeight, 
-      imageObj, theme, annotations, activeAnnotationId, taxonomyClasses, 
+      imageObj, theme, annotations, activeAnnotationId, selectedAnnotationIds, selectionBox, taxonomyClasses,
       currentPoints, tool, formLabel, pendingAnnotation: safePendingAnnotation, hoverPos, editorSettings,
       taxonomyAttributes,
     });
@@ -468,7 +468,7 @@ const CanvasViewInner=({
     ctx.drawImage = originalDrawImage;
     
   }, [
-    viewport, view, annotations, activeAnnotationId, currentPoints, 
+    viewport, view, annotations, activeAnnotationId, selectedAnnotationIds, selectionBox, currentPoints,
     tool, taxonomyClasses, imageObj, isFullExtent, mainWidth, mainHeight, 
     theme, formLabel, pendingAnnotation, hoverPos, editorSettings,
     isSingleViewMode, 
@@ -700,6 +700,8 @@ export const CanvasView = React.memo(CanvasViewInner, (prev, next) => (
   prev.view === next.view
   && prev.annotations === next.annotations
   && prev.activeAnnotationId === next.activeAnnotationId
+  && prev.selectedAnnotationIds === next.selectedAnnotationIds
+  && prev.selectionBox === next.selectionBox
   && prev.taxonomyClasses === next.taxonomyClasses
   && prev.taxonomyAttributes === next.taxonomyAttributes
   && prev.currentPoints === next.currentPoints
