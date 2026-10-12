@@ -800,6 +800,7 @@ export default function App() {
       annotations: [],
       hiddenAnnotations: [],
       activeAnnotationId: null,
+      selectedAnnotationIds: [],
       isAnnotationDirty: false,
       dirtyAnnotationStems: [],
     });

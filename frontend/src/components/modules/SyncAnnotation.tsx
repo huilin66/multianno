@@ -91,6 +91,8 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
     taxonomyAttributes = [],
     activeAnnotationId = null,
     setActiveAnnotationId = () => {}, // 兜底空函数
+    selectedAnnotationIds = [],
+    setSelectedAnnotationIds = () => {},
     editorSettings = { showCrosshair: true, showPixelValue: true },
     tempViewSettings, updateAnnotation,
     setSettingsOpen, aiSettings, setAISettings
@@ -237,7 +239,6 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
     isBoxSelecting: boolean;
   };
   const selectionGestureRef = useRef<SelectionGesture | null>(null);
-  const [selectedAnnotationIds, setSelectedAnnotationIds] = useState<string[]>([]);
   const [selectionBox, setSelectionBox] = useState<{
     startX: number;
     startY: number;

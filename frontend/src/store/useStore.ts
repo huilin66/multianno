@@ -269,6 +269,7 @@ export interface AppState {
   annotations: Annotation[];
   hiddenAnnotations: string[];
   activeAnnotationId: string | null;
+  selectedAnnotationIds: string[];
   pendingAnnotationFocus: { stem: string; index: number } | null;
   isAnnotationDirty: boolean;
   dirtyAnnotationStems: string[];
@@ -360,6 +361,7 @@ export interface AppState {
   updateAnnotation: (id: string, data: Partial<Annotation>) => void;
   removeAnnotation: (id: string) => void;
   setActiveAnnotationId: (id: string | null) => void;
+  setSelectedAnnotationIds: (ids: string[]) => void;
   setPendingAnnotationFocus: (request: { stem: string; index: number } | null) => void;
   markAnnotationDirty: (stem?: string) => void;
   clearAnnotationDirty: (stem?: string) => void;
@@ -415,6 +417,7 @@ export const useStore = create<AppState>()(
       annotations: [],
       hiddenAnnotations: [],
       activeAnnotationId: null,
+      selectedAnnotationIds: [],
       pendingAnnotationFocus: null,
       isAnnotationDirty: false,
       dirtyAnnotationStems: [],
@@ -545,6 +548,7 @@ export const useStore = create<AppState>()(
           currentStem: loadedStems.length > 0 ? loadedStems[0] : null, 
 
           annotations: [],
+          selectedAnnotationIds: [],
           pendingAnnotationFocus: null,
           isAnnotationDirty: false,
           dirtyAnnotationStems: [],
@@ -570,6 +574,7 @@ export const useStore = create<AppState>()(
         sceneGroups: {},        // 类型必须是 {}
         completedViews: [],
         activeAnnotationId: null,
+        selectedAnnotationIds: [],
         pendingAnnotationFocus: null,
       }),
       addFolder: (folder) => set((state) => ({ folders: [...state.folders, folder] })),
@@ -894,6 +899,7 @@ export const useStore = create<AppState>()(
         const target = state.annotations.find((annotation) => annotation.id === id);
         return {
           annotations: state.annotations.filter(a => a.id !== id),
+          selectedAnnotationIds: state.selectedAnnotationIds.filter((selectedId) => selectedId !== id),
           isAnnotationDirty: true,
           dirtyAnnotationStems: target
             ? mergeDirtyAnnotationStems(state.dirtyAnnotationStems, [target.stem])
@@ -901,6 +907,9 @@ export const useStore = create<AppState>()(
         };
       }),
       setActiveAnnotationId: (id) => set({ activeAnnotationId: id }),
+      setSelectedAnnotationIds: (ids) => set({
+        selectedAnnotationIds: Array.from(new Set(ids.map(String))),
+      }),
       setPendingAnnotationFocus: (request) => set({ pendingAnnotationFocus: request }),
       markAnnotationDirty: (stem) => set((state) => {
         const targetStem = stem || state.currentStem;

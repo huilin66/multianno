@@ -5,6 +5,7 @@ import type { Annotation, TaxonomyAttribute, TaxonomyClass } from '../../store/u
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Switch } from '../ui/switch';
 import {
   findAnnotationOverlaps,
   getAnnotationOverlapKey,
@@ -23,6 +24,8 @@ interface AnnotationTableProps {
   onOpenAnnotation: (annotation: Annotation, sceneObjectIndex: number) => void;
   overlapState?: AnnotationTableOverlapState;
   onOverlapStateChange?: (state: AnnotationTableOverlapState) => void;
+  selectedAnnotationIds?: string[];
+  activeAnnotationId?: string | null;
 }
 
 interface AnnotationTableRow {
@@ -65,6 +68,8 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   onOpenAnnotation,
   overlapState,
   onOverlapStateChange,
+  selectedAnnotationIds = [],
+  activeAnnotationId = null,
 }: AnnotationTableProps) {
   const { t } = useTranslation();
   const [loadedAnnotations, setLoadedAnnotations] = useState<Annotation[] | null>(null);
@@ -78,8 +83,18 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [overlapCounts, setOverlapCounts] = useState<Map<string, number>>(new Map());
   const [overlapGroups, setOverlapGroups] = useState<Map<string, string>>(new Map());
   const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
+  const [hideUnselected, setHideUnselected] = useState(false);
   const overlapScanRequestRef = React.useRef(0);
   const isLoaded = loadedAnnotations !== null;
+
+  const selectedIdSet = useMemo(
+    () => new Set([
+      ...selectedAnnotationIds.map(String),
+      ...(activeAnnotationId ? [String(activeAnnotationId)] : []),
+    ]),
+    [activeAnnotationId, selectedAnnotationIds],
+  );
+  const hasMainSelection = selectedIdSet.size > 0;
 
   const rows = useMemo<AnnotationTableRow[]>(() => {
     const sceneObjectCounts = new Map<string, number>();
@@ -141,9 +156,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     });
   }, [classFilter, overlapKeys, query, rows, typeFilter]);
 
-  const hasFilters = Boolean(query.trim()) || classFilter !== 'all' || typeFilter !== 'all' || overlapKeys !== null;
-  const classCount = new Set(filteredRows.map((row) => row.annotation.label)).size;
-  const sceneCount = new Set(filteredRows.map((row) => row.annotation.stem)).size;
   const taxonomyAttributeNames = new Set(taxonomyAttributes.map((attribute) => attribute.name));
 
   const overlapSceneCount = useMemo(
@@ -222,20 +234,33 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     setQuery('');
     setClassFilter('all');
     setTypeFilter('all');
+    setHideUnselected(false);
     resetOverlapScan();
   };
 
   const displayRows = useMemo(() => {
-    if (overlapKeys === null) return filteredRows;
+    const visibleRows = hideUnselected && hasMainSelection
+      ? filteredRows.filter((row) => selectedIdSet.has(String(row.annotation.id)))
+      : filteredRows;
 
-    return [...filteredRows].sort((first, second) => {
+    if (overlapKeys === null) return visibleRows;
+
+    return [...visibleRows].sort((first, second) => {
       const firstGroup = overlapGroups.get(getAnnotationOverlapKey(first.annotation)) || '';
       const secondGroup = overlapGroups.get(getAnnotationOverlapKey(second.annotation)) || '';
       return firstGroup.localeCompare(secondGroup, undefined, { numeric: true })
         || first.annotation.stem.localeCompare(second.annotation.stem)
         || first.annotation.id.localeCompare(second.annotation.id);
     });
-  }, [filteredRows, overlapGroups, overlapKeys]);
+  }, [filteredRows, hasMainSelection, hideUnselected, overlapGroups, overlapKeys, selectedIdSet]);
+
+  const hasFilters = Boolean(query.trim())
+    || classFilter !== 'all'
+    || typeFilter !== 'all'
+    || overlapKeys !== null
+    || (hideUnselected && hasMainSelection);
+  const classCount = new Set(displayRows.map((row) => row.annotation.label)).size;
+  const sceneCount = new Set(displayRows.map((row) => row.annotation.stem)).size;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
@@ -251,7 +276,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
             {isLoaded && (
               <div className="flex items-center gap-2 text-[10px] font-bold text-neutral-500">
                 <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2.5 py-1">
-                  {filteredRows.length} {t('taxonomyDashboard.objects', 'objects')}
+                  {displayRows.length} {t('taxonomyDashboard.objects', 'objects')}
                 </span>
                 <span className="rounded-full bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1">
                   {sceneCount} {t('taxonomyDashboard.scenes', 'scenes')}
@@ -345,6 +370,19 @@ export const AnnotationTable = React.memo(function AnnotationTable({
             )}
           </Button>
 
+          <div className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 dark:border-neutral-700 dark:bg-neutral-900">
+            <Switch
+              checked={hideUnselected && hasMainSelection}
+              onCheckedChange={setHideUnselected}
+              disabled={!isLoaded || !hasMainSelection}
+              aria-label={t('taxonomyDashboard.hideUnselected', 'Hide unselected')}
+              className="scale-75"
+            />
+            <span className={`whitespace-nowrap text-xs ${hasMainSelection ? 'text-neutral-700 dark:text-neutral-200' : 'text-neutral-400'}`}>
+              {t('taxonomyDashboard.hideUnselected', 'Hide unselected')}
+            </span>
+          </div>
+
           {hasFilters && (
             <Button type="button" variant="ghost" className="h-9 px-3 text-xs" onClick={clearFilters}>
               <Filter className="w-3.5 h-3.5 mr-1.5" />
@@ -427,7 +465,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       </div>
 
       <div className="flex-1 overflow-auto p-5 custom-scrollbar">
-        {filteredRows.length === 0 ? (
+        {displayRows.length === 0 ? (
           <div className="h-full min-h-[260px] flex flex-col items-center justify-center text-neutral-400">
             <Filter className="w-10 h-10 mb-3 opacity-25" />
             <p className="text-sm font-semibold">
@@ -435,6 +473,8 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                 ? t('taxonomyDashboard.annotationTableNotLoaded', 'Click “Load annotations” to populate the table.')
                 : loadedAnnotations.length === 0
                 ? t('taxonomyDashboard.noAnnotations', 'No annotations in the current project.')
+                : hideUnselected && hasMainSelection
+                  ? t('taxonomyDashboard.noSelectedAnnotations', 'No selected annotations match the current filters.')
                 : overlapKeys !== null && overlapKeys.size === 0
                   ? t('taxonomyDashboard.noOverlaps', 'No overlapping objects found.')
                 : t('taxonomyDashboard.noAnnotationMatches', 'No annotations match the current filters.')}
@@ -468,12 +508,16 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                   const classDefinition = taxonomyClasses.find((taxonomyClass) => taxonomyClass.name === row.annotation.label);
                   const knownAttributeCount = Object.keys(row.annotation.attributes || {})
                     .filter((name) => taxonomyAttributeNames.has(name)).length;
+                  const isSelected = selectedIdSet.has(String(row.annotation.id));
 
                   return (
                     <tr
                       key={`${row.annotation.id}-${row.annotation.stem}-${index}`}
                       onDoubleClick={() => onOpenAnnotation(row.annotation, row.sceneObjectIndex)}
-                      className="group cursor-pointer hover:bg-blue-50/60 dark:hover:bg-blue-950/20"
+                      aria-selected={isSelected}
+                      className={`group cursor-pointer transition-colors ${isSelected
+                        ? 'bg-blue-100/80 shadow-[inset_3px_0_0_#2563eb] dark:bg-blue-950/50 dark:shadow-[inset_3px_0_0_#60a5fa]'
+                        : 'hover:bg-blue-50/60 dark:hover:bg-blue-950/20'}`}
                       title={t('taxonomyDashboard.openAnnotationHint', 'Double-click to open this annotation in the workspace')}
                     >
                       <td className="px-3 py-2.5 text-neutral-400 font-mono">{index + 1}</td>

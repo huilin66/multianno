@@ -893,6 +893,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
     annotations = [], folders, views, sceneGroups, editorSettings, projectMetaPath, projectName, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
+    activeAnnotationId = null, selectedAnnotationIds = [],
     mergeTaxonomyClassesWithAttributes, stems, workspacePath, setPendingAnnotationFocus
   } = useStore() as any;
 
@@ -2819,6 +2820,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             onOpenAnnotation={handleOpenAnnotationFromTable}
             overlapState={annotationTableOverlap}
             onOverlapStateChange={setAnnotationTableOverlap}
+            selectedAnnotationIds={selectedAnnotationIds}
+            activeAnnotationId={activeAnnotationId}
           />
         )}
 

@@ -698,6 +698,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       annotations: [],
       hiddenAnnotations: [],
       activeAnnotationId: null,
+      selectedAnnotationIds: [],
       pendingAnnotationFocus: null,
       isAnnotationDirty: false,
       dirtyAnnotationStems: [],

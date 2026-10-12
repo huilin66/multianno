@@ -100,6 +100,7 @@ export const reloadProjectAnnotation = async (
     isAnnotationDirty: remainingDirtyStems.length > 0,
     dirtyAnnotationStems: remainingDirtyStems,
     activeAnnotationId: null,
+    selectedAnnotationIds: [],
   });
 
   let result: StemAnnotationLoadResult = { annotations: [], found: false };
@@ -125,6 +126,7 @@ export const reloadProjectAnnotation = async (
     isAnnotationDirty: latestDirtyStems.length > 0,
     dirtyAnnotationStems: latestDirtyStems,
     activeAnnotationId: null,
+    selectedAnnotationIds: [],
   });
 
   return {
