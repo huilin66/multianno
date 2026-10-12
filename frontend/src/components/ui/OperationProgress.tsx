@@ -1,5 +1,109 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cn } from '../../lib/utils';
+import { formatRemainingTime, normalizeProgress } from '../../lib/progress';
+
+interface EtaTracker {
+  trackingKey: string;
+  startedAt: number;
+  lastTimestamp: number;
+  lastPercent: number;
+  speedPercentPerSecond: number;
+  samples: number;
+}
+
+const MIN_ETA_SAMPLE_MS = 1500;
+
+function useMonotonicPercent(percent: number, trackingKey: string): number {
+  const displayRef = useRef({ trackingKey: '', percent: 0 });
+
+  if (
+    displayRef.current.trackingKey !== trackingKey
+    || (percent <= 0 && displayRef.current.percent > 0)
+  ) {
+    displayRef.current = { trackingKey, percent };
+  } else if (percent > displayRef.current.percent) {
+    displayRef.current.percent = percent;
+  }
+
+  return displayRef.current.percent;
+}
+
+function useEstimatedTime(
+  percent: number,
+  trackingKey: string,
+  enabled: boolean,
+): number | null {
+  const trackerRef = useRef<EtaTracker>({
+    trackingKey: '',
+    startedAt: 0,
+    lastTimestamp: 0,
+    lastPercent: 0,
+    speedPercentPerSecond: 0,
+    samples: 0,
+  });
+  const [etaSeconds, setEtaSeconds] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!enabled) {
+      setEtaSeconds(null);
+      return;
+    }
+
+    const now = Date.now();
+    const tracker = trackerRef.current;
+    const startsNewOperation =
+      tracker.trackingKey !== trackingKey
+      || (percent <= 0 && tracker.lastPercent > 0);
+
+    if (startsNewOperation) {
+      trackerRef.current = {
+        trackingKey,
+        startedAt: now,
+        lastTimestamp: now,
+        lastPercent: percent,
+        speedPercentPerSecond: 0,
+        samples: 0,
+      };
+      setEtaSeconds(null);
+      return;
+    }
+
+    if (percent <= 0 || percent >= 100) {
+      tracker.lastPercent = percent;
+      tracker.lastTimestamp = now;
+      tracker.speedPercentPerSecond = 0;
+      tracker.samples = 0;
+      setEtaSeconds(null);
+      return;
+    }
+
+    const percentDelta = percent - tracker.lastPercent;
+    if (percentDelta > 0.01) {
+      const elapsedSeconds = Math.max((now - tracker.lastTimestamp) / 1000, 0.001);
+      const instantSpeed = percentDelta / elapsedSeconds;
+      tracker.speedPercentPerSecond = tracker.speedPercentPerSecond > 0
+        ? tracker.speedPercentPerSecond * 0.7 + instantSpeed * 0.3
+        : instantSpeed;
+      tracker.samples += 1;
+      tracker.lastPercent = percent;
+      tracker.lastTimestamp = now;
+    }
+
+    const elapsedMs = now - tracker.startedAt;
+    if (
+      tracker.samples > 0
+      && tracker.speedPercentPerSecond > 0
+      && elapsedMs >= MIN_ETA_SAMPLE_MS
+    ) {
+      setEtaSeconds(Math.max(0, (100 - percent) / tracker.speedPercentPerSecond));
+    } else {
+      setEtaSeconds(null);
+    }
+  }, [enabled, percent, trackingKey]);
+
+  return etaSeconds;
+}
 
 export interface OperationProgressProps {
   stageIndex: number;
@@ -11,6 +115,9 @@ export interface OperationProgressProps {
   stageLabel?: string;
   className?: string;
   barClassName?: string;
+  /** Optional identity used to reset ETA sampling when a new operation starts. */
+  operationKey?: string | number;
+  showEta?: boolean;
 }
 
 /**
@@ -31,18 +138,24 @@ export function OperationProgress({
   stageLabel = 'Stage',
   className,
   barClassName,
+  operationKey = 'default',
+  showEta = true,
 }: OperationProgressProps) {
-  const hasTotal = Number.isFinite(total) && Number(total) > 0;
-  const safeTotal = hasTotal ? Number(total) : 0;
-  const safeCurrent = hasTotal
-    ? Math.min(safeTotal, Math.max(0, Number(current) || 0))
-    : 0;
-  const percent = hasTotal ? (safeCurrent / safeTotal) * 100 : 0;
   const hasOverallPercent = Number.isFinite(overallPercent);
-  const safeOverallPercent = hasOverallPercent
-    ? Math.min(100, Math.max(0, Number(overallPercent)))
-    : 0;
+  const progress = normalizeProgress({
+    current,
+    total,
+    percent: hasOverallPercent ? overallPercent : undefined,
+  });
+  const { current: safeCurrent, total: safeTotal, percent } = progress;
+  const hasTotal = safeTotal > 0;
+  const trackingKey = hasOverallPercent
+    ? `${operationKey}:overall`
+    : `${operationKey}:stage:${stageIndex}/${stageCount}:total:${safeTotal}`;
+  const displayPercent = useMonotonicPercent(percent, trackingKey);
+  const etaSeconds = useEstimatedTime(displayPercent, trackingKey, showEta);
   const showDeterminateProgress = hasOverallPercent || (hasTotal && safeCurrent > 0);
+  const { t } = useTranslation();
 
   return (
     <div className={cn('min-w-0 flex-1 space-y-1.5', className)}>
@@ -53,6 +166,11 @@ export function OperationProgress({
         <span className="min-w-0 flex-1 truncate" title={typeof stageName === 'string' ? stageName : undefined}>
           {stageName}:
         </span>
+        {etaSeconds !== null && (
+          <span className="shrink-0 text-primary" aria-live="polite">
+            {t('common.eta')}: {formatRemainingTime(etaSeconds)}
+          </span>
+        )}
         {hasTotal && (
           <span className="shrink-0 font-mono">
             {safeCurrent}/{safeTotal}
@@ -66,7 +184,7 @@ export function OperationProgress({
             showDeterminateProgress ? 'bg-primary' : 'w-1/2 animate-pulse bg-primary',
             barClassName,
           )}
-          style={showDeterminateProgress ? { width: `${hasOverallPercent ? safeOverallPercent : percent}%` } : undefined}
+          style={showDeterminateProgress ? { width: `${displayPercent}%` } : undefined}
         />
       </div>
     </div>

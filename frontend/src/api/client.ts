@@ -1,5 +1,7 @@
 // frontend/src/api/client.ts
 
+import { normalizeProgress, type ProgressEvent } from '../lib/progress';
+
 export const API_BASE_URL = 'http://127.0.0.1:8090/api';
 const VISION_AI_API_URL = `${API_BASE_URL}/ai/vision`;
 const VLM_API_URL = `${API_BASE_URL}/ai/vlm`;
@@ -170,10 +172,7 @@ export const exportData = (payload: any, signal?: AbortSignal) =>
 export const importData = (payload: any) =>
   post(`${API_BASE_URL}/exchange/import`, payload);
 
-export interface ImportProgressEvent {
-  current: number;
-  total: number;
-  percent: number;
+export interface ImportProgressEvent extends ProgressEvent {
   format?: string;
   stem?: string;
 }
@@ -210,10 +209,9 @@ export const importDataStream = async (
     if (!line.trim()) return null;
     const data = JSON.parse(line);
     if (data.type === 'progress') {
+      const progress = normalizeProgress(data);
       onProgress?.({
-        current: Number(data.current) || 0,
-        total: Number(data.total) || 0,
-        percent: Number(data.percent) || 0,
+        ...progress,
         format: data.format,
         stem: data.stem,
       });
@@ -264,7 +262,7 @@ export const checkDirectoryStatus = (path: string) =>
 
 export const exportDataStream = async (
   payload: any,
-  onProgress: (current: number, total: number) => void,
+  onProgress: (progress: ProgressEvent) => void,
   signal?: AbortSignal
 ) => {
   const response = await fetch(`${API_BASE_URL}/exchange/export`, {
@@ -299,7 +297,7 @@ export const exportDataStream = async (
         if (!line.trim()) continue;
         const data = JSON.parse(line);
         if (data.type === 'progress') {
-          onProgress(data.current, data.total);
+          onProgress(normalizeProgress(data));
         } else if (data.type === 'complete') {
           await reader.cancel();
           return data;
@@ -560,7 +558,10 @@ export const inferVLM = (
 export const requestVisPreview = (payload: any) =>
   post(`${API_BASE_URL}/vis/preview`, payload);
 
-export const requestVisExportStream = async (payload: any, onProgress: (p: number) => void) => {
+export const requestVisExportStream = async (
+  payload: any,
+  onProgress: (progress: ProgressEvent) => void,
+) => {
   const response = await fetch(`${API_BASE_URL}/vis/export`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -572,23 +573,47 @@ export const requestVisExportStream = async (payload: any, onProgress: (p: numbe
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
+  let buffer = '';
+  let lastProgress: ProgressEvent = { current: 0, total: 0, percent: 0 };
+
+  const consumeEvent = (line: string) => {
+    if (!line.trim()) return;
+    const data = JSON.parse(line);
+    if (data.type === 'progress') {
+      lastProgress = normalizeProgress(data, lastProgress.total);
+      onProgress(lastProgress);
+      return;
+    }
+    if (data.type === 'complete') {
+      lastProgress = normalizeProgress({
+        ...lastProgress,
+        ...data,
+        current: data.current ?? lastProgress.total,
+        total: data.total ?? lastProgress.total,
+        percent: 100,
+      }, lastProgress.total);
+      onProgress(lastProgress);
+      return;
+    }
+    if (data.type === 'error') throw new Error(data.message);
+  };
 
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        buffer += decoder.decode();
+        break;
+      }
 
-      const lines = decoder.decode(value, { stream: true }).split('\n').filter(l => l.trim());
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
       for (const line of lines) {
-        try {
-          const data = JSON.parse(line);
-          if (data.type === 'progress' || data.type === 'complete') onProgress(data.percent);
-          if (data.type === 'error') throw new Error(data.message);
-        } catch (e) {
-          console.error('Failed to parse stream line:', line, e);
-        }
+        consumeEvent(line);
       }
     }
+    if (buffer.trim()) consumeEvent(buffer);
   } finally {
     reader.releaseLock();
   }

@@ -10,6 +10,7 @@ import { Loader2, Download, Info, Trash2, FolderOpen,
     FileText, AlertCircle, LayoutGrid, Columns3, Rows3, Check
 } from 'lucide-react';
 import { requestVisPreview, requestVisExportStream, getFileContent, analyzeWorkspaceFolders} from '../../api/client';
+import type { ProgressEvent } from '../../lib/progress';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, TaskType } from '../../config/supportedFormats';
 import { OperationProgress } from '../ui/OperationProgress';
@@ -102,7 +103,7 @@ export function LocalVisualization() {
   const [exportCols, setExportCols] = useState(2);
   const [mergedPreview, setMergedPreview] = useState<string | null>(null);
 
-  const [exportProgress, setExportProgress] = useState(0);
+  const [exportProgress, setExportProgress] = useState<ProgressEvent | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
   // Explorer config
@@ -487,7 +488,8 @@ export function LocalVisualization() {
       return;
     }
     setIsExporting(true);
-    setExportProgress(1);
+    setExportProgress({ current: 0, total: scannedStems.length, percent: 0 });
+    let exportCompleted = false;
 
     try {
       const taskApiMap: Record<string, string> = {
@@ -528,15 +530,25 @@ export function LocalVisualization() {
           }
         },
       };
-      const res = await requestVisExportStream(payload, (percent) => {
-        setExportProgress(percent);
+      const res = await requestVisExportStream(payload, (progress) => {
+        setExportProgress(previous => ({
+          current: previous && previous.total === progress.total
+            ? Math.max(previous.current, progress.current)
+            : progress.current,
+          total: progress.total,
+          percent: Math.max(previous?.percent ?? 0, progress.percent),
+        }));
       });
       if (res.success) {
-        setExportProgress(100);
+        exportCompleted = true;
+        setExportProgress(previous => {
+          const total = previous?.total || scannedStems.length;
+          return { current: total, total, percent: 100 };
+        });
         alert(t('localVis.alerts.exportSuccess', { path: savePath, count: scannedStems.length }));
       }
     } catch (err) {
-      if (exportProgress === 100) {
+      if (exportCompleted || exportProgress?.percent === 100) {
              alert(t('localVis.alerts.exportCompleted'));
       } else {
              alert(t('localVis.alerts.exportError', { message: (err as any).message }));
@@ -1126,8 +1138,9 @@ export function LocalVisualization() {
                 stageIndex={1}
                 stageCount={1}
                 stageName={t('localVis.export.processing')}
-                current={Math.round(scannedStems.length * exportProgress / 100)}
-                total={scannedStems.length}
+                current={exportProgress.current}
+                total={exportProgress.total || scannedStems.length}
+                overallPercent={exportProgress.percent}
                 stageLabel={t('common.stage')}
                 barClassName="bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"
               />

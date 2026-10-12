@@ -13,6 +13,7 @@ import { getFileContent, exportDataStream, checkDirectoryStatus } from '../../ap
 import { saveCurrentAnnotations } from '../../lib/annotationSaveService';
 import { showDialog } from '../../store/useDialogStore';
 import { OperationProgress } from '../ui/OperationProgress';
+import { normalizeProgress, type ProgressEvent } from '../../lib/progress';
 import {
   SUPPORTED_TASKS,
   FORMAT_DETAILS,
@@ -168,21 +169,17 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   );
   const currentStemIndex = currentStem ? stems.indexOf(currentStem) : -1;
 
-  const updateExportProgress = useCallback((current: number, total: number) => {
-    const safeTotal = Number.isFinite(total) && total > 0
-      ? Math.floor(total)
-      : exportStems.length;
-    const safeCurrent = safeTotal > 0
-      ? Math.min(safeTotal, Math.max(0, Math.floor(Number(current) || 0)))
-      : 0;
-    const nextPercent = safeTotal > 0 ? Math.round((safeCurrent / safeTotal) * 100) : 0;
+  const updateExportProgress = useCallback((event: ProgressEvent) => {
+    const next = normalizeProgress(event, exportStems.length);
 
     setExportProgress(previous => ({
-      current: safeCurrent,
-      total: safeTotal,
+      current: previous.total === next.total
+        ? Math.max(previous.current, next.current)
+        : next.current,
+      total: next.total,
       // A stream must be monotonic from the user's point of view. This also
       // protects the UI if a stale event arrives after a filtered total.
-      percent: Math.max(previous.percent, nextPercent),
+      percent: Math.max(previous.percent, next.percent),
     }));
   }, [exportStems.length]);
 

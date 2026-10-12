@@ -1309,6 +1309,7 @@
   },
   "common": {
     "stage": "阶段",
+    "eta": "预计剩余",
     "confirm": "确认",
     "cancel": "取消",
     "edit": "编辑",
