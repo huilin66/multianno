@@ -109,6 +109,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   const [progressStageIndex, setProgressStageIndex] = useState(1);
   const [progressStageCount, setProgressStageCount] = useState(1);
   const [operationProgress, setOperationProgress] = useState({ current: 0, total: 0 });
+  const [overallProgress, setOverallProgress] = useState<number | null>(null);
   const [annotationCandidates, setAnnotationCandidates] = useState<AnnotationSourceCandidate[]>([]);
   const [selectedAnnotationPath, setSelectedAnnotationPath] = useState('');
   const [annotationMergeStrategy, setAnnotationMergeStrategy] = useState<AnnotationMergeStrategy>('append');
@@ -120,6 +121,20 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
   const stems = useStore(s => s.stems);
   const sceneGroups = useStore(s => s.sceneGroups);
   const setWorkspaceStorePath = useStore(s => s.setWorkspacePath);
+
+  const updateOverallProgress = useCallback((stageIndex: number, stageCount: number, current: number, total: number) => {
+    const safeStageCount = Math.max(1, Number(stageCount) || 1);
+    const safeTotal = Math.max(0, Number(total) || 0);
+    const stageFraction = safeTotal > 0
+      ? Math.min(1, Math.max(0, (Number(current) || 0) / safeTotal))
+      : 0;
+    const nextPercent = Math.min(
+      100,
+      Math.max(0, ((Math.max(1, Number(stageIndex) || 1) - 1 + stageFraction) / safeStageCount) * 100),
+    );
+
+    setOverallProgress((previous) => previous === null ? nextPercent : Math.max(previous, nextPercent));
+  }, []);
 
   const mainViewFolder = useMemo(() => {
     const mainView = views.find(v => v.isMain);
@@ -415,6 +430,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     setProgressStageIndex(1);
     setProgressStageCount(1);
     setOperationProgress({ current: 0, total: 0 });
+    setOverallProgress(null);
     try {
       const existingFolders = folders.map(f => ({
         path: f.path,
@@ -569,6 +585,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     setProgressStageIndex(1);
     setProgressStageCount(1);
     setOperationProgress({ current: 0, total: 0 });
+    setOverallProgress(null);
     try {
       const allFolders = folders.map(f => ({
         path: f.path,
@@ -676,6 +693,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     setProgressStageIndex(stageIndex);
     setProgressStageCount(stageCount);
     setOperationProgress({ current: 0, total: stemsToLoad.length });
+    updateOverallProgress(stageIndex, stageCount, 0, stemsToLoad.length);
     useStore.setState({
       annotations: [],
       hiddenAnnotations: [],
@@ -692,6 +710,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
         saveDir,
         (current, total) => {
           setOperationProgress({ current, total });
+          updateOverallProgress(stageIndex, stageCount, current, total);
         },
         10,
       );
@@ -748,6 +767,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     setProgressStageIndex(1);
     setProgressStageCount(2);
     setOperationProgress({ current: 0, total: 2 });
+    setOverallProgress(0);
     try {
       const finalPath = isWorkspaceCustom ? workspacePath.trim() : defaultWorkspacePath;
       const shouldEnterAnnotationDirectly = views.length === 1;
@@ -805,11 +825,16 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       const shouldLoadProjectAnnotations = Boolean(finalPath && (shouldLoadExistingAnnotations || shouldImportDetectedAnnotations));
       const totalStages = 2 + (shouldImportDetectedAnnotations ? 1 : 0) + (shouldLoadProjectAnnotations ? 1 : 0);
       setProgressStageCount(totalStages);
+      // The preparation stage is complete. From this point on, the bar uses
+      // one monotonic percentage for the whole workflow instead of resetting
+      // to the local progress of each stage.
+      setOverallProgress(100 / totalStages);
 
       if (finalPath && shouldImportDetectedAnnotations && selectedAnnotationCandidate) {
         setProgressStage('importingAnnotations');
         setProgressStageIndex(2);
         setOperationProgress({ current: 0, total: 0 });
+        updateOverallProgress(2, totalStages, 0, 0);
 
         const imagePaths: Record<string, string> = {};
         const mainFolderPath = mainViewFolder.path.replace(/[\\/]+$/, '');
@@ -840,6 +865,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
           attributes_file: selectedAnnotationCandidate.attributes_file || undefined,
         }, (progress) => {
           setOperationProgress({ current: progress.current, total: progress.total });
+          updateOverallProgress(2, totalStages, progress.current, progress.total);
         });
 
         const importedAttributeDefinitions = Array.isArray(importResult?.attribute_definitions)
@@ -849,6 +875,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
           useStore.getState().upsertTaxonomyAttributes(importedAttributeDefinitions);
         }
         setOperationProgress({ current: 1, total: 1 });
+        updateOverallProgress(2, totalStages, 1, 1);
       }
 
       if (finalPath && shouldLoadProjectAnnotations) {
@@ -861,6 +888,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       setProgressStageIndex(totalStages);
       setProgressStageCount(totalStages);
       setOperationProgress({ current: 0, total: 1 });
+      updateOverallProgress(totalStages, totalStages, 0, 1);
       const projectMeta = generateProjectMetaConfig(useStore.getState());
       if (metaPath) await saveProjectMeta({ file_path: metaPath, content: projectMeta });
       if (isCreatingProject && metaPath) {
@@ -868,6 +896,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       }
       setProgressStage('complete');
       setOperationProgress({ current: 1, total: 1 });
+      updateOverallProgress(totalStages, totalStages, 1, 1);
 
       if (isCreatingProject || loadedWorkspaceStats) {
         const datasetSummary = getDatasetSummary();
@@ -893,6 +922,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
     } finally {
       setIsGlobalConfirming(false);
       setProgressStage('idle');
+      setOverallProgress(null);
     }
   };
 
@@ -1571,6 +1601,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
                 stageName={progressStageName}
                 current={operationProgress.current}
                 total={operationProgress.total}
+                overallPercent={overallProgress}
                 stageLabel={t('common.stage')}
               />
             </div>

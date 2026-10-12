@@ -7,6 +7,7 @@ export interface OperationProgressProps {
   stageName: ReactNode;
   current?: number;
   total?: number;
+  overallPercent?: number | null;
   stageLabel?: string;
   className?: string;
   barClassName?: string;
@@ -26,6 +27,7 @@ export function OperationProgress({
   stageName,
   current,
   total,
+  overallPercent,
   stageLabel = 'Stage',
   className,
   barClassName,
@@ -36,7 +38,11 @@ export function OperationProgress({
     ? Math.min(safeTotal, Math.max(0, Number(current) || 0))
     : 0;
   const percent = hasTotal ? (safeCurrent / safeTotal) * 100 : 0;
-  const showDeterminateProgress = hasTotal && safeCurrent > 0;
+  const hasOverallPercent = Number.isFinite(overallPercent);
+  const safeOverallPercent = hasOverallPercent
+    ? Math.min(100, Math.max(0, Number(overallPercent)))
+    : 0;
+  const showDeterminateProgress = hasOverallPercent || (hasTotal && safeCurrent > 0);
 
   return (
     <div className={cn('min-w-0 flex-1 space-y-1.5', className)}>
@@ -60,7 +66,7 @@ export function OperationProgress({
             showDeterminateProgress ? 'bg-primary' : 'w-1/2 animate-pulse bg-primary',
             barClassName,
           )}
-          style={showDeterminateProgress ? { width: `${percent}%` } : undefined}
+          style={showDeterminateProgress ? { width: `${hasOverallPercent ? safeOverallPercent : percent}%` } : undefined}
         />
       </div>
     </div>

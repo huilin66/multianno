@@ -80,6 +80,12 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'done' | 'error'>('idle');
   const [importStage, setImportStage] = useState<'importing' | 'refreshing'>('importing');
   const [importStageProgress, setImportStageProgress] = useState({ current: 0, total: 0 });
+  const [overallProgress, setOverallProgress] = useState<number | null>(null);
+
+  const updateOverallProgress = (nextPercent: number) => {
+    const safePercent = Math.min(100, Math.max(0, Number(nextPercent) || 0));
+    setOverallProgress((previous) => previous === null ? safePercent : Math.max(previous, safePercent));
+  };
 
   // --- 文件浏览器 ---
   const [explorerConfig, setExplorerConfig] = useState<{
@@ -147,6 +153,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
     setImportStatus('importing');
     setImportStage('importing');
     setImportStageProgress({ current: 0, total: 0 });
+    setOverallProgress(0);
 
     // 传递主视图每个 stem 的真实图像路径。YOLO 标签只有归一化坐标，
     // 后端必须读取对应原图尺寸后才能还原成像素坐标。
@@ -186,10 +193,15 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
             : undefined,
       }, (progress) => {
         setImportStageProgress({ current: progress.current, total: progress.total });
+        const stagePercent = progress.total > 0
+          ? (progress.current / progress.total) * 50
+          : 0;
+        updateOverallProgress(stagePercent);
       });
 
       setImportStage('refreshing');
       setImportStageProgress({ current: 0, total: 0 });
+      updateOverallProgress(50);
 
       // 热重载
       const { projectMetaPath } = useStore.getState();
@@ -217,7 +229,13 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                 await loadAllProjectAnnotations(
                   sortedStems,
                   loadPath,
-                  (current, total) => setImportStageProgress({ current, total }),
+                  (current, total) => {
+                    setImportStageProgress({ current, total });
+                    const stagePercent = total > 0
+                      ? 50 + (current / total) * 50
+                      : 50;
+                    updateOverallProgress(stagePercent);
+                  },
                 );
               }
             }
@@ -228,6 +246,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       }
 
       setImportStageProgress({ current: 1, total: 1 });
+      updateOverallProgress(100);
 
       // 属性配置由后端按实际导入的 attributes.yaml 解析后返回。
       // 必须在 project meta 热重载之后注册，否则热重载会覆盖刚导入的定义。
@@ -282,6 +301,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       setTimeout(() => setImportStatus('idle'), 3000);
     } finally {
       setIsImporting(false);
+      setOverallProgress(null);
     }
   };
 
@@ -674,6 +694,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
               stageName={t(importStage === 'importing' ? 'dataImport.importing' : 'dataImport.refreshing')}
               current={importStageProgress.current}
               total={importStageProgress.total}
+              overallPercent={overallProgress}
               stageLabel={t('common.stage')}
             />
           </div>
