@@ -880,7 +880,7 @@ export default function App() {
                     () => setActiveModule('taxonomy'),
                   );
                 }}>
-                  <Tags className="w-4 h-4 mr-2" /> {t('menu.taxonomyManager')}
+                  <Tags className="w-4 h-4 mr-2" /> {t('menu.annotationManager')}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setTrackIdWindowOpen(true)}>
                   <Route className="w-4 h-4 mr-2" /> {t('menu.trackIdAnnotation')}
@@ -1263,7 +1263,7 @@ export default function App() {
       >
         <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-border overflow-hidden">
           <DialogHeader className="p-4 border-b border-border shrink-0">
-            <DialogTitle>{t('menu.taxonomyManager')}</DialogTitle>
+            <DialogTitle>{t('menu.annotationManager')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <TaxonomyDashboard onClose={() => setActiveModule('workspace')} />

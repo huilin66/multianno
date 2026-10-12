@@ -1,6 +1,8 @@
 // src/components/modules/TaxonomyDashboard.tsx
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useStore } from '../../store/useStore';
+import type { Annotation } from '../../store/useStore';
+import { AnnotationTable } from './AnnotationTable';
 import { 
   Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
   Plus, Check, X, Loader2, AlertCircle, Upload, Database, Activity,
@@ -20,7 +22,7 @@ interface TaxonomyDashboardProps {
   onClose?: () => void;
 }
 
-type TaxonomyDashboardTab = 'overview' | 'classes' | 'attributes';
+type TaxonomyDashboardTab = 'overview' | 'annotationTable' | 'classes' | 'attributes';
 
 interface TaxonomyDashboardViewState {
   activeTab?: TaxonomyDashboardTab;
@@ -31,6 +33,7 @@ interface TaxonomyDashboardViewState {
   previousPreviewStem?: string | null;
   previewViewId?: string;
   expanded?: {
+    taxonomy?: boolean;
     classes?: boolean;
     attributes?: boolean;
   };
@@ -69,7 +72,7 @@ const readTaxonomyViewState = (key: string): TaxonomyDashboardViewState | null =
 };
 
 const isTaxonomyDashboardTab = (value: unknown): value is TaxonomyDashboardTab => (
-  value === 'overview' || value === 'classes' || value === 'attributes'
+  value === 'overview' || value === 'annotationTable' || value === 'classes' || value === 'attributes'
 );
 
 
@@ -888,7 +891,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
-    folders, views, sceneGroups, editorSettings, projectMetaPath, projectName, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
+    annotations = [], folders, views, sceneGroups, editorSettings, projectMetaPath, projectName, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
     mergeTaxonomyClassesWithAttributes, stems, workspacePath, setPendingAnnotationFocus
   } = useStore() as any;
 
@@ -907,7 +910,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
   const [selectedAttributeValue, setSelectedAttributeValue] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState({ classes: true, attributes: true });
+  const [expanded, setExpanded] = useState({ taxonomy: true, classes: true, attributes: true });
   const [statsStatus, setStatsStatus] = useState<'idle' | 'loading' | 'done'>('idle');
   const [statsData, setStatsData] = useState<any>(null); 
   const statsRequestIdRef = useRef(0);
@@ -961,6 +964,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     previousPreviewStem: previousPreviewStemRef.current,
     previewViewId,
     expanded: {
+      taxonomy: expanded.taxonomy,
       classes: expanded.classes,
       attributes: expanded.attributes,
     },
@@ -988,6 +992,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     previousPreviewStemRef.current = savedPreviousPreviewStem;
     setPreviewStem(restoredPreviewStemRef.current);
     setExpanded({
+      taxonomy: saved?.expanded?.taxonomy ?? true,
       classes: saved?.expanded?.classes ?? true,
       attributes: saved?.expanded?.attributes ?? true,
     });
@@ -1009,6 +1014,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       previousPreviewStem: previousPreviewStemRef.current,
       previewViewId,
       expanded: {
+        taxonomy: expanded.taxonomy,
         classes: expanded.classes,
         attributes: expanded.attributes,
       },
@@ -1029,6 +1035,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     activeTab,
     expanded.attributes,
     expanded.classes,
+    expanded.taxonomy,
     previewStem,
     previewViewId,
     restoredViewStateKey,
@@ -1625,6 +1632,40 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     previewObjects,
     previewStem,
     selectedAttributeValue,
+    setActiveModule,
+    setCurrentStem,
+    setPendingAnnotationFocus,
+    t,
+  ]);
+
+  const handleOpenAnnotationFromTable = useCallback((annotation: Annotation, sceneObjectIndex: number) => {
+    const storeStems = useStore.getState().stems;
+    const matchedStem = storeStems.find((candidate: string) => candidate === annotation.stem)
+      || storeStems.find((candidate: string) => candidate.startsWith(annotation.stem));
+
+    if (!matchedStem) {
+      openDialog({
+        type: 'warning',
+        title: t('taxonomyDashboard.sceneNotFound'),
+        description: t('taxonomyDashboard.sceneNotFoundDesc', { stem: annotation.stem }),
+        confirmText: t('taxonomyDashboard.gotIt'),
+        hideCancel: true,
+      });
+      return;
+    }
+
+    setPendingAnnotationFocus({
+      stem: matchedStem,
+      index: annotation.sourceIndex ?? sceneObjectIndex,
+    });
+    onClose?.();
+    setTimeout(() => {
+      setCurrentStem(matchedStem);
+      setActiveModule('workspace');
+    }, 150);
+  }, [
+    onClose,
+    openDialog,
     setActiveModule,
     setCurrentStem,
     setPendingAnnotationFocus,
@@ -2334,15 +2375,41 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {/* ================= 1. 左侧可收纳导航树 ================= */}
         <div className="w-64 border-r border-neutral-200 dark:border-neutral-800 flex flex-col bg-white dark:bg-neutral-900 shrink-0">
           
-          <div className="p-3 border-b border-neutral-100 dark:border-neutral-800">
+          <div className="p-3 border-b border-neutral-100 dark:border-neutral-800 space-y-1">
             <Button variant={activeTab === 'overview' ? 'secondary' : 'ghost'} 
                     onClick={() => { setActiveTab('overview'); setSelectedClassId(null); setSelectedAttributeId(null); }} 
                     className={`w-full justify-start h-10 font-bold transition-all ${activeTab === 'overview' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800' : ''}`}>
               <LayoutDashboard className="w-4 h-4 mr-2"/> {t('taxonomyDashboard.globalOverview')}
             </Button>
+            <Button
+              variant={activeTab === 'annotationTable' ? 'secondary' : 'ghost'}
+              onClick={() => { setActiveTab('annotationTable'); setSelectedClassId(null); setSelectedAttributeId(null); }}
+              className={`w-full justify-start h-10 font-bold transition-all ${activeTab === 'annotationTable' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800' : ''}`}
+            >
+              <List className="w-4 h-4 mr-2" /> {t('taxonomyDashboard.annotationTable', 'Annotation Table')}
+            </Button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
+            <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setExpanded((previous) => ({ ...previous, taxonomy: !previous.taxonomy }))}
+                className="w-full flex items-center justify-between p-2.5 bg-neutral-50/80 dark:bg-neutral-950/30 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
+                aria-expanded={expanded.taxonomy}
+              >
+                <span className="text-xs font-black text-neutral-700 dark:text-neutral-200 uppercase tracking-wider flex items-center">
+                  <Layers className="w-3.5 h-3.5 mr-2 text-blue-500" />
+                  {t('taxonomy.taxonomyGroup', 'Taxonomy')}
+                  <span className="ml-2 bg-white dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px] text-neutral-500">
+                    {taxonomyClasses.length + taxonomyAttributes.length}
+                  </span>
+                </span>
+                {expanded.taxonomy ? <ChevronDown className="w-4 h-4 text-neutral-400" /> : <ChevronRight className="w-4 h-4 text-neutral-400" />}
+              </button>
+
+              {expanded.taxonomy && (
+                <div className="p-2 space-y-3">
             {/* --- Classes --- */}
             <div>
               <div className="flex items-center justify-between cursor-pointer p-1.5 group rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors" onClick={() => setExpanded(p => ({...p, classes: !p.classes}))}>
@@ -2511,6 +2578,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                     <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('attributes')}><Plus className="w-3 h-3 mr-1"/> {t('common.add')}</Button>
                     <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('attributes'); fileInputRef.current?.click(); }}><Upload className="w-3 h-3 mr-1"/> {t('common.import')}</Button>
                   </div>
+                </div>
+              )}
+            </div>
                 </div>
               )}
             </div>
@@ -2731,7 +2801,17 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
           </div>
         )}
 
-        {/* 🌟 模式 B：Classes 单类专属展示 */}
+        {/* 🌟 模式 B：Annotation Table */}
+        {activeTab === 'annotationTable' && (
+          <AnnotationTable
+            annotations={annotations}
+            taxonomyClasses={taxonomyClasses}
+            taxonomyAttributes={taxonomyAttributes}
+            onOpenAnnotation={handleOpenAnnotationFromTable}
+          />
+        )}
+
+        {/* 🌟 模式 C：Classes 单类专属展示 */}
         {activeTab === 'classes' && activeClass && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
             
