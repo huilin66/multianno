@@ -450,17 +450,41 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
   
   const handleDelete = async () => {
     const state = useStore.getState();
-    const id = state.activeAnnotationId;
-    if (id) {
-      const anno = state.annotations.find(a => a.id === id);
-      if (anno) pushAction({ type: 'delete', anno: anno });
-      state.removeAnnotation(id);
-      state.setActiveAnnotationId(null);
+    const activeId = state.activeAnnotationId;
+    const normalizedSelectedIds = Array.from(new Set(selectedAnnotationIds.map(String)));
+    const activeIsPartOfSelection = activeId != null
+      && normalizedSelectedIds.includes(String(activeId));
+    const targetIds = normalizedSelectedIds.length > 1 && activeIsPartOfSelection
+      ? normalizedSelectedIds
+      : activeId
+        ? [String(activeId)]
+        : normalizedSelectedIds;
+    if (targetIds.length === 0) return;
 
-      const saved = await autoSave();
-      if (!saved) {
-        toast.error(t('rightPanel.deleteSaveError'));
-      }
+    const targetIdSet = new Set(targetIds);
+    const targetAnnotations = state.annotations.filter((annotation: Annotation) => (
+      targetIdSet.has(String(annotation.id))
+    ));
+    if (targetAnnotations.length === 0) return;
+
+    if (targetAnnotations.length === 1) {
+      pushAction({ type: 'delete', anno: targetAnnotations[0] });
+    } else {
+      pushAction({
+        type: 'batch',
+        batch: targetAnnotations.map((anno) => ({ type: 'delete' as const, anno })),
+      });
+    }
+
+    targetAnnotations.forEach((annotation) => state.removeAnnotation(annotation.id));
+    state.setActiveAnnotationId(null);
+    selectionGestureRef.current = null;
+    setSelectionBox(null);
+    setSelectedAnnotationIds([]);
+
+    const saved = await autoSave();
+    if (!saved) {
+      toast.error(t('rightPanel.deleteSaveError'));
     }
   };
   const handleClear = async () => {
