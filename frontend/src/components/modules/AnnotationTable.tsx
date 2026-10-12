@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Copy, ExternalLink, Filter, Link2, Search, X } from 'lucide-react';
+import { Copy, ExternalLink, Filter, Link2, RefreshCw, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, TaxonomyAttribute, TaxonomyClass } from '../../store/useStore';
 import { Button } from '../ui/button';
@@ -50,7 +50,15 @@ const formatContent = (annotation: Annotation) => {
   return content.join(' · ');
 };
 
-export function AnnotationTable({
+const cloneAnnotations = (source: Annotation[]) => source.map((annotation) => ({
+  ...annotation,
+  points: (annotation.points || []).map((point) => ({ ...point })),
+  holes: annotation.holes?.map((hole) => hole.map((point) => ({ ...point }))),
+  attributes: { ...(annotation.attributes || {}) },
+  flags: annotation.flags ? { ...annotation.flags } : annotation.flags,
+}));
+
+export const AnnotationTable = React.memo(function AnnotationTable({
   annotations,
   taxonomyClasses,
   taxonomyAttributes,
@@ -59,6 +67,7 @@ export function AnnotationTable({
   onOverlapStateChange,
 }: AnnotationTableProps) {
   const { t } = useTranslation();
+  const [loadedAnnotations, setLoadedAnnotations] = useState<Annotation[] | null>(null);
   const [query, setQuery] = useState('');
   const [classFilter, setClassFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -70,15 +79,19 @@ export function AnnotationTable({
   const [overlapGroups, setOverlapGroups] = useState<Map<string, string>>(new Map());
   const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
   const overlapScanRequestRef = React.useRef(0);
+  const isLoaded = loadedAnnotations !== null;
 
   const rows = useMemo<AnnotationTableRow[]>(() => {
     const sceneObjectCounts = new Map<string, number>();
 
-    return annotations.map((annotation) => {
+    return (loadedAnnotations || []).map((annotation) => {
       const sceneObjectIndex = sceneObjectCounts.get(annotation.stem) || 0;
       sceneObjectCounts.set(annotation.stem, sceneObjectIndex + 1);
 
-      const attributeEntries = Object.entries(annotation.attributes || {});
+      const attributeEntries = Object.entries(annotation.attributes || {}) as Array<[
+        string,
+        string | number | boolean,
+      ]>;
       const attributesText = attributeEntries.length > 0
         ? attributeEntries
           .map(([name, value]) => `${name}=${formatAttributeValue(value)}`)
@@ -92,7 +105,7 @@ export function AnnotationTable({
         contentText: formatContent(annotation),
       };
     });
-  }, [annotations]);
+  }, [loadedAnnotations]);
 
   const classOptions = useMemo(() => {
     const names = new Set([
@@ -143,6 +156,8 @@ export function AnnotationTable({
   );
 
   const scanOverlaps = React.useCallback((mode: 'iou' | 'ios', threshold: number) => {
+    if (loadedAnnotations === null) return;
+
     const requestId = overlapScanRequestRef.current + 1;
     overlapScanRequestRef.current = requestId;
     setIsScanningOverlaps(true);
@@ -152,14 +167,14 @@ export function AnnotationTable({
     window.setTimeout(() => {
       if (requestId !== overlapScanRequestRef.current) return;
 
-      const result = findAnnotationOverlaps(annotations, mode, threshold);
+      const result = findAnnotationOverlaps(loadedAnnotations || [], mode, threshold);
       setOverlapKeys(result.matchedKeys);
       setOverlapCounts(result.overlapCounts);
       setOverlapGroups(result.overlapGroups);
       setIsScanningOverlaps(false);
       onOverlapStateChange?.({ active: true, mode, threshold });
     }, 0);
-  }, [annotations, onOverlapStateChange]);
+  }, [loadedAnnotations, onOverlapStateChange]);
 
   // Keep the last completed scan active when the table is remounted. When the
   // user deleted objects in the workspace, scan again with the saved criteria
@@ -173,7 +188,9 @@ export function AnnotationTable({
 
     if (overlapState?.active) {
       setOverlapPanelOpen(true);
-      scanOverlaps(savedMode, savedThreshold);
+      if (loadedAnnotations !== null) {
+        scanOverlaps(savedMode, savedThreshold);
+      }
       return;
     }
 
@@ -182,7 +199,11 @@ export function AnnotationTable({
     setOverlapCounts(new Map());
     setOverlapGroups(new Map());
     setIsScanningOverlaps(false);
-  }, [annotations, overlapState?.active, overlapState?.mode, overlapState?.threshold, scanOverlaps]);
+  }, [loadedAnnotations, overlapState?.active, overlapState?.mode, overlapState?.threshold, scanOverlaps]);
+
+  const loadAnnotations = () => {
+    setLoadedAnnotations(cloneAnnotations(annotations));
+  };
 
   const resetOverlapScan = () => {
     overlapScanRequestRef.current += 1;
@@ -226,18 +247,40 @@ export function AnnotationTable({
               {t('taxonomyDashboard.annotationTableDesc', 'Browse and filter every annotation in the current project.')}
             </p>
           </div>
-          <div className="flex items-center gap-2 text-[10px] font-bold text-neutral-500 shrink-0">
-            <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2.5 py-1">
-              {filteredRows.length} {t('taxonomyDashboard.objects', 'objects')}
-            </span>
-            <span className="rounded-full bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1">
-              {sceneCount} {t('taxonomyDashboard.scenes', 'scenes')}
-            </span>
-            <span className="rounded-full bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1">
-              {classCount} {t('taxonomyDashboard.classes', 'classes')}
-            </span>
+          <div className="flex items-center gap-2 shrink-0">
+            {isLoaded && (
+              <div className="flex items-center gap-2 text-[10px] font-bold text-neutral-500">
+                <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2.5 py-1">
+                  {filteredRows.length} {t('taxonomyDashboard.objects', 'objects')}
+                </span>
+                <span className="rounded-full bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1">
+                  {sceneCount} {t('taxonomyDashboard.scenes', 'scenes')}
+                </span>
+                <span className="rounded-full bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1">
+                  {classCount} {t('taxonomyDashboard.classes', 'classes')}
+                </span>
+              </div>
+            )}
+            <Button
+              type="button"
+              variant={isLoaded ? 'outline' : 'default'}
+              className="h-8 px-3 text-xs font-bold"
+              onClick={loadAnnotations}
+              title={t('taxonomyDashboard.annotationTableLoadHint', 'Load a snapshot of the current annotations into the table')}
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              {isLoaded
+                ? t('taxonomyDashboard.reloadAnnotations', 'Reload annotations')
+                : t('taxonomyDashboard.loadAnnotations', 'Load annotations')}
+            </Button>
           </div>
         </div>
+
+        {!isLoaded && (
+          <p className="mt-3 text-[11px] text-neutral-500">
+            {t('taxonomyDashboard.annotationTableLoadHint', 'Load a snapshot of the current annotations into the table. The table will not update automatically.')}
+          </p>
+        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1">
@@ -245,6 +288,7 @@ export function AnnotationTable({
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              disabled={!isLoaded}
               placeholder={t('taxonomyDashboard.annotationSearch', 'Search ID, class, content or scene group...')}
               className="h-9 pl-9 pr-8 text-xs"
             />
@@ -260,7 +304,7 @@ export function AnnotationTable({
             )}
           </div>
 
-          <Select value={classFilter} onValueChange={setClassFilter}>
+          <Select value={classFilter} onValueChange={setClassFilter} disabled={!isLoaded}>
             <SelectTrigger className="h-9 w-[170px] text-xs">
               <SelectValue placeholder={t('taxonomyDashboard.className', 'Class')} />
             </SelectTrigger>
@@ -272,7 +316,7 @@ export function AnnotationTable({
             </SelectContent>
           </Select>
 
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <Select value={typeFilter} onValueChange={setTypeFilter} disabled={!isLoaded}>
             <SelectTrigger className="h-9 w-[150px] text-xs">
               <SelectValue placeholder={t('taxonomyDashboard.annotationType', 'Type')} />
             </SelectTrigger>
@@ -289,6 +333,7 @@ export function AnnotationTable({
             variant={overlapKeys !== null ? 'secondary' : 'outline'}
             className="h-9 px-3 text-xs"
             onClick={() => setOverlapPanelOpen((previous) => !previous)}
+            disabled={!isLoaded}
             title={t('rightPanel.findOverlapping', 'Find overlapping objects')}
           >
             <Copy className="w-3.5 h-3.5 mr-1.5" />
@@ -349,7 +394,7 @@ export function AnnotationTable({
                   type="button"
                   className="h-8 text-xs font-bold"
                   onClick={() => scanOverlaps(overlapMode, overlapThreshold)}
-                  disabled={isScanningOverlaps}
+                  disabled={isScanningOverlaps || !isLoaded}
                 >
                   <Copy className="mr-1.5 h-3.5 w-3.5" />
                   {isScanningOverlaps
@@ -386,7 +431,9 @@ export function AnnotationTable({
           <div className="h-full min-h-[260px] flex flex-col items-center justify-center text-neutral-400">
             <Filter className="w-10 h-10 mb-3 opacity-25" />
             <p className="text-sm font-semibold">
-              {annotations.length === 0
+              {!isLoaded
+                ? t('taxonomyDashboard.annotationTableNotLoaded', 'Click “Load annotations” to populate the table.')
+                : loadedAnnotations.length === 0
                 ? t('taxonomyDashboard.noAnnotations', 'No annotations in the current project.')
                 : overlapKeys !== null && overlapKeys.size === 0
                   ? t('taxonomyDashboard.noOverlaps', 'No overlapping objects found.')
@@ -494,4 +541,4 @@ export function AnnotationTable({
       </div>
     </div>
   );
-}
+});
