@@ -15,6 +15,7 @@ import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
 import { ObjectEditorForm } from './ObjectEditorForm'; // 🌟 引入新组件
 import { toast } from '../../../store/useToastStore';
+import { calculateAnnotationOverlap, getAnnotationOverlapBounds } from '../../../lib/annotationOverlap';
 
 export interface RightPanelProps {
   tool: string;
@@ -248,39 +249,6 @@ export function RightPanel({
     // 这里如果需要通知 Canvas 取消高亮，也可以在此处理
   };
 
-// 工具 1：提取对象的 BBox (兼容各类图形)
-  const getBBoxFromPoints = (points: {x: number, y: number}[]) => {
-    if (!points || points.length === 0) return null;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    points.forEach(p => {
-      if (p.x < minX) minX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y > maxY) maxY = p.y;
-    });
-    return { minX, minY, maxX, maxY, area: (maxX - minX) * (maxY - minY) };
-  };
-
-  // 工具 2：计算重叠度
-  const calculateOverlap = (box1: any, box2: any, mode: 'iou' | 'ios') => {
-    if (!box1 || !box2) return 0;
-    const xA = Math.max(box1.minX, box2.minX);
-    const yA = Math.max(box1.minY, box2.minY);
-    const xB = Math.min(box1.maxX, box2.maxX);
-    const yB = Math.min(box1.maxY, box2.maxY);
-
-    const interW = Math.max(0, xB - xA);
-    const interH = Math.max(0, yB - yA);
-    const interArea = interW * interH;
-
-    if (interArea === 0) return 0;
-
-    if (mode === 'ios') {
-      return interArea / Math.min(box1.area, box2.area); // 交小比 (针对嵌套)
-    }
-    return interArea / (box1.area + box2.area - interArea); // 交并比
-  };
-
   // 🌟 工具：计算重叠并分组 (连通分量算法)
   const handleScanOverlaps = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -293,7 +261,7 @@ export function RightPanel({
 
     const candidates = currentAnnos.map(a => ({
       id: a.id,
-      bbox: getBBoxFromPoints(a.points) // 复用之前的 BBox 提取函数
+      bbox: getAnnotationOverlapBounds(a),
     })).filter(c => c.bbox);
 
     // 构建邻接表
@@ -302,7 +270,7 @@ export function RightPanel({
     
     for (let i = 0; i < candidates.length; i++) {
       for (let j = i + 1; j < candidates.length; j++) {
-        const overlap = calculateOverlap(candidates[i].bbox, candidates[j].bbox, nmsMode);
+        const overlap = calculateAnnotationOverlap(candidates[i].bbox, candidates[j].bbox, nmsMode);
         if (overlap >= nmsThreshold / 100) {
           adj[candidates[i].id].push(candidates[j].id);
           adj[candidates[j].id].push(candidates[i].id);

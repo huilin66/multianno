@@ -1,10 +1,14 @@
-import React, { useMemo, useState } from 'react';
-import { ExternalLink, Filter, Search, X } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Copy, ExternalLink, Filter, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, TaxonomyAttribute, TaxonomyClass } from '../../store/useStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import {
+  findAnnotationOverlaps,
+  getAnnotationOverlapKey,
+} from '../../lib/annotationOverlap';
 
 interface AnnotationTableProps {
   annotations: Annotation[];
@@ -48,6 +52,19 @@ export function AnnotationTable({
   const [query, setQuery] = useState('');
   const [classFilter, setClassFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [overlapPanelOpen, setOverlapPanelOpen] = useState(false);
+  const [overlapMode, setOverlapMode] = useState<'iou' | 'ios'>('ios');
+  const [overlapThreshold, setOverlapThreshold] = useState(80);
+  const [overlapKeys, setOverlapKeys] = useState<Set<string> | null>(null);
+  const [overlapCounts, setOverlapCounts] = useState<Map<string, number>>(new Map());
+  const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
+
+  useEffect(() => {
+    // Annotation changes invalidate a previous global scan. Do not leave a
+    // stale result active after an object is edited or deleted.
+    setOverlapKeys(null);
+    setOverlapCounts(new Map());
+  }, [annotations]);
 
   const rows = useMemo<AnnotationTableRow[]>(() => {
     const sceneObjectCounts = new Map<string, number>();
@@ -92,6 +109,7 @@ export function AnnotationTable({
       const { annotation } = row;
       if (classFilter !== 'all' && annotation.label !== classFilter) return false;
       if (typeFilter !== 'all' && annotation.type !== typeFilter) return false;
+      if (overlapKeys && !overlapKeys.has(getAnnotationOverlapKey(annotation))) return false;
       if (!normalizedQuery) return true;
 
       return [
@@ -103,17 +121,41 @@ export function AnnotationTable({
         row.contentText,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
     });
-  }, [classFilter, query, rows, typeFilter]);
+  }, [classFilter, overlapKeys, query, rows, typeFilter]);
 
-  const hasFilters = Boolean(query.trim()) || classFilter !== 'all' || typeFilter !== 'all';
+  const hasFilters = Boolean(query.trim()) || classFilter !== 'all' || typeFilter !== 'all' || overlapKeys !== null;
   const classCount = new Set(filteredRows.map((row) => row.annotation.label)).size;
   const sceneCount = new Set(filteredRows.map((row) => row.annotation.stem)).size;
   const taxonomyAttributeNames = new Set(taxonomyAttributes.map((attribute) => attribute.name));
+
+  const overlapSceneCount = useMemo(
+    () => new Set(
+      rows
+        .filter((row) => overlapKeys?.has(getAnnotationOverlapKey(row.annotation)))
+        .map((row) => row.annotation.stem),
+    ).size,
+    [overlapKeys, rows],
+  );
+
+  const scanOverlaps = () => {
+    setIsScanningOverlaps(true);
+
+    // Yield once so the table can render the scanning state before a large
+    // project-wide pair scan begins.
+    window.setTimeout(() => {
+      const result = findAnnotationOverlaps(annotations, overlapMode, overlapThreshold);
+      setOverlapKeys(result.matchedKeys);
+      setOverlapCounts(result.overlapCounts);
+      setIsScanningOverlaps(false);
+    }, 0);
+  };
 
   const clearFilters = () => {
     setQuery('');
     setClassFilter('all');
     setTypeFilter('all');
+    setOverlapKeys(null);
+    setOverlapCounts(new Map());
   };
 
   return (
@@ -184,6 +226,22 @@ export function AnnotationTable({
             </SelectContent>
           </Select>
 
+          <Button
+            type="button"
+            variant={overlapKeys !== null ? 'secondary' : 'outline'}
+            className="h-9 px-3 text-xs"
+            onClick={() => setOverlapPanelOpen((previous) => !previous)}
+            title={t('rightPanel.findOverlapping', 'Find overlapping objects')}
+          >
+            <Copy className="w-3.5 h-3.5 mr-1.5" />
+            {t('rightPanel.findOverlapping', 'Find overlapping objects')}
+            {overlapKeys !== null && (
+              <span className="ml-1.5 rounded-full bg-blue-100 dark:bg-blue-900/40 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 dark:text-blue-300">
+                {overlapKeys.size}
+              </span>
+            )}
+          </Button>
+
           {hasFilters && (
             <Button type="button" variant="ghost" className="h-9 px-3 text-xs" onClick={clearFilters}>
               <Filter className="w-3.5 h-3.5 mr-1.5" />
@@ -191,6 +249,81 @@ export function AnnotationTable({
             </Button>
           )}
         </div>
+
+        {overlapPanelOpen && (
+          <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[150px]">
+                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                  {t('rightPanel.metric', 'Metric')}
+                </label>
+                <Select value={overlapMode} onValueChange={(value: 'iou' | 'ios') => setOverlapMode(value)}>
+                  <SelectTrigger className="h-8 bg-white text-xs dark:bg-neutral-900">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ios" className="text-xs">{t('rightPanel.iosNested', 'IoS (Nested)')}</SelectItem>
+                    <SelectItem value="iou" className="text-xs">{t('rightPanel.iouStandard', 'IoU (Standard)')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-[220px] flex-1">
+                <div className="mb-1 flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+                  <span>{t('rightPanel.threshold', 'Threshold')}</span>
+                  <span className="font-mono text-blue-600 dark:text-blue-300">{overlapThreshold}%</span>
+                </div>
+                <input
+                  type="range"
+                  min={10}
+                  max={100}
+                  step={1}
+                  value={overlapThreshold}
+                  onChange={(event) => setOverlapThreshold(Number(event.target.value))}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  aria-label={t('rightPanel.threshold', 'Threshold')}
+                  className="h-4 w-full cursor-pointer accent-blue-600 dark:accent-blue-400"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  className="h-8 text-xs font-bold"
+                  onClick={scanOverlaps}
+                  disabled={isScanningOverlaps}
+                >
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  {isScanningOverlaps
+                    ? t('taxonomyDashboard.scanningOverlaps', 'Scanning...')
+                    : t('rightPanel.scanOverlapping', 'Scan Overlapping Objects')}
+                </Button>
+                {overlapKeys !== null && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-8 text-xs"
+                    onClick={() => {
+                      setOverlapKeys(null);
+                      setOverlapCounts(new Map());
+                    }}
+                  >
+                    {t('rightPanel.nmsReset', 'Reset')}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {overlapKeys !== null && (
+              <p className="mt-2 text-[11px] text-blue-700 dark:text-blue-300">
+                {t('taxonomyDashboard.overlapScanResult', '{{objects}} overlapping objects in {{scenes}} scenes', {
+                  objects: overlapKeys.size,
+                  scenes: overlapSceneCount,
+                })}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-auto p-5 custom-scrollbar">
@@ -200,6 +333,8 @@ export function AnnotationTable({
             <p className="text-sm font-semibold">
               {annotations.length === 0
                 ? t('taxonomyDashboard.noAnnotations', 'No annotations in the current project.')
+                : overlapKeys !== null && overlapKeys.size === 0
+                  ? t('taxonomyDashboard.noOverlaps', 'No overlapping objects found.')
                 : t('taxonomyDashboard.noAnnotationMatches', 'No annotations match the current filters.')}
             </p>
             {hasFilters && (
@@ -220,6 +355,9 @@ export function AnnotationTable({
                   <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationContent', 'Annotation Content')}</th>
                   <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationAttributes', 'Attributes')}</th>
                   <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.sceneGroup', 'Scene Group')}</th>
+                  {overlapKeys !== null && (
+                    <th className="w-24 px-3 py-3 text-left font-black">{t('taxonomyDashboard.overlapCount', 'Overlaps')}</th>
+                  )}
                   <th className="w-12 px-3 py-3" />
                 </tr>
               </thead>
@@ -266,6 +404,13 @@ export function AnnotationTable({
                       <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400 max-w-[250px] truncate" title={row.annotation.stem}>
                         {row.annotation.stem}
                       </td>
+                      {overlapKeys !== null && (
+                        <td className="px-3 py-2.5">
+                          <span className="inline-flex min-w-7 items-center justify-center rounded-full bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 dark:bg-red-950/40 dark:text-red-300">
+                            {overlapCounts.get(getAnnotationOverlapKey(row.annotation)) || 0}
+                          </span>
+                        </td>
+                      )}
                       <td className="px-3 py-2.5 text-right">
                         <button
                           type="button"
