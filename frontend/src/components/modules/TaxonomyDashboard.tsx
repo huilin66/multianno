@@ -2375,7 +2375,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {/* ================= 1. 左侧可收纳导航树 ================= */}
         <div className="w-64 border-r border-neutral-200 dark:border-neutral-800 flex flex-col bg-white dark:bg-neutral-900 shrink-0">
           
-          <div className="p-3 border-b border-neutral-100 dark:border-neutral-800 space-y-1">
+          <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
             <Button variant={activeTab === 'overview' ? 'secondary' : 'ghost'} 
                     onClick={() => { setActiveTab('overview'); setSelectedClassId(null); setSelectedAttributeId(null); }} 
                     className={`w-full justify-start h-10 font-bold transition-all ${activeTab === 'overview' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800' : ''}`}>
@@ -2388,28 +2388,24 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             >
               <List className="w-4 h-4 mr-2" /> {t('taxonomyDashboard.annotationTable', 'Annotation Table')}
             </Button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
-            <div className="rounded-lg border border-neutral-200 dark:border-neutral-800 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setExpanded((previous) => ({ ...previous, taxonomy: !previous.taxonomy }))}
-                className="w-full flex items-center justify-between p-2.5 bg-neutral-50/80 dark:bg-neutral-950/30 hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors"
-                aria-expanded={expanded.taxonomy}
-              >
-                <span className="text-xs font-black text-neutral-700 dark:text-neutral-200 uppercase tracking-wider flex items-center">
-                  <Layers className="w-3.5 h-3.5 mr-2 text-blue-500" />
-                  {t('taxonomy.taxonomyGroup', 'Taxonomy')}
-                  <span className="ml-2 bg-white dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px] text-neutral-500">
-                    {taxonomyClasses.length + taxonomyAttributes.length}
-                  </span>
+            <Button
+              variant="ghost"
+              onClick={() => setExpanded((previous) => ({ ...previous, taxonomy: !previous.taxonomy }))}
+              className={`w-full justify-start h-10 px-3 font-bold transition-all ${expanded.taxonomy ? 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-200' : 'text-neutral-600 dark:text-neutral-400'}`}
+              aria-expanded={expanded.taxonomy}
+            >
+              <Layers className="w-4 h-4 mr-2 text-blue-500" />
+              <span className="truncate">{t('taxonomy.taxonomyGroup', 'Taxonomy')}</span>
+              <span className="ml-auto flex items-center gap-2">
+                <span className="bg-white dark:bg-neutral-900 px-1.5 py-0.5 rounded text-[9px] text-neutral-500">
+                  {taxonomyClasses.length + taxonomyAttributes.length}
                 </span>
                 {expanded.taxonomy ? <ChevronDown className="w-4 h-4 text-neutral-400" /> : <ChevronRight className="w-4 h-4 text-neutral-400" />}
-              </button>
+              </span>
+            </Button>
 
-              {expanded.taxonomy && (
-                <div className="p-2 space-y-3">
+            {expanded.taxonomy && (
+              <div className="ml-3 mt-1 border-l-2 border-neutral-100 dark:border-neutral-800 pl-2 space-y-3">
             {/* --- Classes --- */}
             <div>
               <div className="flex items-center justify-between cursor-pointer p-1.5 group rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors" onClick={() => setExpanded(p => ({...p, classes: !p.classes}))}>
@@ -2586,7 +2582,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
             </div>
 
           </div>
-        </div>
 
         {/* ================= 2. 右侧主体区 ================= */}
         
