@@ -1111,7 +1111,9 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     previousDraftProjectKeyRef.current = draftProjectKey;
   }, [draftProjectKey, open]);
 
-  React.useEffect(() => {
+  // Capture the main workspace viewport before the Track ID canvas effects
+  // can fit the editable frame and write their viewport into the store.
+  React.useLayoutEffect(() => {
     if (!open) return;
     previousViewportRef.current = viewport;
     previousCurrentStemRef.current = currentStem;
