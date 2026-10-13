@@ -1040,6 +1040,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [reidSettingsMessage, setReidSettingsMessage] = React.useState('');
   const centerFitRef = React.useRef<(() => void) | null>(null);
   const dialogContentRef = React.useRef<HTMLDivElement>(null);
+  const filmstripRef = React.useRef<HTMLDivElement>(null);
   const [trackPopoverPosition, setTrackPopoverPosition] = React.useState({ x: 0, y: 0 });
   const previousViewportRef = React.useRef<any>(null);
   const previousCurrentStemRef = React.useRef<string | null>(null);
@@ -1121,11 +1122,18 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         if (previousViewport && setViewport) {
           setViewport(previousViewport.zoom, previousViewport.panX, previousViewport.panY);
         }
-        if (setCurrentStem) setCurrentStem(previousCurrentStemRef.current);
         if (setActiveAnnotationId) {
           const previousAnnotationId = previousActiveAnnotationIdRef.current;
-          const previousAnnotation = useStore.getState().annotations.find((annotation) => annotation.id === previousAnnotationId);
-          setActiveAnnotationId(previousAnnotation?.id || null);
+          const currentState = useStore.getState();
+          const previousAnnotation = currentState.annotations.find((annotation) => annotation.id === previousAnnotationId);
+          // Keep the Track ID window's scene selection in the main workspace.
+          // Only restore the previous object when the scene itself did not
+          // change; otherwise it would point to an object from another scene.
+          setActiveAnnotationId(
+            currentState.currentStem === previousCurrentStemRef.current
+              ? previousAnnotation?.id || null
+              : null,
+          );
         }
         previousViewportRef.current = null;
         previousCurrentStemRef.current = null;
@@ -1133,8 +1141,8 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       };
 
       // Save the scene that is currently being edited before restoring the
-      // scene from which the Track ID window was opened. Otherwise an edit on
-      // a browsed frame could be saved against the wrong current scene.
+      // main workspace viewport/object state. The selected scene itself is
+      // intentionally kept in sync with the Track ID window.
       if (useStore.getState().isAnnotationDirty && rightPanelProps.handleSave) {
         void rightPanelProps.handleSave().finally(restoreMainState);
       } else {
@@ -1142,6 +1150,16 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       }
     };
   }, [open, rightPanelProps.handleSave, setActiveAnnotationId, setCurrentStem, setViewport]);
+
+  React.useEffect(() => {
+    if (!open || !currentStem || !filmstripRef.current) return;
+    let thumbnail: HTMLButtonElement | null = null;
+    filmstripRef.current.querySelectorAll('[data-stem]').forEach((element) => {
+      const candidate = element as HTMLButtonElement;
+      if (!thumbnail && candidate.dataset.stem === currentStem) thumbnail = candidate;
+    });
+    thumbnail?.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+  }, [currentStem, open, stems]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -2100,7 +2118,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
 
                 <div className="shrink-0 border-t border-neutral-200 bg-white px-3 py-2 dark:border-neutral-800 dark:bg-neutral-950">
                   <div className="mb-1.5 flex items-center justify-between text-[10px] text-neutral-500"><span>{t('trackIdWindow.filmstrip')}</span><span>{currentIndex >= 0 ? `${currentIndex + 1}/${stems.length}` : `0/${stems.length}`}</span></div>
-                  <div className="flex max-w-full gap-1.5 overflow-x-scroll pb-2 custom-scrollbar">
+                  <div ref={filmstripRef} className="flex max-w-full gap-1.5 overflow-x-scroll pb-2 custom-scrollbar">
                     {stems.map((stem: string) => (
                       <TrackFrameThumbnail key={stem} stem={stem} current={stem === currentStem} canvasProps={canvasProps} onClick={() => jumpToStem(stem)} />
                     ))}
