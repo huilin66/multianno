@@ -1632,6 +1632,14 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
     }
   };
 
+  const handleClearSelection = useCallback(() => {
+    selectionGestureRef.current = null;
+    setSelectionBox(null);
+    setSelectedAnnotationIds([]);
+    setActiveAnnotationId(null);
+    setCursorStyle('default');
+  }, [setActiveAnnotationId, setSelectedAnnotationIds]);
+
 
 // 🌟 辅助：根据视图计算磁盘物理路径
 const getFullImagePath = (view: any) => {
@@ -2017,6 +2025,12 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     activeAnnotationId,
     selectedAnnotationIds,
     selectionBox,
+    isDrawing,
+    popoverOpen,
+    clearSelection: handleClearSelection,
+    handleCancelDrawing,
+    savePendingAnnotationToStore,
+    openSmartPopover,
     setActiveAnnotationId,
     viewport,
     setViewport,
@@ -2033,6 +2047,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     tool,
     setTool: handleToolChange,
     currentPoints,
+    setCurrentPoints,
     pendingAnnotation: tool === 'ai_anno' && tempActiveAnno ? tempActiveAnno : pendingAnnotation,
     formLabel,
     hoverPos,

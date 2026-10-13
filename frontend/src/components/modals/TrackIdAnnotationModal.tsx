@@ -24,6 +24,7 @@ import { CanvasView } from '../modules/annotation/CanvasView';
 import { RightPanel, type RightPanelProps } from '../modules/annotation/RightPanel';
 import { LeftToolbar } from '../modules/annotation/LeftToolbar';
 import { findTopmostAnnotationAtPoint } from '../../lib/annotationHitTest';
+import { getShortcutBindings, shortcutMatchesEvent } from '../../lib/shortcuts';
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -948,6 +949,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const projectName = useStore((state) => state.projectName);
   const projectMetaPath = useStore((state) => state.projectMetaPath);
   const workspacePath = useStore((state) => state.workspacePath);
+  const shortcutsSettings = useStore((state) => state.shortcutsSettings);
 
   const [mainIdDraft, setMainIdDraft] = React.useState('');
   const [partIdDraft, setPartIdDraft] = React.useState('');
@@ -1532,45 +1534,196 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     if (!open) return;
 
     const handleTrackIdKeyDown = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+      if (event.isComposing || event.altKey) return;
+
+      // Keep the workspace safeguard that prevents the browser's Save Page
+      // dialog, even when the focus is inside an editor input.
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault();
+      }
 
       const target = event.target instanceof HTMLElement ? event.target : null;
-      if (target?.closest('input, textarea, select, button, [contenteditable="true"], [role="combobox"], [role="spinbutton"]')) {
+      // Match the workspace behavior: text editing keeps native keyboard
+      // behavior, while shortcuts remain available after clicking a toolbar
+      // button or a sequence control.
+      if (
+        target?.isContentEditable
+        || target?.tagName === 'TEXTAREA'
+        || (target?.tagName === 'INPUT' && (target as HTMLInputElement).type !== 'range')
+      ) {
         return;
       }
 
-      const key = event.key.toLowerCase();
-      let nextStem: string | null = null;
+      const stopShortcut = () => {
+        event.preventDefault();
+        event.stopPropagation();
+      };
 
-      if (key === 'a' || event.key === 'arrowleft') {
+      const jumpByOffset = (offset: number) => {
+        if (offset < 0 && canvasProps.handlePrevStem) {
+          canvasProps.handlePrevStem();
+          return;
+        }
+        if (offset > 0 && canvasProps.handleNextStem) {
+          canvasProps.handleNextStem();
+          return;
+        }
         const index = stems.indexOf(useStore.getState().currentStem);
-        nextStem = index >= 0 ? stems[index - 1] || null : null;
-      } else if (key === 'd' || event.key === 'arrowright') {
-        const index = stems.indexOf(useStore.getState().currentStem);
-        nextStem = index >= 0 ? stems[index + 1] || null : null;
-      } else if (key === 'w') {
-        nextStem = frameContextMode === 'locked'
-          ? startCandidate?.stem || null
-          : stems[Math.max(0, currentIndex - 1)] || null;
-      } else if (key === 's') {
-        nextStem = frameContextMode === 'locked'
-          ? endCandidate?.stem || null
-          : stems[Math.min(stems.length - 1, currentIndex + 1)] || null;
-      } else {
+        const nextStem = index >= 0 ? stems[index + offset] || null : null;
+        if (nextStem) jumpToStem(nextStem);
+      };
+
+      const jumpToFrame = (direction: -1 | 1) => {
+        const nextStem = frameContextMode === 'locked'
+          ? (direction < 0 ? startCandidate?.stem : endCandidate?.stem) || null
+          : stems[
+              Math.max(
+                0,
+                Math.min(stems.length - 1, currentIndex + direction),
+              )
+            ] || null;
+        if (nextStem) jumpToStem(nextStem);
+      };
+
+      // Track ID keeps W/S for the context-frame switch. They intentionally
+      // take precedence over the workspace pan/lasso bindings in this modal.
+      if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
+        const key = event.key.toLowerCase();
+        if (key === 'w') {
+          stopShortcut();
+          jumpToFrame(-1);
+          return;
+        }
+        if (key === 's') {
+          stopShortcut();
+          jumpToFrame(1);
+          return;
+        }
+      }
+
+      if (event.key === 'Escape') {
+        const hasSelection = Boolean(
+          canvasProps.selectionBox
+          || canvasProps.activeAnnotationId
+          || (canvasProps.selectedAnnotationIds || []).length > 0,
+        );
+        if (hasSelection || canvasProps.isDrawing || canvasProps.popoverOpen) {
+          stopShortcut();
+          if (hasSelection) canvasProps.clearSelection?.();
+          canvasProps.handleCancelDrawing?.();
+          canvasProps.setActiveAnnotationId?.(null);
+        }
         return;
       }
 
-      if (!nextStem) return;
-      event.preventDefault();
-      event.stopPropagation();
-      jumpToStem(nextStem);
+      if (canvasProps.popoverOpen) {
+        if (event.key === 'Enter') {
+          stopShortcut();
+          canvasProps.savePendingAnnotationToStore?.();
+        }
+        return;
+      }
+
+      // Keep the same drawing guard as the workspace. A partially drawn
+      // object must not be replaced by a tool/navigation shortcut.
+      if (canvasProps.isDrawing) return;
+
+      if (
+        event.key === 'Enter'
+        && (canvasProps.tool === 'polygon' || canvasProps.tool === 'line')
+        && (canvasProps.currentPoints || []).length > 1
+        && canvasProps.openSmartPopover
+      ) {
+        if (canvasProps.tool === 'polygon' && canvasProps.currentPoints.length < 3) return;
+        const lastPoint = canvasProps.currentPoints[canvasProps.currentPoints.length - 1];
+        const currentViewport = canvasProps.viewport || { zoom: 1, panX: 0, panY: 0 };
+        stopShortcut();
+        canvasProps.openSmartPopover(
+          (lastPoint.x * currentViewport.zoom) + currentViewport.panX,
+          (lastPoint.y * currentViewport.zoom) + currentViewport.panY,
+          canvasProps.tool,
+          canvasProps.currentPoints,
+        );
+        canvasProps.setCurrentPoints?.([]);
+        return;
+      }
+
+      const matches = (shortcutId: string) => getShortcutBindings(
+        shortcutsSettings?.[shortcutId],
+      ).some((binding) => shortcutMatchesEvent(binding, event));
+
+      let matchedShortcut: string | undefined;
+      const configuredShortcutIds = Object.keys(shortcutsSettings || {});
+      matchedShortcut = configuredShortcutIds.find((shortcutId) => matches(shortcutId));
+
+      // The default configuration always contains prev/next, but retain the
+      // historical A/D and arrow behavior if an older persisted settings
+      // object does not contain those entries yet.
+      if (!matchedShortcut) {
+        const key = event.key.toLowerCase();
+        if (!event.ctrlKey && !event.metaKey && !event.shiftKey && (key === 'a' || key === 'arrowleft')) {
+          matchedShortcut = 'prev';
+        } else if (!event.ctrlKey && !event.metaKey && !event.shiftKey && (key === 'd' || key === 'arrowright')) {
+          matchedShortcut = 'next';
+        }
+      }
+
+      if (!matchedShortcut) return;
+
+      stopShortcut();
+
+      if (matchedShortcut === 'prev') {
+        jumpByOffset(-1);
+        return;
+      }
+      if (matchedShortcut === 'next') {
+        jumpByOffset(1);
+        return;
+      }
+      if (matchedShortcut === 'home') {
+        centerFitRef.current?.();
+        return;
+      }
+      if (matchedShortcut === 'undo') {
+        canvasProps.handleUndo?.();
+        return;
+      }
+      if (matchedShortcut === 'redo') {
+        canvasProps.handleRedo?.();
+        return;
+      }
+      if (matchedShortcut === 'copy') {
+        canvasProps.handleCopy?.();
+        return;
+      }
+      if (matchedShortcut === 'paste') {
+        canvasProps.handlePaste?.();
+        return;
+      }
+      if (matchedShortcut === 'delete') {
+        void canvasProps.handleDelete?.();
+        return;
+      }
+      if (matchedShortcut === 'clear') {
+        void canvasProps.handleClear?.();
+        return;
+      }
+      if (matchedShortcut === 'save') {
+        void canvasProps.handleSave?.();
+        return;
+      }
+
+      // All drawing/editing tool shortcuts use the same action that the
+      // workspace toolbar uses. Track ID only changes the double-click
+      // behavior; tool switching remains identical.
+      canvasProps.setTool?.(matchedShortcut);
     };
 
     // Capture the event at the window so the workspace listener underneath
-    // the modal can never consume Track ID navigation keys first.
+    // the modal can never consume Track ID shortcuts first.
     window.addEventListener('keydown', handleTrackIdKeyDown, true);
     return () => window.removeEventListener('keydown', handleTrackIdKeyDown, true);
-  }, [currentIndex, endCandidate?.stem, frameContextMode, jumpToStem, open, startCandidate?.stem, stems]);
+  }, [canvasProps, currentIndex, endCandidate?.stem, frameContextMode, jumpToStem, open, shortcutsSettings, startCandidate?.stem, stems]);
 
   const editor = (
     <TrackIdEditor
