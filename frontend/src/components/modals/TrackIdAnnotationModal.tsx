@@ -337,9 +337,10 @@ function TrackIdFrameCanvasInner({
         canvasProps.setViewport(newZoom, panX, panY);
       }
     : undefined;
-  const handleDoubleClick = editable && canvasProps.onDoubleClick && canvasProps.tool !== 'select'
-    ? canvasProps.onDoubleClick
-    : editable && canvasProps.setActiveAnnotationId
+  // Track ID mode owns double-clicks. Never forward them to the workspace
+  // handler: in the normal editor a double-click opens Object Editor, while
+  // here it selects and locks the current sequence endpoint.
+  const handleDoubleClick = editable && canvasProps.setActiveAnnotationId
     ? (event: React.MouseEvent<HTMLCanvasElement>) => {
         event.preventDefault();
         event.stopPropagation();
@@ -1521,9 +1522,55 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     }
   };
 
-  const jumpToStem = (stem: string | null) => {
-    if (stem) setCurrentStem(stem);
-  };
+  const jumpToStem = React.useCallback((stem: string | null) => {
+    if (!stem || stem === useStore.getState().currentStem) return;
+    setCurrentStem(stem);
+    setActiveAnnotationId(null);
+  }, [setActiveAnnotationId, setCurrentStem]);
+
+  React.useEffect(() => {
+    if (!open) return;
+
+    const handleTrackIdKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return;
+
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.closest('input, textarea, select, button, [contenteditable="true"], [role="combobox"], [role="spinbutton"]')) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      let nextStem: string | null = null;
+
+      if (key === 'a' || event.key === 'arrowleft') {
+        const index = stems.indexOf(useStore.getState().currentStem);
+        nextStem = index >= 0 ? stems[index - 1] || null : null;
+      } else if (key === 'd' || event.key === 'arrowright') {
+        const index = stems.indexOf(useStore.getState().currentStem);
+        nextStem = index >= 0 ? stems[index + 1] || null : null;
+      } else if (key === 'w') {
+        nextStem = frameContextMode === 'locked'
+          ? startCandidate?.stem || null
+          : stems[Math.max(0, currentIndex - 1)] || null;
+      } else if (key === 's') {
+        nextStem = frameContextMode === 'locked'
+          ? endCandidate?.stem || null
+          : stems[Math.min(stems.length - 1, currentIndex + 1)] || null;
+      } else {
+        return;
+      }
+
+      if (!nextStem) return;
+      event.preventDefault();
+      event.stopPropagation();
+      jumpToStem(nextStem);
+    };
+
+    // Capture the event at the window so the workspace listener underneath
+    // the modal can never consume Track ID navigation keys first.
+    window.addEventListener('keydown', handleTrackIdKeyDown, true);
+    return () => window.removeEventListener('keydown', handleTrackIdKeyDown, true);
+  }, [currentIndex, endCandidate?.stem, frameContextMode, jumpToStem, open, startCandidate?.stem, stems]);
 
   const editor = (
     <TrackIdEditor

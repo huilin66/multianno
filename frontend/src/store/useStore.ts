@@ -187,6 +187,7 @@ export interface EditorSettings {
   continuousDrawing: boolean; 
   showToolLabels: boolean; 
   showGroupId: boolean;
+  showTrackId: boolean;
   autoRefreshStats: boolean; 
   fillAnnotationShapes: boolean;
   att_show: boolean;
@@ -435,6 +436,7 @@ export const useStore = create<AppState>()(
         continuousDrawing: false, 
         showToolLabels: false, 
         showGroupId: false,
+        showTrackId: false,
         autoRefreshStats: true,
         fillAnnotationShapes: true,
         att_show: false,
@@ -955,9 +957,12 @@ export const useStore = create<AppState>()(
       // setting function
       setTheme: (theme) => set({ theme }),
       setLanguage: (lang) => set({ language: lang }),
-      updateEditorSettings: (newSettings) => set((state) => ({ 
-        editorSettings: { ...state.editorSettings, ...newSettings } 
-      })),
+      updateEditorSettings: (newSettings) => set((state) => {
+        const editorSettings = { ...state.editorSettings, ...newSettings };
+        if (newSettings.showGroupId === true) editorSettings.showTrackId = false;
+        if (newSettings.showTrackId === true) editorSettings.showGroupId = false;
+        return { editorSettings };
+      }),
       updateShortcutSettings: (tool, settings) => set((state) => ({ 
         shortcutsSettings: { ...state.shortcutsSettings, [tool]: settings } 
       })),

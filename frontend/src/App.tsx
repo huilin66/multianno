@@ -707,6 +707,15 @@ export default function App() {
   const [isReloadingAll, setIsReloadingAll] = useState(false);
   const [reloadProgress, setReloadProgress] = useState({ current: 0, total: 0 });
 
+  const updateIdDisplaySetting = (setting: 'showGroupId' | 'showTrackId', checked: boolean) => {
+    updateEditorSettings({
+      [setting]: checked,
+      ...(checked
+        ? { [setting === 'showGroupId' ? 'showTrackId' : 'showGroupId']: false }
+        : {}),
+    });
+  };
+
   const handleCreateProject = () => {
     resetProject();
     setIsCreatingProject(true);
@@ -1081,7 +1090,15 @@ export default function App() {
                     <Switch
                       className="scale-90 origin-right"
                       checked={editorSettings.showGroupId}
-                      onCheckedChange={(v) => updateEditorSettings({ showGroupId: v })}
+                      onCheckedChange={(v) => updateIdDisplaySetting('showGroupId', v)}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
+                    <Label className="text-xs">{t('headerSetting.showTrackId')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.showTrackId === true}
+                      onCheckedChange={(v) => updateIdDisplaySetting('showTrackId', v)}
                     />
                   </div>
                   <button

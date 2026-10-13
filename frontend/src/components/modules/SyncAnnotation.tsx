@@ -93,7 +93,7 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
     setActiveAnnotationId = () => {}, // 兜底空函数
     selectedAnnotationIds = [],
     setSelectedAnnotationIds = () => {},
-    editorSettings = { showCrosshair: true, showPixelValue: true },
+    editorSettings = { showCrosshair: true, showPixelValue: true, showGroupId: false, showTrackId: false },
     tempViewSettings, updateAnnotation,
     setSettingsOpen, aiSettings, setAISettings
   } = state as any; // 使用 as any 兼容可能还未完全写入 AppState 的新字段
