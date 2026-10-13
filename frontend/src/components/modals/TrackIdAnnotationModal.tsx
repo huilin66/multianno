@@ -1906,7 +1906,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         onClose();
       }
     }}>
-      <DialogContent ref={dialogContentRef} className="relative flex h-[min(92vh,900px)] max-h-[min(92vh,900px)] w-[95vw] max-w-[95vw] flex-col gap-0 overflow-visible border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-[95vw]" showCloseButton>
+      <DialogContent ref={dialogContentRef} className="flex h-[min(92vh,900px)] max-h-[min(92vh,900px)] w-[95vw] max-w-[95vw] flex-col gap-0 overflow-visible border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-[95vw]" showCloseButton>
         <DialogHeader className="shrink-0 border-b border-border p-4">
           <DialogTitle>{t('trackIdWindow.title')}</DialogTitle>
         </DialogHeader>
