@@ -1018,7 +1018,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null);
   const [sequenceEditingTrackId, setSequenceEditingTrackId] = React.useState<string | null>(null);
   // The sequence context is independent from the editing mode. Auto Track
-  // exits editing, but the locked start/end frames must remain visible.
+  // exits editing and clears only the active sequence's anchors.
   const [sequenceContextTrackId, setSequenceContextTrackId] = React.useState<string | null>(null);
   const [manualTrackIds, setManualTrackIds] = React.useState<string[]>([]);
   const [activeSequence, setActiveSequence] = React.useState(1);
@@ -1408,6 +1408,20 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     setActiveSequence(nextId);
   };
 
+  const resetSequenceAnchors = (sequenceId: number) => {
+    setSequences((current) => current.map((sequence) => (
+      sequence.id === sequenceId
+        ? {
+            ...sequence,
+            startCandidate: null,
+            endCandidate: null,
+            startLocked: false,
+            endLocked: false,
+          }
+        : sequence
+    )));
+  };
+
   const resetSequenceEditing = () => {
     setSequenceEditingTrackId(null);
     setSequenceContextTrackId(null);
@@ -1469,10 +1483,14 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
 
   const runReid = async () => {
     const trackId = sequenceEditingTrackId || selectedTrackId || composeTrackId(mainIdDraft, partIdDraft);
+    const sequenceId = activeSequence;
     // Clicking Auto Track ends sequence editing immediately. The async job
     // may continue, but it must not keep changing double-click semantics.
     setSequenceEditingTrackId(null);
-    if (!trackId || !startLocked || !endLocked || !startCandidate || !endCandidate) return;
+    if (!trackId || !startLocked || !endLocked || !startCandidate || !endCandidate) {
+      resetSequenceAnchors(sequenceId);
+      return;
+    }
 
     const startAnnotation = annotations.find((annotation: any) => (
       String(annotation.id) === startCandidate.annotationId && annotation.stem === startCandidate.stem
@@ -1482,6 +1500,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     ));
     if (!startAnnotation || !endAnnotation) {
       setReidMessage(t('trackIdWindow.reidCandidatesMissing'));
+      resetSequenceAnchors(sequenceId);
       return;
     }
 
@@ -1489,6 +1508,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     const endIndex = stems.indexOf(endCandidate.stem);
     if (startIndex < 0 || endIndex < 0) {
       setReidMessage(t('trackIdWindow.reidCandidatesMissing'));
+      resetSequenceAnchors(sequenceId);
       return;
     }
 
@@ -1514,6 +1534,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       setSelectedTrackId(trackId);
       setReidProgress(null);
       setReidMessage(t('trackIdWindow.directTrackResult', { count: anchorAnnotations.size }));
+      resetSequenceAnchors(sequenceId);
       return;
     }
 
@@ -1634,6 +1655,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       setReidMessage(`${t('trackIdWindow.reidFailed')}: ${message}`);
     } finally {
       if (reidRunTokenRef.current !== runToken) return;
+      resetSequenceAnchors(sequenceId);
       if (reidAbortControllerRef.current === controller) {
         reidAbortControllerRef.current = null;
       }
