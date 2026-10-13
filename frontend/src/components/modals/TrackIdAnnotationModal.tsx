@@ -711,6 +711,17 @@ function TrackIdEditor({
             <span className="min-w-0 max-w-36 truncate rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" title={sequenceEditingTrackId || selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || undefined}>
               {sequenceEditingTrackId || selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || t('trackIdWindow.none')}
             </span>
+            <span
+              className={`shrink-0 rounded-full px-1.5 py-0.5 text-[9px] font-medium ${
+                sequenceEditingTrackId
+                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300'
+                  : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
+              }`}
+              title={t(sequenceEditingTrackId ? 'trackIdWindow.sequenceEditing' : 'trackIdWindow.sequenceNotEditing')}
+              aria-live="polite"
+            >
+              {t(sequenceEditingTrackId ? 'trackIdWindow.sequenceEditing' : 'trackIdWindow.sequenceNotEditing')}
+            </span>
           </div>
           <Button
             type="button"

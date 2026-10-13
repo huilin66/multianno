@@ -76,6 +76,8 @@
     "existingTrackIdsShort": "ID 列表",
     "noTrackIds": "当前项目中没有 Track ID",
     "sequence": "序列",
+    "sequenceEditing": "编辑中",
+    "sequenceNotEditing": "未编辑",
     "sequenceDescription": "同一个 Track 可以拆分为多个可见片段，每个序列单独设置。",
     "addSequence": "添加序列",
     "selectSequence": "选择此序列",

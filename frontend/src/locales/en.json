@@ -76,6 +76,8 @@
     "existingTrackIdsShort": "ID list",
     "noTrackIds": "No track IDs in the current project",
     "sequence": "Sequences",
+    "sequenceEditing": "Editing",
+    "sequenceNotEditing": "Not editing",
     "sequenceDescription": "Each sequence can define a separate visible segment of the same track.",
     "addSequence": "Add sequence",
     "selectSequence": "Select this sequence",
