@@ -1017,6 +1017,9 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [trackIdValidationError, setTrackIdValidationError] = React.useState<'required' | 'whitespace' | 'tooLong' | null>(null);
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null);
   const [sequenceEditingTrackId, setSequenceEditingTrackId] = React.useState<string | null>(null);
+  // The sequence context is independent from the editing mode. Auto Track
+  // exits editing, but the locked start/end frames must remain visible.
+  const [sequenceContextTrackId, setSequenceContextTrackId] = React.useState<string | null>(null);
   const [manualTrackIds, setManualTrackIds] = React.useState<string[]>([]);
   const [activeSequence, setActiveSequence] = React.useState(1);
   const [sequences, setSequences] = React.useState<TrackSequence[]>([createTrackSequence(1)]);
@@ -1100,6 +1103,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       setPartIdDraft('');
       setTrackIdValidationError(null);
       setSequenceEditingTrackId(null);
+      setSequenceContextTrackId(null);
       setSequences([createTrackSequence(1)]);
       setActiveSequence(1);
     }
@@ -1209,11 +1213,12 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   }, [annotations]);
 
   const draftIdentity = React.useMemo(() => (
-    sequenceEditingTrackId
+    sequenceContextTrackId
+    || sequenceEditingTrackId
     || selectedTrackId
     || getTrackIdLabel(activeAnnotation?.track_id)
     || (!activeAnnotation ? trackIds[0] || '' : '')
-  ), [activeAnnotation?.track_id, selectedTrackId, sequenceEditingTrackId, trackIds]);
+  ), [activeAnnotation?.track_id, selectedTrackId, sequenceContextTrackId, sequenceEditingTrackId, trackIds]);
   const draftStorageKey = React.useMemo(
     () => getTrackIdDraftKey(draftProjectKey, draftIdentity),
     [draftIdentity, draftProjectKey],
@@ -1303,6 +1308,10 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const selectTrackId = (value: string) => {
     setTrackIdValidationError(null);
     setSelectedTrackId(value);
+    // A normal ID selection changes the visible sequence context only when
+    // the user is not editing another sequence. Single-object assignment in
+    // an active sequence must not switch that sequence's locked frames.
+    if (!sequenceEditingTrackId) setSequenceContextTrackId(value);
     const parsed = parseTrackId(value);
     setMainIdDraft(parsed.mainId);
     setPartIdDraft(parsed.partId);
@@ -1312,6 +1321,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     const normalized = getTrackIdLabel(value);
     if (!normalized) return;
     selectTrackId(normalized);
+    setSequenceContextTrackId(normalized);
     setSequenceEditingTrackId(normalized);
   };
 
@@ -1331,7 +1341,12 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     }
     setManualTrackIds((current) => current.includes(value) ? current : [...current, value]);
     setSelectedTrackId(value || null);
-    if (isNewTrackId) setSequenceEditingTrackId(value);
+    if (isNewTrackId) {
+      setSequenceContextTrackId(value);
+      setSequenceEditingTrackId(value);
+    } else if (!sequenceEditingTrackId) {
+      setSequenceContextTrackId(value);
+    }
     if (activeAnnotation) updateAnnotation(activeAnnotation.id, { track_id: value });
   };
 
@@ -1395,6 +1410,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
 
   const resetSequenceEditing = () => {
     setSequenceEditingTrackId(null);
+    setSequenceContextTrackId(null);
     setSequences([createTrackSequence(1)]);
     setActiveSequence(1);
     setReidProgress(null);
@@ -1914,6 +1930,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     <Dialog open={open} onOpenChange={(nextOpen) => {
       if (!nextOpen) {
         setSequenceEditingTrackId(null);
+        setSequenceContextTrackId(null);
         onClose();
       }
     }}>
