@@ -23,6 +23,7 @@ import { OperationProgress } from '../ui/OperationProgress';
 import { CanvasView } from '../modules/annotation/CanvasView';
 import { RightPanel, type RightPanelProps } from '../modules/annotation/RightPanel';
 import { LeftToolbar } from '../modules/annotation/LeftToolbar';
+import { ClassFormPopover } from '../modules/annotation/ClassFormPopover';
 import { findTopmostAnnotationAtPoint } from '../../lib/annotationHitTest';
 import { getShortcutBindings, shortcutMatchesEvent } from '../../lib/shortcuts';
 import {
@@ -36,7 +37,9 @@ import {
   Loader2,
   Link2,
   Link2Off,
+  Pencil,
   Plus,
+  RotateCcw,
   Settings2,
 } from 'lucide-react';
 
@@ -224,6 +227,7 @@ function TrackIdFrameCanvasInner({
   fitRef,
   syncViewport,
   showTrackId,
+  sequenceEditing,
   annotationsByStem,
   onTrackObjectDoubleClick,
 }: {
@@ -235,6 +239,7 @@ function TrackIdFrameCanvasInner({
   fitRef?: React.MutableRefObject<(() => void) | null>;
   syncViewport?: ViewportState;
   showTrackId: boolean;
+  sequenceEditing: boolean;
   annotationsByStem: Map<string, any[]>;
   onTrackObjectDoubleClick?: (annotation: any, stem: string) => void;
 }) {
@@ -338,10 +343,15 @@ function TrackIdFrameCanvasInner({
         canvasProps.setViewport(newZoom, panX, panY);
       }
     : undefined;
-  // Track ID mode owns double-clicks. Never forward them to the workspace
-  // handler: in the normal editor a double-click opens Object Editor, while
-  // here it selects and locks the current sequence endpoint.
-  const handleDoubleClick = editable && canvasProps.setActiveAnnotationId
+  // Sequence editing owns double-clicks only while it is explicitly active.
+  // Outside that state, forward the event to the workspace so the normal
+  // Object Editor/drawing completion behavior remains available.
+  const handleDoubleClick = editable && sequenceEditing && canvasProps.setActiveAnnotationId
+    && !canvasProps.isDrawing
+    && !(
+      (canvasProps.tool === 'polygon' || canvasProps.tool === 'line')
+      && (canvasProps.currentPoints || []).length > 1
+    )
     ? (event: React.MouseEvent<HTMLCanvasElement>) => {
         event.preventDefault();
         event.stopPropagation();
@@ -357,7 +367,7 @@ function TrackIdFrameCanvasInner({
         canvasProps.setActiveAnnotationId(target?.id || null);
         if (target) onTrackObjectDoubleClick?.(target, slot.stem);
       }
-    : undefined;
+    : editable ? canvasProps.onDoubleClick : undefined;
 
   return (
     <div ref={containerRef} className={`relative h-[min(52vh,520px)] min-h-[260px] overflow-hidden border-b bg-neutral-200 dark:bg-black ${frameClass}`}>
@@ -409,6 +419,7 @@ const TrackIdFrameCanvas = React.memo(TrackIdFrameCanvasInner, (previous, next) 
     previous.slot.stem === next.slot.stem
     && previous.slot.role === next.slot.role
     && previous.showTrackId === next.showTrackId
+    && previous.sequenceEditing === next.sequenceEditing
     && previous.syncViewport === next.syncViewport
     && previous.viewPacket.view?.id === next.viewPacket.view?.id
     && previous.viewPacket.view === next.viewPacket.view
@@ -505,18 +516,21 @@ function TrackIdEditor({
   t,
   trackIds,
   selectedTrackId,
+  sequenceEditingTrackId,
   mainIdDraft,
   partIdDraft,
   trackIdValidationError,
   setMainIdDraft,
   setPartIdDraft,
   selectTrackId,
+  onEditTrackId,
   applyTrackId,
   activeAnnotation,
   activeSequence,
   sequences,
   setActiveSequence,
   onAddSequence,
+  onResetSequences,
   onToggleCandidateLock,
   reidStatus,
   reidLifecycleAction,
@@ -539,18 +553,21 @@ function TrackIdEditor({
   t: (key: string, options?: any) => string;
   trackIds: string[];
   selectedTrackId: string | null;
+  sequenceEditingTrackId: string | null;
   mainIdDraft: string;
   partIdDraft: string;
   trackIdValidationError: string | null;
   setMainIdDraft: (value: string) => void;
   setPartIdDraft: (value: string) => void;
   selectTrackId: (value: string) => void;
+  onEditTrackId: (value: string) => void;
   applyTrackId: (value?: string) => void;
   activeAnnotation: any;
   activeSequence: number;
   sequences: TrackSequence[];
   setActiveSequence: React.Dispatch<React.SetStateAction<number>>;
   onAddSequence: () => void;
+  onResetSequences: () => void;
   onToggleCandidateLock: (kind: 'start' | 'end', sequenceId?: number) => void;
   reidStatus: TrackIdReIDStatus | null;
   reidLifecycleAction: 'load' | 'unload' | null;
@@ -576,7 +593,7 @@ function TrackIdEditor({
   const activeSequenceData = sequences.find((sequence) => sequence.id === activeSequence);
   const activeStartLocked = activeSequenceData?.startLocked ?? false;
   const activeEndLocked = activeSequenceData?.endLocked ?? false;
-  const currentTrackId = selectedTrackId || composeTrackId(mainIdDraft, partIdDraft);
+  const currentTrackId = sequenceEditingTrackId || selectedTrackId || composeTrackId(mainIdDraft, partIdDraft);
   const reidAvailable = Boolean(
     reidStatus?.runtime_available && reidStatus.configured && reidStatus.model_exists,
   );
@@ -648,21 +665,40 @@ function TrackIdEditor({
         </div>
         <div className="max-h-28 space-y-1 overflow-auto">
           {trackIds.map((trackId) => (
-            <button
+            <div
               key={trackId}
-              type="button"
-              onClick={() => selectTrackId(trackId)}
-              onDoubleClick={() => applyTrackId(trackId)}
-              title={t('trackIdWindow.assignTrackId')}
-              className={`flex w-full items-center justify-between rounded-md border px-2 py-1.5 text-left text-[10px] transition-colors ${
-                selectedTrackId === trackId
+              className={`flex w-full items-center gap-1 rounded-md border px-1 py-1 transition-colors ${
+                selectedTrackId === trackId || sequenceEditingTrackId === trackId
                   ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-300'
                   : 'border-transparent bg-neutral-50 text-neutral-600 hover:border-neutral-200 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-neutral-700'
               }`}
             >
-              <span className="truncate">{trackId}</span>
-              {selectedTrackId === trackId && <Check className="h-3.5 w-3.5 shrink-0" />}
-            </button>
+              <button
+                type="button"
+                onClick={() => selectTrackId(trackId)}
+                onDoubleClick={() => applyTrackId(trackId)}
+                title={t('trackIdWindow.assignTrackId')}
+                className="flex min-w-0 flex-1 items-center justify-between rounded px-1 py-0.5 text-left text-[10px]"
+              >
+                <span className="truncate">{trackId}</span>
+                {selectedTrackId === trackId && <Check className="h-3.5 w-3.5 shrink-0" />}
+              </button>
+              <Button
+                type="button"
+                size="icon-xs"
+                variant="ghost"
+                className="shrink-0"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEditTrackId(trackId);
+                }}
+                title={t('trackIdWindow.editSequence')}
+                aria-label={t('trackIdWindow.editSequence')}
+                aria-pressed={sequenceEditingTrackId === trackId}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           ))}
           {trackIds.length === 0 && <p className="py-2 text-[10px] text-neutral-400">{t('trackIdWindow.noTrackIds')}</p>}
         </div>
@@ -672,10 +708,22 @@ function TrackIdEditor({
         <div className="flex items-center justify-between gap-2">
           <div className="flex min-w-0 items-center gap-1.5">
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-neutral-600 dark:text-neutral-200">{t('trackIdWindow.sequence')}</h3>
-            <span className="min-w-0 max-w-36 truncate rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" title={selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || undefined}>
-              {selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || t('trackIdWindow.none')}
+            <span className="min-w-0 max-w-36 truncate rounded-full bg-blue-50 px-1.5 py-0.5 text-[9px] text-blue-600 dark:bg-blue-950/40 dark:text-blue-300" title={sequenceEditingTrackId || selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || undefined}>
+              {sequenceEditingTrackId || selectedTrackId || composeTrackId(mainIdDraft, partIdDraft) || t('trackIdWindow.none')}
             </span>
           </div>
+          <Button
+            type="button"
+            size="icon-xs"
+            variant="ghost"
+            className="shrink-0"
+            disabled={!sequenceEditingTrackId}
+            onClick={onResetSequences}
+            title={t('trackIdWindow.resetSequences')}
+            aria-label={t('trackIdWindow.resetSequences')}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
         </div>
 
         <div className="rounded-md border border-blue-200 bg-blue-50/60 p-2 dark:border-blue-900/60 dark:bg-blue-950/20">
@@ -710,7 +758,7 @@ function TrackIdEditor({
                     size="icon-xs"
                     variant="ghost"
                     className="shrink-0"
-                    disabled={!sequence.startCandidate && !canUseCurrentObject}
+                    disabled={!sequenceEditingTrackId || (!sequence.startCandidate && !canUseCurrentObject)}
                     onClick={() => onToggleCandidateLock('start', sequence.id)}
                     title={t(sequence.startLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
                     aria-label={t(sequence.startLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
@@ -724,7 +772,7 @@ function TrackIdEditor({
                     size="icon-xs"
                     variant="ghost"
                     className="shrink-0"
-                    disabled={!sequence.endCandidate && !canUseCurrentObject}
+                    disabled={!sequenceEditingTrackId || (!sequence.endCandidate && !canUseCurrentObject)}
                     onClick={() => onToggleCandidateLock('end', sequence.id)}
                     title={t(sequence.endLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
                     aria-label={t(sequence.endLocked ? 'trackIdWindow.unlock' : 'trackIdWindow.lock')}
@@ -756,6 +804,7 @@ function TrackIdEditor({
               variant="outline"
               className="h-6 w-full justify-center border-blue-200 bg-white/50 px-0 text-blue-600 hover:bg-white hover:text-blue-700 dark:border-blue-900/60 dark:bg-neutral-900/40 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
               onClick={onAddSequence}
+              disabled={!sequenceEditingTrackId}
               title={t('trackIdWindow.addSequence')}
               aria-label={t('trackIdWindow.addSequence')}
             >
@@ -897,6 +946,7 @@ function TrackIdEditor({
             disabled={
               reidLifecycleAction !== null
               || reidRunning
+              || !sequenceEditingTrackId
               || !reidStatus?.runtime_available
               || !reidStatus.configured
               || !reidStatus.model_exists
@@ -955,6 +1005,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [partIdDraft, setPartIdDraft] = React.useState('');
   const [trackIdValidationError, setTrackIdValidationError] = React.useState<'required' | 'whitespace' | 'tooLong' | null>(null);
   const [selectedTrackId, setSelectedTrackId] = React.useState<string | null>(null);
+  const [sequenceEditingTrackId, setSequenceEditingTrackId] = React.useState<string | null>(null);
   const [manualTrackIds, setManualTrackIds] = React.useState<string[]>([]);
   const [activeSequence, setActiveSequence] = React.useState(1);
   const [sequences, setSequences] = React.useState<TrackSequence[]>([createTrackSequence(1)]);
@@ -974,6 +1025,8 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [reidPathSaving, setReidPathSaving] = React.useState(false);
   const [reidSettingsMessage, setReidSettingsMessage] = React.useState('');
   const centerFitRef = React.useRef<(() => void) | null>(null);
+  const dialogContentRef = React.useRef<HTMLDivElement>(null);
+  const [trackPopoverPosition, setTrackPopoverPosition] = React.useState({ x: 0, y: 0 });
   const previousViewportRef = React.useRef<any>(null);
   const previousCurrentStemRef = React.useRef<string | null>(null);
   const previousActiveAnnotationIdRef = React.useRef<string | null>(null);
@@ -983,6 +1036,23 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const reidJobIdRef = React.useRef<string | null>(null);
   const reidRunTokenRef = React.useRef(0);
   const reidLifecycleQueueRef = React.useRef<Promise<unknown>>(Promise.resolve());
+
+  React.useLayoutEffect(() => {
+    if (!open || !canvasProps.popoverOpen || !canvasProps.popoverPos) return;
+
+    const updatePopoverPosition = () => {
+      const dialogBounds = dialogContentRef.current?.getBoundingClientRect();
+      if (!dialogBounds) return;
+      setTrackPopoverPosition({
+        x: canvasProps.popoverPos.x - dialogBounds.left,
+        y: canvasProps.popoverPos.y - dialogBounds.top,
+      });
+    };
+
+    updatePopoverPosition();
+    window.addEventListener('resize', updatePopoverPosition);
+    return () => window.removeEventListener('resize', updatePopoverPosition);
+  }, [canvasProps.popoverOpen, canvasProps.popoverPos?.x, canvasProps.popoverPos?.y, open]);
 
   const draftProjectKey = React.useMemo(() => getTrackIdDraftProjectKey({
     projectMetaPath,
@@ -1004,7 +1074,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   }, [trackIdReIDSettings?.modelPath]);
 
   React.useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // Reopening the window must not implicitly resume sequence editing.
+      setSequenceEditingTrackId(null);
+      return;
+    }
     const previousProjectKey = previousDraftProjectKeyRef.current;
     if (previousProjectKey && previousProjectKey !== draftProjectKey) {
       // The modal component stays mounted while projects are switched. Do not
@@ -1014,6 +1088,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       setMainIdDraft('');
       setPartIdDraft('');
       setTrackIdValidationError(null);
+      setSequenceEditingTrackId(null);
       setSequences([createTrackSequence(1)]);
       setActiveSequence(1);
     }
@@ -1123,10 +1198,11 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   }, [annotations]);
 
   const draftIdentity = React.useMemo(() => (
-    selectedTrackId
+    sequenceEditingTrackId
+    || selectedTrackId
     || getTrackIdLabel(activeAnnotation?.track_id)
     || (!activeAnnotation ? trackIds[0] || '' : '')
-  ), [activeAnnotation?.track_id, selectedTrackId, trackIds]);
+  ), [activeAnnotation?.track_id, selectedTrackId, sequenceEditingTrackId, trackIds]);
   const draftStorageKey = React.useMemo(
     () => getTrackIdDraftKey(draftProjectKey, draftIdentity),
     [draftIdentity, draftProjectKey],
@@ -1221,6 +1297,13 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     setPartIdDraft(parsed.partId);
   };
 
+  const enterSequenceEditing = (value: string) => {
+    const normalized = getTrackIdLabel(value);
+    if (!normalized) return;
+    selectTrackId(normalized);
+    setSequenceEditingTrackId(normalized);
+  };
+
   const applyTrackId = (valueOverride?: string) => {
     const validation = validateTrackId(valueOverride?.trim() || composeTrackId(mainIdDraft, partIdDraft));
     if (validation.error) {
@@ -1228,6 +1311,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       return;
     }
     const value = validation.value;
+    const isNewTrackId = !trackIds.includes(value);
     setTrackIdValidationError(null);
     if (valueOverride) {
       const parsed = parseTrackId(value);
@@ -1236,6 +1320,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     }
     setManualTrackIds((current) => current.includes(value) ? current : [...current, value]);
     setSelectedTrackId(value || null);
+    if (isNewTrackId) setSequenceEditingTrackId(value);
     if (activeAnnotation) updateAnnotation(activeAnnotation.id, { track_id: value });
   };
 
@@ -1255,6 +1340,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   };
 
   const handleTrackObjectDoubleClick = (annotation: any, stem: string) => {
+    if (!sequenceEditingTrackId) return;
     const candidate = makeCandidate(annotation, stem);
     if (!candidate) return;
 
@@ -1290,9 +1376,18 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   };
 
   const addSequence = () => {
+    if (!sequenceEditingTrackId) return;
     const nextId = sequences.reduce((maximum, sequence) => Math.max(maximum, sequence.id), 0) + 1;
     setSequences((current) => [...current, createTrackSequence(nextId)]);
     setActiveSequence(nextId);
+  };
+
+  const resetSequenceEditing = () => {
+    setSequenceEditingTrackId(null);
+    setSequences([createTrackSequence(1)]);
+    setActiveSequence(1);
+    setReidProgress(null);
+    setReidMessage('');
   };
 
   const handleLoadReid = React.useCallback(() => {
@@ -1346,7 +1441,10 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   };
 
   const runReid = async () => {
-    const trackId = selectedTrackId || composeTrackId(mainIdDraft, partIdDraft);
+    const trackId = sequenceEditingTrackId || selectedTrackId || composeTrackId(mainIdDraft, partIdDraft);
+    // Clicking Auto Track ends sequence editing immediately. The async job
+    // may continue, but it must not keep changing double-click semantics.
+    setSequenceEditingTrackId(null);
     if (!trackId || !startLocked || !endLocked || !startCandidate || !endCandidate) return;
 
     const startAnnotation = annotations.find((annotation: any) => (
@@ -1730,6 +1828,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       t={t}
       trackIds={trackIds}
       selectedTrackId={selectedTrackId}
+      sequenceEditingTrackId={sequenceEditingTrackId}
       mainIdDraft={mainIdDraft}
       partIdDraft={partIdDraft}
       trackIdValidationError={trackIdValidationError ? t(`trackIdWindow.trackIdInvalid.${trackIdValidationError}`) : null}
@@ -1742,12 +1841,14 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         setPartIdDraft(value);
       }}
       selectTrackId={selectTrackId}
+      onEditTrackId={enterSequenceEditing}
       applyTrackId={applyTrackId}
       activeAnnotation={activeAnnotation}
       activeSequence={activeSequence}
       sequences={sequences}
       setActiveSequence={setActiveSequence}
       onAddSequence={addSequence}
+      onResetSequences={resetSequenceEditing}
       onToggleCandidateLock={toggleCandidateLock}
       reidStatus={reidStatus}
       reidLifecycleAction={reidLifecycleAction}
@@ -1799,8 +1900,13 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   );
 
   return (
-    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
-      <DialogContent className="flex h-[min(92vh,900px)] max-h-[min(92vh,900px)] w-[95vw] max-w-[95vw] flex-col gap-0 overflow-hidden border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-[95vw]" showCloseButton>
+    <Dialog open={open} onOpenChange={(nextOpen) => {
+      if (!nextOpen) {
+        setSequenceEditingTrackId(null);
+        onClose();
+      }
+    }}>
+      <DialogContent ref={dialogContentRef} className="relative flex h-[min(92vh,900px)] max-h-[min(92vh,900px)] w-[95vw] max-w-[95vw] flex-col gap-0 overflow-visible border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-[95vw]" showCloseButton>
         <DialogHeader className="shrink-0 border-b border-border p-4">
           <DialogTitle>{t('trackIdWindow.title')}</DialogTitle>
         </DialogHeader>
@@ -1886,6 +1992,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
                           fitRef={viewPacket.interaction.editable ? centerFitRef : undefined}
                           syncViewport={canvasProps.viewport}
                           showTrackId={showTrackIds}
+                          sequenceEditing={Boolean(sequenceEditingTrackId)}
                           annotationsByStem={annotationsByStem}
                           onTrackObjectDoubleClick={handleTrackObjectDoubleClick}
                         />
@@ -1981,6 +2088,31 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
             )}
           </aside>
         </div>
+
+        {canvasProps.popoverOpen && canvasProps.popoverPos && (
+          <ClassFormPopover
+            popoverPos={trackPopoverPosition}
+            formLabel={canvasProps.formLabel}
+            setFormLabel={canvasProps.setFormLabel}
+            formText={canvasProps.formText}
+            setFormText={canvasProps.setFormText}
+            formGroupId={canvasProps.formGroupId}
+            setFormGroupId={canvasProps.setFormGroupId}
+            formTrackId={canvasProps.formTrackId}
+            setFormTrackId={canvasProps.setFormTrackId}
+            formDifficult={canvasProps.formDifficult}
+            setFormDifficult={canvasProps.setFormDifficult}
+            formOccluded={canvasProps.formOccluded}
+            setFormOccluded={canvasProps.setFormOccluded}
+            formTruncated={canvasProps.formTruncated}
+            setFormTruncated={canvasProps.setFormTruncated}
+            formAttributes={canvasProps.formAttributes}
+            setFormAttributes={canvasProps.setFormAttributes}
+            handleCancelDrawing={canvasProps.handleCancelDrawing}
+            savePendingAnnotationToStore={canvasProps.savePendingAnnotationToStore}
+            taxonomyClasses={canvasProps.taxonomyClasses || []}
+          />
+        )}
       </DialogContent>
     </Dialog>
   );

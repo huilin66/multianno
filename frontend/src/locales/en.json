@@ -70,6 +70,8 @@
     "trackIdPlaceholder": "e.g. 1-a",
     "selectTrackId": "Use this track ID",
     "assignTrackId": "Double-click to assign this Track ID to the selected object",
+    "editSequence": "Edit this ID sequence",
+    "resetSequences": "Reset sequences and stop editing",
     "existingTrackIds": "Existing track IDs",
     "existingTrackIdsShort": "ID list",
     "noTrackIds": "No track IDs in the current project",

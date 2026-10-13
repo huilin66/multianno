@@ -70,6 +70,8 @@
     "trackIdPlaceholder": "例如：1-a",
     "selectTrackId": "使用此 Track ID",
     "assignTrackId": "双击将此 Track ID 分配给当前选中对象",
+    "editSequence": "编辑此 ID 序列",
+    "resetSequences": "重置序列并停止编辑",
     "existingTrackIds": "已有 Track ID",
     "existingTrackIdsShort": "ID 列表",
     "noTrackIds": "当前项目中没有 Track ID",

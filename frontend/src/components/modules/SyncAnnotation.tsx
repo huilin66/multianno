@@ -2031,6 +2031,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     handleCancelDrawing,
     savePendingAnnotationToStore,
     openSmartPopover,
+    popoverPos,
     setActiveAnnotationId,
     viewport,
     setViewport,
@@ -2050,6 +2051,21 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     setCurrentPoints,
     pendingAnnotation: tool === 'ai_anno' && tempActiveAnno ? tempActiveAnno : pendingAnnotation,
     formLabel,
+    setFormLabel,
+    formText,
+    setFormText,
+    formGroupId,
+    setFormGroupId,
+    formTrackId,
+    setFormTrackId,
+    formDifficult,
+    setFormDifficult,
+    formOccluded,
+    setFormOccluded,
+    formTruncated,
+    setFormTruncated,
+    formAttributes,
+    setFormAttributes,
     hoverPos,
     onMouseDown: handleMouseDown,
     onMouseMove: handleMouseMove,
@@ -2363,7 +2379,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
 
         {/* 🎈 Floating Popover for Class Selection */}
         {/* 2. 悬浮弹窗 */}
-      {popoverOpen && createPortal(
+      {popoverOpen && !trackIdWindowOpen && createPortal(
         <ClassFormPopover 
           popoverPos={popoverPos} formLabel={formLabel} setFormLabel={setFormLabel}
           formText={formText} setFormText={setFormText} formGroupId={formGroupId} 
