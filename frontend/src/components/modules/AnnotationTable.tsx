@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Copy, ExternalLink, Filter, Link2, RefreshCw, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2, RefreshCw, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { Annotation, TaxonomyAttribute, TaxonomyClass } from '../../store/useStore';
 import { Button } from '../ui/button';
@@ -38,6 +38,22 @@ interface AnnotationTableRow {
   boxHeight: number | null;
 }
 
+type AnnotationTableSortKey =
+  | 'id'
+  | 'label'
+  | 'type'
+  | 'boxWidth'
+  | 'boxHeight'
+  | 'content'
+  | 'attributes'
+  | 'stem'
+  | 'overlap';
+
+interface AnnotationTableSortState {
+  key: AnnotationTableSortKey;
+  direction: 'asc' | 'desc';
+}
+
 const formatAttributeValue = (value: string | number | boolean) => {
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   return String(value);
@@ -59,6 +75,20 @@ const formatContent = (annotation: Annotation) => {
 const formatBoxDimension = (value: number | null) => {
   if (value === null || !Number.isFinite(value)) return '—';
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.00$/, '');
+};
+
+const parseNumberFilter = (value: string) => {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const compareOptionalNumbers = (first: number | null, second: number | null) => {
+  if (first === null && second === null) return 0;
+  if (first === null) return 1;
+  if (second === null) return -1;
+  return first - second;
 };
 
 const cloneAnnotations = (source: Annotation[]) => source.map((annotation) => ({
@@ -84,6 +114,16 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [query, setQuery] = useState('');
   const [classFilter, setClassFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
+  const [annotationIdFilter, setAnnotationIdFilter] = useState('');
+  const [contentFilter, setContentFilter] = useState('');
+  const [attributesFilter, setAttributesFilter] = useState('');
+  const [sceneFilter, setSceneFilter] = useState('');
+  const [minBoxWidth, setMinBoxWidth] = useState('');
+  const [maxBoxWidth, setMaxBoxWidth] = useState('');
+  const [minBoxHeight, setMinBoxHeight] = useState('');
+  const [maxBoxHeight, setMaxBoxHeight] = useState('');
+  const [overlapGroupFilter, setOverlapGroupFilter] = useState('');
+  const [sortState, setSortState] = useState<AnnotationTableSortState | null>(null);
   const [overlapPanelOpen, setOverlapPanelOpen] = useState(false);
   const [overlapMode, setOverlapMode] = useState<'iou' | 'ios'>('ios');
   const [overlapThreshold, setOverlapThreshold] = useState(80);
@@ -148,12 +188,33 @@ export const AnnotationTable = React.memo(function AnnotationTable({
 
   const filteredRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
+    const normalizedIdFilter = annotationIdFilter.trim().toLowerCase();
+    const normalizedContentFilter = contentFilter.trim().toLowerCase();
+    const normalizedAttributesFilter = attributesFilter.trim().toLowerCase();
+    const normalizedSceneFilter = sceneFilter.trim().toLowerCase();
+    const normalizedOverlapGroupFilter = overlapGroupFilter.trim().toLowerCase();
+    const minWidth = parseNumberFilter(minBoxWidth);
+    const maxWidth = parseNumberFilter(maxBoxWidth);
+    const minHeight = parseNumberFilter(minBoxHeight);
+    const maxHeight = parseNumberFilter(maxBoxHeight);
 
     return rows.filter((row) => {
       const { annotation } = row;
       if (classFilter !== 'all' && annotation.label !== classFilter) return false;
       if (typeFilter !== 'all' && annotation.type !== typeFilter) return false;
       if (overlapKeys && !overlapKeys.has(getAnnotationOverlapKey(annotation))) return false;
+      if (normalizedIdFilter && !String(annotation.id).toLowerCase().includes(normalizedIdFilter)) return false;
+      if (normalizedContentFilter && !row.contentText.toLowerCase().includes(normalizedContentFilter)) return false;
+      if (normalizedAttributesFilter && !row.attributesText.toLowerCase().includes(normalizedAttributesFilter)) return false;
+      if (normalizedSceneFilter && !annotation.stem.toLowerCase().includes(normalizedSceneFilter)) return false;
+      const overlapGroup = overlapGroups.get(getAnnotationOverlapKey(annotation)) || '';
+      if (normalizedOverlapGroupFilter) {
+        if (!overlapGroup.toLowerCase().includes(normalizedOverlapGroupFilter)) return false;
+      }
+      if (minWidth !== null && (row.boxWidth === null || row.boxWidth < minWidth)) return false;
+      if (maxWidth !== null && (row.boxWidth === null || row.boxWidth > maxWidth)) return false;
+      if (minHeight !== null && (row.boxHeight === null || row.boxHeight < minHeight)) return false;
+      if (maxHeight !== null && (row.boxHeight === null || row.boxHeight > maxHeight)) return false;
       if (!normalizedQuery) return true;
 
       return [
@@ -163,9 +224,12 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         annotation.stem,
         row.attributesText,
         row.contentText,
+        formatBoxDimension(row.boxWidth),
+        formatBoxDimension(row.boxHeight),
+        overlapGroup,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
     });
-  }, [classFilter, overlapKeys, query, rows, typeFilter]);
+  }, [annotationIdFilter, attributesFilter, classFilter, contentFilter, maxBoxHeight, maxBoxWidth, minBoxHeight, minBoxWidth, overlapGroupFilter, overlapGroups, overlapKeys, query, rows, sceneFilter, typeFilter]);
 
   const taxonomyAttributeNames = new Set(taxonomyAttributes.map((attribute) => attribute.name));
 
@@ -241,10 +305,27 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     });
   };
 
+  const toggleSort = (key: AnnotationTableSortKey) => {
+    setSortState((current) => {
+      if (!current || current.key !== key) return { key, direction: 'asc' };
+      if (current.direction === 'asc') return { key, direction: 'desc' };
+      return null;
+    });
+  };
+
   const clearFilters = () => {
     setQuery('');
     setClassFilter('all');
     setTypeFilter('all');
+    setAnnotationIdFilter('');
+    setContentFilter('');
+    setAttributesFilter('');
+    setSceneFilter('');
+    setMinBoxWidth('');
+    setMaxBoxWidth('');
+    setMinBoxHeight('');
+    setMaxBoxHeight('');
+    setOverlapGroupFilter('');
     setHideUnselected(false);
     resetOverlapScan();
   };
@@ -254,24 +335,98 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       ? filteredRows.filter((row) => selectedIdSet.has(String(row.annotation.id)))
       : filteredRows;
 
-    if (overlapKeys === null) return visibleRows;
+    if (!sortState && overlapKeys === null) return visibleRows;
 
     return [...visibleRows].sort((first, second) => {
-      const firstGroup = overlapGroups.get(getAnnotationOverlapKey(first.annotation)) || '';
-      const secondGroup = overlapGroups.get(getAnnotationOverlapKey(second.annotation)) || '';
-      return firstGroup.localeCompare(secondGroup, undefined, { numeric: true })
-        || first.annotation.stem.localeCompare(second.annotation.stem)
-        || first.annotation.id.localeCompare(second.annotation.id);
+      if (!sortState) {
+        const firstGroup = overlapGroups.get(getAnnotationOverlapKey(first.annotation)) || '';
+        const secondGroup = overlapGroups.get(getAnnotationOverlapKey(second.annotation)) || '';
+        return firstGroup.localeCompare(secondGroup, undefined, { numeric: true })
+          || first.annotation.stem.localeCompare(second.annotation.stem)
+          || first.annotation.id.localeCompare(second.annotation.id);
+      }
+
+      let comparison = 0;
+      switch (sortState.key) {
+        case 'id':
+          comparison = first.annotation.id.localeCompare(second.annotation.id, undefined, { numeric: true });
+          break;
+        case 'label':
+          comparison = first.annotation.label.localeCompare(second.annotation.label, undefined, { numeric: true });
+          break;
+        case 'type':
+          comparison = first.annotation.type.localeCompare(second.annotation.type, undefined, { numeric: true });
+          break;
+        case 'boxWidth':
+          comparison = compareOptionalNumbers(first.boxWidth, second.boxWidth);
+          break;
+        case 'boxHeight':
+          comparison = compareOptionalNumbers(first.boxHeight, second.boxHeight);
+          break;
+        case 'content':
+          comparison = first.contentText.localeCompare(second.contentText, undefined, { numeric: true });
+          break;
+        case 'attributes':
+          comparison = first.attributesText.localeCompare(second.attributesText, undefined, { numeric: true });
+          break;
+        case 'stem':
+          comparison = first.annotation.stem.localeCompare(second.annotation.stem, undefined, { numeric: true });
+          break;
+        case 'overlap': {
+          const firstGroup = overlapGroups.get(getAnnotationOverlapKey(first.annotation)) || '';
+          const secondGroup = overlapGroups.get(getAnnotationOverlapKey(second.annotation)) || '';
+          comparison = firstGroup.localeCompare(secondGroup, undefined, { numeric: true })
+            || (overlapCounts.get(getAnnotationOverlapKey(first.annotation)) || 0)
+              - (overlapCounts.get(getAnnotationOverlapKey(second.annotation)) || 0);
+          break;
+        }
+        default:
+          comparison = 0;
+      }
+
+      return (comparison * (sortState.direction === 'asc' ? 1 : -1))
+        || first.annotation.stem.localeCompare(second.annotation.stem, undefined, { numeric: true })
+        || first.annotation.id.localeCompare(second.annotation.id, undefined, { numeric: true });
     });
-  }, [filteredRows, hasMainSelection, hideUnselected, overlapGroups, overlapKeys, selectedIdSet]);
+  }, [filteredRows, hasMainSelection, hideUnselected, overlapCounts, overlapGroups, overlapKeys, selectedIdSet, sortState]);
 
   const hasFilters = Boolean(query.trim())
     || classFilter !== 'all'
     || typeFilter !== 'all'
+    || Boolean(annotationIdFilter.trim())
+    || Boolean(contentFilter.trim())
+    || Boolean(attributesFilter.trim())
+    || Boolean(sceneFilter.trim())
+    || Boolean(minBoxWidth.trim())
+    || Boolean(maxBoxWidth.trim())
+    || Boolean(minBoxHeight.trim())
+    || Boolean(maxBoxHeight.trim())
+    || Boolean(overlapGroupFilter.trim())
     || overlapKeys !== null
     || (hideUnselected && hasMainSelection);
   const classCount = new Set(displayRows.map((row) => row.annotation.label)).size;
   const sceneCount = new Set(displayRows.map((row) => row.annotation.stem)).size;
+
+  const renderSortableHeader = (label: string, key: AnnotationTableSortKey, align: 'left' | 'right' = 'left') => {
+    const isActive = sortState?.key === key;
+    const sortIcon = isActive
+      ? sortState.direction === 'asc'
+        ? <ChevronUp className="h-3 w-3" aria-hidden="true" />
+        : <ChevronDown className="h-3 w-3" aria-hidden="true" />
+      : <ChevronsUpDown className="h-3 w-3 opacity-40" aria-hidden="true" />;
+
+    return (
+      <button
+        type="button"
+        onClick={() => toggleSort(key)}
+        className={`inline-flex w-full items-center gap-1 text-[10px] font-black uppercase tracking-wider hover:text-blue-600 dark:hover:text-blue-300 ${align === 'right' ? 'justify-end text-right' : 'justify-start text-left'}`}
+        title={t('taxonomyDashboard.sortColumnHint', 'Click to sort; click again to reverse; click a third time to reset')}
+      >
+        <span>{label}</span>
+        {sortIcon}
+      </button>
+    );
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
@@ -339,30 +494,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
               </button>
             )}
           </div>
-
-          <Select value={classFilter} onValueChange={setClassFilter} disabled={!isLoaded}>
-            <SelectTrigger className="h-9 w-[170px] text-xs">
-              <SelectValue placeholder={t('taxonomyDashboard.className', 'Class')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('taxonomyDashboard.allClasses', 'All classes')}</SelectItem>
-              {classOptions.map((className) => (
-                <SelectItem key={className} value={className}>{className}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          <Select value={typeFilter} onValueChange={setTypeFilter} disabled={!isLoaded}>
-            <SelectTrigger className="h-9 w-[150px] text-xs">
-              <SelectValue placeholder={t('taxonomyDashboard.annotationType', 'Type')} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('taxonomyDashboard.allTypes', 'All types')}</SelectItem>
-              {typeOptions.map((type) => (
-                <SelectItem key={type} value={type}>{type}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
 
           <Button
             type="button"
@@ -498,22 +629,143 @@ export const AnnotationTable = React.memo(function AnnotationTable({
           </div>
         ) : (
           <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
-            <table className="w-full min-w-[1120px] border-collapse text-xs">
+            <table className="w-full min-w-[1380px] border-collapse text-xs">
               <thead className="sticky top-0 z-10 bg-neutral-50 dark:bg-neutral-800/95 text-[10px] uppercase tracking-wider text-neutral-500">
                 <tr>
                   <th className="w-10 px-3 py-3 text-left font-black">#</th>
-                  <th className="w-52 px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationId', 'Annotation ID')}</th>
-                  <th className="w-44 px-3 py-3 text-left font-black">{t('taxonomyDashboard.className', 'Class')}</th>
-                  <th className="w-28 px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationType', 'Type')}</th>
-                  <th className="w-24 px-3 py-3 text-right font-black" title={t('taxonomyDashboard.boxWidth', 'Box width')}>{t('taxonomyDashboard.boxWidthShort', 'Box W')}</th>
-                  <th className="w-24 px-3 py-3 text-right font-black" title={t('taxonomyDashboard.boxHeight', 'Box height')}>{t('taxonomyDashboard.boxHeightShort', 'Box H')}</th>
-                  <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationContent', 'Annotation Content')}</th>
-                  <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.annotationAttributes', 'Attributes')}</th>
-                  <th className="min-w-[220px] px-3 py-3 text-left font-black">{t('taxonomyDashboard.sceneGroup', 'Scene Group')}</th>
+                  <th className="w-52 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationId', 'Annotation ID'), 'id')}</th>
+                  <th className="w-44 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.className', 'Class'), 'label')}</th>
+                  <th className="w-28 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationType', 'Type'), 'type')}</th>
+                  <th className="w-24 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.boxWidthShort', 'Box W'), 'boxWidth', 'right')}</th>
+                  <th className="w-24 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.boxHeightShort', 'Box H'), 'boxHeight', 'right')}</th>
+                  <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationContent', 'Annotation Content'), 'content')}</th>
+                  <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationAttributes', 'Attributes'), 'attributes')}</th>
+                  <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.sceneGroup', 'Scene Group'), 'stem')}</th>
                   {overlapKeys !== null && (
-                    <th className="w-40 px-3 py-3 text-left font-black">{t('taxonomyDashboard.overlapGroup', 'Overlap group')}</th>
+                    <th className="w-40 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.overlapGroup', 'Overlap group'), 'overlap')}</th>
                   )}
                   <th className="w-12 px-3 py-3" />
+                </tr>
+                <tr className="border-t border-neutral-200/80 dark:border-neutral-700/80">
+                  <th className="px-3 py-1.5" />
+                  <th className="px-3 py-1.5">
+                    <Input
+                      value={annotationIdFilter}
+                      onChange={(event) => setAnnotationIdFilter(event.target.value)}
+                      disabled={!isLoaded}
+                      placeholder={t('taxonomyDashboard.filterId', 'Find ID')}
+                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
+                    />
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <Select value={classFilter} onValueChange={setClassFilter} disabled={!isLoaded}>
+                      <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900">
+                        <SelectValue placeholder={t('taxonomyDashboard.className', 'Class')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('taxonomyDashboard.allClasses', 'All classes')}</SelectItem>
+                        {classOptions.map((className) => (
+                          <SelectItem key={className} value={className}>{className}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <Select value={typeFilter} onValueChange={setTypeFilter} disabled={!isLoaded}>
+                      <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900">
+                        <SelectValue placeholder={t('taxonomyDashboard.annotationType', 'Type')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('taxonomyDashboard.allTypes', 'All types')}</SelectItem>
+                        {typeOptions.map((type) => (
+                          <SelectItem key={type} value={type}>{type}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <div className="space-y-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={minBoxWidth}
+                        onChange={(event) => setMinBoxWidth(event.target.value)}
+                        disabled={!isLoaded}
+                        placeholder={t('taxonomyDashboard.min', 'min')}
+                        className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900"
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        value={maxBoxWidth}
+                        onChange={(event) => setMaxBoxWidth(event.target.value)}
+                        disabled={!isLoaded}
+                        placeholder={t('taxonomyDashboard.max', 'max')}
+                        className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900"
+                      />
+                    </div>
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <div className="space-y-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={minBoxHeight}
+                        onChange={(event) => setMinBoxHeight(event.target.value)}
+                        disabled={!isLoaded}
+                        placeholder={t('taxonomyDashboard.min', 'min')}
+                        className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900"
+                      />
+                      <Input
+                        type="number"
+                        min="0"
+                        value={maxBoxHeight}
+                        onChange={(event) => setMaxBoxHeight(event.target.value)}
+                        disabled={!isLoaded}
+                        placeholder={t('taxonomyDashboard.max', 'max')}
+                        className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900"
+                      />
+                    </div>
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <Input
+                      value={contentFilter}
+                      onChange={(event) => setContentFilter(event.target.value)}
+                      disabled={!isLoaded}
+                      placeholder={t('taxonomyDashboard.filterContent', 'Find content')}
+                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
+                    />
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <Input
+                      value={attributesFilter}
+                      onChange={(event) => setAttributesFilter(event.target.value)}
+                      disabled={!isLoaded}
+                      placeholder={t('taxonomyDashboard.filterAttributes', 'Find attributes')}
+                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
+                    />
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <Input
+                      value={sceneFilter}
+                      onChange={(event) => setSceneFilter(event.target.value)}
+                      disabled={!isLoaded}
+                      placeholder={t('taxonomyDashboard.filterScene', 'Find scene')}
+                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
+                    />
+                  </th>
+                  {overlapKeys !== null && (
+                    <th className="px-3 py-1.5">
+                      <Input
+                        value={overlapGroupFilter}
+                        onChange={(event) => setOverlapGroupFilter(event.target.value)}
+                        disabled={!isLoaded}
+                        placeholder={t('taxonomyDashboard.filterOverlapGroup', 'Find group')}
+                        className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
+                      />
+                    </th>
+                  )}
+                  <th className="px-3 py-1.5" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
