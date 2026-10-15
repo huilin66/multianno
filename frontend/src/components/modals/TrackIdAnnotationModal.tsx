@@ -1740,34 +1740,6 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         if (nextStem) jumpToStem(nextStem);
       };
 
-      const jumpToFrame = (direction: -1 | 1) => {
-        const nextStem = frameContextMode === 'locked'
-          ? (direction < 0 ? startCandidate?.stem : endCandidate?.stem) || null
-          : stems[
-              Math.max(
-                0,
-                Math.min(stems.length - 1, currentIndex + direction),
-              )
-            ] || null;
-        if (nextStem) jumpToStem(nextStem);
-      };
-
-      // Track ID keeps W/S for the context-frame switch. They intentionally
-      // take precedence over the workspace pan/lasso bindings in this modal.
-      if (!event.ctrlKey && !event.metaKey && !event.shiftKey) {
-        const key = event.key.toLowerCase();
-        if (key === 'w') {
-          stopShortcut();
-          jumpToFrame(-1);
-          return;
-        }
-        if (key === 's') {
-          stopShortcut();
-          jumpToFrame(1);
-          return;
-        }
-      }
-
       if (event.key === 'Escape') {
         const hasSelection = Boolean(
           canvasProps.selectionBox
@@ -1890,7 +1862,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     // the modal can never consume Track ID shortcuts first.
     window.addEventListener('keydown', handleTrackIdKeyDown, true);
     return () => window.removeEventListener('keydown', handleTrackIdKeyDown, true);
-  }, [canvasProps, currentIndex, endCandidate?.stem, frameContextMode, jumpToStem, open, shortcutsSettings, startCandidate?.stem, stems]);
+  }, [canvasProps, jumpToStem, open, shortcutsSettings, stems]);
 
   const editor = (
     <TrackIdEditor
