@@ -378,21 +378,6 @@ export function SceneGroupManager({ onClose }: SceneGroupManagerProps) {
               <Table2 className="mr-2 h-4 w-4" /> {t('sceneGroupManager.sceneGroupTable')}
             </Button>
 
-            <div className="mt-4 border-t border-neutral-100 pt-3 dark:border-neutral-800">
-              <div className="flex items-center gap-2 px-2 text-[10px] font-black uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-                <Layers className="h-3.5 w-3.5 text-blue-500" /> {t('sceneGroupManager.groups')}
-              </div>
-              <div className="mt-2 space-y-0.5">
-                {groupRows.slice(0, 16).map((row) => (
-                  <button type="button" key={row.stem} onClick={() => setSelectedStem(row.stem)} onDoubleClick={() => openScene(row.stem)} className={selectedStem === row.stem ? 'flex w-full items-center gap-2 rounded-md bg-neutral-100 px-2 py-2 text-left text-xs font-bold shadow-sm transition-colors dark:bg-neutral-800' : 'flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs text-neutral-600 transition-colors hover:bg-neutral-50 dark:text-neutral-400 dark:hover:bg-neutral-800/50'}>
-                    <span className={currentStem === row.stem ? 'h-2 w-2 shrink-0 rounded-full bg-blue-500' : row.objectCount > 0 ? 'h-2 w-2 shrink-0 rounded-full bg-emerald-500' : 'h-2 w-2 shrink-0 rounded-full bg-neutral-300 dark:bg-neutral-600'} />
-                    <span className="min-w-0 flex-1 truncate font-mono" title={row.stem}>{row.stem}</span>
-                    <span className="shrink-0 text-[9px] text-neutral-400">{row.objectCount}</span>
-                  </button>
-                ))}
-                {groupRows.length > 16 && <button type="button" onClick={() => setActiveTab('table')} className="w-full px-2 py-2 text-left text-[10px] font-medium text-blue-600 hover:text-blue-700 dark:text-blue-300">{t('sceneGroupManager.viewAll', { count: groupRows.length })}</button>}
-              </div>
-            </div>
           </div>
           <div className="shrink-0 border-t border-neutral-200 p-3 dark:border-neutral-800">
             <p className="text-[10px] leading-4 text-neutral-500 dark:text-neutral-400">{t('sceneGroupManager.description')}</p>
