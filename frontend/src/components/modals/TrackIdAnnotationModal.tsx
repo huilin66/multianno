@@ -206,6 +206,57 @@ const composeTrackId = (mainId: string, partId: string) => {
   return part ? `${main}-${part}` : main;
 };
 
+const isAdjustableNumericId = (value: string) => {
+  if (!/^\d+$/.test(value)) return false;
+  return Number.isSafeInteger(Number(value));
+};
+
+const adjustNumericId = (value: string, delta: -1 | 1) => {
+  if (!isAdjustableNumericId(value)) return value;
+  const nextValue = Math.max(0, Number(value) + delta);
+  return String(nextValue).padStart(value.length, '0');
+};
+
+function NumericIdStepper({
+  value,
+  label,
+  onChange,
+}: {
+  value: string;
+  label: string;
+  onChange: (value: string) => void;
+}) {
+  const adjustable = isAdjustableNumericId(value);
+  const numericValue = adjustable ? Number(value) : null;
+
+  return (
+    <div className="flex w-5 shrink-0 flex-col gap-px" aria-label={`${label} stepper`}>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={!adjustable}
+        onClick={() => onChange(adjustNumericId(value, 1))}
+        className="h-3.5 w-5 rounded px-0 py-0"
+        title={`${label} +1`}
+        aria-label={`${label} +1`}
+      >
+        <span className="text-[8px] leading-none" aria-hidden="true">▲</span>
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={!adjustable || numericValue === 0}
+        onClick={() => onChange(adjustNumericId(value, -1))}
+        className="h-3.5 w-5 rounded px-0 py-0"
+        title={`${label} -1`}
+        aria-label={`${label} -1`}
+      >
+        <span className="text-[8px] leading-none" aria-hidden="true">▼</span>
+      </Button>
+    </div>
+  );
+}
+
 const getFrameImagePath = (stem: string, canvasProps: Record<string, any>) => {
   const view = canvasProps.view;
   const folder = (canvasProps.folders || []).find((item: any) => item.id === view?.folderId);
@@ -611,34 +662,48 @@ function TrackIdEditor({
         <div className="mt-1.5 flex items-end gap-1.5">
           <div className="min-w-0 flex-1">
             <span className="mb-1 block text-[9px] uppercase tracking-wider text-neutral-400">{t('trackIdWindow.mainId')}</span>
-            <Input
-              value={mainIdDraft}
-              onChange={(event) => setMainIdDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  applyTrackId();
-                }
-              }}
-              className="h-7 min-w-0 text-[11px]"
-              aria-label={t('trackIdWindow.mainId')}
-            />
+            <div className="flex items-center gap-1">
+              <Input
+                value={mainIdDraft}
+                onChange={(event) => setMainIdDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    applyTrackId();
+                  }
+                }}
+                className="h-7 min-w-0 flex-1 text-[11px]"
+                aria-label={t('trackIdWindow.mainId')}
+              />
+              <NumericIdStepper
+                value={mainIdDraft}
+                label={t('trackIdWindow.mainId')}
+                onChange={setMainIdDraft}
+              />
+            </div>
           </div>
           <span className="mb-2 text-xs font-semibold text-neutral-400">-</span>
           <div className="min-w-0 flex-1">
             <span className="mb-1 block text-[9px] uppercase tracking-wider text-neutral-400">{t('trackIdWindow.partId')}</span>
-            <Input
-              value={partIdDraft}
-              onChange={(event) => setPartIdDraft(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault();
-                  applyTrackId();
-                }
-              }}
-              className="h-7 min-w-0 text-[11px]"
-              aria-label={t('trackIdWindow.partId')}
-            />
+            <div className="flex items-center gap-1">
+              <Input
+                value={partIdDraft}
+                onChange={(event) => setPartIdDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
+                    applyTrackId();
+                  }
+                }}
+                className="h-7 min-w-0 flex-1 text-[11px]"
+                aria-label={t('trackIdWindow.partId')}
+              />
+              <NumericIdStepper
+                value={partIdDraft}
+                label={t('trackIdWindow.partId')}
+                onChange={setPartIdDraft}
+              />
+            </div>
           </div>
           <Button
             type="button"
