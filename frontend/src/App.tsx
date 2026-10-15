@@ -9,6 +9,7 @@ import {
   SyncAnnotation,
   ProjectMetaDashboard,
   TaxonomyDashboard,
+  SceneGroupManager,
   DataExport,
   DataImport
 } from './components/Modules';
@@ -23,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2, Route } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2, Route, Layers } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -868,6 +869,9 @@ export default function App() {
                 <DropdownMenuItem onClick={() => setActiveModule('meta')}>
                   <Database className="w-4 h-4 mr-2" /> {t('menu.projectMeta')}
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveModule('scene_group_manager')}>
+                  <Layers className="w-4 h-4 mr-2" /> {t('menu.sceneGroupManager')}
+                </DropdownMenuItem>
               </DropdownMenuGroup>
 
               <DropdownMenuSeparator />
@@ -1285,6 +1289,20 @@ export default function App() {
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <TaxonomyDashboard onClose={() => setActiveModule('workspace')} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={activeModule === 'scene_group_manager'}
+        onOpenChange={(open) => !open && setActiveModule('workspace')}
+      >
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-border overflow-hidden">
+          <DialogHeader className="p-4 border-b border-border shrink-0">
+            <DialogTitle>{t('menu.sceneGroupManager')}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-grow overflow-hidden relative">
+            <SceneGroupManager onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>

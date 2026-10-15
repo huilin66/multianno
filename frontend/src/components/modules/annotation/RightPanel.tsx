@@ -1450,52 +1450,63 @@ export function RightPanel({
           isExpanded={expanded.scenes} onToggle={() => toggleSection('scenes')} 
           badge={currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}
           actionNode={(
-            !sceneSearchOpen ? (
+            <div className="flex items-center gap-0.5">
               <button
                 type="button"
-                aria-label={t('rightPanel.searchSceneGroup')}
-                title={t('rightPanel.searchSceneGroup')}
-                onClick={() => {
-                  setSceneSearchOpen(true);
-                  setExpanded((previous) => ({ ...previous, scenes: true }));
-                }}
+                aria-label={t('menu.sceneGroupManager')}
+                title={t('menu.sceneGroupManager')}
+                onClick={() => setActiveModule('scene_group_manager')}
                 className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
               >
-                <Search className="h-3.5 w-3.5" />
+                <ExternalLink className="h-3.5 w-3.5" />
               </button>
-            ) : (
-              <div className="flex w-28 items-center gap-1">
-                <Input
-                  ref={sceneSearchInputRef}
-                  value={sceneSearchInput}
-                  onChange={(event) => setSceneSearchInput(event.target.value)}
-                  onKeyDown={(event) => {
-                    event.stopPropagation();
-                    if (event.key === 'Enter') {
-                      event.preventDefault();
-                      handleSceneSearch();
-                    } else if (event.key === 'Escape') {
-                      setSceneSearchInput('');
-                      setSceneSearchQuery('');
-                      setSceneSearchOpen(false);
-                      event.currentTarget.blur();
-                    }
-                  }}
-                  placeholder={t('rightPanel.searchSceneGroup')}
-                  aria-label={t('rightPanel.searchSceneGroup')}
-                  className="h-6 min-w-0 flex-1 bg-white/80 px-2 text-[10px] dark:bg-neutral-900/80"
-                />
+              {!sceneSearchOpen ? (
                 <button
                   type="button"
-                  aria-label={t('rightPanel.executeSceneSearch')}
-                  title={t('rightPanel.executeSceneSearch')}
-                  onClick={handleSceneSearch}
-                  className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-500 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
+                  aria-label={t('rightPanel.searchSceneGroup')}
+                  title={t('rightPanel.searchSceneGroup')}
+                  onClick={() => {
+                    setSceneSearchOpen(true);
+                    setExpanded((previous) => ({ ...previous, scenes: true }));
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
                 >
                   <Search className="h-3.5 w-3.5" />
                 </button>
-              </div>
-            )
+              ) : (
+                <div className="flex w-28 items-center gap-1">
+                  <Input
+                    ref={sceneSearchInputRef}
+                    value={sceneSearchInput}
+                    onChange={(event) => setSceneSearchInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      event.stopPropagation();
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        handleSceneSearch();
+                      } else if (event.key === 'Escape') {
+                        setSceneSearchInput('');
+                        setSceneSearchQuery('');
+                        setSceneSearchOpen(false);
+                        event.currentTarget.blur();
+                      }
+                    }}
+                    placeholder={t('rightPanel.searchSceneGroup')}
+                    aria-label={t('rightPanel.searchSceneGroup')}
+                    className="h-6 min-w-0 flex-1 bg-white/80 px-2 text-[10px] dark:bg-neutral-900/80"
+                  />
+                  <button
+                    type="button"
+                    aria-label={t('rightPanel.executeSceneSearch')}
+                    title={t('rightPanel.executeSceneSearch')}
+                    onClick={handleSceneSearch}
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-500 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
+                  >
+                    <Search className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         />
         {expanded.scenes && (

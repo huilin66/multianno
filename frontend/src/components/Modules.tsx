@@ -7,6 +7,7 @@ import { DataPreload } from './modules/DataPreload';
 import { ViewExtentCheck } from './modules/ViewExtentCheck';
 import { ProjectMetaDashboard } from './modules/ProjectMetaDashboard';
 import { TaxonomyDashboard } from './modules/TaxonomyDashboard';
+import { SceneGroupManager } from './modules/SceneGroupManager';
 import { DataExport } from './modules/DataExport';
 import { DataImport } from './modules/DataImport';
 
@@ -18,6 +19,7 @@ export {
   ViewExtentCheck,
   ProjectMetaDashboard,
   TaxonomyDashboard,
+  SceneGroupManager,
   DataExport,
   DataImport
 };
