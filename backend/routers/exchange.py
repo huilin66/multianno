@@ -1687,12 +1687,13 @@ def _finalize_import_annotation(
 async def handle_import(req: ImportRequest):
     logger.info(
         "IMPORT_REQUEST format=%s strategy=%s source=%s target=%s stems=%d "
-        "image_paths=%d extension=%s suffix=%s",
+        "task_type=%s image_paths=%d extension=%s suffix=%s",
         req.format,
         req.merge_strategy,
         shorten(req.source_path, 1500),
         shorten(req.target_dir, 1500),
         len(req.stems),
+        req.task_type or "-",
         len(req.image_paths or {}),
         req.extension or "-",
         req.custom_suffix or "-",
@@ -1704,6 +1705,8 @@ async def handle_import(req: ImportRequest):
 
 
 async def _dispatch_import(req: ImportRequest, progress_callback=None):
+    if req.task_type == "image_meta":
+        return await import_from_image_meta(req, progress_callback)
     if req.format == "yolo":
         return await import_from_yolo(req, progress_callback)
     elif req.format == "coco":
@@ -1728,9 +1731,10 @@ async def handle_import_stream(req: ImportRequest):
     """Import annotations with per-scene progress and periodic heartbeats."""
 
     logger.info(
-        "IMPORT_STREAM_REQUEST format=%s strategy=%s source=%s target=%s stems=%d",
+        "IMPORT_STREAM_REQUEST format=%s strategy=%s task_type=%s source=%s target=%s stems=%d",
         req.format,
         req.merge_strategy,
+        req.task_type or "-",
         shorten(req.source_path, 1500),
         shorten(req.target_dir, 1500),
         len(req.stems),
@@ -2323,6 +2327,216 @@ async def import_from_multianno(req: ImportRequest, progress_callback=None):
         "empty_json_count": empty_json_count,
         "missing_source_count": missing_source_count,
         "dimension_fallback_count": dimension_fallback_count,
+    }
+
+
+# ==========================================
+# 导入图像元数据 (Image Meta)
+# ==========================================
+def _write_import_json_atomic(path: str, data: dict):
+    """Write an import result without leaving a partially written JSON file."""
+    temp_path = f"{path}.tmp-{uuid.uuid4().hex}"
+    try:
+        with open(temp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(temp_path, path)
+    finally:
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except OSError:
+                logger.warning(
+                    "IMPORT_IMAGE_META_TEMP_REMOVE_FAILED path=%s",
+                    shorten(temp_path, 1500),
+                )
+
+
+async def import_from_image_meta(req: ImportRequest, progress_callback=None):
+    """Import one image-keyed JSON into each scene's MultiAnno JSON.
+
+    The source shape is intentionally different from the normal MultiAnno
+    folder import: one JSON file contains ``{image_name: metadata}`` records.
+    Each record is copied verbatim to the corresponding scene JSON under the
+    ``imageMeta`` field. Existing ``shapes`` and other annotation metadata are
+    preserved. Mirror only removes stale ``imageMeta`` fields; it never deletes
+    annotations or annotation files.
+    """
+    if req.merge_strategy != "mirror":
+        raise HTTPException(
+            status_code=400,
+            detail="Image Meta import only supports the mirror merge strategy",
+        )
+
+    source_path = os.path.abspath(os.path.expanduser(req.source_path))
+    if not os.path.isfile(source_path):
+        raise HTTPException(status_code=404, detail="Image Meta JSON file does not exist")
+    if Path(source_path).suffix.lower() != ".json":
+        raise HTTPException(status_code=400, detail="Image Meta source must be a .json file")
+
+    try:
+        with open(source_path, "r", encoding="utf-8-sig") as f:
+            source_records = json.load(f)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid Image Meta JSON: {exc}") from exc
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=f"Cannot read Image Meta JSON: {exc}") from exc
+
+    if not isinstance(source_records, dict):
+        raise HTTPException(
+            status_code=400,
+            detail="Image Meta JSON must be an object keyed by image file name",
+        )
+
+    records = list(source_records.items())
+    total_records = len(records)
+    imported_count = 0
+    updated_count = 0
+    created_count = 0
+    invalid_count = 0
+    removed_count = 0
+    processed_stems: set[str] = set()
+
+    logger.info(
+        "IMPORT_IMAGE_META_PLAN source=%s target=%s records=%d strategy=%s",
+        shorten(source_path, 1500),
+        shorten(req.target_dir, 1500),
+        total_records,
+        req.merge_strategy,
+    )
+
+    for index, (image_name, metadata) in enumerate(records, start=1):
+        image_name = str(image_name or "").strip()
+        image_basename = _image_basename(image_name)
+        stem = Path(image_basename).stem
+
+        if not image_name or not stem or not isinstance(metadata, dict):
+            invalid_count += 1
+            logger.warning(
+                "IMPORT_IMAGE_META_SKIP index=%d/%d image=%s reason=invalid_record",
+                index,
+                total_records,
+                shorten(image_name, 500),
+            )
+            _report_import_progress(
+                progress_callback,
+                index,
+                total_records,
+                "Image Meta",
+                stem or image_name,
+            )
+            continue
+
+        target_json_path = os.path.join(req.target_dir, f"{stem}.json")
+        target_exists = os.path.isfile(target_json_path)
+        if target_exists:
+            try:
+                with open(target_json_path, "r", encoding="utf-8") as f:
+                    target_data = json.load(f)
+                if not isinstance(target_data, dict):
+                    raise ValueError("target JSON root is not an object")
+            except Exception as exc:
+                logger.exception(
+                    "IMPORT_IMAGE_META_TARGET_READ_ERROR stem=%s path=%s error=%s",
+                    stem,
+                    shorten(target_json_path, 1500),
+                    exc,
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Cannot read target annotation JSON for {stem}: {exc}",
+                ) from exc
+        else:
+            target_data = {"shapes": []}
+
+        # Copy the record as-is. The source key remains represented by the
+        # existing MultiAnno imageNameMain field, while every source property
+        # (GPS, UTC, height, heading, etc.) stays under imageMeta.
+        target_data["imageMeta"] = dict(metadata)
+        target_data.setdefault("stem", stem)
+        target_data.setdefault("imageNameMain", image_basename)
+        if not isinstance(target_data.get("shapes"), list):
+            target_data["shapes"] = []
+
+        _write_import_json_atomic(target_json_path, target_data)
+        processed_stems.add(stem)
+        imported_count += 1
+        if target_exists:
+            updated_count += 1
+        else:
+            created_count += 1
+
+        logger.info(
+            "IMPORT_IMAGE_META_WRITE index=%d/%d stem=%s image=%s target=%s fields=%d existed=%s",
+            index,
+            total_records,
+            stem,
+            image_basename,
+            shorten(target_json_path, 1500),
+            len(metadata),
+            target_exists,
+        )
+        _report_import_progress(
+            progress_callback,
+            index,
+            total_records,
+            "Image Meta",
+            stem,
+        )
+
+    # Mirror applies only to the imported metadata field. Existing annotation
+    # shapes and unrelated JSON files are deliberately left untouched.
+    for file_name in os.listdir(req.target_dir):
+        if not file_name.lower().endswith(".json"):
+            continue
+        stem = Path(file_name).stem
+        if stem in processed_stems:
+            continue
+        target_json_path = os.path.join(req.target_dir, file_name)
+        try:
+            with open(target_json_path, "r", encoding="utf-8") as f:
+                target_data = json.load(f)
+            if not isinstance(target_data, dict):
+                continue
+            removed_fields = False
+            for field_name in ("imageMeta", "image_meta"):
+                if field_name in target_data:
+                    target_data.pop(field_name, None)
+                    removed_fields = True
+            if removed_fields:
+                _write_import_json_atomic(target_json_path, target_data)
+                removed_count += 1
+                logger.info(
+                    "IMPORT_IMAGE_META_MIRROR_REMOVE stem=%s target=%s",
+                    stem,
+                    shorten(target_json_path, 1500),
+                )
+        except (OSError, json.JSONDecodeError):
+            logger.warning(
+                "IMPORT_IMAGE_META_MIRROR_SKIP path=%s",
+                shorten(target_json_path, 1500),
+            )
+
+    logger.info(
+        "IMPORT_IMAGE_META_END records=%d updated=%d created=%d invalid=%d removed=%d",
+        imported_count,
+        updated_count,
+        created_count,
+        invalid_count,
+        removed_count,
+    )
+    return {
+        "status": "success",
+        "message": f"Imported image metadata for {imported_count} images.",
+        "format": "Image Meta",
+        "imported_count": imported_count,
+        "shape_count": 0,
+        "record_count": imported_count,
+        "updated_count": updated_count,
+        "created_count": created_count,
+        "files_written": updated_count + created_count,
+        "invalid_count": invalid_count,
+        "metadata_removed_count": removed_count,
+        "metadata_source": source_path,
     }
 
 

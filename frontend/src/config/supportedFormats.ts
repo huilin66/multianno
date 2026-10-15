@@ -1,6 +1,11 @@
 // src/config/supportedFormats.ts
 
-export type TaskType = 'object_detection' | 'instance_segmentation' | 'image_segmentation' | 'change_detection';
+export type TaskType =
+  | 'object_detection'
+  | 'instance_segmentation'
+  | 'image_segmentation'
+  | 'change_detection'
+  | 'image_meta';
 
 // ==========================================
 // 1. task definition
@@ -9,6 +14,8 @@ export interface TaskInfo {
   label: string;
   description: string;
   formats: string[];
+  /** Some task types are only meaningful for the Import Data workflow. */
+  importOnly?: boolean;
 }
 
 export const SUPPORTED_TASKS: Record<TaskType, TaskInfo> = {
@@ -31,6 +38,12 @@ export const SUPPORTED_TASKS: Record<TaskType, TaskInfo> = {
     label: 'Change Detection',
     description: 'Class-based pixel change detection masks',
     formats: ['mask', 'multianno'],
+  },
+  image_meta: {
+    label: 'Image Meta',
+    description: 'Per-image GPS and pose metadata',
+    formats: ['multianno'],
+    importOnly: true,
   },
 };
 
@@ -191,6 +204,17 @@ export const TASK_SHAPE_MAPPINGS: Record<TaskType, Record<string, ShapeStatus>> 
     point: 'incompatible',
     line: 'incompatible',
     cuboid: 'incompatible',
+    keypoints: 'incompatible',
+  },
+  image_meta: {
+    bbox: 'incompatible',
+    oriented_bbox: 'incompatible',
+    polygon: 'incompatible',
+    ellipse: 'incompatible',
+    circle: 'incompatible',
+    cuboid: 'incompatible',
+    point: 'incompatible',
+    line: 'incompatible',
     keypoints: 'incompatible',
   },
 };

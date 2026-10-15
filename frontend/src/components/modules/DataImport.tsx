@@ -81,6 +81,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [importStage, setImportStage] = useState<'importing' | 'refreshing'>('importing');
   const [importStageProgress, setImportStageProgress] = useState({ current: 0, total: 0 });
   const [overallProgress, setOverallProgress] = useState<number | null>(null);
+  const isImageMetaTask = taskType === 'image_meta';
 
   const updateOverallProgress = (nextPercent: number) => {
     const safePercent = Math.min(100, Math.max(0, Number(nextPercent) || 0));
@@ -91,7 +92,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [explorerConfig, setExplorerConfig] = useState<{
     open: boolean;
     type: 'dir' | 'file';
-    target: 'source' | 'class_file' | 'attributes_file';
+    target: 'source' | 'workspace' | 'class_file' | 'attributes_file';
     initialPath?: string;
   }>({ open: false, type: 'dir', target: 'source' });
 
@@ -101,7 +102,13 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   useEffect(() => {
     const available = SUPPORTED_TASKS[taskType]?.formats;
     if (available && !available.includes(format)) setFormat(available[0]);
-  }, [taskType]);
+    if (taskType === 'image_meta') {
+      if (format !== 'multianno') setFormat('multianno');
+      if (extension !== '.json') setExtension('.json');
+      if (mergeStrategy !== 'mirror') setMergeStrategy('mirror');
+      if (customSuffix) setCustomSuffix('');
+    }
+  }, [taskType, format, extension, mergeStrategy, customSuffix]);
 
   useEffect(() => {
     const detail = FORMAT_DETAILS[format];
@@ -140,7 +147,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   // ==========================================
   const handleExecute = async () => {
     if (!sourceDataPath) return;
-    if ((format === 'yolo' || format === 'images_only') && !externalClassFile) {
+    if (!isImageMetaTask && (format === 'yolo' || format === 'images_only') && !externalClassFile) {
       alert(t('dataImport.alerts.needClassFile'));
       return;
     }
@@ -177,71 +184,80 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       const res = await importDataStream({
         source_path: sourceDataPath,
         target_dir: targetWorkspaceDir,
+        task_type: taskType,
         format,
-        merge_strategy: mergeStrategy,
-        classes_file: externalClassFile,
-        custom_suffix: customSuffix,
-        extension: extension,
-        import_zero_class: importZeroClass,
-        coco_mode: cocoMode,
+        merge_strategy: isImageMetaTask ? 'mirror' : mergeStrategy,
+        classes_file: isImageMetaTask ? undefined : externalClassFile,
+        custom_suffix: isImageMetaTask ? '' : customSuffix,
+        extension: isImageMetaTask ? '.json' : extension,
+        import_zero_class: isImageMetaTask ? false : importZeroClass,
+        coco_mode: isImageMetaTask ? 'polygon' : cocoMode,
         stems: stems,
         image_paths: imagePaths,
         image_raw_profile: mainViewFolder?.rawProfile,
         attributes_file:
-          format === 'yolo' && taskType === 'object_detection'
+          !isImageMetaTask && format === 'yolo' && taskType === 'object_detection'
             ? (attributeFile || undefined)
             : undefined,
       }, (progress) => {
         setImportStageProgress({ current: progress.current, total: progress.total });
         const stagePercent = progress.total > 0
-          ? (progress.current / progress.total) * 50
+          ? (progress.current / progress.total) * (isImageMetaTask ? 100 : 50)
           : 0;
         updateOverallProgress(stagePercent);
       });
 
-      setImportStage('refreshing');
-      setImportStageProgress({ current: 0, total: 0 });
-      updateOverallProgress(50);
+      if (isImageMetaTask) {
+        // Image metadata updates existing scene JSON files and does not change
+        // the image/annotation lists, so reloading the project would reset the
+        // user's current scene unnecessarily.
+        setImportStageProgress({ current: 1, total: 1 });
+        updateOverallProgress(100);
+      } else {
+        setImportStage('refreshing');
+        setImportStageProgress({ current: 0, total: 0 });
+        updateOverallProgress(50);
 
-      // 热重载
-      const { projectMetaPath } = useStore.getState();
-      if (projectMetaPath) {
-        try {
-          const meta = await loadProjectMetaFromServer(projectMetaPath);
-          useStore.getState().loadProjectMeta(meta);
+        // 热重载
+        const { projectMetaPath } = useStore.getState();
+        if (projectMetaPath) {
+          try {
+            const meta = await loadProjectMetaFromServer(projectMetaPath);
+            useStore.getState().loadProjectMeta(meta);
 
-          if (meta.folders && meta.folders.length > 0) {
-            const analyzeResult = await analyzeWorkspaceFolders(
-              meta.folders.map((f: any) => ({ path: f.path, suffix: f.suffix || '' }))
-            );
-            if (analyzeResult.commonStems?.length > 0) {
-              useStore.getState().setStems(analyzeResult.commonStems);
-              const sortedStems = useStore.getState().stems;
-              useStore.getState().setSceneGroups(analyzeResult.sceneGroups);
-              useStore.getState().setCurrentStem(sortedStems[0]);
+            if (meta.folders && meta.folders.length > 0) {
+              const analyzeResult = await analyzeWorkspaceFolders(
+                meta.folders.map((f: any) => ({ path: f.path, suffix: f.suffix || '' }))
+              );
+              if (analyzeResult.commonStems?.length > 0) {
+                useStore.getState().setStems(analyzeResult.commonStems);
+                const sortedStems = useStore.getState().stems;
+                useStore.getState().setSceneGroups(analyzeResult.sceneGroups);
+                useStore.getState().setCurrentStem(sortedStems[0]);
 
-              const mainFolder = meta.folders.find((f: any) =>
-                f.Id === meta.views?.find((v: any) => v.isMain)?.["folder id"]
-              ) || meta.folders[0];
+                const mainFolder = meta.folders.find((f: any) =>
+                  f.Id === meta.views?.find((v: any) => v.isMain)?.["folder id"]
+                ) || meta.folders[0];
 
-              const loadPath = useStore.getState().workspacePath || mainFolder?.path || '';
-              if (loadPath) {
-                await loadAllProjectAnnotations(
-                  sortedStems,
-                  loadPath,
-                  (current, total) => {
-                    setImportStageProgress({ current, total });
-                    const stagePercent = total > 0
-                      ? 50 + (current / total) * 50
-                      : 50;
-                    updateOverallProgress(stagePercent);
-                  },
-                );
+                const loadPath = useStore.getState().workspacePath || mainFolder?.path || '';
+                if (loadPath) {
+                  await loadAllProjectAnnotations(
+                    sortedStems,
+                    loadPath,
+                    (current, total) => {
+                      setImportStageProgress({ current, total });
+                      const stagePercent = total > 0
+                        ? 50 + (current / total) * 50
+                        : 50;
+                      updateOverallProgress(stagePercent);
+                    },
+                  );
+                }
               }
             }
+          } catch (refreshErr) {
+            console.error("Refresh failed:", refreshErr);
           }
-        } catch (refreshErr) {
-          console.error("Refresh failed:", refreshErr);
         }
       }
 
@@ -262,11 +278,19 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       const shapeCount = res?.shape_count ?? 0;
       const importedCount = res?.imported_count ?? 0;
       const totalCount = stems.length || 0;
-      const desc = [
-        t('dataImport.result.method', { format: fmt }),
-        t('dataImport.result.shapes', { count: shapeCount }),
-        t('dataImport.result.images', { imported: importedCount, total: totalCount }),
-      ].join('\n');
+      const desc = isImageMetaTask
+        ? [
+            t('dataImport.result.method', { format: fmt }),
+            t('dataImport.result.metadataRecords', { count: res?.record_count ?? importedCount }),
+            t('dataImport.result.metadataFiles', {
+              count: res?.files_written ?? ((res?.updated_count ?? 0) + (res?.created_count ?? 0)),
+            }),
+          ].join('\n')
+        : [
+            t('dataImport.result.method', { format: fmt }),
+            t('dataImport.result.shapes', { count: shapeCount }),
+            t('dataImport.result.images', { imported: importedCount, total: totalCount }),
+          ].join('\n');
       const emptyJsonCount = res?.empty_json_count ?? 0;
       const dimensionFallbackCount = res?.dimension_fallback_count ?? 0;
       const resultLines = [desc];
@@ -289,6 +313,16 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
           count: importedAttributeDefinitions.length,
         }));
       }
+      if (isImageMetaTask && (res?.metadata_removed_count ?? 0) > 0) {
+        resultLines.push(t('dataImport.result.metadataRemoved', {
+          count: res.metadata_removed_count,
+        }));
+      }
+      if (isImageMetaTask && (res?.invalid_count ?? 0) > 0) {
+        resultLines.push(t('dataImport.result.metadataInvalid', {
+          count: res.invalid_count,
+        }));
+      }
       const resultDescription = resultLines.join('\n');
       await showDialog({
         title: t('dataImport.success'),
@@ -306,6 +340,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   };
 
   const getSourceLabel = () => {
+    if (isImageMetaTask) return t('dataImport.source.imageMetaFile');
     switch (format) {
       case 'yolo': return t('dataImport.source.yoloFolder');
       case 'coco': return t('dataImport.source.cocoFile');
@@ -316,6 +351,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   };
 
   const getSourceIcon = () => {
+    if (isImageMetaTask) return <FileText className="w-4 h-4 mr-2 shrink-0" />;
     switch (format) {
       case 'coco': return <FileText className="w-4 h-4 mr-2 shrink-0" />;
       case 'images_only': return <Image className="w-4 h-4 mr-2 shrink-0" />;
@@ -341,7 +377,21 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                 {Object.entries(SUPPORTED_TASKS).map(([id, info]) => (
                   <div
                     key={id}
-                    onClick={() => setTaskType(id as TaskType)}
+                    onClick={() => {
+                      const nextTaskType = id as TaskType;
+                      const leavingImageMeta = isImageMetaTask && nextTaskType !== 'image_meta';
+                      setTaskType(nextTaskType);
+                      setSourceDataPath('');
+                      if (nextTaskType === 'image_meta') {
+                        setFormat('multianno');
+                        setExtension('.json');
+                        setMergeStrategy('mirror');
+                        setCustomSuffix('');
+                      } else if (leavingImageMeta) {
+                        setMergeStrategy(DefaultImportConfig.mergeStrategy);
+                        setCustomSuffix(DefaultImportConfig.customSuffix);
+                      }
+                    }}
                     className={`p-3 rounded-xl border-2 cursor-pointer text-center transition-all ${
                       taskType === id
                         ? 'border-primary bg-primary/5 shadow-sm'
@@ -391,11 +441,13 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
             <div className="h-px bg-border" />
 
             {/* 3. Suffix + Extension */}
-            <div className="grid grid-cols-2 gap-4">
-              <Field label={t('dataImport.task.suffix')}>
-                <Input value={customSuffix} onChange={(e) => setCustomSuffix(e.target.value)}
-                  className="h-9 text-xs font-mono" placeholder="_RGB" />
-              </Field>
+            <div className={`${isImageMetaTask ? 'grid grid-cols-1' : 'grid grid-cols-2'} gap-4`}>
+              {!isImageMetaTask && (
+                <Field label={t('dataImport.task.suffix')}>
+                  <Input value={customSuffix} onChange={(e) => setCustomSuffix(e.target.value)}
+                    className="h-9 text-xs font-mono" placeholder="_RGB" />
+                </Field>
+              )}
               <Field label={t('dataImport.task.extension')}>
                 <div className="flex flex-wrap gap-2">
                   {FORMAT_DETAILS[format]?.extensions.map(ext => {
@@ -403,7 +455,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                     return (
                       <div
                         key={ext}
-                        onClick={() => !isSingle && setExtension(ext)}
+                        onClick={() => !isSingle && !isImageMetaTask && setExtension(ext)}
                         className={`p-3 rounded-xl border-2 text-center min-w-[80px] transition-all ${
                           extension === ext
                             ? 'border-primary bg-primary/5 shadow-sm'
@@ -431,11 +483,14 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                 {t('dataImport.task.strategy')}
               </Label>
               <div className="flex flex-wrap gap-2">
-                {(['append', 'overwrite', 'skip', 'mirror'] as const).map(strategy => (
+                {(isImageMetaTask
+                  ? (['mirror'] as const)
+                  : (['append', 'overwrite', 'skip', 'mirror'] as const)
+                ).map(strategy => (
                   <div
                     key={strategy}
-                    onClick={() => setMergeStrategy(strategy)}
-                    className={`p-3 rounded-xl border-2 cursor-pointer text-center min-w-[90px] transition-all ${
+                    onClick={() => !isImageMetaTask && setMergeStrategy(strategy)}
+                    className={`p-3 rounded-xl border-2 text-center min-w-[90px] transition-all ${
                       mergeStrategy === strategy
                         ? 'border-primary bg-primary/5 shadow-sm'
                         : 'border-border hover:border-muted-foreground/30 hover:bg-muted/30'
@@ -470,7 +525,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                   <button
                     onClick={() => setExplorerConfig({
                       open: true,
-                      type: format === 'coco' ? 'file' : 'dir',
+                      type: format === 'coco' || isImageMetaTask ? 'file' : 'dir',
                       target: 'source',
                       initialPath: sourceDataPath,
                     })}
@@ -480,8 +535,13 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                   </button>
                 </div>
               </Field>
+              {isImageMetaTask && (
+                <p className="text-[10px] leading-relaxed text-muted-foreground">
+                  {t('dataImport.source.imageMetaHint')}
+                </p>
+              )}
 
-              {(format === 'yolo' || format === 'images_only') && (
+              {!isImageMetaTask && (format === 'yolo' || format === 'images_only') && (
                 <div className="pt-3 border-t border-border">
                   <Label className="text-[10px] text-amber-600 flex items-center gap-1 mb-2">
                     <AlertCircle className="w-3 h-3" />
@@ -580,7 +640,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                     onClick={() => setExplorerConfig({
                       open: true,
                       type: 'dir',
-                      target: 'source',
+                      target: 'workspace',
                       initialPath: targetWorkspaceDir,
                     })}
                     className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
@@ -690,7 +750,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
           <div className="flex items-center gap-3 flex-1 mr-4">
             <OperationProgress
               stageIndex={importStage === 'importing' ? 1 : 2}
-              stageCount={2}
+              stageCount={isImageMetaTask ? 1 : 2}
               stageName={t(importStage === 'importing' ? 'dataImport.importing' : 'dataImport.refreshing')}
               current={importStageProgress.current}
               total={importStageProgress.total}
@@ -728,6 +788,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         onClose={() => setExplorerConfig(prev => ({ ...prev, open: false }))}
         onConfirm={(paths) => {
           if (explorerConfig.target === 'source') setSourceDataPath(paths[0]);
+          else if (explorerConfig.target === 'workspace') setTargetWorkspaceDir(paths[0]);
           else if (explorerConfig.target === 'class_file') setExternalClassFile(paths[0]);
           else if (explorerConfig.target === 'attributes_file') setAttributeFile(paths[0]);
           setExplorerConfig(prev => ({ ...prev, open: false }));

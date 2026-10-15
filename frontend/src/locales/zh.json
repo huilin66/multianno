@@ -855,6 +855,8 @@
       "yoloFolder": "YOLO 标注文件夹",
       "cocoFile": "COCO JSON 文件",
       "multiannoFolder": "MultiAnno JSON 文件夹",
+      "imageMetaFile": "图像元数据 JSON 文件",
+      "imageMetaHint": "每个图像记录都会独立导入；坐标相同的记录也不会去重。",
       "maskFolder": "掩码图文件夹",
       "select": "选择源数据...",
       "placeholder": "请输入或选择源数据路径...",
@@ -895,7 +897,11 @@
       "dimensionFallback": "有 {{count}} 个场景未能读取原图尺寸，使用了默认尺寸，请检查图像路径。",
       "attributeBboxes": "多属性检测框导入: {{count}} 个",
       "attributeDropped": "已跳过无效的多属性标签行: {{count}} 行",
-      "attributesRegistered": "已注册属性定义: {{count}} 个"
+      "attributesRegistered": "已注册属性定义: {{count}} 个",
+      "metadataRecords": "已导入图像元数据记录: {{count}} 条",
+      "metadataFiles": "已写入场景 JSON 文件: {{count}} 个",
+      "metadataRemoved": "已清理过期图像元数据: {{count}} 个场景",
+      "metadataInvalid": "已跳过无效图像元数据记录: {{count}} 条"
     }
   },
   "localVis": {

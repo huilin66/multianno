@@ -781,14 +781,16 @@ export function LocalVisualization() {
                 <div>
                   <Label className="text-[10px] text-muted-foreground mb-2 block">{t('localVis.groundTruth.taskType')}</Label>
                   <div className="grid grid-cols-2 gap-2">
-                    {Object.entries(SUPPORTED_TASKS).map(([id, info]) => (
+                    {Object.entries(SUPPORTED_TASKS)
+                      .filter(([, info]) => !info.importOnly)
+                      .map(([id, info]) => (
                       <CardButton
                         key={id}
                         active={annoTaskType === id}
                         label={info.label.split(' ')[0]}
                         onClick={() => setAnnoTaskType(id as TaskType)}
                       />
-                    ))}
+                      ))}
                   </div>
                 </div>
 
@@ -914,14 +916,16 @@ export function LocalVisualization() {
                     <div>
                       <Label className="text-[10px] text-muted-foreground mb-2 block">{t('localVis.predictions.taskType')}</Label>
                       <div className="grid grid-cols-2 gap-2">
-                        {Object.entries(SUPPORTED_TASKS).map(([id, info]) => (
+                        {Object.entries(SUPPORTED_TASKS)
+                          .filter(([, info]) => !info.importOnly)
+                          .map(([id, info]) => (
                           <CardButton
                             key={id}
                             active={pred.taskType === id}
                             label={info.label.split(' ')[0]}
                             onClick={() => setPredictions(prev => prev.map(p => p.id === pred.id ? { ...p, taskType: id as TaskType } : p))}
                           />
-                        ))}
+                          ))}
                       </div>
                     </div>
 

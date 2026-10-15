@@ -216,6 +216,10 @@ class ImportRequest(BaseModel):
     source_path: str
     target_dir: str
     format: str
+    # Import-only task specialization. `image_meta` uses MultiAnno JSON as
+    # the storage container, but the source is one JSON object keyed by image
+    # file name rather than one annotation JSON per scene.
+    task_type: Optional[str] = None
     merge_strategy: str = "append"
     classes_file: Optional[str] = None
     custom_suffix: str = ""

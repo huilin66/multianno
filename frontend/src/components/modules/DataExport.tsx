@@ -684,7 +684,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                 {t('dataExport.stepTask.task')}
               </Label>
               <div className="grid grid-cols-2 gap-2">
-                {Object.entries(SUPPORTED_TASKS).map(([id, info]) => (
+                {Object.entries(SUPPORTED_TASKS)
+                  .filter(([, info]) => !info.importOnly)
+                  .map(([id, info]) => (
                   <div
                     key={id}
                     onClick={() => setTaskType(id as TaskType)}
@@ -701,7 +703,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
                       {info.description}
                     </div>
                   </div>
-                ))}
+                  ))}
               </div>
             </div>
 
