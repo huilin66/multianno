@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2, RefreshCw, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { Annotation, TaxonomyAttribute, TaxonomyClass } from '../../store/useStore';
+import { getFileContent } from '../../api/client';
+import { useStore, type Annotation, type TaxonomyAttribute, type TaxonomyClass } from '../../store/useStore';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
@@ -41,6 +42,16 @@ interface AnnotationTableRow {
   pointsCount: number;
   boxWidth: number | null;
   boxHeight: number | null;
+}
+
+type ImageMetaRecord = Record<string, unknown>;
+
+interface SceneGroupMetadata {
+  imageName: string;
+  imageWidth?: unknown;
+  imageHeight?: unknown;
+  metadata: ImageMetaRecord | null;
+  error: boolean;
 }
 
 type AnnotationTableSortKey =
@@ -87,6 +98,7 @@ interface AnnotationTableMemoryState {
   overlapCounts: Array<[string, number]>;
   overlapGroups: Array<[string, string]>;
   hideUnselected: boolean;
+  showSceneGroupInfo: boolean;
 }
 
 // Annotation Table is mounted only while its tab is active. Keep its loaded
@@ -100,6 +112,65 @@ const formatAttributeValue = (value: string | number | boolean) => {
 };
 
 const formatCellText = (value: string) => value || '—';
+
+const getBaseName = (value: string) => {
+  const normalized = String(value || '').replace(/\\/g, '/');
+  return normalized.split('/').pop() || normalized;
+};
+
+const getImageStem = (value: string) => getBaseName(value).replace(/\.[^.]+$/, '');
+
+const normalizeExtension = (extension: string) => {
+  if (!extension) return '';
+  return extension.startsWith('.') ? extension : `.${extension}`;
+};
+
+const formatMetadataValue = (value: unknown) => {
+  if (value === undefined || value === null || value === '') return '—';
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+  return String(value);
+};
+
+const readMetadataValue = (metadata: ImageMetaRecord | null, keys: string[]) => {
+  if (!metadata) return undefined;
+  const sources = [
+    metadata,
+    metadata.gps,
+    metadata.GPS,
+    metadata.position,
+    metadata.pose,
+  ].filter((source): source is ImageMetaRecord => Boolean(source) && typeof source === 'object');
+
+  for (const source of sources) {
+    for (const key of keys) {
+      if (source[key] !== undefined && source[key] !== null && source[key] !== '') {
+        return source[key];
+      }
+    }
+  }
+  return undefined;
+};
+
+const sceneGroupMetadataSearchText = (data: SceneGroupMetadata | undefined) => {
+  if (!data) return '';
+  return [
+    data.imageName,
+    data.imageWidth,
+    data.imageHeight,
+    ...(data.metadata ? Object.values(data.metadata) : []),
+    readMetadataValue(data.metadata, ['latitude', 'lat', 'gps_latitude']),
+    readMetadataValue(data.metadata, ['longitude', 'lon', 'lng', 'gps_longitude']),
+    readMetadataValue(data.metadata, ['altitude', 'gps_altitude', 'elevation', 'height']),
+    readMetadataValue(data.metadata, ['heading', 'yaw', 'course']),
+    readMetadataValue(data.metadata, ['utc_iso', 'utc', 'timestamp']),
+  ].map((value) => String(value ?? '')).join(' ');
+};
 
 const compareOptionalText = (first: string, second: string) => {
   if (!first && !second) return 0;
@@ -148,6 +219,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   activeAnnotationId = null,
 }: AnnotationTableProps) {
   const { t } = useTranslation();
+  const workspacePath = useStore((state) => state.workspacePath);
+  const folders = useStore((state) => state.folders);
+  const views = useStore((state) => state.views);
+  const sceneGroups = useStore((state) => state.sceneGroups);
   const rememberedState = cacheKey ? annotationTableMemory.get(cacheKey) : undefined;
   const [loadedAnnotations, setLoadedAnnotations] = useState<Annotation[] | null>(() => (
     rememberedState?.loadedAnnotations ?? null
@@ -184,7 +259,12 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   ));
   const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
   const [hideUnselected, setHideUnselected] = useState(() => rememberedState?.hideUnselected ?? false);
+  const [showSceneGroupInfo, setShowSceneGroupInfo] = useState(() => rememberedState?.showSceneGroupInfo ?? false);
+  const [sceneGroupMetadata, setSceneGroupMetadata] = useState<Map<string, SceneGroupMetadata>>(new Map());
+  const [sceneGroupMetadataLoading, setSceneGroupMetadataLoading] = useState(false);
+  const [sceneGroupMetadataProgress, setSceneGroupMetadataProgress] = useState({ current: 0, total: 0 });
   const overlapScanRequestRef = React.useRef(0);
+  const sceneGroupMetadataRequestRef = useRef(0);
   const isLoaded = loadedAnnotations !== null;
 
   useEffect(() => {
@@ -214,6 +294,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       overlapCounts: Array.from(overlapCounts.entries()),
       overlapGroups: Array.from(overlapGroups.entries()),
       hideUnselected,
+      showSceneGroupInfo,
     });
   }, [
     annotationIdFilter,
@@ -237,6 +318,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     pointsFilter,
     query,
     sceneFilter,
+    showSceneGroupInfo,
     sortState,
     textFilter,
     trackIdFilter,
@@ -287,6 +369,113 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       };
     });
   }, [loadedAnnotations]);
+
+  const mainViewFolder = useMemo(() => {
+    const mainView = views.find((view) => view.isMain) || views[0];
+    return folders.find((folder) => folder.id === mainView?.folderId) || folders[0];
+  }, [folders, views]);
+
+  const metadataDirectory = useMemo(() => {
+    if (workspacePath) return workspacePath;
+    return mainViewFolder?.path || folders[0]?.path || '';
+  }, [folders, mainViewFolder, workspacePath]);
+
+  const sceneGroupImageNames = useMemo(() => {
+    const imageNames = new Map<string, string>();
+    (loadedAnnotations || []).forEach((annotation) => {
+      if (imageNames.has(annotation.stem)) return;
+      const fileMap = sceneGroups?.[annotation.stem] || {};
+      const imageName = (mainViewFolder?.path ? fileMap[mainViewFolder.path] : '')
+        || Object.values(fileMap)[0]
+        || `${annotation.stem}${mainViewFolder?.suffix || ''}${normalizeExtension(mainViewFolder?.extension || '')}`;
+      imageNames.set(annotation.stem, getBaseName(imageName));
+    });
+    return imageNames;
+  }, [loadedAnnotations, mainViewFolder, sceneGroups]);
+
+  const loadSceneGroupMetadata = useCallback(async () => {
+    const requestId = sceneGroupMetadataRequestRef.current + 1;
+    sceneGroupMetadataRequestRef.current = requestId;
+    const targetStems: string[] = Array.from(new Set<string>(
+      (loadedAnnotations || []).map((annotation) => String(annotation.stem)).filter(Boolean),
+    ));
+
+    if (!showSceneGroupInfo || loadedAnnotations === null || !metadataDirectory || targetStems.length === 0) {
+      setSceneGroupMetadata(new Map());
+      setSceneGroupMetadataProgress({ current: 0, total: 0 });
+      setSceneGroupMetadataLoading(false);
+      return;
+    }
+
+    setSceneGroupMetadataLoading(true);
+    setSceneGroupMetadata(new Map());
+    setSceneGroupMetadataProgress({ current: 0, total: targetStems.length });
+
+    const separator = metadataDirectory.includes('\\') ? '\\' : '/';
+    const directory = metadataDirectory.replace(/[\\/]+$/, '');
+    const nextMetadata = new Map<string, SceneGroupMetadata>();
+    const batchSize = 12;
+
+    for (let index = 0; index < targetStems.length; index += batchSize) {
+      const batch = targetStems.slice(index, index + batchSize);
+      const loaded = await Promise.all(batch.map(async (stem) => {
+        const imageName = sceneGroupImageNames.get(stem) || `${stem}${normalizeExtension(mainViewFolder?.extension || '')}`;
+        const imageStem = getImageStem(imageName) || stem;
+        const path = `${directory}${separator}${imageStem}.json`;
+        try {
+          const response = await getFileContent(path);
+          const rawContent = response?.content ?? response;
+          const parsed = typeof rawContent === 'string' ? JSON.parse(rawContent) : rawContent;
+          const imageMeta = parsed?.imageMeta ?? parsed?.image_meta;
+          const metadata = imageMeta && typeof imageMeta === 'object' ? imageMeta as ImageMetaRecord : null;
+          return {
+            stem,
+            data: {
+              imageName,
+              imageWidth: parsed?.imageWidth
+                ?? parsed?.image_width
+                ?? readMetadataValue(metadata, ['image_width', 'pixel_width', 'img_width']),
+              imageHeight: parsed?.imageHeight
+                ?? parsed?.image_height
+                ?? readMetadataValue(metadata, ['image_height', 'pixel_height', 'img_height']),
+              metadata,
+              error: false,
+            } as SceneGroupMetadata,
+          };
+        } catch {
+          return {
+            stem,
+            data: { imageName, metadata: null, error: true } as SceneGroupMetadata,
+          };
+        }
+      }));
+
+      if (sceneGroupMetadataRequestRef.current !== requestId) return;
+      loaded.forEach(({ stem, data }) => nextMetadata.set(stem, data));
+      setSceneGroupMetadata(new Map(nextMetadata));
+      setSceneGroupMetadataProgress({
+        current: Math.min(index + batch.length, targetStems.length),
+        total: targetStems.length,
+      });
+    }
+
+    if (sceneGroupMetadataRequestRef.current === requestId) {
+      setSceneGroupMetadataLoading(false);
+    }
+  }, [
+    loadedAnnotations,
+    mainViewFolder,
+    metadataDirectory,
+    sceneGroupImageNames,
+    showSceneGroupInfo,
+  ]);
+
+  useEffect(() => {
+    void loadSceneGroupMetadata();
+    return () => {
+      sceneGroupMetadataRequestRef.current += 1;
+    };
+  }, [loadSceneGroupMetadata]);
 
   const classOptions = useMemo(() => {
     const names = new Set([
@@ -351,9 +540,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         formatBoxDimension(row.boxWidth),
         formatBoxDimension(row.boxHeight),
         overlapGroup,
+        showSceneGroupInfo ? sceneGroupMetadataSearchText(sceneGroupMetadata.get(annotation.stem)) : '',
       ].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
     });
-  }, [annotationIdFilter, attributesFilter, classFilter, groupIdFilter, maxBoxHeight, maxBoxWidth, minBoxHeight, minBoxWidth, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, query, rows, sceneFilter, textFilter, trackIdFilter, typeFilter]);
+  }, [annotationIdFilter, attributesFilter, classFilter, groupIdFilter, maxBoxHeight, maxBoxWidth, minBoxHeight, minBoxWidth, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, query, rows, sceneFilter, sceneGroupMetadata, showSceneGroupInfo, textFilter, trackIdFilter, typeFilter]);
 
   const taxonomyAttributeNames = new Set(taxonomyAttributes.map((attribute) => attribute.name));
 
@@ -679,6 +869,24 @@ export const AnnotationTable = React.memo(function AnnotationTable({
             </span>
           </div>
 
+          <div className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 dark:border-neutral-700 dark:bg-neutral-900">
+            <Switch
+              checked={showSceneGroupInfo}
+              onCheckedChange={setShowSceneGroupInfo}
+              disabled={!isLoaded}
+              aria-label={t('taxonomyDashboard.showSceneGroupInfo', 'Show scene group info')}
+              className="scale-75"
+            />
+            <span className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-200">
+              {t('taxonomyDashboard.showSceneGroupInfo', 'Scene group info')}
+              {sceneGroupMetadataLoading && (
+                <span className="ml-1 font-mono text-[10px] text-neutral-400">
+                  {sceneGroupMetadataProgress.current}/{sceneGroupMetadataProgress.total}
+                </span>
+              )}
+            </span>
+          </div>
+
           {hasFilters && (
             <Button type="button" variant="ghost" className="h-9 px-3 text-xs" onClick={clearFilters}>
               <Filter className="w-3.5 h-3.5 mr-1.5" />
@@ -783,7 +991,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
           </div>
         ) : (
           <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
-            <table className="w-full min-w-[1680px] border-collapse text-xs">
+            <table className={`w-full ${showSceneGroupInfo ? 'min-w-[2520px]' : 'min-w-[1680px]'} border-collapse text-xs`}>
               <thead className="sticky top-0 z-10 bg-neutral-50 dark:bg-neutral-800/95 text-[10px] uppercase tracking-wider text-neutral-500">
                 <tr>
                   <th className="w-10 px-3 py-3 text-left font-black">#</th>
@@ -798,6 +1006,18 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                   <th className="w-20 px-3 py-3 text-right">{renderSortableHeader(t('taxonomyDashboard.annotationPoints', 'Points'), 'points', 'right')}</th>
                   <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationAttributes', 'Attributes'), 'attributes')}</th>
                   <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.sceneGroup', 'Scene Group'), 'stem')}</th>
+                  {showSceneGroupInfo && (
+                    <>
+                      <th className="min-w-[220px] px-3 py-3">{t('sceneGroupManager.imageName', 'Image')}</th>
+                      <th className="w-28 px-3 py-3">{t('sceneGroupManager.imageWidth', 'Image width')}</th>
+                      <th className="w-28 px-3 py-3">{t('sceneGroupManager.imageHeight', 'Image height')}</th>
+                      <th className="w-32 px-3 py-3">{t('sceneGroupManager.latitude', 'Latitude')}</th>
+                      <th className="w-32 px-3 py-3">{t('sceneGroupManager.longitude', 'Longitude')}</th>
+                      <th className="w-32 px-3 py-3">{t('sceneGroupManager.height', 'Height / Altitude')}</th>
+                      <th className="w-32 px-3 py-3">{t('sceneGroupManager.heading', 'Heading')}</th>
+                      <th className="min-w-[220px] px-3 py-3">{t('sceneGroupManager.utc', 'UTC')}</th>
+                    </>
+                  )}
                   {overlapKeys !== null && (
                     <th className="w-40 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.overlapGroup', 'Overlap group'), 'overlap')}</th>
                   )}
@@ -938,6 +1158,18 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                       className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
                     />
                   </th>
+                  {showSceneGroupInfo && (
+                    <>
+                      <th className="px-3 py-1.5" />
+                      <th className="px-3 py-1.5" />
+                      <th className="px-3 py-1.5" />
+                      <th className="px-3 py-1.5" />
+                      <th className="px-3 py-1.5" />
+                      <th className="px-3 py-1.5" />
+                      <th className="px-3 py-1.5" />
+                      <th className="px-3 py-1.5" />
+                    </>
+                  )}
                   {overlapKeys !== null && (
                     <th className="px-3 py-1.5">
                       <Input
@@ -1014,6 +1246,41 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                       <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400 max-w-[250px] truncate" title={row.annotation.stem}>
                         {row.annotation.stem}
                       </td>
+                      {showSceneGroupInfo && (() => {
+                        const sceneData = sceneGroupMetadata.get(row.annotation.stem);
+                        const metadata = sceneData?.metadata || null;
+                        const unavailable = sceneData?.error;
+                        return (
+                          <>
+                            <td className="max-w-[260px] truncate px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={sceneData?.imageName || '—'}>
+                              {formatMetadataValue(sceneData?.imageName)}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
+                              {formatMetadataValue(sceneData?.imageWidth)}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
+                              {formatMetadataValue(sceneData?.imageHeight)}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
+                              {formatMetadataValue(readMetadataValue(metadata, ['latitude', 'lat', 'gps_latitude']))}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
+                              {formatMetadataValue(readMetadataValue(metadata, ['longitude', 'lon', 'lng', 'gps_longitude']))}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
+                              {formatMetadataValue(readMetadataValue(metadata, ['altitude', 'gps_altitude', 'elevation', 'height']))}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
+                              {formatMetadataValue(readMetadataValue(metadata, ['heading', 'yaw', 'course']))}
+                            </td>
+                            <td className="max-w-[260px] truncate px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={formatMetadataValue(readMetadataValue(metadata, ['utc_iso', 'utc', 'timestamp']))}>
+                              {unavailable
+                                ? <span className="text-amber-600 dark:text-amber-300">{t('sceneGroupManager.loadFailed', 'Unavailable')}</span>
+                                : formatMetadataValue(readMetadataValue(metadata, ['utc_iso', 'utc', 'timestamp']))}
+                            </td>
+                          </>
+                        );
+                      })()}
                       {overlapKeys !== null && (
                         <td className="px-3 py-2.5">
                           <span className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">

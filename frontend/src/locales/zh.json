@@ -1199,6 +1199,7 @@
     "clearAnnotationSearch": "清除搜索",
     "clearFilters": "清除筛选",
     "hideUnselected": "隐藏未选择",
+    "showSceneGroupInfo": "场景组信息",
     "allClasses": "全部类别",
     "allTypes": "全部类型",
     "annotationId": "标注 ID",
