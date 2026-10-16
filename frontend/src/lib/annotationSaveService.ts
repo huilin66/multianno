@@ -4,6 +4,7 @@ import { generateAnnotationPayload } from './annotationUtils';
 
 type StoreState = ReturnType<typeof useStore.getState>;
 type AnnotationSavePayload = Parameters<typeof saveAnnotation>[0];
+type AnnotationSaveProgress = (current: number, total: number) => void;
 
 // 所有标注写入共用一个队列，避免导出读取磁盘时仍有保存请求在路上。
 let pendingSaves: Promise<unknown> = Promise.resolve();
@@ -81,9 +82,14 @@ const buildAnnotationSavePayload = (state: StoreState, stem: string): Annotation
   };
 };
 
-const saveAnnotationStems = async (state: StoreState, stems: string[]) => {
+const saveAnnotationStems = async (
+  state: StoreState,
+  stems: string[],
+  onProgress?: AnnotationSaveProgress,
+) => {
   const projectIdentity = getAnnotationProjectIdentity(state);
-  const payloads = stems.map((stem) => ({
+  const targetStems = Array.from(new Set(stems.filter(Boolean)));
+  const payloads = targetStems.map((stem) => ({
     stem,
     payload: buildAnnotationSavePayload(state, stem),
   }));
@@ -91,7 +97,12 @@ const saveAnnotationStems = async (state: StoreState, stems: string[]) => {
   // Enqueue all snapshots from the same immutable state. This means browsing
   // to another scene while the requests are in flight cannot redirect a save
   // to the newly active scene.
-  await Promise.all(payloads.map(({ payload }) => enqueueAnnotationSave(payload)));
+  let completed = 0;
+  await Promise.all(payloads.map(async ({ payload }) => {
+    await enqueueAnnotationSave(payload);
+    completed += 1;
+    onProgress?.(completed, payloads.length);
+  }));
   await waitForPendingAnnotationSaves();
 
   const latestState = useStore.getState();
@@ -104,6 +115,13 @@ const saveAnnotationStems = async (state: StoreState, stems: string[]) => {
       latestState.clearAnnotationDirty(stem);
     }
   });
+
+  return {
+    scenes: payloads.length,
+    objects: payloads.reduce((count, { payload }) => (
+      count + (Array.isArray(payload.content?.shapes) ? payload.content.shapes.length : 0)
+    ), 0),
+  };
 };
 
 /**
@@ -135,4 +153,26 @@ export const saveDirtyAnnotations = async () => {
   }
 
   await saveAnnotationStems(state, dirtyStems);
+};
+
+/**
+ * Persist the complete in-memory annotation cache.
+ *
+ * This is intentionally separate from the dirty-only autosave path. It is
+ * useful for recovering an active browser session after a serialization bug
+ * or for making the current in-memory workspace the authoritative disk copy.
+ */
+export const writeAllAnnotations = async (onProgress?: AnnotationSaveProgress) => {
+  const state = useStore.getState();
+  const stems = Array.from(new Set([
+    ...state.stems,
+    ...state.annotations.map((annotation) => annotation.stem),
+  ].filter(Boolean)));
+
+  if (stems.length === 0) {
+    await waitForPendingAnnotationSaves();
+    return { scenes: 0, objects: 0 };
+  }
+
+  return saveAnnotationStems(state, stems, onProgress);
 };

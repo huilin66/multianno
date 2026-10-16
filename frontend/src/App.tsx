@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2, Route, Layers } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2, Route, Layers, Save } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -41,6 +41,7 @@ import { DrawingObjectEditorSettingsModal } from './components/modals/settings/D
 import { ToastContainer } from './components/ui/toast';
 import { useBackendHealth } from './hooks/useBackendHealth';
 import { loadAllProjectAnnotations, loadProjectAnnotationsForStems } from './lib/annotationUtils';
+import { writeAllAnnotations } from './lib/annotationSaveService';
 import { hasAnnotationAttributeContent } from './lib/annotationAttributeUtils';
 import { showDialog } from './store/useDialogStore';
 import { toast } from './store/useToastStore';
@@ -707,6 +708,8 @@ export default function App() {
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isReloadingAll, setIsReloadingAll] = useState(false);
   const [reloadProgress, setReloadProgress] = useState({ current: 0, total: 0 });
+  const [isWritingAll, setIsWritingAll] = useState(false);
+  const [writeProgress, setWriteProgress] = useState({ current: 0, total: 0 });
 
   const updateIdDisplaySetting = (setting: 'showGroupId' | 'showTrackId', checked: boolean) => {
     updateEditorSettings({
@@ -835,6 +838,53 @@ export default function App() {
       }));
     } finally {
       setIsReloadingAll(false);
+    }
+  };
+
+  const handleWriteAll = async () => {
+    if (isWritingAll) return;
+
+    const state = useStore.getState();
+    const mainFolder = state.folders.find(
+      (folder) => folder.id === state.views.find((view) => view.isMain)?.folderId,
+    ) || state.folders[0];
+    const saveDir = state.workspacePath || mainFolder?.path || '';
+    const sceneCount = Array.from(new Set([
+      ...state.stems,
+      ...state.annotations.map((annotation) => annotation.stem),
+    ].filter(Boolean))).length;
+
+    if (sceneCount === 0 || !saveDir) {
+      toast.warning(t('headerSetting.writeAllNoProject'));
+      return;
+    }
+
+    const confirmed = await showDialog({
+      type: 'warning',
+      title: t('headerSetting.writeAllTitle'),
+      description: t('headerSetting.writeAllDesc', { scenes: sceneCount }),
+      confirmText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+    });
+    if (!confirmed) return;
+
+    setIsWritingAll(true);
+    setWriteProgress({ current: 0, total: sceneCount });
+    try {
+      const result = await writeAllAnnotations((current, total) => {
+        setWriteProgress({ current, total });
+      });
+      useStore.getState().setAnnotationLastSavedTime(new Date().toISOString());
+      toast.success(t('headerSetting.writeAllSuccess', {
+        scenes: result.scenes,
+        count: result.objects,
+      }));
+    } catch (error: any) {
+      toast.error(t('headerSetting.writeAllError', {
+        message: error?.message || String(error),
+      }));
+    } finally {
+      setIsWritingAll(false);
     }
   };
 
@@ -1161,6 +1211,32 @@ export default function App() {
                     </span>
                     <RefreshCw className={`h-4 w-4 shrink-0 ${isReloadingAll ? 'animate-spin' : ''}`} />
                   </button>
+                  <button
+                    type="button"
+                    onClick={handleWriteAll}
+                    disabled={isWritingAll}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60"
+                    title={t('headerSetting.writeAll')}
+                  >
+                    <span className="text-xs">
+                      {isWritingAll && writeProgress.total > 0
+                        ? `${t('headerSetting.writeAll')} (${writeProgress.current}/${writeProgress.total})`
+                        : t('headerSetting.writeAll')}
+                    </span>
+                    <Save className={`h-4 w-4 shrink-0 ${isWritingAll ? 'animate-pulse' : ''}`} />
+                  </button>
+                  {isWritingAll && writeProgress.total > 0 && (
+                    <OperationProgress
+                      stageIndex={1}
+                      stageCount={1}
+                      stageLabel={t('common.stage')}
+                      stageName={t('headerSetting.writeAllProgress')}
+                      current={writeProgress.current}
+                      total={writeProgress.total}
+                      operationKey="write-all-annotations"
+                      className="px-1.5 py-1"
+                    />
+                  )}
                   <DataUpdateSettings
                     folders={folders}
                     views={views}
