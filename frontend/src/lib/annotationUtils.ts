@@ -289,6 +289,9 @@ export const generateAnnotationPayload = (state: AppState, currentStem: string) 
       // 将前端的 {x, y} 转换为后端的 [x, y] 数组
       points: ann.points.map((p: any) => [p.x, p.y]), 
       group_id: ann.group_id || null,
+      // Track ID is part of the native MultiAnno shape and must survive
+      // ordinary saves as well as the save-before-export flow.
+      track_id: ann.track_id ?? null,
       shape_type: mapFrontendTypeToDiskType(ann.type), // 使用映射函数
       flags: {},
       attributes: ann.attributes || {},
