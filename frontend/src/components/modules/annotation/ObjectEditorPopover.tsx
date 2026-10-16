@@ -1,6 +1,8 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { ObjectEditorForm } from './ObjectEditorForm';
+import { Button } from '../../ui/button';
+import type { DrawingObjectEditorField, DrawingObjectEditorTemplate } from '../../../store/useStore';
 
 interface ObjectEditorPopoverProps {
   annotation: any;
@@ -9,6 +11,10 @@ interface ObjectEditorPopoverProps {
   taxonomyAttributes: any[];
   onUpdate: (updates: Record<string, any>) => void;
   onClose: () => void;
+  onSave?: () => void;
+  mode?: 'edit' | 'create';
+  template?: DrawingObjectEditorTemplate;
+  visibleFields?: DrawingObjectEditorField[];
 }
 
 /** Floating editor for an existing annotation selected from the main canvas. */
@@ -19,9 +25,14 @@ export function ObjectEditorPopover({
   taxonomyAttributes,
   onUpdate,
   onClose,
+  onSave,
+  mode = 'edit',
+  template = 'standard',
+  visibleFields,
 }: ObjectEditorPopoverProps) {
   const activeClass = taxonomyClasses.find((item: any) => item.name === annotation.label);
   const activeColor = activeClass?.color || '#3B82F6';
+  const isCreateMode = mode === 'create';
 
   return (
     <div
@@ -35,8 +46,8 @@ export function ObjectEditorPopover({
           <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
             Object Editor
           </div>
-          <div className="mt-0.5 truncate text-[10px] text-neutral-400" title={annotation.id}>
-            {annotation.label} · {annotation.id}
+          <div className="mt-0.5 truncate text-[10px] text-neutral-400" title={annotation.id || 'new'}>
+            {annotation.label || 'New object'} · {annotation.id || 'new'}
           </div>
         </div>
         <button
@@ -71,8 +82,29 @@ export function ObjectEditorPopover({
           taxonomyClasses={taxonomyClasses}
           taxonomyAttributes={taxonomyAttributes}
           activeColor={activeColor}
+          template={template}
+          visibleFields={visibleFields}
         />
       </div>
+
+      {isCreateMode && onSave && (
+        <div className="flex items-center gap-2 border-t border-neutral-200 px-3 py-3 dark:border-neutral-700">
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="h-8 flex-1 text-xs font-bold text-neutral-600 dark:text-neutral-400"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={onSave}
+            className="h-8 flex-1 text-xs font-bold text-white shadow-sm hover:brightness-110"
+            style={{ backgroundColor: activeColor }}
+          >
+            Save
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useStore, Annotation } from '../../store/useStore';
 import { useTranslation } from 'react-i18next';
-import { ClassFormPopover } from './annotation/ClassFormPopover';
 import { ObjectEditorPopover } from './annotation/ObjectEditorPopover';
 import { LeftToolbar } from './annotation/LeftToolbar';
 import { RightPanel } from './annotation/RightPanel';
@@ -102,6 +101,11 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
   const sortedClasses = [...taxonomyClasses].sort((a: any, b: any) => 
     classOrder.indexOf(a.id) - classOrder.indexOf(b.id)
   );
+  const drawingEditorTemplate = editorSettings?.drawingObjectEditorTemplate === 'quick'
+    ? 'quick'
+    : editorSettings?.drawingObjectEditorTemplate === 'custom'
+      ? 'custom'
+      : 'standard';
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [rightPanelWidth, setRightPanelWidth] = useState(readStoredRightPanelWidth);
@@ -781,6 +785,17 @@ export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpe
     if (!floatingObjectEditor || !floatingAnnotation) return;
     updateAnnotation(floatingObjectEditor.annotationId, updates);
   }, [floatingAnnotation, floatingObjectEditor, updateAnnotation]);
+
+  const handlePendingObjectUpdate = useCallback((updates: Record<string, any>) => {
+    if (Object.prototype.hasOwnProperty.call(updates, 'label')) setFormLabel(updates.label || '');
+    if (Object.prototype.hasOwnProperty.call(updates, 'text')) setFormText(updates.text || '');
+    if (Object.prototype.hasOwnProperty.call(updates, 'group_id')) setFormGroupId(updates.group_id ?? '');
+    if (Object.prototype.hasOwnProperty.call(updates, 'track_id')) setFormTrackId(updates.track_id ?? '');
+    if (Object.prototype.hasOwnProperty.call(updates, 'difficult')) setFormDifficult(Boolean(updates.difficult));
+    if (Object.prototype.hasOwnProperty.call(updates, 'occluded')) setFormOccluded(Boolean(updates.occluded));
+    if (Object.prototype.hasOwnProperty.call(updates, 'truncated')) setFormTruncated(Boolean(updates.truncated));
+    if (Object.prototype.hasOwnProperty.call(updates, 'attributes')) setFormAttributes(updates.attributes || {});
+  }, []);
 
   const closeFloatingObjectEditor = useCallback(() => {
     setFloatingObjectEditor(null);
@@ -2381,18 +2396,28 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
 
         {/* 🎈 Floating Popover for Class Selection */}
         {/* 2. 悬浮弹窗 */}
-      {popoverOpen && !trackIdWindowOpen && createPortal(
-        <ClassFormPopover 
-          popoverPos={popoverPos} formLabel={formLabel} setFormLabel={setFormLabel}
-          formText={formText} setFormText={setFormText} formGroupId={formGroupId} 
-          setFormGroupId={setFormGroupId} formTrackId={formTrackId} setFormTrackId={setFormTrackId}
-          formDifficult={formDifficult} setFormDifficult={setFormDifficult}
-          formOccluded={formOccluded} setFormOccluded={setFormOccluded}
-          formTruncated={formTruncated} setFormTruncated={setFormTruncated}
-          formAttributes={formAttributes} 
-          setFormAttributes={setFormAttributes}
-          handleCancelDrawing={handleCancelDrawing} savePendingAnnotationToStore={savePendingAnnotationToStore}
+      {popoverOpen && pendingAnnotation && !trackIdWindowOpen && createPortal(
+        <ObjectEditorPopover
+          annotation={{
+            id: 'new',
+            label: formLabel,
+            text: formText,
+            group_id: formGroupId,
+            track_id: formTrackId,
+            difficult: formDifficult,
+            occluded: formOccluded,
+            truncated: formTruncated,
+            attributes: formAttributes,
+          }}
+          position={popoverPos}
           taxonomyClasses={sortedClasses}
+          taxonomyAttributes={taxonomyAttributes}
+          onUpdate={handlePendingObjectUpdate}
+          onClose={handleCancelDrawing}
+          onSave={savePendingAnnotationToStore}
+          mode="create"
+          template={drawingEditorTemplate}
+          visibleFields={editorSettings?.drawingObjectEditorVisibleFields}
         />,
         document.body
       )}
@@ -2404,6 +2429,8 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
           taxonomyAttributes={taxonomyAttributes}
           onUpdate={handleFloatingObjectUpdate}
           onClose={closeFloatingObjectEditor}
+          template={drawingEditorTemplate}
+          visibleFields={editorSettings?.drawingObjectEditorVisibleFields}
         />,
         document.body,
       )}

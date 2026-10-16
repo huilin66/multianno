@@ -23,7 +23,7 @@ import { OperationProgress } from '../ui/OperationProgress';
 import { CanvasView } from '../modules/annotation/CanvasView';
 import { RightPanel, type RightPanelProps } from '../modules/annotation/RightPanel';
 import { LeftToolbar } from '../modules/annotation/LeftToolbar';
-import { ClassFormPopover } from '../modules/annotation/ClassFormPopover';
+import { ObjectEditorPopover } from '../modules/annotation/ObjectEditorPopover';
 import { findTopmostAnnotationAtPoint } from '../../lib/annotationHitTest';
 import { getShortcutBindings, shortcutMatchesEvent } from '../../lib/shortcuts';
 import {
@@ -2005,6 +2005,23 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     />
   );
 
+  const drawingEditorTemplate = canvasProps.editorSettings?.drawingObjectEditorTemplate === 'quick'
+    ? 'quick'
+    : canvasProps.editorSettings?.drawingObjectEditorTemplate === 'custom'
+      ? 'custom'
+      : 'standard';
+
+  const handleTrackPopoverUpdate = React.useCallback((updates: Record<string, any>) => {
+    if (Object.prototype.hasOwnProperty.call(updates, 'label')) canvasProps.setFormLabel?.(updates.label || '');
+    if (Object.prototype.hasOwnProperty.call(updates, 'text')) canvasProps.setFormText?.(updates.text || '');
+    if (Object.prototype.hasOwnProperty.call(updates, 'group_id')) canvasProps.setFormGroupId?.(updates.group_id ?? '');
+    if (Object.prototype.hasOwnProperty.call(updates, 'track_id')) canvasProps.setFormTrackId?.(updates.track_id ?? '');
+    if (Object.prototype.hasOwnProperty.call(updates, 'difficult')) canvasProps.setFormDifficult?.(Boolean(updates.difficult));
+    if (Object.prototype.hasOwnProperty.call(updates, 'occluded')) canvasProps.setFormOccluded?.(Boolean(updates.occluded));
+    if (Object.prototype.hasOwnProperty.call(updates, 'truncated')) canvasProps.setFormTruncated?.(Boolean(updates.truncated));
+    if (Object.prototype.hasOwnProperty.call(updates, 'attributes')) canvasProps.setFormAttributes?.(updates.attributes || {});
+  }, [canvasProps]);
+
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => {
       if (!nextOpen) {
@@ -2197,27 +2214,27 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
         </div>
 
         {canvasProps.popoverOpen && canvasProps.popoverPos && (
-          <ClassFormPopover
-            popoverPos={trackPopoverPosition}
-            formLabel={canvasProps.formLabel}
-            setFormLabel={canvasProps.setFormLabel}
-            formText={canvasProps.formText}
-            setFormText={canvasProps.setFormText}
-            formGroupId={canvasProps.formGroupId}
-            setFormGroupId={canvasProps.setFormGroupId}
-            formTrackId={canvasProps.formTrackId}
-            setFormTrackId={canvasProps.setFormTrackId}
-            formDifficult={canvasProps.formDifficult}
-            setFormDifficult={canvasProps.setFormDifficult}
-            formOccluded={canvasProps.formOccluded}
-            setFormOccluded={canvasProps.setFormOccluded}
-            formTruncated={canvasProps.formTruncated}
-            setFormTruncated={canvasProps.setFormTruncated}
-            formAttributes={canvasProps.formAttributes}
-            setFormAttributes={canvasProps.setFormAttributes}
-            handleCancelDrawing={canvasProps.handleCancelDrawing}
-            savePendingAnnotationToStore={canvasProps.savePendingAnnotationToStore}
+          <ObjectEditorPopover
+            annotation={{
+              id: 'new',
+              label: canvasProps.formLabel || '',
+              text: canvasProps.formText || '',
+              group_id: canvasProps.formGroupId,
+              track_id: canvasProps.formTrackId,
+              difficult: Boolean(canvasProps.formDifficult),
+              occluded: Boolean(canvasProps.formOccluded),
+              truncated: Boolean(canvasProps.formTruncated),
+              attributes: canvasProps.formAttributes || {},
+            }}
+            position={trackPopoverPosition}
             taxonomyClasses={canvasProps.taxonomyClasses || []}
+            taxonomyAttributes={canvasProps.taxonomyAttributes || []}
+            onUpdate={handleTrackPopoverUpdate}
+            onClose={canvasProps.handleCancelDrawing}
+            onSave={canvasProps.savePendingAnnotationToStore}
+            mode="create"
+            template={drawingEditorTemplate}
+            visibleFields={canvasProps.editorSettings?.drawingObjectEditorVisibleFields}
           />
         )}
       </DialogContent>
