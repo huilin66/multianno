@@ -24,6 +24,7 @@ from utils.format_converters import (
     ma_to_voc,
     ma_to_yolo,
     mask_to_shapes,
+    normalize_multianno_shape,
     parse_attributes_config,
     render_mask_array,
     yolo_to_shapes,
@@ -2249,12 +2250,21 @@ async def import_from_multianno(req: ImportRequest, progress_callback=None):
         new_shapes = source_data.get("shapes", [])
         if not isinstance(new_shapes, list):
             new_shapes = []
+
+        # Canonicalize existing shapes too.  This repairs append imports where
+        # the target already contains legacy `trackId`/`trackID` fields.
+        existing_data["shapes"] = [
+            normalize_multianno_shape(shape)
+            for shape in existing_data.get("shapes", [])
+            if isinstance(shape, dict)
+        ]
+
         # Append 模式下绝对不能直接 extend，必须遍历赋予新 ID。
         imported_shape_count = 0
         for shape in new_shapes:
             if not isinstance(shape, dict):
                 continue
-            normalized_shape = dict(shape)
+            normalized_shape = normalize_multianno_shape(shape)
             normalized_shape["id"] = str(uuid.uuid4())
             normalized_shape["stem"] = base_stem
             existing_data["shapes"].append(normalized_shape)

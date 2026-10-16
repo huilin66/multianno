@@ -1574,7 +1574,9 @@ const handleAIPredict = async (prompts: SAMPoint[]) => {
         label: formLabel,
         text: formText, // 🌟 对象的描述
         group_id: formGroupId ? Number(formGroupId) : null, // 🌟 确保转换为数字或 null
-        track_id: formTrackId ? Number(formTrackId) : null, // 🌟 确保转换为数字或 null
+        // Track IDs may be composite values such as `1001-1`; keep them as
+        // strings instead of coercing them with Number() (which would become NaN).
+        track_id: formTrackId.trim() || null,
         stem: currentStem,
         difficult: formDifficult,
         occluded: formOccluded,

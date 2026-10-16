@@ -31,6 +31,27 @@ const mapFrontendTypeToDiskType = (frontendType: string) => {
   return typeMap[frontendType] || 'polygon';
 };
 
+/**
+ * Normalize the track identifier used by the native MultiAnno shape format.
+ *
+ * Older exports and a few external tools used camelCase (`trackId` or
+ * `trackID`).  Track IDs are also allowed to contain composite values such as
+ * `1001-1`, so they must never be coerced with Number().
+ */
+export const normalizeAnnotationTrackId = (...values: unknown[]): string | number | null => {
+  for (const value of values) {
+    if (typeof value === 'string') {
+      const normalized = value.trim();
+      if (normalized) return normalized;
+      continue;
+    }
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return value;
+    }
+  }
+  return null;
+};
+
 type StemAnnotationLoadResult = {
   annotations: Annotation[];
   found: boolean;
@@ -74,7 +95,8 @@ const readStemAnnotations = async (
       occluded: shape.occluded || false,
       truncated: shape.truncated || false,
       group_id: shape.group_id,
-      track_id: shape.track_id,
+      // Accept both the canonical snake_case key and legacy camelCase keys.
+      track_id: normalizeAnnotationTrackId(shape.track_id, shape.trackId, shape.trackID),
       flags: shape.flags || {},
       sourceIndex,
     }));
@@ -291,7 +313,7 @@ export const generateAnnotationPayload = (state: AppState, currentStem: string) 
       group_id: ann.group_id || null,
       // Track ID is part of the native MultiAnno shape and must survive
       // ordinary saves as well as the save-before-export flow.
-      track_id: ann.track_id ?? null,
+      track_id: normalizeAnnotationTrackId(ann.track_id, ann.trackId, ann.trackID),
       shape_type: mapFrontendTypeToDiskType(ann.type), // 使用映射函数
       flags: {},
       attributes: ann.attributes || {},

@@ -19,6 +19,39 @@ def normalize_shape_type(shape_type) -> str:
     return normalized
 
 
+def normalize_multianno_shape(shape: dict) -> dict:
+    """Normalize a native MultiAnno shape without dropping extension fields.
+
+    The canonical key is ``track_id``.  ``trackId`` and ``trackID`` appeared in
+    older exports and third-party tooling, so accept them on import and emit a
+    single canonical key on export.  Values remain strings or numbers because
+    composite IDs such as ``1001-1`` are valid track identifiers.
+    """
+    normalized = dict(shape)
+    track_id = normalized.get("track_id")
+
+    if track_id is None or (isinstance(track_id, str) and not track_id.strip()):
+        for legacy_key in ("trackId", "trackID"):
+            candidate = normalized.get(legacy_key)
+            if candidate is None:
+                continue
+            if isinstance(candidate, str):
+                if candidate.strip():
+                    track_id = candidate
+                    break
+            else:
+                track_id = candidate
+                break
+
+    if isinstance(track_id, str):
+        track_id = track_id.strip() or None
+
+    normalized["track_id"] = track_id
+    normalized.pop("trackId", None)
+    normalized.pop("trackID", None)
+    return normalized
+
+
 def get_bounding_box(shape_type: str, points: list) -> list:
     """将任何形状转换为 [xmin, ymin, xmax, ymax] 的绝对边界框"""
     if not points:
@@ -103,7 +136,7 @@ def filter_multianno(
             stats["discarded"] += 1
         else:
             stats["native"] += 1  # MultiAnno 原生支持所有合法形状
-            normalized_shape = dict(shape)
+            normalized_shape = normalize_multianno_shape(shape)
             normalized_shape["shape_type"] = shape_type
             if "type" in normalized_shape:
                 normalized_shape["type"] = normalize_shape_type(normalized_shape.get("type"))
