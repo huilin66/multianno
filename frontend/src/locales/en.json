@@ -829,6 +829,9 @@
       "title": "Target Folder Has Existing Contents",
       "description": "The target folder will be cleared before exporting:\n{{path}}\n\nIt currently contains {{count}} item(s). Examples: {{sample}}\n\nOverwrite it?",
       "confirm": "Overwrite",
+      "annotationTitle": "Annotation Export Target Has Existing Contents",
+      "annotationDescription": "Same-named annotation files from this export will be replaced; other files will not be deleted:\n{{path}}\n\nIt currently contains {{count}} item(s). Examples: {{sample}}\n\nOverwrite them?",
+      "annotationConfirm": "Overwrite Annotations",
       "notDirectoryTitle": "Target Path Is Not a Folder",
       "notDirectoryDesc": "Please choose a folder as the export target:\n{{path}}"
     },

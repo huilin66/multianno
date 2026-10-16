@@ -421,8 +421,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
     try {
       let overwriteTarget = false;
-      if (exportMode === 'dataset') {
-        const dirStatus = await checkDirectoryStatus(targetDir);
+      const dirStatus = await checkDirectoryStatus(targetDir);
         if (dirStatus.exists && !dirStatus.is_dir) {
           await showDialog({
             type: 'danger',
@@ -436,20 +435,32 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
         if (dirStatus.exists && !dirStatus.is_empty) {
           const sample = (dirStatus.sample_entries || []).join(', ');
+          const overwriteTitle = exportMode === 'dataset'
+            ? t('dataExport.overwrite.title')
+            : t('dataExport.overwrite.annotationTitle');
+          const overwriteDescription = exportMode === 'dataset'
+            ? t('dataExport.overwrite.description', {
+                path: dirStatus.path || targetDir,
+                count: dirStatus.entry_count,
+                sample: sample || '-',
+              })
+            : t('dataExport.overwrite.annotationDescription', {
+                path: dirStatus.path || targetDir,
+                count: dirStatus.entry_count,
+                sample: sample || '-',
+              });
+          const overwriteConfirm = exportMode === 'dataset'
+            ? t('dataExport.overwrite.confirm')
+            : t('dataExport.overwrite.annotationConfirm');
           const confirmed = await showDialog({
             type: 'danger',
-            title: t('dataExport.overwrite.title'),
-            description: t('dataExport.overwrite.description', {
-              path: dirStatus.path || targetDir,
-              count: dirStatus.entry_count,
-              sample: sample || '-',
-            }),
-            confirmText: t('dataExport.overwrite.confirm'),
+            title: overwriteTitle,
+            description: overwriteDescription,
+            confirmText: overwriteConfirm,
             cancelText: t('common.cancel'),
           });
           if (!confirmed) return;
           overwriteTarget = true;
-        }
       }
 
       setExportStatus('exporting');
@@ -549,6 +560,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
           stems: exportStems,
           export_mode: 'annotation',
           split_content_mode: splitContentMode,
+          overwrite_target: overwriteTarget,
           include_unlabeled_images: includeUnlabeledImages,
           export_attributes: mdetExportEnabled,
           attributes_file: mdetExportEnabled ? (attributeExportFile || undefined) : undefined,

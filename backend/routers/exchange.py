@@ -1,5 +1,6 @@
 # backend/routers/exchange.py
 import asyncio
+from copy import deepcopy
 import json
 import os
 import random
@@ -78,9 +79,49 @@ def get_native_jsons(source_dirs):
     for d in source_dirs:
         if os.path.exists(d):
             jsons.extend(
-                [os.path.join(d, f) for f in os.listdir(d) if f.endswith(".json")]
+                sorted(
+                    os.path.join(d, f)
+                    for f in os.listdir(d)
+                    if f.lower().endswith(".json")
+                    and os.path.isfile(os.path.join(d, f))
+                )
             )
     return jsons
+
+
+def _find_multianno_source_file(
+    source_dir: str,
+    stem: str,
+    custom_suffix: str = "",
+    extension: str = ".json",
+    source_file_lookup: dict[str, str] | None = None,
+) -> str:
+    """Find a MultiAnno source JSON without depending on filename case."""
+    if not source_dir or not os.path.isdir(source_dir):
+        return os.path.join(source_dir, f"{stem}{custom_suffix}{extension}")
+
+    normalized_extension = extension or ".json"
+    if not normalized_extension.startswith("."):
+        normalized_extension = f".{normalized_extension}"
+    candidates = [
+        f"{stem}{custom_suffix}{normalized_extension}",
+        f"{stem}{normalized_extension}",
+        f"{stem}{custom_suffix}.json",
+        f"{stem}.json",
+    ]
+    entries = source_file_lookup
+    if entries is None:
+        entries = {
+            name.lower(): os.path.join(source_dir, name)
+            for name in os.listdir(source_dir)
+            if name.lower().endswith(".json")
+            and os.path.isfile(os.path.join(source_dir, name))
+        }
+    for candidate in candidates:
+        path = entries.get(candidate.lower())
+        if path:
+            return path
+    return os.path.join(source_dir, candidates[0])
 
 
 def _target_dir_has_contents(target_dir: str) -> bool:
@@ -99,6 +140,118 @@ def _ensure_dataset_target_safe(req: ExportRequest):
             status_code=409,
             detail="目标文件夹已存在内容。请确认覆盖后再导出。",
         )
+
+
+def _annotation_extension(req: ExportRequest) -> str:
+    extension = req.extension or {
+        "multianno": ".json",
+        "yolo": ".txt",
+        "coco": ".json",
+        "mask": ".png",
+    }.get(req.format, "")
+    if extension and not extension.startswith("."):
+        extension = f".{extension}"
+    return extension
+
+
+def _get_requested_annotation_stems(req: ExportRequest) -> list[str]:
+    """Return output stems before empty-label filtering is applied.
+
+    Annotation export may intentionally skip empty results.  We still need the
+    original selection so a confirmed overwrite can remove a stale output that
+    would otherwise survive from a previous export.
+    """
+    if req.stems:
+        source_dir = req.source_dirs[0] if req.source_dirs else ""
+        paths = [
+            os.path.join(source_dir, f"{stem}.json")
+            for stem in dict.fromkeys(req.stems)
+        ]
+    else:
+        paths = _get_annotation_json_paths(req)
+
+    output_stems = []
+    for path in paths:
+        fallback_stem = Path(path).stem
+        base_stem = fallback_stem
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if isinstance(data, dict) and data.get("stem"):
+                base_stem = str(data["stem"])
+        except (OSError, json.JSONDecodeError, TypeError, ValueError):
+            # The export stream will report the actual source-file error.  A
+            # fallback stem keeps cleanup deterministic without masking it.
+            pass
+        output_stems.append(base_stem)
+
+    return list(dict.fromkeys(output_stems))
+
+
+def _get_annotation_output_paths(req: ExportRequest, stems: list[str]):
+    """Resolve only files that this confirmed annotation export can replace."""
+    extension = _annotation_extension(req)
+    if req.format == "coco":
+        yield os.path.join(
+            req.target_dir,
+            f"instances_default{req.custom_suffix}{extension}",
+        )
+        return
+
+    if req.format not in {"multianno", "yolo", "mask"}:
+        return
+
+    for stem in stems:
+        yield os.path.join(
+            req.target_dir,
+            f"{stem}{req.custom_suffix}{extension}",
+        )
+
+
+def _ensure_annotation_target_safe(req: ExportRequest):
+    """Require confirmation before replacing annotation output files."""
+    source_dirs = {
+        os.path.abspath(os.path.normpath(path))
+        for path in req.source_dirs
+        if path
+    }
+    target_dir = os.path.abspath(os.path.normpath(req.target_dir))
+    if target_dir in source_dirs:
+        raise HTTPException(
+            status_code=400,
+            detail="导出目标不能与源标注文件夹相同。",
+        )
+
+    if _target_dir_has_contents(req.target_dir) and not req.overwrite_target:
+        raise HTTPException(
+            status_code=409,
+            detail="目标文件夹已存在内容。请确认覆盖后再导出。",
+        )
+
+
+def _clear_annotation_outputs(req: ExportRequest, stems: list[str]):
+    """Delete only selected annotation outputs after explicit confirmation."""
+    removed = 0
+    for output_path in _get_annotation_output_paths(req, stems):
+        if not os.path.isfile(output_path):
+            continue
+        try:
+            os.remove(output_path)
+            removed += 1
+        except OSError as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"无法覆盖导出文件 {output_path}: {exc}",
+            ) from exc
+
+    if removed:
+        logger.info(
+            "EXPORT_ANNOTATION_OUTPUTS_CLEARED format=%s target=%s files=%d",
+            req.format,
+            shorten(req.target_dir, 1500),
+            removed,
+        )
+    return removed
 
 
 def _prepare_dataset_target_dir(req: ExportRequest):
@@ -350,6 +503,11 @@ async def handle_export(req: ExportRequest):
     if not os.path.exists(req.target_dir):
         os.makedirs(req.target_dir, exist_ok=True)
 
+    requested_annotation_stems = None
+    if req.export_mode == "annotation":
+        _ensure_annotation_target_safe(req)
+        requested_annotation_stems = _get_requested_annotation_stems(req)
+
     # The same option applies to dataset and annotation exports.  For
     # annotation-only exports this decides whether empty JSON/YOLO/COCO/mask
     # results are written or skipped.
@@ -363,6 +521,9 @@ async def handle_export(req: ExportRequest):
             for_export=True,
             export_attributes=_mdet_export_enabled(req),
         )
+
+    if req.export_mode == "annotation" and req.overwrite_target:
+        _clear_annotation_outputs(req, requested_annotation_stems or [])
 
     if req.export_mode == "dataset":
         _ensure_dataset_target_safe(req)
@@ -1502,18 +1663,20 @@ def apply_mirror_cleanup(target_dir: str, processed_stems: set) -> int:
     """
     cleaned_count = 0
     for f_name in os.listdir(target_dir):
-        if not f_name.endswith(".json"):
+        target_json = os.path.join(target_dir, f_name)
+        if (
+            not f_name.lower().endswith(".json")
+            or not os.path.isfile(target_json)
+        ):
             continue
         base_stem = Path(f_name).stem
         if base_stem not in processed_stems:
-            target_json = os.path.join(target_dir, f_name)
             try:
                 with open(target_json, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 if len(data.get("shapes", [])) > 0:
                     data["shapes"] = []
-                    with open(target_json, "w", encoding="utf-8") as f:
-                        json.dump(data, f, ensure_ascii=False, indent=2)
+                    _write_import_json_atomic(target_json, data)
                     cleaned_count += 1
             except Exception:
                 pass
@@ -1534,6 +1697,72 @@ def _load_import_annotation(path: str) -> dict:
     if not isinstance(data.get("shapes"), list):
         data["shapes"] = []
     return data
+
+
+def _merge_multianno_root_metadata(
+    target_data: dict,
+    source_data: dict,
+    merge_strategy: str,
+):
+    """Merge native MultiAnno root fields without touching ``shapes``.
+
+    A native MultiAnno file may contain more than annotations and dimensions:
+    ``imageMeta`` (GPS/pose), project fields, and extension fields must survive
+    a normal import. The old importer copied only ``shapes``, which silently
+    discarded those fields when the target file was created.
+
+    For overwrite/mirror, the source is authoritative for fields it contains.
+    Append/skip keep existing target values and only fill fields that are
+    missing (or explicitly empty). Existing target-only extension fields are
+    intentionally preserved in every mode.
+    """
+    if not isinstance(target_data, dict) or not isinstance(source_data, dict):
+        return
+
+    source_is_authoritative = merge_strategy in {"overwrite", "mirror"}
+    source_image_meta = source_data.get("imageMeta")
+    if source_image_meta is None:
+        source_image_meta = source_data.get("image_meta")
+
+    # imageMeta is a structured object.  For append/skip, merge at field level
+    # instead of treating it as one opaque root value; this preserves existing
+    # target values while filling GPS/pose fields that are only in the source.
+    if source_image_meta is not None:
+        target_image_meta = target_data.get("imageMeta")
+        if target_image_meta is None:
+            target_image_meta = target_data.get("image_meta")
+
+        if source_is_authoritative or not isinstance(target_image_meta, dict):
+            merged_image_meta = deepcopy(source_image_meta)
+        elif isinstance(source_image_meta, dict):
+            merged_image_meta = deepcopy(source_image_meta)
+            merged_image_meta.update(deepcopy(target_image_meta))
+        else:
+            merged_image_meta = deepcopy(target_image_meta)
+
+        target_data["imageMeta"] = merged_image_meta
+        target_data.pop("image_meta", None)
+
+    for key, value in source_data.items():
+        if key in {"shapes", "imageMeta", "image_meta"}:
+            continue
+
+        target_value = target_data.get(key)
+        should_copy = source_is_authoritative or key not in target_data
+        if not should_copy and target_value in (None, ""):
+            should_copy = True
+
+        if should_copy:
+            target_data[key] = deepcopy(value)
+
+    # Avoid leaving two competing spellings of the same metadata block after
+    # an authoritative import. imageMeta is the canonical spelling; the
+    # legacy image_meta spelling remains accepted on read.
+    if source_is_authoritative:
+        if "imageMeta" in source_data:
+            target_data.pop("image_meta", None)
+        elif "image_meta" in source_data:
+            target_data.pop("imageMeta", None)
 
 
 def _positive_dimensions(width, height):
@@ -1675,8 +1904,7 @@ def _finalize_import_annotation(
         data["imageNameMain"] = image_name
     elif image_path and not data.get("imageNameMain"):
         data["imageNameMain"] = _image_basename(image_path)
-    with open(target_path, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
+    _write_import_json_atomic(target_path, data)
     logger.info(
         "IMPORT_JSON_WRITE_END stem=%s path=%s",
         stem,
@@ -2169,10 +2397,21 @@ async def import_from_multianno(req: ImportRequest, progress_callback=None):
     total_shapes = 0
     processed_stems = set()
 
-    # 使用 stems 列表按 {stem}{custom_suffix}.json 规则定位文件
-    source_stems = [
-        Path(f).stem for f in os.listdir(req.source_path) if f.endswith(".json")
-    ]
+    # 使用 stems 列表按 {stem}{custom_suffix}.json 规则定位文件，同时兼容
+    # .JSON 等大小写差异。未显式传入 stems 时，去掉文件名中实际存在的
+    # custom_suffix，避免再次拼接后缀导致源文件找不到。
+    source_stems = []
+    source_file_lookup = {}
+    for file_name in os.listdir(req.source_path):
+        file_path = os.path.join(req.source_path, file_name)
+        if not file_name.lower().endswith(".json") or not os.path.isfile(file_path):
+            continue
+        source_file_lookup[file_name.lower()] = file_path
+        source_stem = Path(file_name).stem
+        if req.custom_suffix and source_stem.endswith(req.custom_suffix):
+            source_stem = source_stem[: -len(req.custom_suffix)]
+        source_stems.append(source_stem)
+    source_stems = list(dict.fromkeys(source_stems))
     if req.stems:
         stems = req.stems
     elif req.image_paths:
@@ -2191,9 +2430,13 @@ async def import_from_multianno(req: ImportRequest, progress_callback=None):
 
     for index, stem in enumerate(stems, start=1):
         scene_started = asyncio.get_running_loop().time()
-        ext = req.extension or ".json"
-        filename = f"{stem}{req.custom_suffix}{ext}"
-        source_json_path = os.path.join(req.source_path, filename)
+        source_json_path = _find_multianno_source_file(
+            req.source_path,
+            stem,
+            req.custom_suffix,
+            req.extension or ".json",
+            source_file_lookup,
+        )
         base_stem = stem
         source_exists = os.path.exists(source_json_path)
         if not source_exists:
@@ -2245,6 +2488,14 @@ async def import_from_multianno(req: ImportRequest, progress_callback=None):
             continue
         if req.merge_strategy in ["overwrite", "mirror"]:
             existing_data["shapes"] = []
+
+        # Preserve native root metadata such as imageMeta/GPS. Dimensions are
+        # resolved from the actual image below and finalized afterwards.
+        _merge_multianno_root_metadata(
+            existing_data,
+            source_data,
+            req.merge_strategy,
+        )
 
         # 4. 执行合并写入 (核心修复区)
         new_shapes = source_data.get("shapes", [])
