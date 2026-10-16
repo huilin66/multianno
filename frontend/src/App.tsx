@@ -783,7 +783,7 @@ export default function App() {
   ]);
 
   const handleReloadAll = async () => {
-    if (isReloadingAll) return;
+    if (isReloadingAll || isWritingAll) return;
 
     const state = useStore.getState();
     const mainFolder = state.folders.find(
@@ -796,16 +796,18 @@ export default function App() {
       return;
     }
 
-    if (state.isAnnotationDirty) {
-      const confirmed = await showDialog({
-        type: 'warning',
-        title: t('headerSetting.reloadAllTitle'),
-        description: t('headerSetting.reloadAllDirtyDesc'),
-        confirmText: t('common.confirm'),
-        cancelText: t('common.cancel'),
-      });
-      if (!confirmed) return;
-    }
+    const hasUnsavedChanges = state.isAnnotationDirty
+      || (state.dirtyAnnotationStems?.length ?? 0) > 0;
+    const confirmed = await showDialog({
+      type: 'warning',
+      title: t('headerSetting.reloadAllTitle'),
+      description: hasUnsavedChanges
+        ? t('headerSetting.reloadAllDirtyDesc')
+        : t('headerSetting.reloadAllDesc', { scenes: state.stems.length }),
+      confirmText: t('common.confirm'),
+      cancelText: t('common.cancel'),
+    });
+    if (!confirmed) return;
 
     setIsReloadingAll(true);
     setReloadProgress({ current: 0, total: state.stems.length });
@@ -842,7 +844,7 @@ export default function App() {
   };
 
   const handleWriteAll = async () => {
-    if (isWritingAll) return;
+    if (isWritingAll || isReloadingAll) return;
 
     const state = useStore.getState();
     const mainFolder = state.folders.find(
@@ -1200,7 +1202,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleReloadAll}
-                    disabled={isReloadingAll}
+                    disabled={isReloadingAll || isWritingAll}
                     className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60"
                     title={t('headerSetting.reloadAll')}
                   >
@@ -1211,10 +1213,22 @@ export default function App() {
                     </span>
                     <RefreshCw className={`h-4 w-4 shrink-0 ${isReloadingAll ? 'animate-spin' : ''}`} />
                   </button>
+                  {isReloadingAll && reloadProgress.total > 0 && (
+                    <OperationProgress
+                      stageIndex={1}
+                      stageCount={1}
+                      stageLabel={t('common.stage')}
+                      stageName={t('headerSetting.reloadAllProgress')}
+                      current={reloadProgress.current}
+                      total={reloadProgress.total}
+                      operationKey="reload-all-annotations"
+                      className="px-1.5 py-1"
+                    />
+                  )}
                   <button
                     type="button"
                     onClick={handleWriteAll}
-                    disabled={isWritingAll}
+                    disabled={isWritingAll || isReloadingAll}
                     className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 disabled:opacity-60"
                     title={t('headerSetting.writeAll')}
                   >

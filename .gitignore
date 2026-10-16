@@ -11,3 +11,4 @@ backend/logs/*.log
 task.md
 
 logs/
+.playwright-cli/
