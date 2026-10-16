@@ -968,7 +968,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         )}
       </div>
 
-      <div className="flex-1 overflow-auto p-5 custom-scrollbar">
+      <div className="flex-1 min-h-0 min-w-0 overflow-hidden p-5">
         {displayRows.length === 0 ? (
           <div className="h-full min-h-[260px] flex flex-col items-center justify-center text-neutral-400">
             <Filter className="w-10 h-10 mb-3 opacity-25" />
@@ -990,7 +990,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
             )}
           </div>
         ) : (
-          <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
+          <div className="h-full max-w-full overflow-auto rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm custom-scrollbar">
             <table className={`w-full ${showSceneGroupInfo ? 'min-w-[2520px]' : 'min-w-[1680px]'} border-collapse text-xs`}>
               <thead className="sticky top-0 z-10 bg-neutral-50 dark:bg-neutral-800/95 text-[10px] uppercase tracking-wider text-neutral-500">
                 <tr>
