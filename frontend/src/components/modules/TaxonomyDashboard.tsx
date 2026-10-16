@@ -2814,10 +2814,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {/* 🌟 模式 B：Annotation Table */}
         {activeTab === 'annotationTable' && (
           <AnnotationTable
+            key={taxonomyViewStateKey}
             annotations={annotations}
             taxonomyClasses={taxonomyClasses}
             taxonomyAttributes={taxonomyAttributes}
             onOpenAnnotation={handleOpenAnnotationFromTable}
+            cacheKey={taxonomyViewStateKey}
+            viewStateReady={restoredViewStateKey === taxonomyViewStateKey}
             overlapState={annotationTableOverlap}
             onOverlapStateChange={setAnnotationTableOverlap}
             selectedAnnotationIds={selectedAnnotationIds}

@@ -23,6 +23,8 @@ interface AnnotationTableProps {
   taxonomyClasses: TaxonomyClass[];
   taxonomyAttributes: TaxonomyAttribute[];
   onOpenAnnotation: (annotation: Annotation, sceneObjectIndex: number) => void;
+  cacheKey?: string;
+  viewStateReady?: boolean;
   overlapState?: AnnotationTableOverlapState;
   onOverlapStateChange?: (state: AnnotationTableOverlapState) => void;
   selectedAnnotationIds?: string[];
@@ -53,6 +55,35 @@ interface AnnotationTableSortState {
   key: AnnotationTableSortKey;
   direction: 'asc' | 'desc';
 }
+
+interface AnnotationTableMemoryState {
+  loadedAnnotations: Annotation[] | null;
+  query: string;
+  classFilter: string;
+  typeFilter: string;
+  annotationIdFilter: string;
+  contentFilter: string;
+  attributesFilter: string;
+  sceneFilter: string;
+  minBoxWidth: string;
+  maxBoxWidth: string;
+  minBoxHeight: string;
+  maxBoxHeight: string;
+  overlapGroupFilter: string;
+  sortState: AnnotationTableSortState | null;
+  overlapPanelOpen: boolean;
+  overlapMode: 'iou' | 'ios';
+  overlapThreshold: number;
+  overlapKeys: string[] | null;
+  overlapCounts: Array<[string, number]>;
+  overlapGroups: Array<[string, string]>;
+  hideUnselected: boolean;
+}
+
+// Annotation Table is mounted only while its tab is active. Keep its loaded
+// snapshot and controls outside the component so switching tabs or closing
+// and reopening Annotation Manager does not discard the user's work.
+const annotationTableMemory = new Map<string, AnnotationTableMemoryState>();
 
 const formatAttributeValue = (value: string | number | boolean) => {
   if (typeof value === 'boolean') return value ? 'true' : 'false';
@@ -104,36 +135,99 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   taxonomyClasses,
   taxonomyAttributes,
   onOpenAnnotation,
+  cacheKey,
+  viewStateReady = true,
   overlapState,
   onOverlapStateChange,
   selectedAnnotationIds = [],
   activeAnnotationId = null,
 }: AnnotationTableProps) {
   const { t } = useTranslation();
-  const [loadedAnnotations, setLoadedAnnotations] = useState<Annotation[] | null>(null);
-  const [query, setQuery] = useState('');
-  const [classFilter, setClassFilter] = useState('all');
-  const [typeFilter, setTypeFilter] = useState('all');
-  const [annotationIdFilter, setAnnotationIdFilter] = useState('');
-  const [contentFilter, setContentFilter] = useState('');
-  const [attributesFilter, setAttributesFilter] = useState('');
-  const [sceneFilter, setSceneFilter] = useState('');
-  const [minBoxWidth, setMinBoxWidth] = useState('');
-  const [maxBoxWidth, setMaxBoxWidth] = useState('');
-  const [minBoxHeight, setMinBoxHeight] = useState('');
-  const [maxBoxHeight, setMaxBoxHeight] = useState('');
-  const [overlapGroupFilter, setOverlapGroupFilter] = useState('');
-  const [sortState, setSortState] = useState<AnnotationTableSortState | null>(null);
-  const [overlapPanelOpen, setOverlapPanelOpen] = useState(false);
-  const [overlapMode, setOverlapMode] = useState<'iou' | 'ios'>('ios');
-  const [overlapThreshold, setOverlapThreshold] = useState(80);
-  const [overlapKeys, setOverlapKeys] = useState<Set<string> | null>(null);
-  const [overlapCounts, setOverlapCounts] = useState<Map<string, number>>(new Map());
-  const [overlapGroups, setOverlapGroups] = useState<Map<string, string>>(new Map());
+  const rememberedState = cacheKey ? annotationTableMemory.get(cacheKey) : undefined;
+  const [loadedAnnotations, setLoadedAnnotations] = useState<Annotation[] | null>(() => (
+    rememberedState?.loadedAnnotations ?? null
+  ));
+  const [query, setQuery] = useState(() => rememberedState?.query ?? '');
+  const [classFilter, setClassFilter] = useState(() => rememberedState?.classFilter ?? 'all');
+  const [typeFilter, setTypeFilter] = useState(() => rememberedState?.typeFilter ?? 'all');
+  const [annotationIdFilter, setAnnotationIdFilter] = useState(() => rememberedState?.annotationIdFilter ?? '');
+  const [contentFilter, setContentFilter] = useState(() => rememberedState?.contentFilter ?? '');
+  const [attributesFilter, setAttributesFilter] = useState(() => rememberedState?.attributesFilter ?? '');
+  const [sceneFilter, setSceneFilter] = useState(() => rememberedState?.sceneFilter ?? '');
+  const [minBoxWidth, setMinBoxWidth] = useState(() => rememberedState?.minBoxWidth ?? '');
+  const [maxBoxWidth, setMaxBoxWidth] = useState(() => rememberedState?.maxBoxWidth ?? '');
+  const [minBoxHeight, setMinBoxHeight] = useState(() => rememberedState?.minBoxHeight ?? '');
+  const [maxBoxHeight, setMaxBoxHeight] = useState(() => rememberedState?.maxBoxHeight ?? '');
+  const [overlapGroupFilter, setOverlapGroupFilter] = useState(() => rememberedState?.overlapGroupFilter ?? '');
+  const [sortState, setSortState] = useState<AnnotationTableSortState | null>(() => (
+    rememberedState?.sortState ? { ...rememberedState.sortState } : null
+  ));
+  const [overlapPanelOpen, setOverlapPanelOpen] = useState(() => rememberedState?.overlapPanelOpen ?? false);
+  const [overlapMode, setOverlapMode] = useState<'iou' | 'ios'>(() => rememberedState?.overlapMode ?? 'ios');
+  const [overlapThreshold, setOverlapThreshold] = useState(() => rememberedState?.overlapThreshold ?? 80);
+  const [overlapKeys, setOverlapKeys] = useState<Set<string> | null>(() => (
+    rememberedState?.overlapKeys ? new Set(rememberedState.overlapKeys) : null
+  ));
+  const [overlapCounts, setOverlapCounts] = useState<Map<string, number>>(() => (
+    new Map(rememberedState?.overlapCounts || [])
+  ));
+  const [overlapGroups, setOverlapGroups] = useState<Map<string, string>>(() => (
+    new Map(rememberedState?.overlapGroups || [])
+  ));
   const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
-  const [hideUnselected, setHideUnselected] = useState(false);
+  const [hideUnselected, setHideUnselected] = useState(() => rememberedState?.hideUnselected ?? false);
   const overlapScanRequestRef = React.useRef(0);
   const isLoaded = loadedAnnotations !== null;
+
+  useEffect(() => {
+    if (!cacheKey) return;
+    annotationTableMemory.set(cacheKey, {
+      loadedAnnotations,
+      query,
+      classFilter,
+      typeFilter,
+      annotationIdFilter,
+      contentFilter,
+      attributesFilter,
+      sceneFilter,
+      minBoxWidth,
+      maxBoxWidth,
+      minBoxHeight,
+      maxBoxHeight,
+      overlapGroupFilter,
+      sortState,
+      overlapPanelOpen,
+      overlapMode,
+      overlapThreshold,
+      overlapKeys: overlapKeys ? Array.from(overlapKeys) : null,
+      overlapCounts: Array.from(overlapCounts.entries()),
+      overlapGroups: Array.from(overlapGroups.entries()),
+      hideUnselected,
+    });
+  }, [
+    annotationIdFilter,
+    attributesFilter,
+    cacheKey,
+    classFilter,
+    contentFilter,
+    hideUnselected,
+    loadedAnnotations,
+    maxBoxHeight,
+    maxBoxWidth,
+    minBoxHeight,
+    minBoxWidth,
+    overlapCounts,
+    overlapGroupFilter,
+    overlapGroups,
+    overlapKeys,
+    overlapMode,
+    overlapPanelOpen,
+    overlapThreshold,
+    query,
+    sceneFilter,
+    sortState,
+    typeFilter,
+  ]);
 
   const selectedIdSet = useMemo(
     () => new Set([
@@ -263,10 +357,12 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     }, 0);
   }, [loadedAnnotations, onOverlapStateChange]);
 
-  // Keep the last completed scan active when the table is remounted. When the
-  // user deleted objects in the workspace, scan again with the saved criteria
-  // so the reopened result reflects the current annotations.
+  // Restore the last completed scan from the project-scoped table snapshot.
+  // A deliberate Reload/Scan is required before the table reads or recomputes
+  // anything again.
   useEffect(() => {
+    if (!viewStateReady) return;
+
     const savedMode = overlapState?.mode || 'ios';
     const savedThreshold = Math.max(10, Math.min(100, overlapState?.threshold ?? 80));
 
@@ -275,7 +371,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
 
     if (overlapState?.active) {
       setOverlapPanelOpen(true);
-      if (loadedAnnotations !== null) {
+      if (loadedAnnotations !== null && overlapKeys === null) {
         scanOverlaps(savedMode, savedThreshold);
       }
       return;
@@ -286,10 +382,23 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     setOverlapCounts(new Map());
     setOverlapGroups(new Map());
     setIsScanningOverlaps(false);
-  }, [loadedAnnotations, overlapState?.active, overlapState?.mode, overlapState?.threshold, scanOverlaps]);
+  }, [
+    loadedAnnotations,
+    overlapKeys,
+    overlapState?.active,
+    overlapState?.mode,
+    overlapState?.threshold,
+    scanOverlaps,
+    viewStateReady,
+  ]);
 
   const loadAnnotations = () => {
+    overlapScanRequestRef.current += 1;
     setLoadedAnnotations(cloneAnnotations(annotations));
+    setOverlapKeys(null);
+    setOverlapCounts(new Map());
+    setOverlapGroups(new Map());
+    setIsScanningOverlaps(false);
   };
 
   const resetOverlapScan = () => {
