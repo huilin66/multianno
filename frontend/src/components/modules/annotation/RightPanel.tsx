@@ -1451,15 +1451,6 @@ export function RightPanel({
           badge={currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}
           actionNode={(
             <div className="flex items-center gap-0.5">
-              <button
-                type="button"
-                aria-label={t('menu.sceneGroupManager')}
-                title={t('menu.sceneGroupManager')}
-                onClick={() => setActiveModule('scene_group_manager')}
-                className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-              </button>
               {!sceneSearchOpen ? (
                 <button
                   type="button"
@@ -1506,6 +1497,15 @@ export function RightPanel({
                   </button>
                 </div>
               )}
+              <button
+                type="button"
+                aria-label={t('menu.sceneGroupManager')}
+                title={t('menu.sceneGroupManager')}
+                onClick={() => setActiveModule('scene_group_manager')}
+                className="flex h-6 w-6 items-center justify-center rounded text-neutral-500 hover:bg-white/80 hover:text-blue-600 dark:hover:bg-neutral-900 dark:hover:text-blue-300"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+              </button>
             </div>
           )}
         />
