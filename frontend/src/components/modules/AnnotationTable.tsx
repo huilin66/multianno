@@ -35,7 +35,10 @@ interface AnnotationTableRow {
   annotation: Annotation;
   sceneObjectIndex: number;
   attributesText: string;
-  contentText: string;
+  textValue: string;
+  groupIdValue: string;
+  trackIdValue: string;
+  pointsCount: number;
   boxWidth: number | null;
   boxHeight: number | null;
 }
@@ -46,7 +49,10 @@ type AnnotationTableSortKey =
   | 'type'
   | 'boxWidth'
   | 'boxHeight'
-  | 'content'
+  | 'text'
+  | 'groupId'
+  | 'trackId'
+  | 'points'
   | 'attributes'
   | 'stem'
   | 'overlap';
@@ -62,7 +68,10 @@ interface AnnotationTableMemoryState {
   classFilter: string;
   typeFilter: string;
   annotationIdFilter: string;
-  contentFilter: string;
+  textFilter: string;
+  groupIdFilter: string;
+  trackIdFilter: string;
+  pointsFilter: string;
   attributesFilter: string;
   sceneFilter: string;
   minBoxWidth: string;
@@ -90,17 +99,13 @@ const formatAttributeValue = (value: string | number | boolean) => {
   return String(value);
 };
 
-const formatContent = (annotation: Annotation) => {
-  const content: string[] = [];
-  if (annotation.text?.trim()) content.push(`text: ${annotation.text.trim()}`);
-  if (annotation.group_id !== undefined && annotation.group_id !== null) {
-    content.push(`group: ${annotation.group_id}`);
-  }
-  if (annotation.track_id !== undefined && annotation.track_id !== null) {
-    content.push(`track: ${annotation.track_id}`);
-  }
-  content.push(`${annotation.points?.length || 0} points`);
-  return content.join(' · ');
+const formatCellText = (value: string) => value || '—';
+
+const compareOptionalText = (first: string, second: string) => {
+  if (!first && !second) return 0;
+  if (!first) return 1;
+  if (!second) return -1;
+  return first.localeCompare(second, undefined, { numeric: true });
 };
 
 const formatBoxDimension = (value: number | null) => {
@@ -151,7 +156,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [classFilter, setClassFilter] = useState(() => rememberedState?.classFilter ?? 'all');
   const [typeFilter, setTypeFilter] = useState(() => rememberedState?.typeFilter ?? 'all');
   const [annotationIdFilter, setAnnotationIdFilter] = useState(() => rememberedState?.annotationIdFilter ?? '');
-  const [contentFilter, setContentFilter] = useState(() => rememberedState?.contentFilter ?? '');
+  const [textFilter, setTextFilter] = useState(() => rememberedState?.textFilter ?? '');
+  const [groupIdFilter, setGroupIdFilter] = useState(() => rememberedState?.groupIdFilter ?? '');
+  const [trackIdFilter, setTrackIdFilter] = useState(() => rememberedState?.trackIdFilter ?? '');
+  const [pointsFilter, setPointsFilter] = useState(() => rememberedState?.pointsFilter ?? '');
   const [attributesFilter, setAttributesFilter] = useState(() => rememberedState?.attributesFilter ?? '');
   const [sceneFilter, setSceneFilter] = useState(() => rememberedState?.sceneFilter ?? '');
   const [minBoxWidth, setMinBoxWidth] = useState(() => rememberedState?.minBoxWidth ?? '');
@@ -187,7 +195,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       classFilter,
       typeFilter,
       annotationIdFilter,
-      contentFilter,
+      textFilter,
+      groupIdFilter,
+      trackIdFilter,
+      pointsFilter,
       attributesFilter,
       sceneFilter,
       minBoxWidth,
@@ -209,7 +220,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     attributesFilter,
     cacheKey,
     classFilter,
-    contentFilter,
+    groupIdFilter,
     hideUnselected,
     loadedAnnotations,
     maxBoxHeight,
@@ -223,9 +234,12 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     overlapMode,
     overlapPanelOpen,
     overlapThreshold,
+    pointsFilter,
     query,
     sceneFilter,
     sortState,
+    textFilter,
+    trackIdFilter,
     typeFilter,
   ]);
 
@@ -260,7 +274,14 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         annotation,
         sceneObjectIndex,
         attributesText,
-        contentText: formatContent(annotation),
+        textValue: annotation.text?.trim() || '',
+        groupIdValue: annotation.group_id === undefined || annotation.group_id === null
+          ? ''
+          : String(annotation.group_id),
+        trackIdValue: annotation.track_id === undefined || annotation.track_id === null
+          ? ''
+          : String(annotation.track_id),
+        pointsCount: annotation.points?.length || 0,
         boxWidth: bounds ? Math.max(0, bounds.maxX - bounds.minX) : null,
         boxHeight: bounds ? Math.max(0, bounds.maxY - bounds.minY) : null,
       };
@@ -283,7 +304,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const filteredRows = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     const normalizedIdFilter = annotationIdFilter.trim().toLowerCase();
-    const normalizedContentFilter = contentFilter.trim().toLowerCase();
+    const normalizedTextFilter = textFilter.trim().toLowerCase();
+    const normalizedGroupIdFilter = groupIdFilter.trim().toLowerCase();
+    const normalizedTrackIdFilter = trackIdFilter.trim().toLowerCase();
+    const normalizedPointsFilter = pointsFilter.trim().toLowerCase();
     const normalizedAttributesFilter = attributesFilter.trim().toLowerCase();
     const normalizedSceneFilter = sceneFilter.trim().toLowerCase();
     const normalizedOverlapGroupFilter = overlapGroupFilter.trim().toLowerCase();
@@ -298,7 +322,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       if (typeFilter !== 'all' && annotation.type !== typeFilter) return false;
       if (overlapKeys && !overlapKeys.has(getAnnotationOverlapKey(annotation))) return false;
       if (normalizedIdFilter && !String(annotation.id).toLowerCase().includes(normalizedIdFilter)) return false;
-      if (normalizedContentFilter && !row.contentText.toLowerCase().includes(normalizedContentFilter)) return false;
+      if (normalizedTextFilter && !row.textValue.toLowerCase().includes(normalizedTextFilter)) return false;
+      if (normalizedGroupIdFilter && !row.groupIdValue.toLowerCase().includes(normalizedGroupIdFilter)) return false;
+      if (normalizedTrackIdFilter && !row.trackIdValue.toLowerCase().includes(normalizedTrackIdFilter)) return false;
+      if (normalizedPointsFilter && !String(row.pointsCount).includes(normalizedPointsFilter)) return false;
       if (normalizedAttributesFilter && !row.attributesText.toLowerCase().includes(normalizedAttributesFilter)) return false;
       if (normalizedSceneFilter && !annotation.stem.toLowerCase().includes(normalizedSceneFilter)) return false;
       const overlapGroup = overlapGroups.get(getAnnotationOverlapKey(annotation)) || '';
@@ -316,14 +343,17 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         annotation.label,
         annotation.type,
         annotation.stem,
+        row.textValue,
+        row.groupIdValue,
+        row.trackIdValue,
+        String(row.pointsCount),
         row.attributesText,
-        row.contentText,
         formatBoxDimension(row.boxWidth),
         formatBoxDimension(row.boxHeight),
         overlapGroup,
       ].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
     });
-  }, [annotationIdFilter, attributesFilter, classFilter, contentFilter, maxBoxHeight, maxBoxWidth, minBoxHeight, minBoxWidth, overlapGroupFilter, overlapGroups, overlapKeys, query, rows, sceneFilter, typeFilter]);
+  }, [annotationIdFilter, attributesFilter, classFilter, groupIdFilter, maxBoxHeight, maxBoxWidth, minBoxHeight, minBoxWidth, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, query, rows, sceneFilter, textFilter, trackIdFilter, typeFilter]);
 
   const taxonomyAttributeNames = new Set(taxonomyAttributes.map((attribute) => attribute.name));
 
@@ -427,7 +457,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     setClassFilter('all');
     setTypeFilter('all');
     setAnnotationIdFilter('');
-    setContentFilter('');
+    setTextFilter('');
+    setGroupIdFilter('');
+    setTrackIdFilter('');
+    setPointsFilter('');
     setAttributesFilter('');
     setSceneFilter('');
     setMinBoxWidth('');
@@ -472,8 +505,17 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         case 'boxHeight':
           comparison = compareOptionalNumbers(first.boxHeight, second.boxHeight);
           break;
-        case 'content':
-          comparison = first.contentText.localeCompare(second.contentText, undefined, { numeric: true });
+        case 'text':
+          comparison = compareOptionalText(first.textValue, second.textValue);
+          break;
+        case 'groupId':
+          comparison = compareOptionalText(first.groupIdValue, second.groupIdValue);
+          break;
+        case 'trackId':
+          comparison = compareOptionalText(first.trackIdValue, second.trackIdValue);
+          break;
+        case 'points':
+          comparison = first.pointsCount - second.pointsCount;
           break;
         case 'attributes':
           comparison = first.attributesText.localeCompare(second.attributesText, undefined, { numeric: true });
@@ -503,7 +545,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     || classFilter !== 'all'
     || typeFilter !== 'all'
     || Boolean(annotationIdFilter.trim())
-    || Boolean(contentFilter.trim())
+    || Boolean(textFilter.trim())
+    || Boolean(groupIdFilter.trim())
+    || Boolean(trackIdFilter.trim())
+    || Boolean(pointsFilter.trim())
     || Boolean(attributesFilter.trim())
     || Boolean(sceneFilter.trim())
     || Boolean(minBoxWidth.trim())
@@ -589,7 +634,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               disabled={!isLoaded}
-              placeholder={t('taxonomyDashboard.annotationSearch', 'Search ID, class, content or scene group...')}
+              placeholder={t('taxonomyDashboard.annotationSearch', 'Search ID, class, text, group ID, track ID or scene group...')}
               className="h-9 pl-9 pr-8 text-xs"
             />
             {query && (
@@ -738,7 +783,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
           </div>
         ) : (
           <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm overflow-hidden">
-            <table className="w-full min-w-[1380px] border-collapse text-xs">
+            <table className="w-full min-w-[1680px] border-collapse text-xs">
               <thead className="sticky top-0 z-10 bg-neutral-50 dark:bg-neutral-800/95 text-[10px] uppercase tracking-wider text-neutral-500">
                 <tr>
                   <th className="w-10 px-3 py-3 text-left font-black">#</th>
@@ -747,7 +792,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                   <th className="w-28 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationType', 'Type'), 'type')}</th>
                   <th className="w-24 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.boxWidthShort', 'Box W'), 'boxWidth', 'right')}</th>
                   <th className="w-24 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.boxHeightShort', 'Box H'), 'boxHeight', 'right')}</th>
-                  <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationContent', 'Annotation Content'), 'content')}</th>
+                  <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationText', 'Text'), 'text')}</th>
+                  <th className="w-32 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationGroupId', 'Group ID'), 'groupId')}</th>
+                  <th className="w-36 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationTrackId', 'Track ID'), 'trackId')}</th>
+                  <th className="w-20 px-3 py-3 text-right">{renderSortableHeader(t('taxonomyDashboard.annotationPoints', 'Points'), 'points', 'right')}</th>
                   <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationAttributes', 'Attributes'), 'attributes')}</th>
                   <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.sceneGroup', 'Scene Group'), 'stem')}</th>
                   {overlapKeys !== null && (
@@ -838,10 +886,37 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                   </th>
                   <th className="px-3 py-1.5">
                     <Input
-                      value={contentFilter}
-                      onChange={(event) => setContentFilter(event.target.value)}
+                      value={textFilter}
+                      onChange={(event) => setTextFilter(event.target.value)}
                       disabled={!isLoaded}
-                      placeholder={t('taxonomyDashboard.filterContent', 'Find content')}
+                      placeholder={t('taxonomyDashboard.filterText', 'Find text')}
+                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
+                    />
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <Input
+                      value={groupIdFilter}
+                      onChange={(event) => setGroupIdFilter(event.target.value)}
+                      disabled={!isLoaded}
+                      placeholder={t('taxonomyDashboard.filterGroupId', 'Find group ID')}
+                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
+                    />
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <Input
+                      value={trackIdFilter}
+                      onChange={(event) => setTrackIdFilter(event.target.value)}
+                      disabled={!isLoaded}
+                      placeholder={t('taxonomyDashboard.filterTrackId', 'Find track ID')}
+                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
+                    />
+                  </th>
+                  <th className="px-3 py-1.5">
+                    <Input
+                      value={pointsFilter}
+                      onChange={(event) => setPointsFilter(event.target.value)}
+                      disabled={!isLoaded}
+                      placeholder={t('taxonomyDashboard.filterPoints', 'Find points')}
                       className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
                     />
                   </th>
@@ -918,8 +993,17 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                       <td className="px-3 py-2.5 text-right font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={t('taxonomyDashboard.boxHeight', 'Box height')}>
                         {formatBoxDimension(row.boxHeight)}
                       </td>
-                      <td className="px-3 py-2.5 text-neutral-600 dark:text-neutral-400 max-w-[260px] truncate" title={row.contentText}>
-                        {row.contentText}
+                      <td className="px-3 py-2.5 text-neutral-600 dark:text-neutral-400 max-w-[260px] truncate" title={row.textValue || '—'}>
+                        {formatCellText(row.textValue)}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400 max-w-[140px] truncate" title={row.groupIdValue || '—'}>
+                        {formatCellText(row.groupIdValue)}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400 max-w-[160px] truncate" title={row.trackIdValue || '—'}>
+                        {formatCellText(row.trackIdValue)}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={t('taxonomyDashboard.annotationPoints', 'Points')}>
+                        {row.pointsCount}
                       </td>
                       <td className="px-3 py-2.5 text-neutral-600 dark:text-neutral-400 max-w-[260px] truncate" title={row.attributesText}>
                         <span>{row.attributesText}</span>
