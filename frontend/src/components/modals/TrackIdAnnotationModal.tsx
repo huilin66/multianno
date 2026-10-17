@@ -26,6 +26,7 @@ import { LeftToolbar } from '../modules/annotation/LeftToolbar';
 import { ObjectEditorPopover } from '../modules/annotation/ObjectEditorPopover';
 import { findTopmostAnnotationAtPoint } from '../../lib/annotationHitTest';
 import { getShortcutBindings, shortcutMatchesEvent } from '../../lib/shortcuts';
+import { TrackIdMapView } from './TrackIdMapView';
 import {
   ArrowLeftToLine,
   ArrowRightToLine,
@@ -37,14 +38,17 @@ import {
   Loader2,
   Link2,
   Link2Off,
+  MapPin,
   Pencil,
   Plus,
   RotateCcw,
+  Route,
   Settings2,
 } from 'lucide-react';
 
 interface TrackIdAnnotationModalProps {
   open: boolean;
+  initialMapOpen?: boolean;
   onClose: () => void;
   rightPanelProps: RightPanelProps;
   canvasProps: Record<string, any>;
@@ -1059,7 +1063,7 @@ function TrackIdEditor({
   );
 }
 
-export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasProps }: TrackIdAnnotationModalProps) {
+export function TrackIdAnnotationModal({ open, initialMapOpen = false, onClose, rightPanelProps, canvasProps }: TrackIdAnnotationModalProps) {
   const { t } = useTranslation();
   const stems = useStore((state) => state.stems);
   const currentStem = useStore((state) => state.currentStem);
@@ -1094,6 +1098,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
   const [showTrackIds, setShowTrackIds] = React.useState(true);
   const [frameContextMode, setFrameContextMode] = React.useState<'locked' | 'adjacent'>('locked');
   const [verticalFrameLayout, setVerticalFrameLayout] = React.useState(false);
+  const [mapOpen, setMapOpen] = React.useState(false);
   const [reidStatus, setReidStatus] = React.useState<TrackIdReIDStatus | null>(null);
   const [reidLifecycleAction, setReidLifecycleAction] = React.useState<'load' | 'unload' | null>(null);
   const [reidRunning, setReidRunning] = React.useState(false);
@@ -1157,8 +1162,10 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     if (!open) {
       // Reopening the window must not implicitly resume sequence editing.
       setSequenceEditingTrackId(null);
+      setMapOpen(false);
       return;
     }
+    setMapOpen(initialMapOpen);
     const previousProjectKey = previousDraftProjectKeyRef.current;
     if (previousProjectKey && previousProjectKey !== draftProjectKey) {
       // The modal component stays mounted while projects are switched. Do not
@@ -1174,7 +1181,7 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
       setActiveSequence(1);
     }
     previousDraftProjectKeyRef.current = draftProjectKey;
-  }, [draftProjectKey, open]);
+  }, [draftProjectKey, initialMapOpen, open]);
 
   // Capture the main workspace viewport before the Track ID canvas effects
   // can fit the editable frame and write their viewport into the store.
@@ -1762,6 +1769,17 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     setActiveAnnotationId(null);
   }, [setActiveAnnotationId, setCurrentStem]);
 
+  const openMapObservation = React.useCallback((annotation: any) => {
+    const trackId = getTrackIdLabel(annotation?.track_id);
+    setMapOpen(false);
+    if (trackId) {
+      setSelectedTrackId(trackId);
+      setSequenceContextTrackId(trackId);
+    }
+    if (annotation?.stem) setCurrentStem(annotation.stem);
+    if (annotation?.id) setActiveAnnotationId(annotation.id);
+  }, [setActiveAnnotationId, setCurrentStem]);
+
   React.useEffect(() => {
     if (!open) return;
 
@@ -2032,9 +2050,31 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
     }}>
       <DialogContent ref={dialogContentRef} className="flex h-[min(92vh,900px)] max-h-[min(92vh,900px)] w-[95vw] max-w-[95vw] flex-col gap-0 overflow-visible border-neutral-200 p-0 dark:border-neutral-800 sm:max-w-[95vw]" showCloseButton>
         <DialogHeader className="shrink-0 border-b border-border p-4">
-          <DialogTitle>{t('trackIdWindow.title')}</DialogTitle>
+          <div className="flex min-w-0 items-center justify-between gap-3 pr-8">
+            <DialogTitle className="flex min-w-0 items-center gap-2">
+              <Route className="h-4 w-4 shrink-0 text-blue-600" />
+              <span className="truncate">{t('trackIdWindow.title')}</span>
+            </DialogTitle>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setMapOpen((current) => !current)}
+              title={t(mapOpen ? 'trackIdWindow.backToFrames' : 'trackIdWindow.openMap')}
+              aria-label={t(mapOpen ? 'trackIdWindow.backToFrames' : 'trackIdWindow.openMap')}
+            >
+              <MapPin className="h-3.5 w-3.5" />
+              <span>{t(mapOpen ? 'trackIdWindow.backToFrames' : 'trackIdWindow.openMap')}</span>
+            </Button>
+          </div>
         </DialogHeader>
 
+        {mapOpen ? (
+          <TrackIdMapView
+            initialTrackId={selectedTrackId}
+            onOpenObservation={openMapObservation}
+          />
+        ) : (
         <div className="flex min-h-0 flex-1 overflow-hidden bg-neutral-50/70 dark:bg-neutral-950/50">
           <section className="flex min-w-0 flex-1 flex-col border-r border-neutral-200 dark:border-neutral-800">
             <div className="flex min-h-0 flex-1">
@@ -2188,7 +2228,13 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
           <aside className={`relative shrink-0 overflow-visible bg-white dark:bg-neutral-950 ${rightPanelOpen ? 'w-80 min-w-80' : 'w-6 min-w-6'}`}>
             {rightPanelOpen ? (
               <>
-                <RightPanel {...rightPanelProps} readOnlyViewLayers trackIdMode trackIdEditor={editor} />
+                <RightPanel
+                  {...rightPanelProps}
+                  onOpenTrackIdMap={() => setMapOpen(true)}
+                  readOnlyViewLayers
+                  trackIdMode
+                  trackIdEditor={editor}
+                />
                 <button
                   type="button"
                   onClick={() => setRightPanelOpen(false)}
@@ -2212,8 +2258,9 @@ export function TrackIdAnnotationModal({ open, onClose, rightPanelProps, canvasP
             )}
           </aside>
         </div>
+        )}
 
-        {canvasProps.popoverOpen && canvasProps.popoverPos && (
+        {!mapOpen && canvasProps.popoverOpen && canvasProps.popoverPos && (
           <ObjectEditorPopover
             annotation={{
               id: 'new',

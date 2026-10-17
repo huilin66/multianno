@@ -705,6 +705,7 @@ export default function App() {
   const [drawingObjectEditorModalOpen, setDrawingObjectEditorModalOpen] = useState(false);
   const [aiSettingsModalOpen, setAiSettingsModalOpen] = useState(false);
   const [trackIdWindowOpen, setTrackIdWindowOpen] = useState(false);
+  const [trackIdMapOpen, setTrackIdMapOpen] = useState(false);
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [isReloadingAll, setIsReloadingAll] = useState(false);
   const [reloadProgress, setReloadProgress] = useState({ current: 0, total: 0 });
@@ -1319,9 +1320,20 @@ export default function App() {
       <main className="flex-grow overflow-hidden relative">
         <SyncAnnotation
           autoSave={autoSave}
-          onOpenTrackIdWindow={() => setTrackIdWindowOpen(true)}
+          onOpenTrackIdWindow={() => {
+            setTrackIdMapOpen(false);
+            setTrackIdWindowOpen(true);
+          }}
+          onOpenTrackIdMap={() => {
+            setTrackIdMapOpen(true);
+            setTrackIdWindowOpen(true);
+          }}
           trackIdWindowOpen={trackIdWindowOpen}
-          onCloseTrackIdWindow={() => setTrackIdWindowOpen(false)}
+          trackIdMapOpen={trackIdMapOpen}
+          onCloseTrackIdWindow={() => {
+            setTrackIdMapOpen(false);
+            setTrackIdWindowOpen(false);
+          }}
         />
       </main>
 

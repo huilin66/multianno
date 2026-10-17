@@ -49,7 +49,9 @@ const getControlPoints = (anno: any) => {
 interface SyncAnnotationProps {
   autoSave: () => Promise<boolean>;
   onOpenTrackIdWindow: () => void;
+  onOpenTrackIdMap: () => void;
   trackIdWindowOpen: boolean;
+  trackIdMapOpen: boolean;
   onCloseTrackIdWindow: () => void;
 }
 
@@ -75,7 +77,7 @@ const readStoredRightPanelWidth = () => {
   }
 };
 
-export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, trackIdWindowOpen, onCloseTrackIdWindow }: SyncAnnotationProps) {
+export function SyncAnnotation({ autoSave, onOpenTrackIdWindow, onOpenTrackIdMap, trackIdWindowOpen, trackIdMapOpen, onCloseTrackIdWindow }: SyncAnnotationProps) {
   const { t } = useTranslation();
   const [formAttributes, setFormAttributes] = useState<Record<string, any>>({});
   const { pushAction, performGlobalUndo, performGlobalRedo, undoCount, redoCount } = useActionHistory();
@@ -2123,6 +2125,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     handleRefreshAnnotations: handleRefreshCurrentAnnotations,
     isRefreshingAnnotations,
     onOpenTrackIdWindow,
+    onOpenTrackIdMap,
   };
 
   return (
@@ -2470,6 +2473,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
             handleRefreshAnnotations={handleRefreshCurrentAnnotations}
             isRefreshingAnnotations={isRefreshingAnnotations}
             onOpenTrackIdWindow={onOpenTrackIdWindow}
+            onOpenTrackIdMap={onOpenTrackIdMap}
           />
           </>
         ) : (
@@ -2496,6 +2500,7 @@ const handleAutoPredict = async (tags: string[], mappingDict: Record<string, str
     </div>
     <TrackIdAnnotationModal
       open={trackIdWindowOpen}
+      initialMapOpen={trackIdMapOpen}
       onClose={onCloseTrackIdWindow}
       rightPanelProps={trackIdRightPanelProps}
       canvasProps={trackIdCanvasProps}
