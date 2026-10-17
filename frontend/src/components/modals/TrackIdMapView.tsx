@@ -1,12 +1,13 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import L from 'leaflet';
-import type { LayerGroup, Map as LeafletMap } from 'leaflet';
+import type { LayerGroup, Map as LeafletMap, TileLayer } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   Check,
   ExternalLink,
   Link2,
+  Layers,
   Loader2,
   MapPin,
   Plus,
@@ -196,19 +197,24 @@ const getTrackColor = (trackId: string) => {
   return TRACK_COLORS[Math.abs(hash) % TRACK_COLORS.length];
 };
 
-const getTrackAnchor = (summary: TrackSummary) => {
-  const observation = summary.observations.reduce<TrackObservation | null>((largest, current) => {
+const getAnnotationBoxArea = (annotation: Annotation) => {
+  const bounds = getAnnotationBounds(annotation);
+  if (!bounds) return 0;
+  return Math.max(0, bounds.maxX - bounds.minX) * Math.max(0, bounds.maxY - bounds.minY);
+};
+
+const getLargestObservation = (summary: TrackSummary) => summary.observations.reduce<TrackObservation | null>(
+  (largest, current) => {
     if (!largest) return current;
-    const largestBounds = getAnnotationBounds(largest.annotation);
-    const currentBounds = getAnnotationBounds(current.annotation);
-    const largestArea = largestBounds
-      ? Math.max(0, largestBounds.maxX - largestBounds.minX) * Math.max(0, largestBounds.maxY - largestBounds.minY)
-      : 0;
-    const currentArea = currentBounds
-      ? Math.max(0, currentBounds.maxX - currentBounds.minX) * Math.max(0, currentBounds.maxY - currentBounds.minY)
-      : 0;
-    return currentArea > largestArea ? current : largest;
-  }, null) || summary.observations[0];
+    return getAnnotationBoxArea(current.annotation) > getAnnotationBoxArea(largest.annotation)
+      ? current
+      : largest;
+  },
+  null,
+) || summary.observations[0];
+
+const getTrackAnchor = (summary: TrackSummary) => {
+  const observation = getLargestObservation(summary);
   return observation ? L.latLng(observation.gps.latitude, observation.gps.longitude) : null;
 };
 
@@ -235,22 +241,7 @@ const getLabelPlacements = (
   const zoom = map.getZoom();
   const occupied: Array<{ left: number; top: number; right: number; bottom: number }> = [];
   const placements: LabelPlacement[] = [];
-  const candidates: Array<[number, number]> = [
-    [0, -30],
-    [0, 30],
-    [54, -28],
-    [-54, -28],
-    [54, 28],
-    [-54, 28],
-    [0, -62],
-    [0, 62],
-    [92, 0],
-    [-92, 0],
-    [92, -38],
-    [-92, -38],
-    [92, 38],
-    [-92, 38],
-  ];
+  const candidates: Array<[number, number]> = [];
 
   // Place selected tracks first so the current focus keeps the shortest offset.
   const orderedSummaries = [...summaries]
@@ -266,24 +257,35 @@ const getLabelPlacements = (
     const width = getTrackLabelWidth(summary);
     const height = 24;
     const anchorPoint = map.project(anchor, zoom);
-    const candidateOffsets = [...candidates];
+    const sideDistance = (width / 2) + 30;
+    const preferredSide = placements.length % 2 === 0 ? -1 : 1;
+    const candidateOffsets: Array<[number, number]> = [];
+    for (let row = 0; row < 10; row += 1) {
+      const verticalOffset = row === 0 ? 0 : Math.ceil(row / 2) * 28 * (row % 2 === 0 ? 1 : -1);
+      candidateOffsets.push(
+        [preferredSide * sideDistance, verticalOffset],
+        [-preferredSide * sideDistance, verticalOffset],
+      );
+    }
+    candidateOffsets.push(...candidates);
 
-    // A deterministic spiral keeps working when many IDs share the same GPS.
+    // A deterministic left/right spiral keeps working when many IDs share the same GPS.
     for (let ring = 1; ring <= 8; ring += 1) {
       const radius = 30 + (ring * 25);
       const count = Math.max(8, ring * 8);
       for (let index = 0; index < count; index += 1) {
         const angle = ((Math.PI * 2) * index) / count;
-        candidateOffsets.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
+        const side = index % 2 === 0 ? -1 : 1;
+        candidateOffsets.push([side * Math.max(radius, sideDistance), Math.sin(angle) * radius]);
       }
     }
 
-    let selectedOffset: [number, number] = [0, -30];
+    let selectedOffset: [number, number] = [-sideDistance, 0];
     let selectedRect = {
-      left: anchorPoint.x - (width / 2),
-      top: anchorPoint.y - (height / 2) - 30,
-      right: anchorPoint.x + (width / 2),
-      bottom: anchorPoint.y + (height / 2) - 30,
+      left: anchorPoint.x - sideDistance - (width / 2),
+      top: anchorPoint.y - (height / 2),
+      right: anchorPoint.x - sideDistance + (width / 2),
+      bottom: anchorPoint.y + (height / 2),
     };
 
     for (const [offsetX, offsetY] of candidateOffsets) {
@@ -370,11 +372,18 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
   const [tileError, setTileError] = React.useState(false);
   const [mapReady, setMapReady] = React.useState(false);
   const [mapViewRevision, setMapViewRevision] = React.useState(0);
+  const [layerVisibility, setLayerVisibility] = React.useState({
+    baseMap: true,
+    labels: true,
+    points: true,
+    lines: true,
+  });
   const [associationGroups, setAssociationGroups] = React.useState<AssociationGroup[]>([]);
   const [activeAssociationId, setActiveAssociationId] = React.useState<string | null>(null);
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<LeafletMap | null>(null);
   const layerGroupRef = React.useRef<LayerGroup | null>(null);
+  const tileLayerRef = React.useRef<TileLayer | null>(null);
   const metadataRequestRef = React.useRef(0);
   const associationHydratedRef = React.useRef(false);
   const fittedFinalBoundsRef = React.useRef(false);
@@ -554,7 +563,9 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
     });
     tileLayer.on('tileerror', () => setTileError(true));
     tileLayer.addTo(map);
+    tileLayerRef.current = tileLayer;
     L.control.zoom({ position: 'topright' }).addTo(map);
+    L.control.attribution({ prefix: false }).addTo(map);
     L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 
     const layerGroup = L.layerGroup().addTo(map);
@@ -574,10 +585,19 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
       map.remove();
       mapRef.current = null;
       layerGroupRef.current = null;
+      tileLayerRef.current = null;
       fittedFinalBoundsRef.current = false;
       setMapReady(false);
     };
   }, [Boolean(mapBounds)]);
+
+  React.useEffect(() => {
+    const map = mapRef.current;
+    const tileLayer = tileLayerRef.current;
+    if (!map || !tileLayer || !mapReady) return;
+    if (layerVisibility.baseMap) tileLayer.addTo(map);
+    else tileLayer.remove();
+  }, [layerVisibility.baseMap, mapReady]);
 
   React.useEffect(() => {
     const map = mapRef.current;
@@ -620,7 +640,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
         observation.gps.longitude,
       ] as [number, number]);
 
-      if (latLngs.length > 1) {
+      if (layerVisibility.lines && latLngs.length > 1) {
         L.polyline(latLngs, {
           color,
           weight: selected ? 4 : 1.8,
@@ -632,19 +652,24 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
         }).addTo(layerGroup);
       }
 
-      // Keep the overview readable: image-level points are expanded only for
-      // selected IDs. The line still represents every GPS observation.
-      if (selected) summary.observations.forEach((observation, observationIndex) => {
-        const point = L.circleMarker([observation.gps.latitude, observation.gps.longitude], {
+      // One point represents the image containing the largest box for this ID.
+      // The line above retains the full sequence of image GPS observations.
+      const anchorObservation = getLargestObservation(summary);
+      if (layerVisibility.points && anchorObservation) {
+        const point = L.circleMarker([anchorObservation.gps.latitude, anchorObservation.gps.longitude], {
           radius: 6,
           color: '#ffffff',
           weight: 2,
           fillColor: color,
-          fillOpacity: 0.95,
-          opacity: 1,
+          fillOpacity: selected ? 1 : 0.88,
+          opacity: selected ? 1 : 0.85,
         });
         point.bindTooltip(
-          escapeHtml(`${summary.id} · ${observation.annotation.stem} · ${observationIndex + 1}/${summary.observations.length}`),
+          escapeHtml(t('trackIdWindow.mapAnchorPoint', {
+            id: summary.id,
+            stem: anchorObservation.annotation.stem,
+            count: summary.observations.length,
+          })),
           { direction: 'top', offset: [0, -5], opacity: 0.95 },
         );
         point.on('click', (event) => {
@@ -653,14 +678,14 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
         });
         point.on('dblclick', (event) => {
           L.DomEvent.stopPropagation(event);
-          onOpenObservation(observation.annotation);
+          onOpenObservation(anchorObservation.annotation);
         });
         point.addTo(layerGroup);
-      });
+      }
 
       const placement = placementById.get(summary.id);
       if (!placement) return;
-      if (placement.offsetX !== 0 || placement.offsetY !== 0) {
+      if (layerVisibility.labels && (placement.offsetX !== 0 || placement.offsetY !== 0)) {
         L.polyline([
           placement.anchor,
           placement.position,
@@ -673,23 +698,25 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
         }).addTo(layerGroup);
       }
 
-      const label = L.marker(placement.position, {
-        keyboard: false,
-        zIndexOffset: selected ? 1000 : 0,
-        icon: L.divIcon({
-          className: 'track-id-map-label',
-          html: `<span class="track-id-map-label-chip${selected ? ' is-selected' : ''}" style="--track-color:${color}"><span>${escapeHtml(summary.id)}</span><span class="track-id-map-label-count">${summary.observations.length}</span></span>`,
-          iconSize: [placement.width, placement.height],
-          iconAnchor: [placement.width / 2, placement.height / 2],
-        }),
-      });
-      label.on('click', (event) => {
-        L.DomEvent.stopPropagation(event);
-        toggleTrackSelection(summary.id, Boolean(event.originalEvent?.shiftKey));
-      });
-      label.addTo(layerGroup);
+      if (layerVisibility.labels) {
+        const label = L.marker(placement.position, {
+          keyboard: false,
+          zIndexOffset: selected ? 1000 : 0,
+          icon: L.divIcon({
+            className: 'track-id-map-label',
+            html: `<span class="track-id-map-label-chip${selected ? ' is-selected' : ''}" style="--track-color:${color}"><span>${escapeHtml(summary.id)}</span><span class="track-id-map-label-count">${summary.observations.length}</span></span>`,
+            iconSize: [placement.width, placement.height],
+            iconAnchor: [placement.width / 2, placement.height / 2],
+          }),
+        });
+        label.on('click', (event) => {
+          L.DomEvent.stopPropagation(event);
+          toggleTrackSelection(summary.id, Boolean(event.originalEvent?.shiftKey));
+        });
+        label.addTo(layerGroup);
+      }
     });
-  }, [filteredTrackSummaries, mapReady, mapViewRevision, onOpenObservation, selectedTrackIds, toggleTrackSelection]);
+  }, [filteredTrackSummaries, layerVisibility, mapReady, mapViewRevision, onOpenObservation, selectedTrackIds, t, toggleTrackSelection]);
 
   const addAssociationGroup = React.useCallback(() => {
     const members = Array.from(selectedTrackIds, (trackId) => String(trackId)).sort(compareTrackIds);
@@ -733,6 +760,12 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
   const selectedAssociation = activeAssociationId
     ? associationGroups.find((group) => group.id === activeAssociationId) || null
     : null;
+  const mapLayerOptions: Array<{ key: keyof typeof layerVisibility; label: string }> = [
+    { key: 'baseMap', label: t('trackIdWindow.mapLayerBaseMap') },
+    { key: 'labels', label: t('trackIdWindow.mapLayerLabels') },
+    { key: 'points', label: t('trackIdWindow.mapLayerPoints') },
+    { key: 'lines', label: t('trackIdWindow.mapLayerLines') },
+  ];
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-neutral-50/70 dark:bg-neutral-950/50">
@@ -775,6 +808,27 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
           ) : (
             <div className="track-id-map-container relative h-full min-h-[320px] overflow-hidden rounded-xl border border-neutral-200 bg-sky-50 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               <div ref={mapContainerRef} className="h-full min-h-[320px] w-full" />
+              <div className="pointer-events-auto absolute left-3 top-3 z-[1000] w-44 rounded-lg border border-neutral-200 bg-white/95 p-2 shadow-md backdrop-blur-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+                <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-neutral-700 dark:text-neutral-200">
+                  <Layers className="h-3.5 w-3.5 text-blue-600" />
+                  <span>{t('trackIdWindow.mapLayers')}</span>
+                </div>
+                <div className="space-y-1">
+                  {mapLayerOptions.map(({ key, label }) => (
+                    <label key={key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-[10px] text-neutral-600 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800">
+                      <Checkbox
+                        checked={layerVisibility[key]}
+                        onCheckedChange={(checked) => setLayerVisibility((current) => ({
+                          ...current,
+                          [key]: checked === true,
+                        }))}
+                        className="h-3.5 w-3.5"
+                      />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
               {tileError && (
                 <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-amber-200 bg-amber-50/95 px-2 py-1 text-[10px] text-amber-700 shadow-sm dark:border-amber-500/30 dark:bg-amber-950/85 dark:text-amber-300">
                   {t('trackIdWindow.mapTileError')}
