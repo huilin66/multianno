@@ -540,6 +540,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
     const map = L.map(mapContainerRef.current, {
       center: [(mapBounds.minLat + mapBounds.maxLat) / 2, (mapBounds.minLon + mapBounds.maxLon) / 2],
       zoom: 15,
+      maxZoom: 22,
       zoomControl: false,
       scrollWheelZoom: true,
       doubleClickZoom: false,
@@ -547,7 +548,8 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
     });
     const tileLayer = L.tileLayer(OSM_TILE_URL, {
       attribution: OSM_ATTRIBUTION,
-      maxZoom: 19,
+      maxNativeZoom: 19,
+      maxZoom: 22,
       crossOrigin: true,
     });
     tileLayer.on('tileerror', () => setTileError(true));
