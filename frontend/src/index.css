@@ -238,3 +238,109 @@
 .view-layout-number-input::-webkit-outer-spin-button {
   opacity: 1;
 }
+
+/* Leaflet / OpenStreetMap styling for the Track ID map. */
+.track-id-map-container .leaflet-container {
+  font-family: inherit;
+  background: #dbeafe;
+}
+
+.track-id-map-container .leaflet-control-zoom,
+.track-id-map-container .leaflet-control-scale-line,
+.track-id-map-container .leaflet-control-attribution {
+  border-color: rgba(148, 163, 184, 0.45);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+}
+
+.track-id-map-container .leaflet-control-zoom a {
+  color: #334155;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.track-id-map-container .leaflet-control-zoom a:hover {
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.track-id-map-container .leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.82);
+  color: #64748b;
+  font-size: 9px;
+}
+
+.track-id-map-container .leaflet-control-attribution a {
+  color: #2563eb;
+}
+
+.track-id-map-label {
+  background: transparent !important;
+  border: 0 !important;
+  pointer-events: auto !important;
+}
+
+.track-id-map-label-chip {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--track-color);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.2);
+  color: var(--track-color);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+
+.track-id-map-label-chip.is-selected {
+  background: rgba(239, 246, 255, 0.98);
+  box-shadow: 0 2px 7px rgba(37, 99, 235, 0.34);
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+}
+
+.track-id-map-label-count {
+  display: inline-flex;
+  min-width: 16px;
+  height: 16px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--track-color) 14%, white);
+  color: var(--track-color);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 0 3px;
+}
+
+.dark .track-id-map-label-chip {
+  background: rgba(15, 23, 42, 0.94);
+}
+
+.dark .track-id-map-label-chip.is-selected {
+  background: rgba(30, 58, 138, 0.94);
+  outline-color: rgba(15, 23, 42, 0.9);
+}
+
+.dark .track-id-map-label-count {
+  background: color-mix(in srgb, var(--track-color) 24%, #0f172a);
+}
+
+.dark .track-id-map-container .leaflet-control-zoom a {
+  color: #e2e8f0;
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.dark .track-id-map-container .leaflet-control-zoom a:hover {
+  color: #bfdbfe;
+  background: #1e3a8a;
+}
+
+.dark .track-id-map-container .leaflet-control-attribution {
+  background: rgba(15, 23, 42, 0.84);
+  color: #94a3b8;
+}

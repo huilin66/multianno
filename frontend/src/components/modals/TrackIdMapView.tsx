@@ -1,5 +1,8 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import L from 'leaflet';
+import type { LayerGroup, Map as LeafletMap } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   Check,
   ExternalLink,
@@ -48,18 +51,34 @@ interface TrackSummary {
   stems: string[];
 }
 
+interface LabelPlacement {
+  summary: TrackSummary;
+  anchor: L.LatLng;
+  position: L.LatLng;
+  width: number;
+  height: number;
+  offsetX: number;
+  offsetY: number;
+}
+
 interface AssociationGroup {
   id: string;
   members: string[];
   updatedAt: number;
 }
 
+interface MapBounds {
+  minLat: number;
+  maxLat: number;
+  minLon: number;
+  maxLon: number;
+}
+
 type ImageMetaRecord = Record<string, unknown>;
 
 const ASSOCIATION_STORAGE_KEY = 'multianno.track-id-map-associations.v1';
-const MAP_WIDTH = 1000;
-const MAP_HEIGHT = 620;
-const MAP_PADDING = { left: 64, right: 28, top: 28, bottom: 52 };
+const OSM_TILE_URL = 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors';
 const TRACK_COLORS = [
   '#2563eb',
   '#db2777',
@@ -76,13 +95,6 @@ const getTrackIdLabel = (value: string | number | null | undefined) => String(va
 const compareTrackIds = (left: string, right: string) => (
   right.localeCompare(left, undefined, { numeric: true, sensitivity: 'base' })
 );
-
-const getBaseName = (value: string) => {
-  const normalized = String(value || '').replace(/\\/g, '/');
-  return normalized.split('/').pop() || normalized;
-};
-
-const getImageStem = (value: string) => getBaseName(value).replace(/\.[^.]+$/, '');
 
 const getMetadataDirectory = (
   workspacePath: string | null,
@@ -174,20 +186,133 @@ const extractImageGps = (value: unknown): ImageGps | null => {
   };
 };
 
-const formatCoordinate = (value: number) => value.toFixed(6);
-
-const formatCount = (value: number, singular: string, plural: string) => `${value} ${value === 1 ? singular : plural}`;
-
-const hashString = (value: string) => {
+const getTrackColor = (trackId: string) => {
   let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+  for (let index = 0; index < trackId.length; index += 1) {
+    hash = ((hash << 5) - hash) + trackId.charCodeAt(index);
     hash |= 0;
   }
-  return Math.abs(hash);
+  return TRACK_COLORS[Math.abs(hash) % TRACK_COLORS.length];
 };
 
-const getTrackColor = (trackId: string) => TRACK_COLORS[hashString(trackId) % TRACK_COLORS.length];
+const getTrackAnchor = (summary: TrackSummary) => {
+  const observation = summary.observations[Math.floor(summary.observations.length / 2)]
+    || summary.observations[0];
+  return observation ? L.latLng(observation.gps.latitude, observation.gps.longitude) : null;
+};
+
+const getTrackLabelWidth = (summary: TrackSummary) => Math.min(
+  190,
+  Math.max(66, 28 + (summary.id.length * 7) + (String(summary.observations.length).length * 7)),
+);
+
+const rectanglesOverlap = (
+  left: { left: number; top: number; right: number; bottom: number },
+  right: { left: number; top: number; right: number; bottom: number },
+) => (
+  left.left < right.right
+  && left.right > right.left
+  && left.top < right.bottom
+  && left.bottom > right.top
+);
+
+const getLabelPlacements = (
+  map: LeafletMap,
+  summaries: TrackSummary[],
+  selectedTrackIds: Set<string>,
+) => {
+  const zoom = map.getZoom();
+  const occupied: Array<{ left: number; top: number; right: number; bottom: number }> = [];
+  const placements: LabelPlacement[] = [];
+  const candidates: Array<[number, number]> = [
+    [0, -30],
+    [0, 30],
+    [54, -28],
+    [-54, -28],
+    [54, 28],
+    [-54, 28],
+    [0, -62],
+    [0, 62],
+    [92, 0],
+    [-92, 0],
+    [92, -38],
+    [-92, -38],
+    [92, 38],
+    [-92, 38],
+  ];
+
+  // Place selected tracks first so the current focus keeps the shortest offset.
+  const orderedSummaries = [...summaries]
+    .filter((summary) => summary.observations.length > 0)
+    .sort((left, right) => (
+      Number(selectedTrackIds.has(right.id)) - Number(selectedTrackIds.has(left.id))
+      || compareTrackIds(left.id, right.id)
+    ));
+
+  orderedSummaries.forEach((summary) => {
+    const anchor = getTrackAnchor(summary);
+    if (!anchor) return;
+    const width = getTrackLabelWidth(summary);
+    const height = 24;
+    const anchorPoint = map.project(anchor, zoom);
+    const candidateOffsets = [...candidates];
+
+    // A deterministic spiral keeps working when many IDs share the same GPS.
+    for (let ring = 1; ring <= 8; ring += 1) {
+      const radius = 30 + (ring * 25);
+      const count = Math.max(8, ring * 8);
+      for (let index = 0; index < count; index += 1) {
+        const angle = ((Math.PI * 2) * index) / count;
+        candidateOffsets.push([Math.cos(angle) * radius, Math.sin(angle) * radius]);
+      }
+    }
+
+    let selectedOffset: [number, number] = [0, -30];
+    let selectedRect = {
+      left: anchorPoint.x - (width / 2),
+      top: anchorPoint.y - (height / 2) - 30,
+      right: anchorPoint.x + (width / 2),
+      bottom: anchorPoint.y + (height / 2) - 30,
+    };
+
+    for (const [offsetX, offsetY] of candidateOffsets) {
+      const rect = {
+        left: anchorPoint.x + offsetX - (width / 2),
+        top: anchorPoint.y + offsetY - (height / 2),
+        right: anchorPoint.x + offsetX + (width / 2),
+        bottom: anchorPoint.y + offsetY + (height / 2),
+      };
+      if (!occupied.some((existing) => rectanglesOverlap(existing, rect))) {
+        selectedOffset = [offsetX, offsetY];
+        selectedRect = rect;
+        break;
+      }
+    }
+
+    occupied.push(selectedRect);
+    placements.push({
+      summary,
+      anchor,
+      position: map.unproject(
+        L.point(anchorPoint.x + selectedOffset[0], anchorPoint.y + selectedOffset[1]),
+        zoom,
+      ),
+      width,
+      height,
+      offsetX: selectedOffset[0],
+      offsetY: selectedOffset[1],
+    });
+  });
+
+  return placements;
+};
+
+const escapeHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#039;');
 
 const normalizeAssociationGroups = (value: unknown): AssociationGroup[] => {
   if (!Array.isArray(value)) return [];
@@ -231,10 +356,17 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
   const [metadataByStem, setMetadataByStem] = React.useState<Record<string, ImageGps | null>>({});
   const [metadataProgress, setMetadataProgress] = React.useState({ current: 0, total: 0 });
   const [metadataLoading, setMetadataLoading] = React.useState(false);
+  const [tileError, setTileError] = React.useState(false);
+  const [mapReady, setMapReady] = React.useState(false);
+  const [mapViewRevision, setMapViewRevision] = React.useState(0);
   const [associationGroups, setAssociationGroups] = React.useState<AssociationGroup[]>([]);
   const [activeAssociationId, setActiveAssociationId] = React.useState<string | null>(null);
+  const mapContainerRef = React.useRef<HTMLDivElement>(null);
+  const mapRef = React.useRef<LeafletMap | null>(null);
+  const layerGroupRef = React.useRef<LayerGroup | null>(null);
   const metadataRequestRef = React.useRef(0);
   const associationHydratedRef = React.useRef(false);
+  const fittedFinalBoundsRef = React.useRef(false);
 
   const trackStems = React.useMemo(() => Array.from(new Set(
     annotations
@@ -374,7 +506,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
     [trackSummaries],
   );
 
-  const mapBounds = React.useMemo(() => {
+  const mapBounds = React.useMemo<MapBounds | null>(() => {
     if (validObservations.length === 0) return null;
     const latitudes = validObservations.map((observation) => observation.gps.latitude);
     const longitudes = validObservations.map((observation) => observation.gps.longitude);
@@ -392,16 +524,60 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
     };
   }, [validObservations]);
 
-  const projectPoint = React.useCallback((latitude: number, longitude: number) => {
-    if (!mapBounds) return { x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 };
-    const plotWidth = MAP_WIDTH - MAP_PADDING.left - MAP_PADDING.right;
-    const plotHeight = MAP_HEIGHT - MAP_PADDING.top - MAP_PADDING.bottom;
-    const x = MAP_PADDING.left + ((longitude - mapBounds.minLon) / (mapBounds.maxLon - mapBounds.minLon)) * plotWidth;
-    const y = MAP_PADDING.top + (1 - ((latitude - mapBounds.minLat) / (mapBounds.maxLat - mapBounds.minLat))) * plotHeight;
-    return { x, y };
-  }, [mapBounds]);
+  React.useEffect(() => {
+    if (!mapContainerRef.current || !mapBounds || mapRef.current) return;
+    const map = L.map(mapContainerRef.current, {
+      center: [(mapBounds.minLat + mapBounds.maxLat) / 2, (mapBounds.minLon + mapBounds.maxLon) / 2],
+      zoom: 15,
+      zoomControl: false,
+      scrollWheelZoom: true,
+      doubleClickZoom: false,
+      attributionControl: false,
+    });
+    const tileLayer = L.tileLayer(OSM_TILE_URL, {
+      attribution: OSM_ATTRIBUTION,
+      maxZoom: 19,
+      crossOrigin: true,
+    });
+    tileLayer.on('tileerror', () => setTileError(true));
+    tileLayer.addTo(map);
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    L.control.scale({ position: 'bottomleft', imperial: false }).addTo(map);
 
-  const toggleTrackSelection = (trackId: string, additive = true) => {
+    const layerGroup = L.layerGroup().addTo(map);
+    const refreshMapView = () => setMapViewRevision((revision) => revision + 1);
+    map.on('zoomend resize', refreshMapView);
+    mapRef.current = map;
+    layerGroupRef.current = layerGroup;
+    fittedFinalBoundsRef.current = false;
+    setTileError(false);
+    setMapReady(true);
+
+    const frame = window.requestAnimationFrame(() => map.invalidateSize());
+    return () => {
+      window.cancelAnimationFrame(frame);
+      map.off('zoomend resize', refreshMapView);
+      layerGroup.clearLayers();
+      map.remove();
+      mapRef.current = null;
+      layerGroupRef.current = null;
+      fittedFinalBoundsRef.current = false;
+      setMapReady(false);
+    };
+  }, [Boolean(mapBounds)]);
+
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapBounds || !mapReady || metadataLoading || fittedFinalBoundsRef.current) return;
+    const bounds = L.latLngBounds(
+      [mapBounds.minLat, mapBounds.minLon],
+      [mapBounds.maxLat, mapBounds.maxLon],
+    );
+    map.fitBounds(bounds, { padding: [36, 36], maxZoom: 18 });
+    fittedFinalBoundsRef.current = true;
+  }, [mapBounds, mapReady, metadataLoading]);
+
+  const toggleTrackSelection = React.useCallback((trackId: string, additive = true) => {
     setSelectedTrackIds((current) => {
       const next = additive ? new Set(current) : new Set<string>();
       if (next.has(trackId)) next.delete(trackId);
@@ -409,14 +585,100 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
       return next;
     });
     setActiveAssociationId(null);
-  };
+  }, []);
 
-  const selectAssociation = (group: AssociationGroup) => {
-    setActiveAssociationId(group.id);
-    setSelectedTrackIds(new Set(group.members));
-  };
+  React.useEffect(() => {
+    const layerGroup = layerGroupRef.current;
+    const map = mapRef.current;
+    if (!layerGroup || !map || !mapReady) return;
+    layerGroup.clearLayers();
 
-  const addAssociationGroup = () => {
+    const placements = getLabelPlacements(map, filteredTrackSummaries, selectedTrackIds);
+    const placementById = new Map(placements.map((placement) => [placement.summary.id, placement]));
+
+    filteredTrackSummaries.forEach((summary) => {
+      if (summary.observations.length === 0) return;
+      const color = getTrackColor(summary.id);
+      const selected = selectedTrackIds.has(summary.id);
+      const hasSelection = selectedTrackIds.size > 0;
+      const visible = !hasSelection || selected;
+      const latLngs = summary.observations.map((observation) => [
+        observation.gps.latitude,
+        observation.gps.longitude,
+      ] as [number, number]);
+
+      if (latLngs.length > 1) {
+        L.polyline(latLngs, {
+          color,
+          weight: selected ? 4 : 1.8,
+          opacity: visible ? (selected ? 0.9 : 0.65) : 0.18,
+          dashArray: selected || !hasSelection ? undefined : '6 5',
+          lineCap: 'round',
+          lineJoin: 'round',
+          interactive: false,
+        }).addTo(layerGroup);
+      }
+
+      // Keep the overview readable: image-level points are expanded only for
+      // selected IDs. The line still represents every GPS observation.
+      if (selected) summary.observations.forEach((observation, observationIndex) => {
+        const point = L.circleMarker([observation.gps.latitude, observation.gps.longitude], {
+          radius: 6,
+          color: '#ffffff',
+          weight: 2,
+          fillColor: color,
+          fillOpacity: 0.95,
+          opacity: 1,
+        });
+        point.bindTooltip(
+          escapeHtml(`${summary.id} · ${observation.annotation.stem} · ${observationIndex + 1}/${summary.observations.length}`),
+          { direction: 'top', offset: [0, -5], opacity: 0.95 },
+        );
+        point.on('click', (event) => {
+          L.DomEvent.stopPropagation(event);
+          toggleTrackSelection(summary.id, Boolean(event.originalEvent?.shiftKey) || selectedTrackIds.has(summary.id));
+        });
+        point.on('dblclick', (event) => {
+          L.DomEvent.stopPropagation(event);
+          onOpenObservation(observation.annotation);
+        });
+        point.addTo(layerGroup);
+      });
+
+      const placement = placementById.get(summary.id);
+      if (!placement) return;
+      if (placement.offsetX !== 0 || placement.offsetY !== 0) {
+        L.polyline([
+          placement.anchor,
+          placement.position,
+        ], {
+          color,
+          weight: selected ? 1.4 : 1,
+          opacity: visible ? (selected ? 0.65 : 0.35) : 0.2,
+          dashArray: '3 4',
+          interactive: false,
+        }).addTo(layerGroup);
+      }
+
+      const label = L.marker(placement.position, {
+        keyboard: false,
+        zIndexOffset: selected ? 1000 : 0,
+        icon: L.divIcon({
+          className: 'track-id-map-label',
+          html: `<span class="track-id-map-label-chip${selected ? ' is-selected' : ''}" style="--track-color:${color}"><span>${escapeHtml(summary.id)}</span><span class="track-id-map-label-count">${summary.observations.length}</span></span>`,
+          iconSize: [placement.width, placement.height],
+          iconAnchor: [placement.width / 2, placement.height / 2],
+        }),
+      });
+      label.on('click', (event) => {
+        L.DomEvent.stopPropagation(event);
+        toggleTrackSelection(summary.id, Boolean(event.originalEvent?.shiftKey));
+      });
+      label.addTo(layerGroup);
+    });
+  }, [filteredTrackSummaries, mapReady, mapViewRevision, onOpenObservation, selectedTrackIds, toggleTrackSelection]);
+
+  const addAssociationGroup = React.useCallback(() => {
     const members = Array.from(selectedTrackIds, (trackId) => String(trackId)).sort(compareTrackIds);
     if (members.length < 2) return;
     const existing = associationGroups.find((group) => (
@@ -436,11 +698,21 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
     };
     setAssociationGroups((current) => [...current, nextGroup]);
     setActiveAssociationId(nextGroup.id);
-  };
+  }, [associationGroups, selectedTrackIds]);
 
   const removeAssociationGroup = (groupId: string) => {
     setAssociationGroups((current) => current.filter((group) => group.id !== groupId));
     setActiveAssociationId((current) => current === groupId ? null : current);
+  };
+
+  const selectAssociation = (group: AssociationGroup) => {
+    setActiveAssociationId(group.id);
+    setSelectedTrackIds(new Set(group.members));
+  };
+
+  const openFirstObservation = (summary: TrackSummary) => {
+    const first = summary.observations[0]?.annotation || summary.annotations[0];
+    if (first) onOpenObservation(first);
   };
 
   const allVisibleSelected = visibleTrackIds.length > 0 && visibleTrackIds.every((id) => selectedTrackIds.has(id));
@@ -448,11 +720,6 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
   const selectedAssociation = activeAssociationId
     ? associationGroups.find((group) => group.id === activeAssociationId) || null
     : null;
-
-  const openFirstObservation = (summary: TrackSummary) => {
-    const first = summary.observations[0]?.annotation || summary.annotations[0];
-    if (first) onOpenObservation(first);
-  };
 
   return (
     <div className="flex min-h-0 flex-1 overflow-hidden bg-neutral-50/70 dark:bg-neutral-950/50">
@@ -493,102 +760,22 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
               )}
             </EmptyMapState>
           ) : (
-            <div className="relative h-full min-h-[320px] overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
-              <svg
-                viewBox={`0 0 ${MAP_WIDTH} ${MAP_HEIGHT}`}
-                className="h-full w-full"
-                role="img"
-                aria-label={t('trackIdWindow.mapObservationGps')}
-              >
-                <rect x="0" y="0" width={MAP_WIDTH} height={MAP_HEIGHT} fill="currentColor" className="text-white dark:text-neutral-950" />
-                {[0, 0.25, 0.5, 0.75, 1].map((fraction) => {
-                  const x = MAP_PADDING.left + fraction * (MAP_WIDTH - MAP_PADDING.left - MAP_PADDING.right);
-                  const y = MAP_PADDING.top + fraction * (MAP_HEIGHT - MAP_PADDING.top - MAP_PADDING.bottom);
-                  const latitude = mapBounds.maxLat - fraction * (mapBounds.maxLat - mapBounds.minLat);
-                  const longitude = mapBounds.minLon + fraction * (mapBounds.maxLon - mapBounds.minLon);
-                  return (
-                    <React.Fragment key={`grid-${fraction}`}>
-                      <line x1={x} y1={MAP_PADDING.top} x2={x} y2={MAP_HEIGHT - MAP_PADDING.bottom} stroke="currentColor" className="text-neutral-200 dark:text-neutral-800" strokeWidth="1" />
-                      <line x1={MAP_PADDING.left} y1={y} x2={MAP_WIDTH - MAP_PADDING.right} y2={y} stroke="currentColor" className="text-neutral-200 dark:text-neutral-800" strokeWidth="1" />
-                      <text x={x} y={MAP_HEIGHT - 20} textAnchor="middle" fontSize="11" fill="currentColor" className="fill-neutral-500 dark:fill-neutral-400">{formatCoordinate(longitude)}</text>
-                      <text x={MAP_PADDING.left - 8} y={y + 4} textAnchor="end" fontSize="11" fill="currentColor" className="fill-neutral-500 dark:fill-neutral-400">{formatCoordinate(latitude)}</text>
-                    </React.Fragment>
-                  );
-                })}
-
-                {trackSummaries.map((summary, summaryIndex) => {
-                  const points = summary.observations.map((observation) => projectPoint(observation.gps.latitude, observation.gps.longitude));
-                  if (points.length === 0) return null;
-                  const selected = selectedTrackIds.has(summary.id);
-                  const color = getTrackColor(summary.id);
-                  const anchor = points[Math.floor(points.length / 2)] || points[0];
-                  const offsetY = ((summaryIndex % 5) - 2) * 13;
-                  const labelX = Math.min(MAP_WIDTH - MAP_PADDING.right - 8, Math.max(MAP_PADDING.left + 8, anchor.x + 12));
-                  const labelY = Math.min(MAP_HEIGHT - MAP_PADDING.bottom - 6, Math.max(MAP_PADDING.top + 10, anchor.y + offsetY));
-                  const labelWidth = Math.max(34, summary.id.length * 7 + 12);
-                  return (
-                    <g key={summary.id} opacity={selectedTrackIds.size === 0 || selected ? 1 : 0.42}>
-                      {points.length > 1 && (
-                        <polyline
-                          points={points.map((point) => `${point.x},${point.y}`).join(' ')}
-                          fill="none"
-                          stroke={color}
-                          strokeWidth={selected ? 3 : 1.5}
-                          strokeDasharray={selected ? undefined : '5 4'}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      )}
-                      {summary.observations.map((observation, observationIndex) => {
-                        const point = projectPoint(observation.gps.latitude, observation.gps.longitude);
-                        return (
-                          <circle
-                            key={observation.annotation.id}
-                            cx={point.x}
-                            cy={point.y}
-                            r={selected ? 6 : 4.5}
-                            fill={color}
-                            stroke="white"
-                            strokeWidth={selected ? 2 : 1.5}
-                            className="cursor-pointer transition-[r] hover:[r:8px] dark:stroke-neutral-950"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              toggleTrackSelection(summary.id, event.shiftKey || selectedTrackIds.has(summary.id));
-                            }}
-                          >
-                            <title>{`${summary.id} · ${observation.annotation.stem} · ${observationIndex + 1}/${summary.observations.length}`}</title>
-                          </circle>
-                        );
-                      })}
-                      <line x1={anchor.x} y1={anchor.y} x2={labelX} y2={labelY} stroke={color} strokeWidth="1" opacity="0.7" />
-                      <rect x={labelX - 4} y={labelY - 11} width={labelWidth} height="18" rx="5" fill="white" stroke={color} strokeWidth={selected ? 2 : 1} className="dark:fill-neutral-900" />
-                      <text
-                        x={labelX + 2}
-                        y={labelY + 2}
-                        fontSize="11"
-                        fontWeight={selected ? 700 : 600}
-                        fill={color}
-                        className="cursor-pointer"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleTrackSelection(summary.id, event.shiftKey);
-                        }}
-                      >
-                        {summary.id}
-                      </text>
-                    </g>
-                  );
-                })}
-              </svg>
-              <div className="pointer-events-none absolute bottom-2 left-3 rounded-md bg-white/90 px-2 py-1 text-[10px] text-neutral-500 shadow-sm dark:bg-neutral-900/90 dark:text-neutral-400">
-                {t('trackIdWindow.mapClickHint')}
-              </div>
+            <div className="track-id-map-container relative h-full min-h-[320px] overflow-hidden rounded-xl border border-neutral-200 bg-sky-50 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+              <div ref={mapContainerRef} className="h-full min-h-[320px] w-full" />
+              {tileError && (
+                <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-amber-200 bg-amber-50/95 px-2 py-1 text-[10px] text-amber-700 shadow-sm dark:border-amber-500/30 dark:bg-amber-950/85 dark:text-amber-300">
+                  {t('trackIdWindow.mapTileError')}
+                </div>
+              )}
               {metadataLoading && (
-                <div className="absolute right-3 top-3 flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50/95 px-2 py-1 text-[10px] text-blue-700 shadow-sm dark:border-blue-500/30 dark:bg-blue-950/80 dark:text-blue-300">
+                <div className="pointer-events-none absolute right-3 top-3 flex items-center gap-1.5 rounded-md border border-blue-200 bg-blue-50/95 px-2 py-1 text-[10px] text-blue-700 shadow-sm dark:border-blue-500/30 dark:bg-blue-950/80 dark:text-blue-300">
                   <Loader2 className="h-3 w-3 animate-spin" />
                   {t('trackIdWindow.mapLoadingProgress', metadataProgress)}
                 </div>
               )}
+              <div className="pointer-events-none absolute bottom-2 left-3 rounded-md bg-white/90 px-2 py-1 text-[10px] text-neutral-500 shadow-sm dark:bg-neutral-900/90 dark:text-neutral-400">
+                {t('trackIdWindow.mapClickHint')}
+              </div>
             </div>
           )}
         </div>
@@ -641,7 +828,10 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
               <div
                 key={summary.id}
                 className={`mb-1 rounded-lg border px-2 py-2 transition-colors ${selected ? 'border-blue-300 bg-blue-50/70 dark:border-blue-700 dark:bg-blue-950/30' : 'border-transparent hover:border-neutral-200 hover:bg-neutral-50 dark:hover:border-neutral-800 dark:hover:bg-neutral-900'}`}
-                onClick={() => setSelectedTrackIds(new Set([summary.id]))}
+                onClick={() => {
+                  setSelectedTrackIds(new Set([summary.id]));
+                  setActiveAssociationId(null);
+                }}
               >
                 <div className="flex items-start gap-2">
                   <Checkbox
@@ -657,6 +847,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
                     onClick={(event) => {
                       event.stopPropagation();
                       setSelectedTrackIds(new Set([summary.id]));
+                      setActiveAssociationId(null);
                     }}
                   >
                     <span className="flex items-center gap-1.5 text-xs font-semibold text-neutral-800 dark:text-neutral-100">
@@ -664,7 +855,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
                       <span className="truncate">{summary.id}</span>
                     </span>
                     <span className="mt-1 block truncate text-[10px] text-neutral-500 dark:text-neutral-400">
-                      {formatCount(summary.annotations.length, t('trackIdWindow.mapObjectSingular'), t('trackIdWindow.mapObjectPlural'))} · {formatCount(summary.stems.length, t('trackIdWindow.mapImageSingular'), t('trackIdWindow.mapImagePlural'))}
+                      {summary.annotations.length} {t('trackIdWindow.mapObjectPlural')} · {summary.stems.length} {t('trackIdWindow.mapImagePlural')}
                       {summary.observations.length === 0 && ` · ${t('trackIdWindow.mapNoGpsForTrack')}`}
                     </span>
                   </button>
