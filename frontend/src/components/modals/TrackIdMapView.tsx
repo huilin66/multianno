@@ -21,6 +21,7 @@ import {
   type FolderData,
   type ViewConfig,
 } from '../../store/useStore';
+import { getAnnotationBounds } from '../../lib/annotationHitTest';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { Input } from '../ui/input';
@@ -196,8 +197,18 @@ const getTrackColor = (trackId: string) => {
 };
 
 const getTrackAnchor = (summary: TrackSummary) => {
-  const observation = summary.observations[Math.floor(summary.observations.length / 2)]
-    || summary.observations[0];
+  const observation = summary.observations.reduce<TrackObservation | null>((largest, current) => {
+    if (!largest) return current;
+    const largestBounds = getAnnotationBounds(largest.annotation);
+    const currentBounds = getAnnotationBounds(current.annotation);
+    const largestArea = largestBounds
+      ? Math.max(0, largestBounds.maxX - largestBounds.minX) * Math.max(0, largestBounds.maxY - largestBounds.minY)
+      : 0;
+    const currentArea = currentBounds
+      ? Math.max(0, currentBounds.maxX - currentBounds.minX) * Math.max(0, currentBounds.maxY - currentBounds.minY)
+      : 0;
+    return currentArea > largestArea ? current : largest;
+  }, null) || summary.observations[0];
   return observation ? L.latLng(observation.gps.latitude, observation.gps.longitude) : null;
 };
 
