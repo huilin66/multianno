@@ -3625,16 +3625,16 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
             
             {/* 顶栏：干净内联的编辑工具栏 (已去重合并) */}
-            <div className="p-4 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center justify-between shrink-0 shadow-sm z-10">
+            <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white p-2 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
               
               {/* 左侧：颜色修改与名称重命名 */}
-              <div className="flex items-center gap-4">
+              <div className="flex w-fit shrink-0 items-center gap-3 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
                 <div className="relative w-8 h-8 rounded-md shadow-sm border border-neutral-200 overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
                   <input type="color" value={activeClass.color} onChange={e => updateTaxonomyClass(activeClass.id, { color: e.target.value })} className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer" />
                 </div>
                 
                 {/* 🌟 保护 1：禁止修改 background 的名字 */}
-                <div className="flex flex-col">
+                <div className="flex items-center gap-3">
 
                   {/* --- 第一行：输入框 (左) + 确认重命名胶囊组 (右) --- */}
                   <div className="flex items-center gap-3">
@@ -3648,7 +3648,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         } 
                       }}
                     disabled={activeClass.name.toLowerCase() === 'background'} 
-                    className={`text-xl font-black border-transparent bg-transparent px-2 h-8 w-64 shadow-none ${
+                    style={{
+                      width: `${Math.min(256, Math.max(112, renameValue.trim().length * 12 + 24))}px`,
+                    }}
+                    className={`text-xl font-black border-transparent bg-transparent px-2 h-8 w-auto min-w-[7rem] max-w-64 shadow-none ${
                       activeClass.name.toLowerCase() === 'background' 
                         ? 'opacity-60 cursor-not-allowed' 
                         : 'hover:border-neutral-200 focus:border-blue-500'
@@ -3730,145 +3733,140 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     )}
                   </div>
 
-                  {/* 第二行：附加信息 (标签说明和总数) */}
-                  <div className="flex items-center gap-2 mt-2 px-2">
-                    {activeClass.name.toLowerCase() === 'background' && (
-                      <span className="text-[10px] text-neutral-400 font-bold uppercase tracking-widest">
-                        {t('taxonomyDashboard.systemClassRecycleBin')}
-                      </span>
-                    )}
-                    <span className="text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400 font-black px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-800 shadow-sm">
-                      {t('taxonomyDashboard.totalObjects')}: {statsData?.classes?.[activeClass.name]?.total_objects || 0}
+                  <span className="shrink-0 whitespace-nowrap rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                    {statsData?.classes?.[activeClass.name]?.total_objects || 0} {t('taxonomyDashboard.objects', 'objects')}
+                  </span>
+                  {activeClass.name.toLowerCase() === 'background' && (
+                    <span className="shrink-0 whitespace-nowrap text-[10px] font-bold uppercase tracking-widest text-neutral-400">
+                      {t('taxonomyDashboard.systemClassRecycleBin')}
                     </span>
-                </div>
+                  )}
+
               </div>
-            </div>
-              {/* 右侧：Merge合并 与 删除操作 */}
-              {/* 使用全局确认弹窗的合并操作 */}
-                <div className="flex items-center gap-3">
-                  
-                  {/* 🌟 Merge 模块：无论什么类都显示，方便 background 导出内容 */}
-                  <div className="flex items-center bg-neutral-50 dark:bg-neutral-800 p-1 rounded-lg border border-neutral-200 dark:border-neutral-700">
-                    <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
-                      <SelectTrigger className="h-7 w-32 text-xs border-none bg-transparent focus:ring-0 shadow-none">
-                        {/* 🌟 修复：手动通过 ID 查找 Name 进行显示，确保选中后不显示 ID */}
-                        <SelectValue placeholder={t('taxonomyDashboard.mergeInto')}>
-                          {taxonomyClasses.find(c => c.id === mergeTargetId)?.name}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {sortedClasses
-                          .filter((c: any) => c.id !== activeClass.id)
-                          .map((c: any) => (
-                            <SelectItem key={c.id} value={c.id} className="text-xs">
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                      </SelectContent>
-                    </Select>
-                    
-                    <Button
-                      size="sm"
-                      className="h-7 px-3 text-xs bg-orange-500 hover:bg-orange-600 text-white rounded ml-1"
-                      disabled={!mergeTargetId || isProcessing}
-                      onClick={requestMergeClass}
-                    >
-                      <GitMerge className="w-3.5 h-3.5 mr-1" /> {t('taxonomyDashboard.merge')}
-                    </Button>
-                  </div>
-                  {/* 🌟 新增：带属性的合并入口 */}
+              {/* 右侧：Merge 合并与删除操作 */}
+              <div className="flex shrink-0 items-center gap-2">
+                <div className="flex w-fit items-center gap-1.5 rounded-lg border border-neutral-300 bg-white p-1 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                  <span className="px-1 text-[10px] font-bold text-neutral-500 dark:text-neutral-400">
+                    {t('taxonomyDashboard.mergeInto', 'Merge into')}
+                  </span>
+                  <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
+                    <SelectTrigger className="h-7 w-28 border-none bg-transparent text-xs shadow-none focus:ring-0">
+                      <SelectValue placeholder={t('taxonomyDashboard.selectClass', 'Select class')}>
+                        {taxonomyClasses.find(c => c.id === mergeTargetId)?.name}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sortedClasses
+                        .filter((c: any) => c.id !== activeClass.id)
+                        .map((c: any) => (
+                          <SelectItem key={c.id} value={c.id} className="text-xs">
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    className="ml-1 h-7 rounded bg-orange-500 px-3 text-xs text-white hover:bg-orange-600"
+                    disabled={!mergeTargetId || isProcessing}
+                    onClick={requestMergeClass}
+                  >
+                    {t('taxonomyDashboard.confirmMerge', 'Confirm')}
+                  </Button>
                   {activeClass && (
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 px-3 text-[10px] border-purple-200 text-purple-600 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-400"
+                      className="h-7 border-purple-200 px-3 text-[10px] text-purple-600 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-400"
                       onClick={() => setShowMergeWithAttr(true)}
                     >
-                      <GitMerge className="w-3.5 h-3.5 mr-1" /> {t('taxonomyDashboard.mergeWithAttr')}
+                      {t('taxonomyDashboard.advanced', 'Advanced')}
                     </Button>
                   )}
-                  <div className="w-px h-6 bg-neutral-200 dark:bg-neutral-800" />
-
-                    {/* 🌟 Delete 模块：仅对 background 锁定 */}
-                    {/* 🌟 Delete / Clean 模块：对 background 开启 Clean 模式 */}
-                    {activeClass.name.toLowerCase() === 'background' ? (
-                      <div className="flex items-center">
-                        {deleteStage === 0 ? (
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-9 px-4 font-bold border-orange-200 text-orange-600 hover:bg-orange-50 dark:border-orange-900/50 dark:hover:bg-orange-900/20" 
-                            onClick={() => setDeleteStage(1)}
-                          >
-                            <Eraser className="w-4 h-4 mr-2" /> {t('taxonomyDashboard.clean')}
-                          </Button>
-                        ) : (
-                          <div className="flex items-center gap-1.5 bg-orange-50 dark:bg-orange-950/30 p-1.5 rounded-lg border border-orange-200 animate-in slide-in-from-right-2">
-                            <Button
-                              size="sm"
-                              className="h-7 px-3 text-[10px] font-black transition-all bg-orange-500 hover:bg-orange-600 text-white shadow-lg ring-2 ring-orange-400 animate-pulse"
-                              onClick={executeCleanBackground}
-                              disabled={isProcessing}
-                            >
-                              {isProcessing ? t('taxonomyDashboard.cleaning') : t('taxonomyDashboard.confirmClean')}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200"
-                              onClick={() => setDeleteStage(0)}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                    <div className="flex items-center">
-                      {deleteStage === 0 ? (
-                        <Button variant="destructive" size="sm" className="h-9 px-4 font-bold" onClick={() => setDeleteStage(1)}>
-                          <Trash2 className="w-4 h-4 mr-2" /> {t('taxonomyDashboard.delete')}
-                        </Button>
-                      ) : (
-                        <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1.5 rounded-lg border border-red-200 animate-in slide-in-from-right-2">
-                          {/* 硬删除按钮：随点击次数改变颜色和文字 */}
-                          <Button
-                            size="sm"
-                            className={`h-7 px-3 text-[10px] font-black transition-all ${
-                              deleteStage === 1 
-                                ? 'bg-red-500 hover:bg-red-600' 
-                                : 'bg-red-700 hover:bg-red-800 scale-105 shadow-lg ring-2 ring-red-400 animate-pulse'
-                            }`}
-                            onClick={() => executeDeleteClass(true)}
-                          >
-                            {deleteStage === 1 ? t('taxonomyDashboard.hardDelete') : t('taxonomyDashboard.absolutelySure')}
-                          </Button>
-
-                          {/* 只有在第一级确认时才显示软删除，降低干扰 */}
-                          {deleteStage === 1 && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-3 text-[10px] border-red-200 text-red-600 font-bold"
-                              onClick={() => executeDeleteClass(false)}
-                            >
-                              {t('taxonomyDashboard.softDelete')}
-                            </Button>
-                          )}
-
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200"
-                            onClick={() => setDeleteStage(0)}
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      )}
-                    </div>
-                  )}
                 </div>
+
+                <div className="h-7 w-px bg-neutral-300 dark:bg-neutral-700" />
+
+                {activeClass.name.toLowerCase() === 'background' ? (
+                  <div className="flex items-center rounded-lg border border-neutral-200 bg-neutral-50 p-1 dark:border-neutral-700 dark:bg-neutral-800">
+                    {deleteStage === 0 ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-9 border-orange-200 px-4 font-bold text-orange-600 hover:bg-orange-50 dark:border-orange-900/50 dark:hover:bg-orange-900/20"
+                        onClick={() => setDeleteStage(1)}
+                      >
+                        {t('taxonomyDashboard.clean')}
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 p-1.5 animate-in slide-in-from-right-2 dark:bg-orange-950/30">
+                        <Button
+                          size="sm"
+                          className="h-7 bg-orange-500 px-3 text-[10px] font-black text-white shadow-lg ring-2 ring-orange-400 transition-all hover:bg-orange-600 animate-pulse"
+                          onClick={executeCleanBackground}
+                          disabled={isProcessing}
+                        >
+                          {isProcessing ? t('taxonomyDashboard.cleaning') : t('taxonomyDashboard.confirmClean')}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200"
+                          onClick={() => setDeleteStage(0)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex items-center rounded-lg border border-neutral-200 bg-neutral-50 p-1 dark:border-neutral-700 dark:bg-neutral-800">
+                    {deleteStage === 0 ? (
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-9 px-4 font-bold"
+                        onClick={() => setDeleteStage(1)}
+                      >
+                        {t('taxonomyDashboard.delete')}
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 p-1.5 animate-in slide-in-from-right-2 dark:bg-red-950/30">
+                        <Button
+                          size="sm"
+                          className={`h-7 px-3 text-[10px] font-black transition-all ${
+                            deleteStage === 1
+                              ? 'bg-red-500 hover:bg-red-600'
+                              : 'bg-red-700 hover:bg-red-800 scale-105 shadow-lg ring-2 ring-red-400 animate-pulse'
+                          }`}
+                          onClick={() => executeDeleteClass(true)}
+                        >
+                          {deleteStage === 1 ? t('taxonomyDashboard.hardDelete') : t('taxonomyDashboard.absolutelySure')}
+                        </Button>
+                        {deleteStage === 1 && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 border-red-200 px-3 text-[10px] font-bold text-red-600"
+                            onClick={() => executeDeleteClass(false)}
+                          >
+                            {t('taxonomyDashboard.softDelete')}
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200"
+                          onClick={() => setDeleteStage(0)}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
             </div>
 
             {/* 主体：该类别的专属统计 */}
@@ -3884,18 +3882,14 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       {/* Scenes Involved + read-only preview */}
           <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-row h-[480px] overflow-hidden">
             <div className="w-[30%] min-w-[220px] max-w-[360px] h-full flex flex-col shrink-0 border-r border-neutral-100 dark:border-neutral-800">
-            <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
-                <Layers className="w-4 h-4 text-blue-500" />
-                <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
-                  {t('taxonomyDashboard.scenesInvolved')}
-                </h3>
-              </div>
-              <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500">
+            <div className="flex items-center justify-between border-b border-neutral-100 px-5 py-4 shrink-0 dark:border-neutral-800">
+              <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+                {t('taxonomyDashboard.scenesInvolved')}
+              </h3>
+              <span className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-neutral-800">
                 {classSceneStems.length || 0} {t('taxonomyDashboard.files')}
               </span>
             </div>
-
             <div ref={classSceneListRef} className="flex-1 min-h-0 overflow-y-auto p-2 custom-scrollbar">
               <div className="flex flex-col gap-1">
                 {classSceneStems.map((stem: string) => {
@@ -4066,7 +4060,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                   }`}
                                 >
                                   <span className="flex items-center gap-2">
-                                    <Layers className="h-3.5 w-3.5" />
                                     {shapeLabel}
                                   </span>
                                   <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] ${
