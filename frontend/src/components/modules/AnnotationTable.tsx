@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, ChevronsUpDown, Copy, Eye, EyeOff, ExternalLink, Filter, GripVertical, Link2, RotateCcw, Settings2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getFileContent } from '../../api/client';
 import { useStore, type Annotation, type TaxonomyAttribute, type TaxonomyClass } from '../../store/useStore';
@@ -7,8 +7,15 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { getAnnotationBounds } from '../../lib/annotationHitTest';
+import {
+  AnnotationTableColumnSettings,
+  DEFAULT_COLUMN_ORDER,
+  DEFAULT_COLUMN_WIDTHS,
+  MIN_COLUMN_WIDTHS,
+  SCENE_GROUP_INFO_COLUMNS,
+  type AnnotationTableColumnKey,
+} from './AnnotationTableColumnSettings';
 import {
   findAnnotationOverlaps,
   getAnnotationOverlapKey,
@@ -69,92 +76,6 @@ type AnnotationTableSortKey =
   | 'attributes'
   | 'stem'
   | 'overlap';
-
-type AnnotationTableColumnKey =
-  | 'row'
-  | 'id'
-  | 'label'
-  | 'type'
-  | 'boxWidth'
-  | 'boxHeight'
-  | 'text'
-  | 'groupId'
-  | 'trackId'
-  | 'points'
-  | 'attributes'
-  | 'stem'
-  | 'imageName'
-  | 'imageWidth'
-  | 'imageHeight'
-  | 'latitude'
-  | 'longitude'
-  | 'altitude'
-  | 'heading'
-  | 'utc'
-  | 'overlap'
-  | 'action';
-
-const DEFAULT_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
-  row: 48,
-  id: 208,
-  label: 176,
-  type: 112,
-  boxWidth: 96,
-  boxHeight: 96,
-  text: 220,
-  groupId: 128,
-  trackId: 144,
-  points: 80,
-  attributes: 220,
-  stem: 220,
-  imageName: 220,
-  imageWidth: 112,
-  imageHeight: 112,
-  latitude: 128,
-  longitude: 128,
-  altitude: 128,
-  heading: 128,
-  utc: 220,
-  overlap: 160,
-  action: 48,
-};
-
-const MIN_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
-  row: 40,
-  id: 120,
-  label: 120,
-  type: 88,
-  boxWidth: 72,
-  boxHeight: 72,
-  text: 160,
-  groupId: 96,
-  trackId: 96,
-  points: 64,
-  attributes: 160,
-  stem: 160,
-  imageName: 160,
-  imageWidth: 88,
-  imageHeight: 88,
-  latitude: 96,
-  longitude: 96,
-  altitude: 96,
-  heading: 96,
-  utc: 160,
-  overlap: 112,
-  action: 40,
-};
-
-const DEFAULT_COLUMN_ORDER: AnnotationTableColumnKey[] = [
-  'row', 'id', 'label', 'type', 'boxWidth', 'boxHeight', 'text',
-  'groupId', 'trackId', 'points', 'attributes', 'stem',
-  'imageName', 'imageWidth', 'imageHeight', 'latitude', 'longitude',
-  'altitude', 'heading', 'utc', 'overlap', 'action',
-];
-
-const SCENE_GROUP_INFO_COLUMNS: AnnotationTableColumnKey[] = [
-  'imageName', 'imageWidth', 'imageHeight', 'latitude', 'longitude',
-  'altitude', 'heading', 'utc',
-];
 
 interface AnnotationTableSortState {
   key: AnnotationTableSortKey;
@@ -307,21 +228,12 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     ...DEFAULT_COLUMN_WIDTHS,
     ...(rememberedState?.columnWidths || {}),
   }));
-  const [columnWidthDrafts, setColumnWidthDrafts] = useState<Partial<Record<AnnotationTableColumnKey, string>>>(() => (
-    Object.fromEntries(
-      Object.entries({
-        ...DEFAULT_COLUMN_WIDTHS,
-        ...(rememberedState?.columnWidths || {}),
-      }).map(([key, value]) => [key, String(value)]),
-    ) as Partial<Record<AnnotationTableColumnKey, string>>
-  ));
   const [columnOrder, setColumnOrder] = useState<AnnotationTableColumnKey[]>(() => (
     rememberedState?.columnOrder ? [...rememberedState.columnOrder] : [...DEFAULT_COLUMN_ORDER]
   ));
   const [hiddenColumns, setHiddenColumns] = useState<Set<AnnotationTableColumnKey>>(() => (
     new Set((rememberedState?.hiddenColumns || []).filter((key) => key !== 'row'))
   ));
-  const [columnOrderDialogOpen, setColumnOrderDialogOpen] = useState(false);
   const [resizingColumn, setResizingColumn] = useState<AnnotationTableColumnKey | null>(null);
   const columnResizeRef = useRef<{
     key: AnnotationTableColumnKey;
@@ -748,13 +660,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     };
   }, [resizingColumn]);
 
-  useEffect(() => {
-    if (!columnOrderDialogOpen) return;
-    setColumnWidthDrafts(Object.fromEntries(
-      DEFAULT_COLUMN_ORDER.map((key) => [key, String(columnWidths[key])]),
-    ));
-  }, [columnOrderDialogOpen, columnWidths]);
-
   const resetOverlapScan = () => {
     overlapScanRequestRef.current += 1;
     setOverlapKeys(null);
@@ -997,9 +902,11 @@ export const AnnotationTable = React.memo(function AnnotationTable({
 
   const resetColumnWidths = () => {
     setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS });
-    setColumnWidthDrafts(Object.fromEntries(
-      DEFAULT_COLUMN_ORDER.map((key) => [key, String(DEFAULT_COLUMN_WIDTHS[key])]),
-    ));
+  };
+
+  const updateColumnWidth = (key: AnnotationTableColumnKey, width: number) => {
+    if (key === 'row') return;
+    setColumnWidths((current) => ({ ...current, [key]: width }));
   };
 
   const swapColumns = (firstKey: AnnotationTableColumnKey, secondKey: AnnotationTableColumnKey) => {
@@ -1049,17 +956,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       next.splice(insertIndex, 0, key);
       return next;
     });
-  };
-
-  const commitColumnWidth = (key: AnnotationTableColumnKey) => {
-    if (key === 'row') return;
-    const draft = columnWidthDrafts[key] ?? String(columnWidths[key]);
-    const parsed = Number(draft);
-    const nextWidth = Number.isFinite(parsed) && parsed > 0
-      ? Math.max(MIN_COLUMN_WIDTHS[key], Math.round(parsed))
-      : columnWidths[key];
-    setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
-    setColumnWidthDrafts((current) => ({ ...current, [key]: String(nextWidth) }));
   };
 
   const toggleColumnVisibility = (key: AnnotationTableColumnKey) => {
@@ -1275,17 +1171,21 @@ export const AnnotationTable = React.memo(function AnnotationTable({
             )}
           </Button>
 
-          <Button
-            type="button"
-            variant={columnOrderDialogOpen ? 'secondary' : 'outline'}
-            className="h-9 px-3 text-xs"
-            onClick={() => setColumnOrderDialogOpen(true)}
-            disabled={!isLoaded}
-            title={t('taxonomyDashboard.manageColumns', 'Manage columns')}
-          >
-            <Settings2 className="mr-1.5 h-3.5 w-3.5" />
-            {t('taxonomyDashboard.columnSettings', 'Columns Settings')}
-          </Button>
+          <AnnotationTableColumnSettings
+            isLoaded={isLoaded}
+            columnSettingsKeys={columnSettingsKeys}
+            visibleColumnKeys={tableColumnKeys}
+            columnWidths={columnWidths}
+            hiddenColumns={hiddenColumns}
+            onColumnWidthChange={updateColumnWidth}
+            onToggleColumnVisibility={toggleColumnVisibility}
+            onMoveColumn={moveColumn}
+            onMoveColumnToEdge={moveColumnToEdge}
+            onResetColumnOrder={resetColumnOrder}
+            onResetColumnWidths={resetColumnWidths}
+            onColumnDragStart={handleColumnDragStart}
+            onColumnDrop={handleColumnDrop}
+          />
 
           <div className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 dark:border-neutral-700 dark:bg-neutral-900">
             <Switch
@@ -1470,152 +1370,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         )}
       </div>
 
-      <Dialog open={columnOrderDialogOpen} onOpenChange={setColumnOrderDialogOpen}>
-        <DialogContent
-          className="max-w-none"
-          style={{ width: '600px', maxWidth: 'calc(100vw - 32px)' }}
-        >
-          <DialogHeader>
-            <DialogTitle>{t('taxonomyDashboard.columnOrder', 'Column order')}</DialogTitle>
-          </DialogHeader>
-          <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-3 text-[10px] font-black uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-            <span>{t('taxonomyDashboard.column', 'Column')}</span>
-            <span>{t('taxonomyDashboard.columnWidth', 'Width')}</span>
-            <span>{t('taxonomyDashboard.columnVisibility', 'Visible')}</span>
-            <span>{t('taxonomyDashboard.columnOrderActions', 'Order')}</span>
-          </div>
-          <div className="max-h-[55vh] space-y-1 overflow-y-auto pr-1">
-            {columnSettingsKeys.map((key) => {
-              const isFixed = key === 'row';
-              const isHidden = hiddenColumns.has(key);
-              const movableKeys = tableColumnKeys.filter((columnKey) => columnKey !== 'row');
-              const movableIndex = movableKeys.indexOf(key);
-              const canMove = !isFixed && !isHidden && movableIndex >= 0;
-              const isFirst = !canMove || movableIndex === 0;
-              const isLast = !canMove || movableIndex === movableKeys.length - 1;
-
-              return (
-                <div
-                  key={key}
-                  draggable={!isFixed && !isHidden}
-                  onDragStart={isFixed || isHidden ? undefined : (event) => handleColumnDragStart(event, key)}
-                  onDragOver={isFixed || isHidden ? undefined : (event) => event.preventDefault()}
-                  onDrop={isFixed || isHidden ? undefined : (event) => handleColumnDrop(event, key)}
-                  className={`grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 rounded-lg border px-3 py-1.5 text-sm ${isFixed
-                    ? 'border-neutral-200 bg-neutral-100/70 dark:border-neutral-700 dark:bg-neutral-800/60'
-                    : isHidden
-                      ? 'border-dashed border-neutral-200 bg-neutral-50/70 text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400'
-                      : 'border-neutral-200 bg-white active:cursor-grabbing dark:border-neutral-700 dark:bg-neutral-900'}`}
-                >
-                  <div className={`flex min-w-0 items-center gap-2 ${!isFixed && !isHidden ? 'cursor-grab' : ''}`}>
-                    <GripVertical className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
-                    <span className="truncate">{getColumnLabel(key)}</span>
-                    {isFixed && <span className="text-[10px] text-neutral-400">{t('taxonomyDashboard.fixedColumn', 'Fixed')}</span>}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <Input
-                      type="number"
-                      min={MIN_COLUMN_WIDTHS[key]}
-                      step="1"
-                      value={columnWidthDrafts[key] ?? String(getColumnWidth(key))}
-                      onChange={(event) => setColumnWidthDrafts((current) => ({ ...current, [key]: event.target.value }))}
-                      onBlur={() => commitColumnWidth(key)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          commitColumnWidth(key);
-                        }
-                      }}
-                      disabled={isFixed}
-                      className="h-7 w-20 text-center text-xs"
-                      aria-label={`${getColumnLabel(key)} ${t('taxonomyDashboard.columnWidth', 'width')}`}
-                    />
-                    <span className="text-[10px] text-neutral-400">px</span>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    disabled={isFixed}
-                    onClick={() => toggleColumnVisibility(key)}
-                    title={isHidden
-                      ? t('taxonomyDashboard.showColumn', 'Show column')
-                      : t('taxonomyDashboard.hideColumn', 'Hide column')}
-                    aria-label={isHidden
-                      ? t('taxonomyDashboard.showColumn', 'Show column')
-                      : t('taxonomyDashboard.hideColumn', 'Hide column')}
-                  >
-                    {isHidden
-                      ? <EyeOff className="h-3.5 w-3.5" />
-                      : <Eye className="h-3.5 w-3.5" />}
-                  </Button>
-                  <div className="flex items-center gap-0.5">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={isFirst}
-                      onClick={() => moveColumnToEdge(key, 'first')}
-                      title={t('taxonomyDashboard.moveColumnFirst', 'Move to first')}
-                      aria-label={t('taxonomyDashboard.moveColumnFirst', 'Move to first')}
-                    >
-                      <ChevronsUp className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={isFirst}
-                      onClick={() => moveColumn(key, 'up')}
-                      title={t('taxonomyDashboard.moveColumnUp', 'Move up')}
-                      aria-label={t('taxonomyDashboard.moveColumnUp', 'Move up')}
-                    >
-                      <ArrowUp className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={isLast}
-                      onClick={() => moveColumn(key, 'down')}
-                      title={t('taxonomyDashboard.moveColumnDown', 'Move down')}
-                      aria-label={t('taxonomyDashboard.moveColumnDown', 'Move down')}
-                    >
-                      <ArrowDown className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-xs"
-                      disabled={isLast}
-                      onClick={() => moveColumnToEdge(key, 'last')}
-                      title={t('taxonomyDashboard.moveColumnLast', 'Move to last')}
-                      aria-label={t('taxonomyDashboard.moveColumnLast', 'Move to last')}
-                    >
-                      <ChevronsDown className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex justify-between gap-2 pt-3">
-            <div className="flex gap-2">
-              <Button type="button" variant="outline" onClick={resetColumnOrder}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                {t('taxonomyDashboard.resetColumnOrder', 'Reset order')}
-              </Button>
-              <Button type="button" variant="outline" onClick={resetColumnWidths}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                {t('taxonomyDashboard.resetColumnWidths', 'Reset widths')}
-              </Button>
-            </div>
-            <Button type="button" onClick={() => setColumnOrderDialogOpen(false)}>
-              {t('common.confirm', 'Confirm')}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 });
