@@ -757,9 +757,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     || Boolean(overlapGroupFilter.trim())
     || overlapKeys !== null
     || (hideUnselected && hasMainSelection);
-  const classCount = new Set(displayRows.map((row) => row.annotation.label)).size;
-  const sceneCount = new Set(displayRows.map((row) => row.annotation.stem)).size;
-
   const renderSortableHeader = (label: string, key: AnnotationTableSortKey, align: 'left' | 'right' = 'left') => {
     const isActive = sortState?.key === key;
     const sortIcon = isActive
@@ -784,25 +781,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
       <div className="p-5 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-2 shrink-0">
-            {isLoaded && (
-              <div className="flex items-center gap-2 text-[10px] font-bold text-neutral-500">
-                <span className="rounded-full bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-2.5 py-1">
-                  {displayRows.length} {t('taxonomyDashboard.objects', 'objects')}
-                </span>
-                <span className="rounded-full bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1">
-                  {sceneCount} {t('taxonomyDashboard.scenes', 'scenes')}
-                </span>
-                <span className="rounded-full bg-neutral-100 dark:bg-neutral-800 px-2.5 py-1">
-                  {classCount} {t('taxonomyDashboard.classes', 'classes')}
-                </span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
             <Input

@@ -1394,14 +1394,14 @@ export default function App() {
           <DialogHeader className="p-4 pr-14 border-b border-border shrink-0 flex-row items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-4">
               <DialogTitle className="min-w-0 truncate">{t('menu.annotationManager')}</DialogTitle>
-              <span className="shrink-0 flex items-center gap-3 text-[10px] font-medium text-muted-foreground">
-                <span>
-                  {t('taxonomyDashboard.footprintView', 'View')}: <strong className="font-mono text-foreground">{views.length}</strong>
+              <span className="shrink-0 flex items-center gap-2 text-[10px] font-medium text-muted-foreground">
+                <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 dark:border-blue-800 dark:bg-blue-950/40">
+                  {t('taxonomyDashboard.footprintView', 'View')}: <strong className="font-mono text-blue-700 dark:text-blue-300">{views.length}</strong>
                 </span>
-                <span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 dark:border-neutral-700 dark:bg-neutral-800">
                   {t('taxonomyDashboard.footprintSceneGroup', 'Scene Group')}: <strong className="font-mono text-foreground">{Object.keys(sceneGroups || {}).length}</strong>
                 </span>
-                <span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 dark:border-neutral-700 dark:bg-neutral-800">
                   {t('taxonomyDashboard.footprintAnnotation', 'Annotation')}: <strong className="font-mono text-foreground">{annotations.length}</strong>
                 </span>
               </span>
