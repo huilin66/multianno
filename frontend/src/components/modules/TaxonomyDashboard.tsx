@@ -3628,7 +3628,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center justify-between shrink-0 shadow-sm z-10">
               
               {/* 左侧：颜色修改与名称重命名 */}
-              <div className="flex shrink-0 items-center gap-3">
+              <div className="flex shrink-0 items-center gap-3 rounded-lg border border-neutral-200 bg-white px-2 py-1.5 dark:border-neutral-700 dark:bg-neutral-900">
                 <div className="relative w-8 h-8 rounded-md shadow-sm border border-neutral-200 overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
                   <input type="color" value={activeClass.color} onChange={e => updateTaxonomyClass(activeClass.id, { color: e.target.value })} className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer" />
                 </div>
@@ -3742,6 +3742,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     </span>
                   )}
 
+                </div>
               </div>
               {/* 右侧：Merge 合并与删除操作 */}
               <div className="flex items-center gap-3">
@@ -3866,7 +3867,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   </div>
                 )}
               </div>
-            </div>
             </div>
 
             {/* 主体：该类别的专属统计 */}
