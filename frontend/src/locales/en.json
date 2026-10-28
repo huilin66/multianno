@@ -800,6 +800,8 @@
     "attributePerTarget": "One attribute per target",
     "attributeName": "Attribute name",
     "attributeNamePlaceholder": "e.g. source_class",
+    "attributeValues": "Attribute values",
+    "sourceClass": "Source class",
     "values": "Values"
   },
   "dataExport": {

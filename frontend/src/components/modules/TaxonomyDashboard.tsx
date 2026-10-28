@@ -1309,6 +1309,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [mergeAttributeMode, setMergeAttributeMode] = useState<MergeAttributeMode>('single');
   const [mergeAttrName, setMergeAttrName] = useState('source_class');
   const [mergeTargetAttributeNames, setMergeTargetAttributeNames] = useState<Record<string, string>>({});
+  const [mergeAttributeValueOverrides, setMergeAttributeValueOverrides] = useState<Record<string, string>>({});
   const mergeMappingGridRef = useRef<HTMLDivElement>(null);
   const mergeSourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const mergeTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1324,6 +1325,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setMergeAttributeMode('single');
     setMergeAttrName('source_class');
     setMergeTargetAttributeNames({});
+    setMergeAttributeValueOverrides({});
     setNewTargetClassName('');
   }, []);
 
@@ -2276,10 +2278,16 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const mergeAttributeNamesValid = mergeAttributeNames.length > 0
     && mergeAttributeNames.every(Boolean)
     && new Set(mergeAttributeNames.map((name) => name.toLowerCase())).size === mergeAttributeNames.length;
+  const getMergeAttributeValue = useCallback(
+    (sourceClass: any) => mergeAttributeValueOverrides[sourceClass.id] ?? sourceClass.name,
+    [mergeAttributeValueOverrides],
+  );
+  const mergeAttributeValuesValid = mappedSourceClasses.length > 0
+    && mappedSourceClasses.every((sourceClass: any) => getMergeAttributeValue(sourceClass).trim().length > 0);
 
   const executeMergeWithAttribute = async () => {
     const sourceClasses = mappedSourceClasses;
-    if (!mergeMappingComplete || !mergeAttributeNamesValid) return;
+    if (!mergeMappingComplete || !mergeAttributeNamesValid || !mergeAttributeValuesValid) return;
 
     const sourceTargetPairs = sourceClasses.map((sourceClass: any) => ({
       sourceClass,
@@ -2290,14 +2298,14 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           id: `attr-${Date.now()}-origin`,
           name: mergeAttributeNames[0],
           type: 'select',
-          options: sourceClasses.map((cls: any) => cls.name),
-          defaultValue: sourceClasses[0]?.name || '',
+           options: sourceClasses.map((cls: any) => getMergeAttributeValue(cls).trim()),
+           defaultValue: sourceClasses[0] ? getMergeAttributeValue(sourceClasses[0]).trim() : '',
           applyToAll: true,
         }]
       : mergeTargetDrafts.map((target) => {
           const values = sourceTargetPairs
             .filter(({ target: assignedTarget }) => assignedTarget?.id === target.id)
-            .map(({ sourceClass }) => sourceClass.name);
+            .map(({ sourceClass }) => getMergeAttributeValue(sourceClass).trim());
           return {
             id: `attr-${Date.now()}-${target.id}`,
             name: mergeTargetAttributeNames[target.id].trim(),
@@ -2309,11 +2317,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         });
     const merges = sourceTargetPairs.map(({ sourceClass, target }) => {
       const attributes = mergeAttributeMode === 'single'
-        ? { [mergeAttributeNames[0]]: sourceClass.name }
+        ? { [mergeAttributeNames[0]]: getMergeAttributeValue(sourceClass).trim() }
         : Object.fromEntries(
             mergeTargetDrafts.map((candidate, index) => [
               mergeAttributeNames[index],
-              candidate.id === target?.id ? sourceClass.name : 'none',
+              candidate.id === target?.id ? getMergeAttributeValue(sourceClass).trim() : 'none',
             ]),
           );
       return {
@@ -4863,21 +4871,42 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
                 {mergeAttributeMode === 'single' ? (
                   <div className="mt-3">
-                    <Label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                      {t('workspace.attributeName', 'Attribute name')}
-                    </Label>
-                    <Input
-                      value={mergeAttrName}
-                      onChange={(event) => setMergeAttrName(event.target.value)}
-                      placeholder={t('workspace.attributeNamePlaceholder', 'e.g. source_class')}
-                      className="mt-1 h-9 text-sm"
-                    />
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                      <span className="text-[10px] text-neutral-500">{t('workspace.values', 'Values')}:</span>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div>
+                        <Label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                          {t('workspace.attributeName', 'Attribute name')}
+                        </Label>
+                        <Input
+                          value={mergeAttrName}
+                          onChange={(event) => setMergeAttrName(event.target.value)}
+                          placeholder={t('workspace.attributeNamePlaceholder', 'e.g. source_class')}
+                          className="mt-1 h-9 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                          {t('workspace.attributeValues', 'Attribute values')}
+                        </Label>
+                        <div className="mt-1 flex h-9 items-center rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
+                          {mappedSourceClasses.length} {t('workspace.values', 'values')}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto custom-scrollbar">
                       {mappedSourceClasses.map((sourceClass: any) => (
-                        <span key={sourceClass.id} className="rounded bg-white px-1.5 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
-                          {sourceClass.name}
-                        </span>
+                        <div key={sourceClass.id} className="rounded-md border border-neutral-200 bg-white p-2 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: sourceClass.color }} />
+                            <Input
+                              value={getMergeAttributeValue(sourceClass)}
+                              onChange={(event) => setMergeAttributeValueOverrides((previous) => ({ ...previous, [sourceClass.id]: event.target.value }))}
+                              className="h-8 flex-1 text-xs"
+                            />
+                          </div>
+                          <div className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+                            {t('workspace.sourceClass', 'Source class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">{sourceClass.name}</span>
+                          </div>
+                        </div>
                       ))}
                     </div>
                   </div>
@@ -4885,25 +4914,39 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   <div className="mt-3 space-y-2">
                     {mergeTargetDrafts.map((target) => {
                       const values = mappedSourceClasses
-                        .filter((sourceClass: any) => mergeSourceTargetMap[sourceClass.id] === target.id)
-                        .map((sourceClass: any) => sourceClass.name);
+                        .filter((sourceClass: any) => mergeSourceTargetMap[sourceClass.id] === target.id);
                       return (
                         <div key={target.id} className="rounded-md border border-neutral-200 bg-white p-2.5 dark:border-neutral-700 dark:bg-neutral-900">
                           <div className="mb-1 flex items-center gap-2">
                             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: target.color }} />
                             <span className="text-xs font-semibold">{target.name}</span>
                           </div>
+                          <Label className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
+                            {t('workspace.attributeName', 'Attribute name')}
+                          </Label>
                           <Input
                             value={mergeTargetAttributeNames[target.id] || ''}
                             onChange={(event) => setMergeTargetAttributeNames((previous) => ({ ...previous, [target.id]: event.target.value }))}
                             placeholder={t('workspace.attributeNamePlaceholder', 'Attribute name')}
-                            className="h-8 text-xs"
+                            className="mt-1 h-8 text-xs"
                           />
-                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                            {values.map((value) => (
-                              <span key={value} className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{value}</span>
+                          <Label className="mt-2 block text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
+                            {t('workspace.attributeValues', 'Attribute values')}
+                          </Label>
+                          <div className="mt-1.5 space-y-1.5">
+                            {values.map((sourceClass: any) => (
+                              <div key={sourceClass.id} className="rounded border border-neutral-200 p-1.5 dark:border-neutral-700">
+                                <Input
+                                  value={getMergeAttributeValue(sourceClass)}
+                                  onChange={(event) => setMergeAttributeValueOverrides((previous) => ({ ...previous, [sourceClass.id]: event.target.value }))}
+                                  className="h-7 text-xs"
+                                />
+                                <div className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+                                  {t('workspace.sourceClass', 'Source class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">{sourceClass.name}</span>
+                                </div>
+                              </div>
                             ))}
-                            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">none</span>
+                            <span className="inline-flex rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">none</span>
                           </div>
                         </div>
                       );

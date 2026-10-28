@@ -800,6 +800,8 @@
     "attributePerTarget": "每个目标类别创建一个属性",
     "attributeName": "属性名称",
     "attributeNamePlaceholder": "例如 source_class",
+    "attributeValues": "属性值",
+    "sourceClass": "源类别",
     "values": "属性值"
   },
     "dataExport": {
