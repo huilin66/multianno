@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronDown, ChevronUp, ChevronsDown, ChevronsUp, ChevronsUpDown, Copy, Eye, EyeOff, ExternalLink, Filter, GripVertical, Link2, RotateCcw, Settings2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getFileContent } from '../../api/client';
 import { useStore, type Annotation, type TaxonomyAttribute, type TaxonomyClass } from '../../store/useStore';
@@ -7,6 +7,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { getAnnotationBounds } from '../../lib/annotationHitTest';
 import {
   findAnnotationOverlaps,
@@ -69,6 +70,92 @@ type AnnotationTableSortKey =
   | 'stem'
   | 'overlap';
 
+type AnnotationTableColumnKey =
+  | 'row'
+  | 'id'
+  | 'label'
+  | 'type'
+  | 'boxWidth'
+  | 'boxHeight'
+  | 'text'
+  | 'groupId'
+  | 'trackId'
+  | 'points'
+  | 'attributes'
+  | 'stem'
+  | 'imageName'
+  | 'imageWidth'
+  | 'imageHeight'
+  | 'latitude'
+  | 'longitude'
+  | 'altitude'
+  | 'heading'
+  | 'utc'
+  | 'overlap'
+  | 'action';
+
+const DEFAULT_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
+  row: 48,
+  id: 208,
+  label: 176,
+  type: 112,
+  boxWidth: 96,
+  boxHeight: 96,
+  text: 220,
+  groupId: 128,
+  trackId: 144,
+  points: 80,
+  attributes: 220,
+  stem: 220,
+  imageName: 220,
+  imageWidth: 112,
+  imageHeight: 112,
+  latitude: 128,
+  longitude: 128,
+  altitude: 128,
+  heading: 128,
+  utc: 220,
+  overlap: 160,
+  action: 48,
+};
+
+const MIN_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
+  row: 40,
+  id: 120,
+  label: 120,
+  type: 88,
+  boxWidth: 72,
+  boxHeight: 72,
+  text: 160,
+  groupId: 96,
+  trackId: 96,
+  points: 64,
+  attributes: 160,
+  stem: 160,
+  imageName: 160,
+  imageWidth: 88,
+  imageHeight: 88,
+  latitude: 96,
+  longitude: 96,
+  altitude: 96,
+  heading: 96,
+  utc: 160,
+  overlap: 112,
+  action: 40,
+};
+
+const DEFAULT_COLUMN_ORDER: AnnotationTableColumnKey[] = [
+  'row', 'id', 'label', 'type', 'boxWidth', 'boxHeight', 'text',
+  'groupId', 'trackId', 'points', 'attributes', 'stem',
+  'imageName', 'imageWidth', 'imageHeight', 'latitude', 'longitude',
+  'altitude', 'heading', 'utc', 'overlap', 'action',
+];
+
+const SCENE_GROUP_INFO_COLUMNS: AnnotationTableColumnKey[] = [
+  'imageName', 'imageWidth', 'imageHeight', 'latitude', 'longitude',
+  'altitude', 'heading', 'utc',
+];
+
 interface AnnotationTableSortState {
   key: AnnotationTableSortKey;
   direction: 'asc' | 'desc';
@@ -76,6 +163,9 @@ interface AnnotationTableSortState {
 
 interface AnnotationTableMemoryState {
   loadedAnnotations: Annotation[] | null;
+  columnWidths?: Partial<Record<AnnotationTableColumnKey, number>>;
+  columnOrder?: AnnotationTableColumnKey[];
+  hiddenColumns?: AnnotationTableColumnKey[];
   classFilter: string;
   typeFilter: string;
   annotationIdFilter: string;
@@ -213,6 +303,31 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [loadedAnnotations, setLoadedAnnotations] = useState<Annotation[] | null>(() => (
     rememberedState?.loadedAnnotations ?? null
   ));
+  const [columnWidths, setColumnWidths] = useState<Record<AnnotationTableColumnKey, number>>(() => ({
+    ...DEFAULT_COLUMN_WIDTHS,
+    ...(rememberedState?.columnWidths || {}),
+  }));
+  const [columnWidthDrafts, setColumnWidthDrafts] = useState<Partial<Record<AnnotationTableColumnKey, string>>>(() => (
+    Object.fromEntries(
+      Object.entries({
+        ...DEFAULT_COLUMN_WIDTHS,
+        ...(rememberedState?.columnWidths || {}),
+      }).map(([key, value]) => [key, String(value)]),
+    ) as Partial<Record<AnnotationTableColumnKey, string>>
+  ));
+  const [columnOrder, setColumnOrder] = useState<AnnotationTableColumnKey[]>(() => (
+    rememberedState?.columnOrder ? [...rememberedState.columnOrder] : [...DEFAULT_COLUMN_ORDER]
+  ));
+  const [hiddenColumns, setHiddenColumns] = useState<Set<AnnotationTableColumnKey>>(() => (
+    new Set((rememberedState?.hiddenColumns || []).filter((key) => key !== 'row'))
+  ));
+  const [columnOrderDialogOpen, setColumnOrderDialogOpen] = useState(false);
+  const [resizingColumn, setResizingColumn] = useState<AnnotationTableColumnKey | null>(null);
+  const columnResizeRef = useRef<{
+    key: AnnotationTableColumnKey;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
   const [classFilter, setClassFilter] = useState(() => rememberedState?.classFilter ?? 'all');
   const [typeFilter, setTypeFilter] = useState(() => rememberedState?.typeFilter ?? 'all');
   const [annotationIdFilter, setAnnotationIdFilter] = useState(() => rememberedState?.annotationIdFilter ?? '');
@@ -257,6 +372,9 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     if (!cacheKey) return;
     annotationTableMemory.set(cacheKey, {
       loadedAnnotations,
+      columnWidths,
+      columnOrder,
+      hiddenColumns: Array.from(hiddenColumns),
       classFilter,
       typeFilter,
       annotationIdFilter,
@@ -286,6 +404,9 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     attributesFilter,
     cacheKey,
     classFilter,
+    columnOrder,
+    columnWidths,
+    hiddenColumns,
     groupIdFilter,
     hideUnselected,
     loadedAnnotations,
@@ -594,6 +715,46 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     loadAnnotations();
   }, [loadAnnotations, reloadToken]);
 
+  useEffect(() => {
+    if (!resizingColumn) return;
+
+    const handlePointerMove = (event: PointerEvent) => {
+      const resize = columnResizeRef.current;
+      if (!resize) return;
+
+      const nextWidth = Math.max(
+        MIN_COLUMN_WIDTHS[resize.key],
+        resize.startWidth + event.clientX - resize.startX,
+      );
+      setColumnWidths((current) => ({ ...current, [resize.key]: nextWidth }));
+    };
+    const stopResizing = () => {
+      columnResizeRef.current = null;
+      setResizingColumn(null);
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopResizing, { once: true });
+    window.addEventListener('pointercancel', stopResizing, { once: true });
+
+    return () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopResizing);
+      window.removeEventListener('pointercancel', stopResizing);
+    };
+  }, [resizingColumn]);
+
+  useEffect(() => {
+    if (!columnOrderDialogOpen) return;
+    setColumnWidthDrafts(Object.fromEntries(
+      DEFAULT_COLUMN_ORDER.map((key) => [key, String(columnWidths[key])]),
+    ));
+  }, [columnOrderDialogOpen, columnWidths]);
+
   const resetOverlapScan = () => {
     overlapScanRequestRef.current += 1;
     setOverlapKeys(null);
@@ -719,6 +880,198 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     || Boolean(overlapGroupFilter.trim())
     || overlapKeys !== null
     || (hideUnselected && hasMainSelection);
+
+  const configurableColumnKeys = useMemo<AnnotationTableColumnKey[]>(() => (
+    DEFAULT_COLUMN_ORDER.filter((key) => {
+      if (SCENE_GROUP_INFO_COLUMNS.includes(key)) return showSceneGroupInfo;
+      if (key === 'overlap') return overlapKeys !== null;
+      return true;
+    })
+  ), [overlapKeys, showSceneGroupInfo]);
+
+  const columnSettingsKeys = useMemo<AnnotationTableColumnKey[]>(() => {
+    const available = new Set(configurableColumnKeys);
+    const ordered = [
+      ...columnOrder.filter((key) => available.has(key)),
+      ...configurableColumnKeys.filter((key) => !columnOrder.includes(key)),
+    ];
+    return ['row', ...ordered.filter((key) => key !== 'row')];
+  }, [columnOrder, configurableColumnKeys]);
+
+  const availableColumnKeys = useMemo<AnnotationTableColumnKey[]>(() => (
+    columnSettingsKeys.filter((key) => key === 'row' || !hiddenColumns.has(key))
+  ), [columnSettingsKeys, hiddenColumns]);
+
+  const tableColumnKeys = availableColumnKeys;
+
+  const getColumnWidth = (key: AnnotationTableColumnKey) => (
+    key === 'row' ? DEFAULT_COLUMN_WIDTHS.row : columnWidths[key]
+  );
+
+  const tableWidth = tableColumnKeys.reduce(
+    (total, key) => total + getColumnWidth(key),
+    0,
+  );
+
+  const handleColumnResizePointerDown = (
+    event: React.PointerEvent<HTMLSpanElement>,
+    key: AnnotationTableColumnKey,
+  ) => {
+    if (key === 'row') return;
+    columnResizeRef.current = {
+      key,
+      startX: event.clientX,
+      startWidth: getColumnWidth(key),
+    };
+    setResizingColumn(key);
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  const renderColumnResizer = (key: AnnotationTableColumnKey) => key === 'row' ? null : (
+    <span
+      role="separator"
+      aria-orientation="vertical"
+      aria-label={t('taxonomyDashboard.resizeColumn', 'Resize column')}
+      title={t('taxonomyDashboard.resizeColumn', 'Drag to resize column')}
+      onPointerDown={(event) => handleColumnResizePointerDown(event, key)}
+      className={`absolute right-[-3px] top-0 z-20 h-full w-2 cursor-col-resize transition-colors hover:bg-blue-400/70 ${resizingColumn === key ? 'bg-blue-500' : 'bg-transparent'}`}
+    />
+  );
+
+  const getColumnLabel = (key: AnnotationTableColumnKey) => {
+    switch (key) {
+      case 'row': return '#';
+      case 'id': return t('taxonomyDashboard.annotationId', 'Annotation ID');
+      case 'label': return t('taxonomyDashboard.className', 'Class');
+      case 'type': return t('taxonomyDashboard.annotationType', 'Type');
+      case 'boxWidth': return t('taxonomyDashboard.boxWidthShort', 'Box W');
+      case 'boxHeight': return t('taxonomyDashboard.boxHeightShort', 'Box H');
+      case 'text': return t('taxonomyDashboard.annotationText', 'Text');
+      case 'groupId': return t('taxonomyDashboard.annotationGroupId', 'Group ID');
+      case 'trackId': return t('taxonomyDashboard.annotationTrackId', 'Track ID');
+      case 'points': return t('taxonomyDashboard.annotationPoints', 'Points');
+      case 'attributes': return t('taxonomyDashboard.annotationAttributes', 'Attributes');
+      case 'stem': return t('taxonomyDashboard.sceneGroup', 'Scene Group');
+      case 'imageName': return t('sceneGroupManager.imageName', 'Image');
+      case 'imageWidth': return t('sceneGroupManager.imageWidth', 'Image width');
+      case 'imageHeight': return t('sceneGroupManager.imageHeight', 'Image height');
+      case 'latitude': return t('sceneGroupManager.latitude', 'Latitude');
+      case 'longitude': return t('sceneGroupManager.longitude', 'Longitude');
+      case 'altitude': return t('sceneGroupManager.height', 'Height / Altitude');
+      case 'heading': return t('sceneGroupManager.heading', 'Heading');
+      case 'utc': return t('sceneGroupManager.utc', 'UTC');
+      case 'overlap': return t('taxonomyDashboard.overlapGroup', 'Overlap group');
+      case 'action': return t('taxonomyDashboard.openAnnotation', 'Open annotation');
+      default: return key;
+    }
+  };
+
+  const handleColumnDragStart = (event: React.DragEvent, key: AnnotationTableColumnKey) => {
+    if (key === 'row') return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/annotation-table-column', key);
+  };
+
+  const handleColumnDrop = (event: React.DragEvent, targetKey: AnnotationTableColumnKey) => {
+    event.preventDefault();
+    const sourceKey = event.dataTransfer.getData('text/annotation-table-column') as AnnotationTableColumnKey;
+    if (!sourceKey || sourceKey === targetKey || sourceKey === 'row' || targetKey === 'row') return;
+
+    setColumnOrder((current) => {
+      const normalized = [
+        ...current,
+        ...DEFAULT_COLUMN_ORDER.filter((key) => !current.includes(key)),
+      ];
+      const sourceIndex = normalized.indexOf(sourceKey);
+      const targetIndex = normalized.indexOf(targetKey);
+      if (sourceIndex < 0 || targetIndex < 0) return current;
+      const next = [...normalized];
+      next.splice(sourceIndex, 1);
+      next.splice(sourceIndex < targetIndex ? targetIndex - 1 : targetIndex, 0, sourceKey);
+      return next;
+    });
+  };
+
+  const resetColumnOrder = () => setColumnOrder([...DEFAULT_COLUMN_ORDER]);
+
+  const resetColumnWidths = () => {
+    setColumnWidths({ ...DEFAULT_COLUMN_WIDTHS });
+    setColumnWidthDrafts(Object.fromEntries(
+      DEFAULT_COLUMN_ORDER.map((key) => [key, String(DEFAULT_COLUMN_WIDTHS[key])]),
+    ));
+  };
+
+  const swapColumns = (firstKey: AnnotationTableColumnKey, secondKey: AnnotationTableColumnKey) => {
+    if (firstKey === secondKey || firstKey === 'row' || secondKey === 'row') return;
+    setColumnOrder((current) => {
+      const normalized = [
+        ...current,
+        ...DEFAULT_COLUMN_ORDER.filter((key) => !current.includes(key)),
+      ];
+      const firstIndex = normalized.indexOf(firstKey);
+      const secondIndex = normalized.indexOf(secondKey);
+      if (firstIndex < 0 || secondIndex < 0) return current;
+      const next = [...normalized];
+      [next[firstIndex], next[secondIndex]] = [next[secondIndex], next[firstIndex]];
+      return next;
+    });
+  };
+
+  const moveColumn = (key: AnnotationTableColumnKey, direction: 'up' | 'down') => {
+    if (key === 'row') return;
+    const movableKeys = tableColumnKeys.filter((columnKey) => columnKey !== 'row');
+    const index = movableKeys.indexOf(key);
+    const target = movableKeys[index + (direction === 'up' ? -1 : 1)];
+    if (target) swapColumns(key, target);
+  };
+
+  const moveColumnToEdge = (key: AnnotationTableColumnKey, edge: 'first' | 'last') => {
+    if (key === 'row') return;
+    setColumnOrder((current) => {
+      const normalized = [
+        ...current,
+        ...DEFAULT_COLUMN_ORDER.filter((columnKey) => !current.includes(columnKey)),
+      ];
+      const sourceIndex = normalized.indexOf(key);
+      if (sourceIndex < 0) return current;
+
+      const next = [...normalized];
+      next.splice(sourceIndex, 1);
+      const remainingVisible = tableColumnKeys.filter((columnKey) => columnKey !== 'row' && columnKey !== key);
+      const edgeKey = edge === 'first'
+        ? remainingVisible[0]
+        : remainingVisible[remainingVisible.length - 1];
+      const edgeIndex = edgeKey ? next.indexOf(edgeKey) : -1;
+      const insertIndex = edge === 'first'
+        ? edgeIndex < 0 ? next.indexOf('row') + 1 : edgeIndex
+        : edgeIndex < 0 ? next.length : edgeIndex + 1;
+      next.splice(insertIndex, 0, key);
+      return next;
+    });
+  };
+
+  const commitColumnWidth = (key: AnnotationTableColumnKey) => {
+    if (key === 'row') return;
+    const draft = columnWidthDrafts[key] ?? String(columnWidths[key]);
+    const parsed = Number(draft);
+    const nextWidth = Number.isFinite(parsed) && parsed > 0
+      ? Math.max(MIN_COLUMN_WIDTHS[key], Math.round(parsed))
+      : columnWidths[key];
+    setColumnWidths((current) => ({ ...current, [key]: nextWidth }));
+    setColumnWidthDrafts((current) => ({ ...current, [key]: String(nextWidth) }));
+  };
+
+  const toggleColumnVisibility = (key: AnnotationTableColumnKey) => {
+    if (key === 'row') return;
+    setHiddenColumns((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   const renderSortableHeader = (label: string, key: AnnotationTableSortKey, align: 'left' | 'right' = 'left') => {
     const isActive = sortState?.key === key;
     const sortIcon = isActive
@@ -740,6 +1093,167 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     );
   };
 
+  const renderHeaderCell = (key: AnnotationTableColumnKey, children: React.ReactNode, className = 'px-3 py-3') => (
+    <th
+      key={key}
+      data-column-key={key}
+      draggable={key !== 'row'}
+      onDragStart={key === 'row' ? undefined : (event) => handleColumnDragStart(event, key)}
+      onDragOver={key === 'row' ? undefined : (event) => event.preventDefault()}
+      onDrop={key === 'row' ? undefined : (event) => handleColumnDrop(event, key)}
+      className={className}
+    >
+      {children}
+      {renderColumnResizer(key)}
+    </th>
+  );
+
+  const renderHeaderForKey = (key: AnnotationTableColumnKey) => {
+    switch (key) {
+      case 'row':
+        return renderHeaderCell(key, '#', 'px-3 py-3 text-left font-black');
+      case 'id':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'id'));
+      case 'label':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'label'));
+      case 'type':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'type'));
+      case 'boxWidth':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'boxWidth', 'right'), 'px-3 py-3 text-right');
+      case 'boxHeight':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'boxHeight', 'right'), 'px-3 py-3 text-right');
+      case 'text':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'text'));
+      case 'groupId':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'groupId'));
+      case 'trackId':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'trackId'));
+      case 'points':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'points', 'right'), 'px-3 py-3 text-right');
+      case 'attributes':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'attributes'));
+      case 'stem':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'stem'));
+      case 'imageName':
+      case 'imageWidth':
+      case 'imageHeight':
+      case 'latitude':
+      case 'longitude':
+      case 'altitude':
+      case 'heading':
+      case 'utc':
+        return renderHeaderCell(key, getColumnLabel(key));
+      case 'overlap':
+        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'overlap'));
+      case 'action':
+        return renderHeaderCell(key, null, 'px-3 py-3 text-right');
+      default:
+        return renderHeaderCell(key, getColumnLabel(key));
+    }
+  };
+
+  const renderFilterCell = (key: AnnotationTableColumnKey) => {
+    const cell = (children?: React.ReactNode) => (
+      <th key={key} className="px-3 py-1.5">{children}</th>
+    );
+
+    switch (key) {
+      case 'id':
+        return cell(
+          <Input value={annotationIdFilter} onChange={(event) => setAnnotationIdFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterId', 'Find ID')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />,
+        );
+      case 'label':
+        return cell(
+          <Select value={classFilter} onValueChange={setClassFilter} disabled={!isLoaded}>
+            <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"><SelectValue placeholder={t('taxonomyDashboard.className', 'Class')} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('taxonomyDashboard.allClasses', 'All classes')}</SelectItem>
+              {classOptions.map((className) => <SelectItem key={className} value={className}>{className}</SelectItem>)}
+            </SelectContent>
+          </Select>,
+        );
+      case 'type':
+        return cell(
+          <Select value={typeFilter} onValueChange={setTypeFilter} disabled={!isLoaded}>
+            <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"><SelectValue placeholder={t('taxonomyDashboard.annotationType', 'Type')} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('taxonomyDashboard.allTypes', 'All types')}</SelectItem>
+              {typeOptions.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+            </SelectContent>
+          </Select>,
+        );
+      case 'boxWidth':
+        return cell(
+          <div className="space-y-1">
+            <Input type="number" min="0" value={minBoxWidth} onChange={(event) => setMinBoxWidth(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.min', 'min')} className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900" />
+            <Input type="number" min="0" value={maxBoxWidth} onChange={(event) => setMaxBoxWidth(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.max', 'max')} className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900" />
+          </div>,
+        );
+      case 'boxHeight':
+        return cell(
+          <div className="space-y-1">
+            <Input type="number" min="0" value={minBoxHeight} onChange={(event) => setMinBoxHeight(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.min', 'min')} className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900" />
+            <Input type="number" min="0" value={maxBoxHeight} onChange={(event) => setMaxBoxHeight(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.max', 'max')} className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900" />
+          </div>,
+        );
+      case 'text':
+        return cell(<Input value={textFilter} onChange={(event) => setTextFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterText', 'Find text')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+      case 'groupId':
+        return cell(<Input value={groupIdFilter} onChange={(event) => setGroupIdFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterGroupId', 'Find group ID')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+      case 'trackId':
+        return cell(<Input value={trackIdFilter} onChange={(event) => setTrackIdFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterTrackId', 'Find track ID')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+      case 'points':
+        return cell(<Input value={pointsFilter} onChange={(event) => setPointsFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterPoints', 'Find points')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+      case 'attributes':
+        return cell(<Input value={attributesFilter} onChange={(event) => setAttributesFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterAttributes', 'Find attributes')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+      case 'stem':
+        return cell(<Input value={sceneFilter} onChange={(event) => setSceneFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterScene', 'Find scene')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+      case 'overlap':
+        return cell(<Input value={overlapGroupFilter} onChange={(event) => setOverlapGroupFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterOverlapGroup', 'Find group')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+      default:
+        return cell();
+    }
+  };
+
+  const renderDataCell = (
+    key: AnnotationTableColumnKey,
+    row: AnnotationTableRow,
+    index: number,
+    classDefinition: TaxonomyClass | undefined,
+    knownAttributeCount: number,
+  ) => {
+    const sceneData = sceneGroupMetadata.get(row.annotation.stem);
+    const metadata = sceneData?.metadata || null;
+    const unavailable = sceneData?.error;
+    const cellClass = 'px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400';
+
+    switch (key) {
+      case 'row': return <td key={key} className="px-3 py-2.5 text-neutral-400 font-mono">{index + 1}</td>;
+      case 'id': return <td key={key} className={`${cellClass} max-w-[210px] truncate text-neutral-700 dark:text-neutral-300`} title={row.annotation.id}>{row.annotation.id}</td>;
+      case 'label': return <td key={key} className="px-3 py-2.5"><span className="inline-flex max-w-full items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: classDefinition?.color || '#64748b' }} /><span className="truncate font-semibold" title={row.annotation.label}>{row.annotation.label}</span></span></td>;
+      case 'type': return <td key={key} className="px-3 py-2.5"><span className="rounded bg-neutral-100 px-2 py-1 text-[10px] font-mono text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{row.annotation.type}</span></td>;
+      case 'boxWidth': return <td key={key} className={`${cellClass} text-right`} title={t('taxonomyDashboard.boxWidth', 'Box width')}>{formatBoxDimension(row.boxWidth)}</td>;
+      case 'boxHeight': return <td key={key} className={`${cellClass} text-right`} title={t('taxonomyDashboard.boxHeight', 'Box height')}>{formatBoxDimension(row.boxHeight)}</td>;
+      case 'text': return <td key={key} className="max-w-[260px] truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-400" title={row.textValue || '—'}>{formatCellText(row.textValue)}</td>;
+      case 'groupId': return <td key={key} className={`${cellClass} max-w-[140px] truncate`} title={row.groupIdValue || '—'}>{formatCellText(row.groupIdValue)}</td>;
+      case 'trackId': return <td key={key} className={`${cellClass} max-w-[160px] truncate`} title={row.trackIdValue || '—'}>{formatCellText(row.trackIdValue)}</td>;
+      case 'points': return <td key={key} className={`${cellClass} text-right`} title={t('taxonomyDashboard.annotationPoints', 'Points')}>{row.pointsCount}</td>;
+      case 'attributes': return <td key={key} className="max-w-[260px] truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-400" title={row.attributesText}><span>{row.attributesText}</span>{knownAttributeCount > 0 && <span className="ml-2 text-[9px] text-purple-600 dark:text-purple-400">{knownAttributeCount}</span>}</td>;
+      case 'stem': return <td key={key} className={`${cellClass} max-w-[250px] truncate`} title={row.annotation.stem}>{row.annotation.stem}</td>;
+      case 'imageName': return <td key={key} className={`${cellClass} max-w-[260px] truncate`} title={sceneData?.imageName || '—'}>{formatMetadataValue(sceneData?.imageName)}</td>;
+      case 'imageWidth': return <td key={key} className={cellClass}>{formatMetadataValue(sceneData?.imageWidth)}</td>;
+      case 'imageHeight': return <td key={key} className={cellClass}>{formatMetadataValue(sceneData?.imageHeight)}</td>;
+      case 'latitude': return <td key={key} className={cellClass}>{formatMetadataValue(readMetadataValue(metadata, ['latitude', 'lat', 'gps_latitude']))}</td>;
+      case 'longitude': return <td key={key} className={cellClass}>{formatMetadataValue(readMetadataValue(metadata, ['longitude', 'lon', 'lng', 'gps_longitude']))}</td>;
+      case 'altitude': return <td key={key} className={cellClass}>{formatMetadataValue(readMetadataValue(metadata, ['altitude', 'gps_altitude', 'elevation', 'height']))}</td>;
+      case 'heading': return <td key={key} className={cellClass}>{formatMetadataValue(readMetadataValue(metadata, ['heading', 'yaw', 'course']))}</td>;
+      case 'utc': return <td key={key} className={`${cellClass} max-w-[260px] truncate`} title={formatMetadataValue(readMetadataValue(metadata, ['utc_iso', 'utc', 'timestamp']))}>{unavailable ? <span className="text-amber-600 dark:text-amber-300">{t('sceneGroupManager.loadFailed', 'Unavailable')}</span> : formatMetadataValue(readMetadataValue(metadata, ['utc_iso', 'utc', 'timestamp']))}</td>;
+      case 'overlap': return <td key={key} className="px-3 py-2.5"><span className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300"><Link2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /><span className="font-mono">{overlapGroups.get(getAnnotationOverlapKey(row.annotation)) || '—'}</span><span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] dark:bg-red-900/50">{overlapCounts.get(getAnnotationOverlapKey(row.annotation)) || 0}</span></span></td>;
+      case 'action': return <td key={key} className="px-3 py-2.5 text-right"><button type="button" onClick={(event) => { event.stopPropagation(); onOpenAnnotation(row.annotation, row.sceneObjectIndex); }} className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-900/40 dark:hover:text-blue-300" title={t('taxonomyDashboard.openAnnotation', 'Open annotation')} aria-label={t('taxonomyDashboard.openAnnotation', 'Open annotation')}><ExternalLink className="w-3.5 h-3.5" /></button></td>;
+      default: return <td key={key} />;
+    }
+  };
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
       <div className="p-5 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0">
@@ -759,6 +1273,18 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                 {overlapKeys.size}
               </span>
             )}
+          </Button>
+
+          <Button
+            type="button"
+            variant={columnOrderDialogOpen ? 'secondary' : 'outline'}
+            className="h-9 px-3 text-xs"
+            onClick={() => setColumnOrderDialogOpen(true)}
+            disabled={!isLoaded}
+            title={t('taxonomyDashboard.manageColumns', 'Manage columns')}
+          >
+            <Settings2 className="mr-1.5 h-3.5 w-3.5" />
+            {t('taxonomyDashboard.columnSettings', 'Columns Settings')}
           </Button>
 
           <div className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 dark:border-neutral-700 dark:bg-neutral-900">
@@ -896,197 +1422,19 @@ export const AnnotationTable = React.memo(function AnnotationTable({
           </div>
         ) : (
           <div className="h-full max-w-full overflow-auto rounded-xl border border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-sm custom-scrollbar">
-            <table className={`w-full ${showSceneGroupInfo ? 'min-w-[2520px]' : 'min-w-[1680px]'} border-collapse text-xs`}>
-              <thead className="sticky top-0 z-10 bg-neutral-50 dark:bg-neutral-800/95 text-[10px] uppercase tracking-wider text-neutral-500">
-                <tr>
-                  <th className="w-10 px-3 py-3 text-left font-black">#</th>
-                  <th className="w-52 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationId', 'Annotation ID'), 'id')}</th>
-                  <th className="w-44 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.className', 'Class'), 'label')}</th>
-                  <th className="w-28 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationType', 'Type'), 'type')}</th>
-                  <th className="w-24 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.boxWidthShort', 'Box W'), 'boxWidth', 'right')}</th>
-                  <th className="w-24 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.boxHeightShort', 'Box H'), 'boxHeight', 'right')}</th>
-                  <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationText', 'Text'), 'text')}</th>
-                  <th className="w-32 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationGroupId', 'Group ID'), 'groupId')}</th>
-                  <th className="w-36 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationTrackId', 'Track ID'), 'trackId')}</th>
-                  <th className="w-20 px-3 py-3 text-right">{renderSortableHeader(t('taxonomyDashboard.annotationPoints', 'Points'), 'points', 'right')}</th>
-                  <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.annotationAttributes', 'Attributes'), 'attributes')}</th>
-                  <th className="min-w-[220px] px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.sceneGroup', 'Scene Group'), 'stem')}</th>
-                  {showSceneGroupInfo && (
-                    <>
-                      <th className="min-w-[220px] px-3 py-3">{t('sceneGroupManager.imageName', 'Image')}</th>
-                      <th className="w-28 px-3 py-3">{t('sceneGroupManager.imageWidth', 'Image width')}</th>
-                      <th className="w-28 px-3 py-3">{t('sceneGroupManager.imageHeight', 'Image height')}</th>
-                      <th className="w-32 px-3 py-3">{t('sceneGroupManager.latitude', 'Latitude')}</th>
-                      <th className="w-32 px-3 py-3">{t('sceneGroupManager.longitude', 'Longitude')}</th>
-                      <th className="w-32 px-3 py-3">{t('sceneGroupManager.height', 'Height / Altitude')}</th>
-                      <th className="w-32 px-3 py-3">{t('sceneGroupManager.heading', 'Heading')}</th>
-                      <th className="min-w-[220px] px-3 py-3">{t('sceneGroupManager.utc', 'UTC')}</th>
-                    </>
-                  )}
-                  {overlapKeys !== null && (
-                    <th className="w-40 px-3 py-3">{renderSortableHeader(t('taxonomyDashboard.overlapGroup', 'Overlap group'), 'overlap')}</th>
-                  )}
-                  <th className="w-12 px-3 py-3" />
-                </tr>
+            <table
+              className="table-fixed border-collapse text-xs"
+              style={{ width: `${tableWidth}px`, minWidth: `${tableWidth}px` }}
+            >
+              <colgroup>
+                {tableColumnKeys.map((key) => (
+                  <col key={key} style={{ width: `${getColumnWidth(key)}px` }} />
+                ))}
+              </colgroup>
+              <thead className="sticky top-0 z-10 bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500 dark:bg-neutral-800/95 [&_th]:relative">
+                <tr>{tableColumnKeys.map((key) => renderHeaderForKey(key))}</tr>
                 <tr className="border-t border-neutral-200/80 dark:border-neutral-700/80">
-                  <th className="px-3 py-1.5" />
-                  <th className="px-3 py-1.5">
-                    <Input
-                      value={annotationIdFilter}
-                      onChange={(event) => setAnnotationIdFilter(event.target.value)}
-                      disabled={!isLoaded}
-                      placeholder={t('taxonomyDashboard.filterId', 'Find ID')}
-                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
-                    />
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <Select value={classFilter} onValueChange={setClassFilter} disabled={!isLoaded}>
-                      <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900">
-                        <SelectValue placeholder={t('taxonomyDashboard.className', 'Class')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">{t('taxonomyDashboard.allClasses', 'All classes')}</SelectItem>
-                        {classOptions.map((className) => (
-                          <SelectItem key={className} value={className}>{className}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <Select value={typeFilter} onValueChange={setTypeFilter} disabled={!isLoaded}>
-                      <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900">
-                        <SelectValue placeholder={t('taxonomyDashboard.annotationType', 'Type')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">{t('taxonomyDashboard.allTypes', 'All types')}</SelectItem>
-                        {typeOptions.map((type) => (
-                          <SelectItem key={type} value={type}>{type}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <div className="space-y-1">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={minBoxWidth}
-                        onChange={(event) => setMinBoxWidth(event.target.value)}
-                        disabled={!isLoaded}
-                        placeholder={t('taxonomyDashboard.min', 'min')}
-                        className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900"
-                      />
-                      <Input
-                        type="number"
-                        min="0"
-                        value={maxBoxWidth}
-                        onChange={(event) => setMaxBoxWidth(event.target.value)}
-                        disabled={!isLoaded}
-                        placeholder={t('taxonomyDashboard.max', 'max')}
-                        className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900"
-                      />
-                    </div>
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <div className="space-y-1">
-                      <Input
-                        type="number"
-                        min="0"
-                        value={minBoxHeight}
-                        onChange={(event) => setMinBoxHeight(event.target.value)}
-                        disabled={!isLoaded}
-                        placeholder={t('taxonomyDashboard.min', 'min')}
-                        className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900"
-                      />
-                      <Input
-                        type="number"
-                        min="0"
-                        value={maxBoxHeight}
-                        onChange={(event) => setMaxBoxHeight(event.target.value)}
-                        disabled={!isLoaded}
-                        placeholder={t('taxonomyDashboard.max', 'max')}
-                        className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900"
-                      />
-                    </div>
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <Input
-                      value={textFilter}
-                      onChange={(event) => setTextFilter(event.target.value)}
-                      disabled={!isLoaded}
-                      placeholder={t('taxonomyDashboard.filterText', 'Find text')}
-                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
-                    />
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <Input
-                      value={groupIdFilter}
-                      onChange={(event) => setGroupIdFilter(event.target.value)}
-                      disabled={!isLoaded}
-                      placeholder={t('taxonomyDashboard.filterGroupId', 'Find group ID')}
-                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
-                    />
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <Input
-                      value={trackIdFilter}
-                      onChange={(event) => setTrackIdFilter(event.target.value)}
-                      disabled={!isLoaded}
-                      placeholder={t('taxonomyDashboard.filterTrackId', 'Find track ID')}
-                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
-                    />
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <Input
-                      value={pointsFilter}
-                      onChange={(event) => setPointsFilter(event.target.value)}
-                      disabled={!isLoaded}
-                      placeholder={t('taxonomyDashboard.filterPoints', 'Find points')}
-                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
-                    />
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <Input
-                      value={attributesFilter}
-                      onChange={(event) => setAttributesFilter(event.target.value)}
-                      disabled={!isLoaded}
-                      placeholder={t('taxonomyDashboard.filterAttributes', 'Find attributes')}
-                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
-                    />
-                  </th>
-                  <th className="px-3 py-1.5">
-                    <Input
-                      value={sceneFilter}
-                      onChange={(event) => setSceneFilter(event.target.value)}
-                      disabled={!isLoaded}
-                      placeholder={t('taxonomyDashboard.filterScene', 'Find scene')}
-                      className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
-                    />
-                  </th>
-                  {showSceneGroupInfo && (
-                    <>
-                      <th className="px-3 py-1.5" />
-                      <th className="px-3 py-1.5" />
-                      <th className="px-3 py-1.5" />
-                      <th className="px-3 py-1.5" />
-                      <th className="px-3 py-1.5" />
-                      <th className="px-3 py-1.5" />
-                      <th className="px-3 py-1.5" />
-                      <th className="px-3 py-1.5" />
-                    </>
-                  )}
-                  {overlapKeys !== null && (
-                    <th className="px-3 py-1.5">
-                      <Input
-                        value={overlapGroupFilter}
-                        onChange={(event) => setOverlapGroupFilter(event.target.value)}
-                        disabled={!isLoaded}
-                        placeholder={t('taxonomyDashboard.filterOverlapGroup', 'Find group')}
-                        className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"
-                      />
-                    </th>
-                  )}
-                  <th className="px-3 py-1.5" />
+                  {tableColumnKeys.map((key) => renderFilterCell(key))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
@@ -1106,111 +1454,13 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                         : 'hover:bg-blue-50/60 dark:hover:bg-blue-950/20'}`}
                       title={t('taxonomyDashboard.openAnnotationHint', 'Double-click to open this annotation in the workspace')}
                     >
-                      <td className="px-3 py-2.5 text-neutral-400 font-mono">{index + 1}</td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-700 dark:text-neutral-300 max-w-[210px] truncate" title={row.annotation.id}>
-                        {row.annotation.id}
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="inline-flex items-center gap-2 max-w-full">
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: classDefinition?.color || '#64748b' }}
-                          />
-                          <span className="font-semibold truncate" title={row.annotation.label}>{row.annotation.label}</span>
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5">
-                        <span className="rounded bg-neutral-100 dark:bg-neutral-800 px-2 py-1 text-[10px] font-mono text-neutral-600 dark:text-neutral-300">
-                          {row.annotation.type}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={t('taxonomyDashboard.boxWidth', 'Box width')}>
-                        {formatBoxDimension(row.boxWidth)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={t('taxonomyDashboard.boxHeight', 'Box height')}>
-                        {formatBoxDimension(row.boxHeight)}
-                      </td>
-                      <td className="px-3 py-2.5 text-neutral-600 dark:text-neutral-400 max-w-[260px] truncate" title={row.textValue || '—'}>
-                        {formatCellText(row.textValue)}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400 max-w-[140px] truncate" title={row.groupIdValue || '—'}>
-                        {formatCellText(row.groupIdValue)}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400 max-w-[160px] truncate" title={row.trackIdValue || '—'}>
-                        {formatCellText(row.trackIdValue)}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={t('taxonomyDashboard.annotationPoints', 'Points')}>
-                        {row.pointsCount}
-                      </td>
-                      <td className="px-3 py-2.5 text-neutral-600 dark:text-neutral-400 max-w-[260px] truncate" title={row.attributesText}>
-                        <span>{row.attributesText}</span>
-                        {knownAttributeCount > 0 && (
-                          <span className="ml-2 text-[9px] text-purple-600 dark:text-purple-400">{knownAttributeCount}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400 max-w-[250px] truncate" title={row.annotation.stem}>
-                        {row.annotation.stem}
-                      </td>
-                      {showSceneGroupInfo && (() => {
-                        const sceneData = sceneGroupMetadata.get(row.annotation.stem);
-                        const metadata = sceneData?.metadata || null;
-                        const unavailable = sceneData?.error;
-                        return (
-                          <>
-                            <td className="max-w-[260px] truncate px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={sceneData?.imageName || '—'}>
-                              {formatMetadataValue(sceneData?.imageName)}
-                            </td>
-                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
-                              {formatMetadataValue(sceneData?.imageWidth)}
-                            </td>
-                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
-                              {formatMetadataValue(sceneData?.imageHeight)}
-                            </td>
-                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
-                              {formatMetadataValue(readMetadataValue(metadata, ['latitude', 'lat', 'gps_latitude']))}
-                            </td>
-                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
-                              {formatMetadataValue(readMetadataValue(metadata, ['longitude', 'lon', 'lng', 'gps_longitude']))}
-                            </td>
-                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
-                              {formatMetadataValue(readMetadataValue(metadata, ['altitude', 'gps_altitude', 'elevation', 'height']))}
-                            </td>
-                            <td className="px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400">
-                              {formatMetadataValue(readMetadataValue(metadata, ['heading', 'yaw', 'course']))}
-                            </td>
-                            <td className="max-w-[260px] truncate px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400" title={formatMetadataValue(readMetadataValue(metadata, ['utc_iso', 'utc', 'timestamp']))}>
-                              {unavailable
-                                ? <span className="text-amber-600 dark:text-amber-300">{t('sceneGroupManager.loadFailed', 'Unavailable')}</span>
-                                : formatMetadataValue(readMetadataValue(metadata, ['utc_iso', 'utc', 'timestamp']))}
-                            </td>
-                          </>
-                        );
-                      })()}
-                      {overlapKeys !== null && (
-                        <td className="px-3 py-2.5">
-                          <span className="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-[10px] font-bold text-red-700 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300">
-                            <Link2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                            <span className="font-mono">{overlapGroups.get(getAnnotationOverlapKey(row.annotation)) || '—'}</span>
-                            <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-[9px] dark:bg-red-900/50">
-                              {overlapCounts.get(getAnnotationOverlapKey(row.annotation)) || 0}
-                            </span>
-                          </span>
-                        </td>
-                      )}
-                      <td className="px-3 py-2.5 text-right">
-                        <button
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onOpenAnnotation(row.annotation, row.sceneObjectIndex);
-                          }}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-neutral-400 opacity-0 transition-opacity group-hover:opacity-100 hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
-                          title={t('taxonomyDashboard.openAnnotation', 'Open annotation')}
-                          aria-label={t('taxonomyDashboard.openAnnotation', 'Open annotation')}
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
-                      </td>
+                      {tableColumnKeys.map((key) => renderDataCell(
+                        key,
+                        row,
+                        index,
+                        classDefinition,
+                        knownAttributeCount,
+                      ))}
                     </tr>
                   );
                 })}
@@ -1219,6 +1469,153 @@ export const AnnotationTable = React.memo(function AnnotationTable({
           </div>
         )}
       </div>
+
+      <Dialog open={columnOrderDialogOpen} onOpenChange={setColumnOrderDialogOpen}>
+        <DialogContent
+          className="max-w-none"
+          style={{ width: '600px', maxWidth: 'calc(100vw - 32px)' }}
+        >
+          <DialogHeader>
+            <DialogTitle>{t('taxonomyDashboard.columnOrder', 'Column order')}</DialogTitle>
+          </DialogHeader>
+          <div className="mb-2 grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 px-3 text-[10px] font-black uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+            <span>{t('taxonomyDashboard.column', 'Column')}</span>
+            <span>{t('taxonomyDashboard.columnWidth', 'Width')}</span>
+            <span>{t('taxonomyDashboard.columnVisibility', 'Visible')}</span>
+            <span>{t('taxonomyDashboard.columnOrderActions', 'Order')}</span>
+          </div>
+          <div className="max-h-[55vh] space-y-1 overflow-y-auto pr-1">
+            {columnSettingsKeys.map((key) => {
+              const isFixed = key === 'row';
+              const isHidden = hiddenColumns.has(key);
+              const movableKeys = tableColumnKeys.filter((columnKey) => columnKey !== 'row');
+              const movableIndex = movableKeys.indexOf(key);
+              const canMove = !isFixed && !isHidden && movableIndex >= 0;
+              const isFirst = !canMove || movableIndex === 0;
+              const isLast = !canMove || movableIndex === movableKeys.length - 1;
+
+              return (
+                <div
+                  key={key}
+                  draggable={!isFixed && !isHidden}
+                  onDragStart={isFixed || isHidden ? undefined : (event) => handleColumnDragStart(event, key)}
+                  onDragOver={isFixed || isHidden ? undefined : (event) => event.preventDefault()}
+                  onDrop={isFixed || isHidden ? undefined : (event) => handleColumnDrop(event, key)}
+                  className={`grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-3 rounded-lg border px-3 py-1.5 text-sm ${isFixed
+                    ? 'border-neutral-200 bg-neutral-100/70 dark:border-neutral-700 dark:bg-neutral-800/60'
+                    : isHidden
+                      ? 'border-dashed border-neutral-200 bg-neutral-50/70 text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900/60 dark:text-neutral-400'
+                      : 'border-neutral-200 bg-white active:cursor-grabbing dark:border-neutral-700 dark:bg-neutral-900'}`}
+                >
+                  <div className={`flex min-w-0 items-center gap-2 ${!isFixed && !isHidden ? 'cursor-grab' : ''}`}>
+                    <GripVertical className="h-4 w-4 shrink-0 text-neutral-400" aria-hidden="true" />
+                    <span className="truncate">{getColumnLabel(key)}</span>
+                    {isFixed && <span className="text-[10px] text-neutral-400">{t('taxonomyDashboard.fixedColumn', 'Fixed')}</span>}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      type="number"
+                      min={MIN_COLUMN_WIDTHS[key]}
+                      step="1"
+                      value={columnWidthDrafts[key] ?? String(getColumnWidth(key))}
+                      onChange={(event) => setColumnWidthDrafts((current) => ({ ...current, [key]: event.target.value }))}
+                      onBlur={() => commitColumnWidth(key)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          commitColumnWidth(key);
+                        }
+                      }}
+                      disabled={isFixed}
+                      className="h-7 w-20 text-center text-xs"
+                      aria-label={`${getColumnLabel(key)} ${t('taxonomyDashboard.columnWidth', 'width')}`}
+                    />
+                    <span className="text-[10px] text-neutral-400">px</span>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={isFixed}
+                    onClick={() => toggleColumnVisibility(key)}
+                    title={isHidden
+                      ? t('taxonomyDashboard.showColumn', 'Show column')
+                      : t('taxonomyDashboard.hideColumn', 'Hide column')}
+                    aria-label={isHidden
+                      ? t('taxonomyDashboard.showColumn', 'Show column')
+                      : t('taxonomyDashboard.hideColumn', 'Hide column')}
+                  >
+                    {isHidden
+                      ? <EyeOff className="h-3.5 w-3.5" />
+                      : <Eye className="h-3.5 w-3.5" />}
+                  </Button>
+                  <div className="flex items-center gap-0.5">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={isFirst}
+                      onClick={() => moveColumnToEdge(key, 'first')}
+                      title={t('taxonomyDashboard.moveColumnFirst', 'Move to first')}
+                      aria-label={t('taxonomyDashboard.moveColumnFirst', 'Move to first')}
+                    >
+                      <ChevronsUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={isFirst}
+                      onClick={() => moveColumn(key, 'up')}
+                      title={t('taxonomyDashboard.moveColumnUp', 'Move up')}
+                      aria-label={t('taxonomyDashboard.moveColumnUp', 'Move up')}
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={isLast}
+                      onClick={() => moveColumn(key, 'down')}
+                      title={t('taxonomyDashboard.moveColumnDown', 'Move down')}
+                      aria-label={t('taxonomyDashboard.moveColumnDown', 'Move down')}
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      disabled={isLast}
+                      onClick={() => moveColumnToEdge(key, 'last')}
+                      title={t('taxonomyDashboard.moveColumnLast', 'Move to last')}
+                      aria-label={t('taxonomyDashboard.moveColumnLast', 'Move to last')}
+                    >
+                      <ChevronsDown className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between gap-2 pt-3">
+            <div className="flex gap-2">
+              <Button type="button" variant="outline" onClick={resetColumnOrder}>
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                {t('taxonomyDashboard.resetColumnOrder', 'Reset order')}
+              </Button>
+              <Button type="button" variant="outline" onClick={resetColumnWidths}>
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                {t('taxonomyDashboard.resetColumnWidths', 'Reset widths')}
+              </Button>
+            </div>
+            <Button type="button" onClick={() => setColumnOrderDialogOpen(false)}>
+              {t('common.confirm', 'Confirm')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 });
