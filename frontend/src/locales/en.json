@@ -1380,6 +1380,7 @@
     "mergeValueCannotDeleteDesc": "Keep at least one value so a removed value has a merge target.",
     "mergeInto": "Merge into:",
     "selectClass": "Select class",
+    "none": "None",
     "merge": "Merge",
     "mergeWithAttr": "Merge with Attr",
     "advanced": "Advanced",

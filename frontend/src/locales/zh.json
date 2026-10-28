@@ -1380,6 +1380,7 @@
     "mergeValueCannotDeleteDesc": "至少保留一个属性值，才能作为被删除值的合并目标。",
     "mergeInto": "合并到：",
     "selectClass": "选择类别",
+    "none": "无",
     "merge": "合并",
     "mergeWithAttr": "带属性合并",
     "advanced": "高级",

@@ -114,6 +114,7 @@ interface DistributionSeries {
 const DISTRIBUTION_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ef4444', '#14b8a6', '#6366f1'];
 const DISTRIBUTION_MIN_BODY_HEIGHT = 180;
 const DISTRIBUTION_MAX_BODY_HEIGHT = 500;
+const MERGE_NONE_VALUE = '__none__';
 
 const getDistributionBodyHeight = (rowCount: number) => Math.min(
   DISTRIBUTION_MAX_BODY_HEIGHT,
@@ -1266,7 +1267,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<TaxonomyProcessingProgress | null>(null);
   const processingOperationKeyRef = useRef(0);
-  const [mergeTargetId, setMergeTargetId] = useState<string>('');
+  const [mergeTargetId, setMergeTargetId] = useState<string>(MERGE_NONE_VALUE);
   const [renameValue, setRenameValue] = useState('');
   const [attributeRenameValue, setAttributeRenameValue] = useState('');
   const [showClassDeleteConfirm, setShowClassDeleteConfirm] = useState(false);
@@ -2313,7 +2314,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   useEffect(() => { 
     if (activeClass) { 
       setRenameValue(activeClass.name); 
-      setMergeTargetId(''); 
+      setMergeTargetId(MERGE_NONE_VALUE); 
       setShowClassDeleteConfirm(false); 
     } 
   }, [activeClass]);
@@ -2477,7 +2478,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
   // 使用全局确认弹窗执行类别合并。
   const requestMergeClass = async () => {
-    if (!activeClass || !mergeTargetId || isProcessing) return;
+    if (!activeClass || !mergeTargetId || mergeTargetId === MERGE_NONE_VALUE || isProcessing) return;
     const targetClass = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
     if (!targetClass) return;
 
@@ -2503,7 +2504,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
   // 执行类别合并。
   const executeMergeClass = async () => {
-    if (!activeClass || !mergeTargetId) return;
+    if (!activeClass || !mergeTargetId || mergeTargetId === MERGE_NONE_VALUE) return;
     const targetClass = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
     if (!targetClass) return;
 
@@ -2546,7 +2547,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           description: activeClass.description
         });
         
-        setMergeTargetId('');
+        setMergeTargetId(MERGE_NONE_VALUE);
       } else {
         // 普通类别：正常合并并销毁
         mergeTaxonomyClasses([activeClass.name], targetClass.name);
@@ -3751,12 +3752,17 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     {t('taxonomyDashboard.mergeInto', 'Merge into')}
                   </span>
                   <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
-                    <SelectTrigger className="h-7 w-28 border-none bg-transparent text-xs shadow-none focus:ring-0">
-                      <SelectValue placeholder={t('taxonomyDashboard.selectClass', 'Select class')}>
-                        {taxonomyClasses.find(c => c.id === mergeTargetId)?.name}
+                    <SelectTrigger className="h-8 w-32 rounded-md border border-neutral-200 bg-white text-xs shadow-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900">
+                      <SelectValue placeholder={t('taxonomyDashboard.none', 'None')}>
+                        {mergeTargetId === MERGE_NONE_VALUE
+                          ? t('taxonomyDashboard.none', 'None')
+                          : taxonomyClasses.find(c => c.id === mergeTargetId)?.name}
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value={MERGE_NONE_VALUE} className="text-xs">
+                        {t('taxonomyDashboard.none', 'None')}
+                      </SelectItem>
                       {sortedClasses
                         .filter((c: any) => c.id !== activeClass.id)
                         .map((c: any) => (
@@ -3766,7 +3772,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         ))}
                     </SelectContent>
                   </Select>
-                  {mergeTargetId && (
+                  {mergeTargetId && mergeTargetId !== MERGE_NONE_VALUE && (
                     <Button
                       size="sm"
                       className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
@@ -4486,11 +4492,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             variant="outline"
             disabled={statsStatus === 'loading' || isProcessing}
             onClick={handleReload}
-            className="h-8 rounded-md px-3 text-xs font-semibold"
+            className="h-9 rounded-md px-4 text-sm font-semibold"
           >
             {t('taxonomyDashboard.reload', 'Reload')}
           </Button>
-          <Button disabled={isProcessing} onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="h-8 rounded-md bg-blue-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-blue-700">
+          <Button disabled={isProcessing} onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="h-9 rounded-md bg-blue-600 px-6 text-sm font-semibold text-white transition-colors hover:bg-blue-700">
             {t('common.confirm', 'Confirm & Close')}
           </Button>
         </div>
