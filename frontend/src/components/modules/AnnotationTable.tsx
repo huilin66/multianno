@@ -785,9 +785,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
       <div className="p-5 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0">
         <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-black">{t('taxonomyDashboard.annotationTable', 'Annotation Table')}</h2>
-          </div>
           <div className="flex items-center gap-2 shrink-0">
             {isLoaded && (
               <div className="flex items-center gap-2 text-[10px] font-bold text-neutral-500">
