@@ -8,7 +8,7 @@ import {
   Plus, Check, X, Loader2, AlertCircle, Upload, Activity,
   LayoutDashboard, ChevronDown, ChevronLeft, ChevronRight,
   Layers, ShieldCheck, CheckSquare, Square,
-  Table2,
+  Table2, GripVertical,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
 import { Button } from '../ui/button';
@@ -1323,6 +1323,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [mergeConnectionLines, setMergeConnectionLines] = useState<MergeConnectionLine[]>([]);
   const mergeSourceListRef = useRef<HTMLDivElement>(null);
   const mergeSourceSelectionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const mergeSourceSelectionMovedRef = useRef(false);
+  const mergeSuppressNextSourceClickRef = useRef(false);
   const [mergeSourceSelectionRect, setMergeSourceSelectionRect] = useState<MergeSelectionRect | null>(null);
   const [mergeSelectedSourceIds, setMergeSelectedSourceIds] = useState<Set<string>>(new Set());
 
@@ -1340,6 +1342,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setMergeSelectedSourceIds(new Set());
     setMergeSourceSelectionRect(null);
     mergeSourceSelectionStartRef.current = null;
+    mergeSourceSelectionMovedRef.current = false;
+    mergeSuppressNextSourceClickRef.current = false;
     setNewTargetClassName('');
   }, []);
 
@@ -2311,6 +2315,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       right: Math.max(start.x, current.x),
       bottom: Math.max(start.y, current.y),
     };
+    if (selection.right - selection.left > 4 || selection.bottom - selection.top > 4) {
+      mergeSourceSelectionMovedRef.current = true;
+    }
     setMergeSourceSelectionRect({
       left: selection.left,
       top: selection.top,
@@ -2338,7 +2345,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   };
 
   const startMergeSourceSelection = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || (event.target as HTMLElement).closest('[data-merge-source-card]')) return;
+    if (event.button !== 0 || (event.target as HTMLElement).closest('[data-merge-source-drag-handle]')) return;
     const container = mergeSourceListRef.current;
     if (!container) return;
 
@@ -2347,6 +2354,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       x: event.clientX - containerRect.left + container.scrollLeft,
       y: event.clientY - containerRect.top + container.scrollTop,
     };
+    mergeSourceSelectionMovedRef.current = false;
+    mergeSuppressNextSourceClickRef.current = false;
     setMergeSourceSelectionRect({
       left: mergeSourceSelectionStartRef.current.x,
       top: mergeSourceSelectionStartRef.current.y,
@@ -2355,13 +2364,14 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     });
     setMergeSelectedSourceIds(new Set());
     container.setPointerCapture(event.pointerId);
-    event.preventDefault();
   };
 
   const finishMergeSourceSelection = (event: React.PointerEvent<HTMLDivElement>) => {
     if (!mergeSourceSelectionStartRef.current) return;
     updateMergeSourceSelection(event);
+    mergeSuppressNextSourceClickRef.current = mergeSourceSelectionMovedRef.current;
     mergeSourceSelectionStartRef.current = null;
+    mergeSourceSelectionMovedRef.current = false;
     setMergeSourceSelectionRect(null);
     if (mergeSourceListRef.current?.hasPointerCapture(event.pointerId)) {
       mergeSourceListRef.current.releasePointerCapture(event.pointerId);
@@ -2373,6 +2383,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     const clearSelectionOnEscape = (event: KeyboardEvent) => {
       if (event.key !== 'Escape') return;
       mergeSourceSelectionStartRef.current = null;
+      mergeSourceSelectionMovedRef.current = false;
+      mergeSuppressNextSourceClickRef.current = false;
       setMergeSourceSelectionRect(null);
       setMergeSelectedSourceIds(new Set());
     };
@@ -4880,8 +4892,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           key={sourceClass.id}
                           data-merge-source-card="true"
                           ref={(element) => { mergeSourceRefs.current[sourceClass.id] = element; }}
-                          draggable
                           onClick={(event) => {
+                            if (mergeSuppressNextSourceClickRef.current) {
+                              mergeSuppressNextSourceClickRef.current = false;
+                              return;
+                            }
                             if (event.ctrlKey || event.metaKey) {
                               setMergeSelectedSourceIds((previous) => {
                                 const next = new Set(previous);
@@ -4893,16 +4908,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                               setMergeSelectedSourceIds(new Set([sourceClass.id]));
                             }
                           }}
-                          onDragStart={(event) => {
-                            const sourceIds = mergeSelectedSourceIds.has(sourceClass.id)
-                              ? Array.from(mergeSelectedSourceIds)
-                              : [sourceClass.id];
-                            setMergeSelectedSourceIds(new Set(sourceIds));
-                            event.dataTransfer.setData('application/x-multianno-source-ids', JSON.stringify(sourceIds));
-                            event.dataTransfer.setData('text/plain', sourceClass.id);
-                            event.dataTransfer.effectAllowed = 'move';
-                          }}
-                          className={`relative z-10 flex cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-xs active:cursor-grabbing ${
+                          className={`relative z-10 flex cursor-crosshair items-center gap-2 rounded-md border px-2 py-1.5 text-xs active:cursor-crosshair ${
                             isSelected
                               ? 'border-blue-500 bg-blue-100 ring-1 ring-blue-300 dark:border-blue-500 dark:bg-blue-950/50 dark:ring-blue-700'
                               : target
@@ -4910,6 +4916,23 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                 : 'border-transparent hover:border-neutral-200 hover:bg-neutral-50 dark:hover:border-neutral-700 dark:hover:bg-neutral-800'
                           }`}
                         >
+                          <span
+                            data-merge-source-drag-handle="true"
+                            draggable
+                            title={t('workspace.dragToTarget', 'Drag to target class')}
+                            onDragStart={(event) => {
+                              const sourceIds = mergeSelectedSourceIds.has(sourceClass.id)
+                                ? Array.from(mergeSelectedSourceIds)
+                                : [sourceClass.id];
+                              setMergeSelectedSourceIds(new Set(sourceIds));
+                              event.dataTransfer.setData('application/x-multianno-source-ids', JSON.stringify(sourceIds));
+                              event.dataTransfer.setData('text/plain', sourceClass.id);
+                              event.dataTransfer.effectAllowed = 'move';
+                            }}
+                            className="flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-neutral-400 hover:text-blue-600 active:cursor-grabbing dark:text-neutral-500 dark:hover:text-blue-400"
+                          >
+                            <GripVertical className="h-3.5 w-3.5" />
+                          </span>
                           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: sourceClass.color }} />
                           <span className="min-w-0 flex-1 truncate font-medium">{sourceClass.name}</span>
                           {target && (

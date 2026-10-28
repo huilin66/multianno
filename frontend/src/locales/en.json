@@ -794,6 +794,7 @@
     "dropSourceClassHint": "Drop source classes here",
     "dropToKeep": "Drop here to keep",
     "removeMapping": "Click to remove mapping",
+    "dragToTarget": "Drag to target class",
     "attributeSettings": "3. Attribute settings",
     "mappingComplete": "Mapping complete",
     "oneSharedAttribute": "One attribute for all",

@@ -794,6 +794,7 @@
     "dropSourceClassHint": "将源类别拖到这里",
     "dropToKeep": "拖到这里保留原类别",
     "removeMapping": "点击连线取消映射",
+    "dragToTarget": "拖动到目标类别",
     "attributeSettings": "3. 属性设置",
     "mappingComplete": "映射完成",
     "oneSharedAttribute": "一个属性应用于全部",
