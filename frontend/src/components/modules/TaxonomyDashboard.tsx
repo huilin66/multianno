@@ -2470,9 +2470,22 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                 : getMergeNoneAttributeValue(candidate).trim(),
             ]),
           );
+      const legacyAttributeName = mergeAttributeNames[0];
+      const legacyAttributeValue = mergeAttributeMode === 'single'
+        ? getMergeAttributeValue(sourceClass).trim()
+        : mergeAttributeTargets[0]?.id === target?.id
+          ? getMergeAttributeValue(sourceClass).trim()
+          : mergeAttributeTargets[0]
+            ? getMergeNoneAttributeValue(mergeAttributeTargets[0]).trim()
+            : '';
       return {
         old_name: sourceClass.name,
         new_name: target?.name || sourceClass.name,
+        // Keep the legacy pair during the transition so an already-running
+        // backend can still validate the request. Updated backends use all
+        // entries in `attributes`.
+        attribute_name: legacyAttributeName,
+        attribute_value: legacyAttributeValue,
         attributes,
       };
     });
