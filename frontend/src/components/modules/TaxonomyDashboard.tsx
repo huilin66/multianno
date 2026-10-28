@@ -17,7 +17,7 @@ import { Label } from '../ui/label';
 import { OperationProgress } from '../ui/OperationProgress';
 import { getFileContent, getPreviewImageUrl, runTaxonomyJob, type TaxonomyJobOperation, type TaxonomyJobState } from '../../api/client';
 import { useTranslation } from 'react-i18next';
-import { TAXONOMY_COLORS } from '../../config/colors';
+import { ATTRIBUTE_COLUMN_PALETTE, TAXONOMY_COLORS } from '../../config/colors';
 import { showDialog, useDialogStore, type DialogOptions } from '../../store/useDialogStore';
 
 interface TaxonomyDashboardProps {
@@ -3237,7 +3237,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             <div>
               <div className="flex items-center justify-between cursor-pointer p-1.5 group rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors" onClick={() => setExpanded(p => ({...p, attributes: !p.attributes}))}>
                 <span className="text-xs font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-wider flex items-center">
-                  <Settings className="w-3.5 h-3.5 mr-2"/> {t('taxonomy.attributes')}
+                  <span
+                    className="mr-2 h-3.5 w-3.5 shrink-0 rounded-sm border border-black/10 shadow-sm"
+                    style={{ backgroundColor: ATTRIBUTE_COLUMN_PALETTE[0] }}
+                  />
+                  {t('taxonomy.attributes')}
                   <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyAttributes.length}</span>
                 </span>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
@@ -3282,7 +3286,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       }}
                       onClick={() => handleAttributeSelection(attr.id)}
                       className={`flex items-center p-2 rounded-md text-xs cursor-pointer transition-colors ${selectedAttributeId === attr.id && activeTab === 'attributes' ? 'bg-neutral-100 dark:bg-neutral-800 font-bold shadow-sm' : 'hover:bg-neutral-50 dark:hover:bg-neutral-800/50 text-neutral-600 dark:text-neutral-400'}`}>
-                      <List className="w-3 h-3 mr-2.5 shrink-0 text-neutral-400" />
+                      <span
+                        className="mr-2.5 h-3 w-3 shrink-0 rounded-sm border border-black/10 shadow-sm"
+                        style={{ backgroundColor: ATTRIBUTE_COLUMN_PALETTE[Math.max(0, taxonomyAttributes.findIndex((item: any) => item.id === attr.id)) % ATTRIBUTE_COLUMN_PALETTE.length] }}
+                      />
                       <span className="truncate flex-1">{attr.name}</span>
                     </div>
                   ))}
@@ -4566,7 +4573,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                 {taxonomyAttributes.map((a: any) => (
                   <SelectItem key={a.id} value={a.name}>
                     <span className="flex items-center gap-2">
-                      <Settings className="w-3 h-3 text-purple-400" />
+                      <span
+                        className="h-3 w-3 shrink-0 rounded-sm border border-black/10 shadow-sm"
+                        style={{ backgroundColor: ATTRIBUTE_COLUMN_PALETTE[taxonomyAttributes.indexOf(a) % ATTRIBUTE_COLUMN_PALETTE.length] }}
+                      />
                       {a.name}
                     </span>
                   </SelectItem>

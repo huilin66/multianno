@@ -8,6 +8,7 @@ import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Switch } from '../ui/switch';
 import { getAnnotationBounds } from '../../lib/annotationHitTest';
+import { ATTRIBUTE_COLUMN_PALETTE } from '../../config/colors';
 import {
   AnnotationTableColumnSettings,
   DEFAULT_COLUMN_ORDER,
@@ -131,17 +132,6 @@ const moveTextColumnToEnd = (order: AnnotationTableColumnKey[]) => {
 // snapshot and controls outside the component so switching tabs or closing
 // and reopening Annotation Manager does not discard the user's work.
 const annotationTableMemory = new Map<string, AnnotationTableMemoryState>();
-
-const ATTRIBUTE_COLUMN_PALETTE = [
-  '#f3f4f6',
-  '#e5e7eb',
-  '#d1d5db',
-  '#eef0f2',
-  '#e2e8f0',
-  '#cbd5e1',
-  '#edf1f4',
-  '#dfe4e8',
-];
 
 const ATTRIBUTE_FILTER_ALL = '__all_attribute_values__';
 

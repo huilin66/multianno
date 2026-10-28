@@ -106,6 +106,18 @@ export const TAXONOMY_COLORS: string[] = [
   '#14b8a6', // Teal
 ];
 
+// Annotation Table 与 Taxonomy 共用的属性列/属性标识色块。
+export const ATTRIBUTE_COLUMN_PALETTE: string[] = [
+  '#f3f4f6',
+  '#e5e7eb',
+  '#d1d5db',
+  '#eef0f2',
+  '#e2e8f0',
+  '#cbd5e1',
+  '#edf1f4',
+  '#dfe4e8',
+];
+
 // 🌟 1. UI 与 渲染引擎共享的：科学色带注册中心
 export const COLOR_MAPS = [
   { name: 'gray', label: 'Gray', css: 'from-black to-white', lut: [[0,0,0], [255,255,255]] },
