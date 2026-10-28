@@ -69,6 +69,13 @@ interface MergeConnectionLine {
   color: string;
 }
 
+interface MergeSelectionRect {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
 type MergeAttributeMode = 'single' | 'perTarget';
 
 const TAXONOMY_VIEW_STATE_PREFIX = 'multiAnno_taxonomy_dashboard_view';
@@ -1314,6 +1321,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const mergeSourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const mergeTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [mergeConnectionLines, setMergeConnectionLines] = useState<MergeConnectionLine[]>([]);
+  const mergeSourceListRef = useRef<HTMLDivElement>(null);
+  const mergeSourceSelectionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const [mergeSourceSelectionRect, setMergeSourceSelectionRect] = useState<MergeSelectionRect | null>(null);
+  const [mergeSelectedSourceIds, setMergeSelectedSourceIds] = useState<Set<string>>(new Set());
 
   const [classSortDir, setClassSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
   const [attrSortDir, setAttrSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
@@ -1326,6 +1337,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setMergeAttrName('source_class');
     setMergeTargetAttributeNames({});
     setMergeAttributeValueOverrides({});
+    setMergeSelectedSourceIds(new Set());
+    setMergeSourceSelectionRect(null);
+    mergeSourceSelectionStartRef.current = null;
     setNewTargetClassName('');
   }, []);
 
@@ -1345,33 +1359,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       [targetId]: `${name}_origin`,
     }));
     setNewTargetClassName('');
-  };
-
-  const keepMergeSourceClass = (sourceId: string) => {
-    const sourceClass = allSourceClasses.find((candidate: any) => candidate.id === sourceId);
-    if (!sourceClass) return;
-
-    const existingTarget = mergeTargetDrafts.find(
-      (target) => target.name.toLowerCase() === sourceClass.name.toLowerCase(),
-    );
-    const targetId = existingTarget?.id || `merge-target-${Date.now()}-keep-${sourceId}`;
-
-    if (!existingTarget) {
-      setMergeTargetDrafts((previous) => [
-        ...previous,
-        {
-          id: targetId,
-          name: sourceClass.name,
-          color: sourceClass.color || TAXONOMY_COLORS[previous.length % TAXONOMY_COLORS.length],
-        },
-      ]);
-      setMergeTargetAttributeNames((previous) => ({
-        ...previous,
-        [targetId]: `${sourceClass.name}_origin`,
-      }));
-    }
-
-    setMergeSourceTargetMap((previous) => ({ ...previous, [sourceId]: targetId }));
   };
 
   const recalculateMergeConnectionLines = useCallback(() => {
@@ -2259,6 +2246,139 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     if (!showMergeWithAttr) return [];
     return [...taxonomyClasses].sort((a: any, b: any) => a.name.localeCompare(b.name));
   }, [showMergeWithAttr, taxonomyClasses]);
+
+  const getMergeSourceIdsFromDrop = (event: React.DragEvent<HTMLElement>) => {
+    const raw = event.dataTransfer.getData('application/x-multianno-source-ids')
+      || event.dataTransfer.getData('text/plain');
+    if (!raw) return [];
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return Array.from(new Set(parsed.filter((id): id is string => typeof id === 'string')))
+          .filter((id) => allSourceClasses.some((sourceClass: any) => sourceClass.id === id));
+      }
+    } catch {
+      // A single source id is stored as plain text for backward compatibility.
+    }
+
+    return allSourceClasses.some((sourceClass: any) => sourceClass.id === raw) ? [raw] : [];
+  };
+
+  const keepMergeSourceClasses = (sourceIds: string[]) => {
+    const sourceClasses = allSourceClasses.filter((sourceClass: any) => sourceIds.includes(sourceClass.id));
+    if (sourceClasses.length === 0) return;
+
+    const nextTargets = [...mergeTargetDrafts];
+    const addedAttributeNames: Record<string, string> = {};
+    const sourceTargetIds: Record<string, string> = {};
+
+    sourceClasses.forEach((sourceClass: any) => {
+      let target = nextTargets.find((candidate) => candidate.name.toLowerCase() === sourceClass.name.toLowerCase());
+      if (!target) {
+        target = {
+          id: `merge-target-${Date.now()}-keep-${sourceClass.id}`,
+          name: sourceClass.name,
+          color: sourceClass.color || TAXONOMY_COLORS[nextTargets.length % TAXONOMY_COLORS.length],
+        };
+        nextTargets.push(target);
+        addedAttributeNames[target.id] = `${sourceClass.name}_origin`;
+      }
+      sourceTargetIds[sourceClass.id] = target.id;
+    });
+
+    if (nextTargets.length !== mergeTargetDrafts.length) setMergeTargetDrafts(nextTargets);
+    if (Object.keys(addedAttributeNames).length > 0) {
+      setMergeTargetAttributeNames((previous) => ({ ...previous, ...addedAttributeNames }));
+    }
+    setMergeSourceTargetMap((previous) => ({ ...previous, ...sourceTargetIds }));
+    setMergeSelectedSourceIds(new Set());
+  };
+
+  const updateMergeSourceSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    const container = mergeSourceListRef.current;
+    const start = mergeSourceSelectionStartRef.current;
+    if (!container || !start) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const current = {
+      x: event.clientX - containerRect.left + container.scrollLeft,
+      y: event.clientY - containerRect.top + container.scrollTop,
+    };
+    const selection = {
+      left: Math.min(start.x, current.x),
+      top: Math.min(start.y, current.y),
+      right: Math.max(start.x, current.x),
+      bottom: Math.max(start.y, current.y),
+    };
+    setMergeSourceSelectionRect({
+      left: selection.left,
+      top: selection.top,
+      width: selection.right - selection.left,
+      height: selection.bottom - selection.top,
+    });
+
+    const selectionViewport = {
+      left: containerRect.left + selection.left - container.scrollLeft,
+      right: containerRect.left + selection.right - container.scrollLeft,
+      top: containerRect.top + selection.top - container.scrollTop,
+      bottom: containerRect.top + selection.bottom - container.scrollTop,
+    };
+    const selectedIds = (Object.entries(mergeSourceRefs.current) as Array<[string, HTMLDivElement | null]>)
+      .filter(([, element]) => {
+        if (!element) return false;
+        const cardRect = element.getBoundingClientRect();
+        return cardRect.right >= selectionViewport.left
+          && cardRect.left <= selectionViewport.right
+          && cardRect.bottom >= selectionViewport.top
+          && cardRect.top <= selectionViewport.bottom;
+      })
+      .map(([sourceId]) => sourceId);
+    setMergeSelectedSourceIds(new Set(selectedIds));
+  };
+
+  const startMergeSourceSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('[data-merge-source-card]')) return;
+    const container = mergeSourceListRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    mergeSourceSelectionStartRef.current = {
+      x: event.clientX - containerRect.left + container.scrollLeft,
+      y: event.clientY - containerRect.top + container.scrollTop,
+    };
+    setMergeSourceSelectionRect({
+      left: mergeSourceSelectionStartRef.current.x,
+      top: mergeSourceSelectionStartRef.current.y,
+      width: 0,
+      height: 0,
+    });
+    setMergeSelectedSourceIds(new Set());
+    container.setPointerCapture(event.pointerId);
+    event.preventDefault();
+  };
+
+  const finishMergeSourceSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!mergeSourceSelectionStartRef.current) return;
+    updateMergeSourceSelection(event);
+    mergeSourceSelectionStartRef.current = null;
+    setMergeSourceSelectionRect(null);
+    if (mergeSourceListRef.current?.hasPointerCapture(event.pointerId)) {
+      mergeSourceListRef.current.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  useEffect(() => {
+    if (!showMergeWithAttr) return;
+    const clearSelectionOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      mergeSourceSelectionStartRef.current = null;
+      setMergeSourceSelectionRect(null);
+      setMergeSelectedSourceIds(new Set());
+    };
+    window.addEventListener('keydown', clearSelectionOnEscape);
+    return () => window.removeEventListener('keydown', clearSelectionOnEscape);
+  }, [showMergeWithAttr]);
 
   const mergeAssignedSourceCount = useMemo(
     () => allSourceClasses.filter((cls: any) => Boolean(mergeSourceTargetMap[cls.id])).length,
@@ -4736,25 +4856,58 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     );
                   })}
                 </svg>
-                <div className="relative z-20 min-w-0">
+                <div
+                  ref={mergeSourceListRef}
+                  className="relative z-20 min-w-0"
+                  onPointerDown={startMergeSourceSelection}
+                  onPointerMove={updateMergeSourceSelection}
+                  onPointerUp={finishMergeSourceSelection}
+                  onPointerCancel={finishMergeSourceSelection}
+                >
                   <p className="mb-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                     {t('workspace.sourceClasses', 'Source classes')}
                   </p>
-                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700" onScroll={recalculateMergeConnectionLines}>
+                  <div
+                    className="max-h-64 select-none space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700"
+                    onScroll={recalculateMergeConnectionLines}
+                  >
                     {allSourceClasses.map((sourceClass: any) => {
                       const targetId = mergeSourceTargetMap[sourceClass.id];
                       const target = mergeTargetDrafts.find((candidate) => candidate.id === targetId);
+                      const isSelected = mergeSelectedSourceIds.has(sourceClass.id);
                       return (
                         <div
                           key={sourceClass.id}
+                          data-merge-source-card="true"
                           ref={(element) => { mergeSourceRefs.current[sourceClass.id] = element; }}
                           draggable
+                          onClick={(event) => {
+                            if (event.ctrlKey || event.metaKey) {
+                              setMergeSelectedSourceIds((previous) => {
+                                const next = new Set(previous);
+                                if (next.has(sourceClass.id)) next.delete(sourceClass.id);
+                                else next.add(sourceClass.id);
+                                return next;
+                              });
+                            } else {
+                              setMergeSelectedSourceIds(new Set([sourceClass.id]));
+                            }
+                          }}
                           onDragStart={(event) => {
+                            const sourceIds = mergeSelectedSourceIds.has(sourceClass.id)
+                              ? Array.from(mergeSelectedSourceIds)
+                              : [sourceClass.id];
+                            setMergeSelectedSourceIds(new Set(sourceIds));
+                            event.dataTransfer.setData('application/x-multianno-source-ids', JSON.stringify(sourceIds));
                             event.dataTransfer.setData('text/plain', sourceClass.id);
                             event.dataTransfer.effectAllowed = 'move';
                           }}
-                          className={`flex cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-xs active:cursor-grabbing ${
-                            target ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30' : 'border-transparent hover:border-neutral-200 hover:bg-neutral-50 dark:hover:border-neutral-700 dark:hover:bg-neutral-800'
+                          className={`relative z-10 flex cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-xs active:cursor-grabbing ${
+                            isSelected
+                              ? 'border-blue-500 bg-blue-100 ring-1 ring-blue-300 dark:border-blue-500 dark:bg-blue-950/50 dark:ring-blue-700'
+                              : target
+                                ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30'
+                                : 'border-transparent hover:border-neutral-200 hover:bg-neutral-50 dark:hover:border-neutral-700 dark:hover:bg-neutral-800'
                           }`}
                         >
                           <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: sourceClass.color }} />
@@ -4769,6 +4922,17 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       );
                     })}
                   </div>
+                  {mergeSourceSelectionRect && (
+                    <div
+                      className="pointer-events-none absolute z-30 rounded border border-blue-500 bg-blue-500/10"
+                      style={{
+                        left: mergeSourceSelectionRect.left,
+                        top: mergeSourceSelectionRect.top,
+                        width: mergeSourceSelectionRect.width,
+                        height: mergeSourceSelectionRect.height,
+                      }}
+                    />
+                  )}
                 </div>
 
                 <div className="relative z-20 min-w-0">
@@ -4790,8 +4954,14 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={(event) => {
                             event.preventDefault();
-                            const sourceId = event.dataTransfer.getData('text/plain');
-                            if (sourceId) setMergeSourceTargetMap((previous) => ({ ...previous, [sourceId]: target.id }));
+                            const sourceIds = getMergeSourceIdsFromDrop(event);
+                            if (sourceIds.length > 0) {
+                              setMergeSourceTargetMap((previous) => ({
+                                ...previous,
+                                ...Object.fromEntries(sourceIds.map((sourceId) => [sourceId, target.id])),
+                              }));
+                              setMergeSelectedSourceIds(new Set());
+                            }
                           }}
                           className="rounded-md border border-neutral-200 bg-neutral-50 p-2.5 dark:border-neutral-700 dark:bg-neutral-800/60"
                         >
@@ -4830,8 +5000,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     onDragOver={(event) => event.preventDefault()}
                     onDrop={(event) => {
                       event.preventDefault();
-                      const sourceId = event.dataTransfer.getData('text/plain');
-                      if (sourceId) keepMergeSourceClass(sourceId);
+                      const sourceIds = getMergeSourceIdsFromDrop(event);
+                      if (sourceIds.length > 0) keepMergeSourceClasses(sourceIds);
                     }}
                     className="mt-2 rounded-md border border-dashed border-neutral-300 px-2 py-1.5 text-center text-[10px] text-neutral-500 dark:border-neutral-600 dark:text-neutral-400"
                   >
