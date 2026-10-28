@@ -4792,7 +4792,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         <div className="flex max-h-[88vh] w-[760px] max-w-full flex-col rounded-xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
           <div className="mb-4 shrink-0 border-b border-neutral-200 pb-3 dark:border-neutral-800">
             <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-              {t('workspace.mergeClassesTrackOrigin', 'Merge Classes & Track Origin')}
+              {t('workspace.mergeClassesKeepAttributes', 'Merge class & keep in attributes')}
             </h3>
           </div>
 

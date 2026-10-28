@@ -781,6 +781,7 @@
     "folders": "文件夹",
     "views": "视图",
     "switchingImage": "正在切换图像...",
+    "mergeClassesKeepAttributes": "合并类别并保留为属性",
     "targetClassCreation": "1. 创建目标类别",
     "created": "个已创建",
     "targetClassNamePlaceholder": "输入目标类别名",

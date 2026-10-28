@@ -781,6 +781,7 @@
     "folders": "FOLDERS",
     "views": "VIEWS",
     "switchingImage": "Switching image...",
+    "mergeClassesKeepAttributes": "Merge class & keep in attributes",
     "targetClassCreation": "1. Create target classes",
     "created": "created",
     "targetClassNamePlaceholder": "Target class name",
