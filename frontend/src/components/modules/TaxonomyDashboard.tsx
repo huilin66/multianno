@@ -3625,10 +3625,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
             
             {/* 顶栏：干净内联的编辑工具栏 (已去重合并) */}
-            <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 bg-white p-2 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+            <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center justify-between shrink-0 shadow-sm z-10">
               
               {/* 左侧：颜色修改与名称重命名 */}
-              <div className="flex w-fit shrink-0 items-center gap-3 rounded-lg border border-neutral-300 bg-white px-2 py-1.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+              <div className="flex shrink-0 items-center gap-3">
                 <div className="relative w-8 h-8 rounded-md shadow-sm border border-neutral-200 overflow-hidden shrink-0 cursor-pointer hover:ring-2 hover:ring-primary/50 transition-all">
                   <input type="color" value={activeClass.color} onChange={e => updateTaxonomyClass(activeClass.id, { color: e.target.value })} className="absolute -top-2 -left-2 w-16 h-16 cursor-pointer" />
                 </div>
@@ -3744,8 +3744,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
               </div>
               {/* 右侧：Merge 合并与删除操作 */}
-              <div className="flex shrink-0 items-center gap-2">
-                <div className="flex w-fit items-center gap-1.5 rounded-lg border border-neutral-300 bg-white p-1 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5">
                   <span className="px-1 text-[10px] font-bold text-neutral-500 dark:text-neutral-400">
                     {t('taxonomyDashboard.mergeInto', 'Merge into')}
                   </span>
@@ -3788,7 +3788,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                 <div className="h-7 w-px bg-neutral-300 dark:bg-neutral-700" />
 
                 {activeClass.name.toLowerCase() === 'background' ? (
-                  <div className="flex items-center rounded-lg border border-neutral-200 bg-neutral-50 p-1 dark:border-neutral-700 dark:bg-neutral-800">
+                  <div className="flex items-center">
                     {deleteStage === 0 ? (
                       <Button
                         variant="outline"
@@ -3820,7 +3820,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     )}
                   </div>
                 ) : (
-                  <div className="flex items-center rounded-lg border border-neutral-200 bg-neutral-50 p-1 dark:border-neutral-700 dark:bg-neutral-800">
+                  <div className="flex items-center">
                     {deleteStage === 0 ? (
                       <Button
                         variant="destructive"
