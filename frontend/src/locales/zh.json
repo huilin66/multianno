@@ -802,6 +802,7 @@
     "attributeNamePlaceholder": "例如 source_class",
     "attributeValues": "属性值",
     "sourceClass": "源类别",
+    "otherClassesExcept": "除 {{classes}} 外的其他类别",
     "values": "属性值"
   },
     "dataExport": {

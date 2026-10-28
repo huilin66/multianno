@@ -1317,6 +1317,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [mergeAttrName, setMergeAttrName] = useState('source_class');
   const [mergeTargetAttributeNames, setMergeTargetAttributeNames] = useState<Record<string, string>>({});
   const [mergeAttributeValueOverrides, setMergeAttributeValueOverrides] = useState<Record<string, string>>({});
+  const [mergeTargetNoneValueOverrides, setMergeTargetNoneValueOverrides] = useState<Record<string, string>>({});
   const mergeMappingGridRef = useRef<HTMLDivElement>(null);
   const mergeSourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const mergeTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1339,6 +1340,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setMergeAttrName('source_class');
     setMergeTargetAttributeNames({});
     setMergeAttributeValueOverrides({});
+    setMergeTargetNoneValueOverrides({});
     setMergeSelectedSourceIds(new Set());
     setMergeSourceSelectionRect(null);
     mergeSourceSelectionStartRef.current = null;
@@ -2414,8 +2416,14 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     (sourceClass: any) => mergeAttributeValueOverrides[sourceClass.id] ?? sourceClass.name,
     [mergeAttributeValueOverrides],
   );
+  const getMergeNoneAttributeValue = useCallback(
+    (target: MergeTargetDraft) => mergeTargetNoneValueOverrides[target.id] ?? 'none',
+    [mergeTargetNoneValueOverrides],
+  );
   const mergeAttributeValuesValid = mappedSourceClasses.length > 0
-    && mappedSourceClasses.every((sourceClass: any) => getMergeAttributeValue(sourceClass).trim().length > 0);
+    && mappedSourceClasses.every((sourceClass: any) => getMergeAttributeValue(sourceClass).trim().length > 0)
+    && (mergeAttributeMode === 'single'
+      || mergeTargetDrafts.every((target) => getMergeNoneAttributeValue(target).trim().length > 0));
 
   const executeMergeWithAttribute = async () => {
     const sourceClasses = mappedSourceClasses;
@@ -2438,12 +2446,13 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           const values = sourceTargetPairs
             .filter(({ target: assignedTarget }) => assignedTarget?.id === target.id)
             .map(({ sourceClass }) => getMergeAttributeValue(sourceClass).trim());
+          const noneValue = getMergeNoneAttributeValue(target).trim();
           return {
             id: `attr-${Date.now()}-${target.id}`,
             name: mergeTargetAttributeNames[target.id].trim(),
             type: 'select',
-            options: [...values, 'none'],
-            defaultValue: 'none',
+            options: Array.from(new Set([...values, noneValue])),
+            defaultValue: noneValue,
             applyToAll: true,
           };
         });
@@ -2453,7 +2462,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         : Object.fromEntries(
             mergeTargetDrafts.map((candidate, index) => [
               mergeAttributeNames[index],
-              candidate.id === target?.id ? getMergeAttributeValue(sourceClass).trim() : 'none',
+              candidate.id === target?.id
+                ? getMergeAttributeValue(sourceClass).trim()
+                : getMergeNoneAttributeValue(candidate).trim(),
             ]),
           );
       return {
@@ -5102,6 +5113,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     {mergeTargetDrafts.map((target) => {
                       const values = mappedSourceClasses
                         .filter((sourceClass: any) => mergeSourceTargetMap[sourceClass.id] === target.id);
+                      const otherSourceClasses = values.map((sourceClass: any) => sourceClass.name).join(', ');
                       return (
                         <div key={target.id} className="rounded-md border border-neutral-200 bg-white p-2.5 dark:border-neutral-700 dark:bg-neutral-900">
                           <div className="mb-1 flex items-center gap-2">
@@ -5137,7 +5149,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                     </div>
                                   </div>
                                 ))}
-                                <span className="inline-flex rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">none</span>
+                                <div className="rounded border border-neutral-200 p-1.5 dark:border-neutral-700">
+                                  <Input
+                                    value={getMergeNoneAttributeValue(target)}
+                                    onChange={(event) => setMergeTargetNoneValueOverrides((previous) => ({ ...previous, [target.id]: event.target.value }))}
+                                    className="h-7 text-xs"
+                                  />
+                                  <div className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+                                    {t('workspace.sourceClass', 'Source class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">
+                                      {t('workspace.otherClassesExcept', 'Other classes except {{classes}}', { classes: otherSourceClasses })}
+                                    </span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           </div>

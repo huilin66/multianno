@@ -802,6 +802,7 @@
     "attributeNamePlaceholder": "e.g. source_class",
     "attributeValues": "Attribute values",
     "sourceClass": "Source class",
+    "otherClassesExcept": "Other classes except {{classes}}",
     "values": "Values"
   },
   "dataExport": {
