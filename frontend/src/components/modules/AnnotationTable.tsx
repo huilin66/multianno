@@ -1321,6 +1321,19 @@ export const AnnotationTable = React.memo(function AnnotationTable({
 
           <div className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 dark:border-neutral-700 dark:bg-neutral-900">
             <Switch
+              checked={showColumnFilters}
+              onCheckedChange={setShowColumnFilters}
+              disabled={!isLoaded}
+              aria-label={t('taxonomyDashboard.showColumnFilters', 'Filter')}
+              className="scale-75"
+            />
+            <span className="whitespace-nowrap text-xs text-neutral-700 dark:text-neutral-200">
+              {t('taxonomyDashboard.showColumnFilters', 'Filter')}
+            </span>
+          </div>
+
+          <div className="flex h-9 items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 dark:border-neutral-700 dark:bg-neutral-900">
+            <Switch
               checked={hideUnselected && hasMainSelection}
               onCheckedChange={setHideUnselected}
               disabled={!isLoaded || !hasMainSelection}
@@ -1485,9 +1498,11 @@ export const AnnotationTable = React.memo(function AnnotationTable({
               </colgroup>
               <thead className="sticky top-0 z-10 bg-neutral-50 text-[10px] uppercase tracking-wider text-neutral-500 dark:bg-neutral-800/95 [&_th]:relative">
                 <tr>{tableColumnKeys.map((key) => renderHeaderForKey(key))}</tr>
-                <tr className="border-t border-neutral-200/80 dark:border-neutral-700/80">
-                  {tableColumnKeys.map((key) => renderFilterCell(key))}
-                </tr>
+                {showColumnFilters && (
+                  <tr className="border-t border-neutral-200/80 dark:border-neutral-700/80">
+                    {tableColumnKeys.map((key) => renderFilterCell(key))}
+                  </tr>
+                )}
               </thead>
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {displayRows.map((row, index) => {
