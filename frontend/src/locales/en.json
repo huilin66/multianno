@@ -802,7 +802,7 @@
     "attributeNamePlaceholder": "e.g. source_class",
     "attributeValues": "Attribute values",
     "sourceClass": "Source class",
-    "otherClassesExcept": "Other classes except {{classes}}",
+    "otherClasses": "Other classes",
     "targetClass": "Target class",
     "deleteAttribute": "Delete attribute",
     "noAttributesConfigured": "No target attributes configured",

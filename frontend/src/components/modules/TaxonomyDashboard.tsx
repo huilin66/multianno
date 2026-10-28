@@ -5144,7 +5144,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     {mergeAttributeTargets.map((target) => {
                       const values = mappedSourceClasses
                         .filter((sourceClass: any) => mergeSourceTargetMap[sourceClass.id] === target.id);
-                      const otherSourceClasses = values.map((sourceClass: any) => sourceClass.name).join(', ');
                       return (
                         <div key={target.id} className="rounded-md border border-neutral-200 bg-white p-2.5 dark:border-neutral-700 dark:bg-neutral-900">
                           <div className="mt-2 grid items-start gap-3 sm:grid-cols-2">
@@ -5205,7 +5204,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                   />
                                   <div className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
                                     {t('workspace.sourceClass', 'Source class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">
-                                      {t('workspace.otherClassesExcept', 'Other classes except {{classes}}', { classes: otherSourceClasses })}
+                                      {t('workspace.otherClasses', 'Other classes')}
                                     </span>
                                   </div>
                                 </div>
