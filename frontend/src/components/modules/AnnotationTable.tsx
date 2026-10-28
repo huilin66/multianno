@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getFileContent } from '../../api/client';
 import { useStore, type Annotation, type TaxonomyAttribute, type TaxonomyClass } from '../../store/useStore';
@@ -76,7 +76,6 @@ interface AnnotationTableSortState {
 
 interface AnnotationTableMemoryState {
   loadedAnnotations: Annotation[] | null;
-  query: string;
   classFilter: string;
   typeFilter: string;
   annotationIdFilter: string;
@@ -158,21 +157,6 @@ const readMetadataValue = (metadata: ImageMetaRecord | null, keys: string[]) => 
   return undefined;
 };
 
-const sceneGroupMetadataSearchText = (data: SceneGroupMetadata | undefined) => {
-  if (!data) return '';
-  return [
-    data.imageName,
-    data.imageWidth,
-    data.imageHeight,
-    ...(data.metadata ? Object.values(data.metadata) : []),
-    readMetadataValue(data.metadata, ['latitude', 'lat', 'gps_latitude']),
-    readMetadataValue(data.metadata, ['longitude', 'lon', 'lng', 'gps_longitude']),
-    readMetadataValue(data.metadata, ['altitude', 'gps_altitude', 'elevation', 'height']),
-    readMetadataValue(data.metadata, ['heading', 'yaw', 'course']),
-    readMetadataValue(data.metadata, ['utc_iso', 'utc', 'timestamp']),
-  ].map((value) => String(value ?? '')).join(' ');
-};
-
 const compareOptionalText = (first: string, second: string) => {
   if (!first && !second) return 0;
   if (!first) return 1;
@@ -229,7 +213,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [loadedAnnotations, setLoadedAnnotations] = useState<Annotation[] | null>(() => (
     rememberedState?.loadedAnnotations ?? null
   ));
-  const [query, setQuery] = useState(() => rememberedState?.query ?? '');
   const [classFilter, setClassFilter] = useState(() => rememberedState?.classFilter ?? 'all');
   const [typeFilter, setTypeFilter] = useState(() => rememberedState?.typeFilter ?? 'all');
   const [annotationIdFilter, setAnnotationIdFilter] = useState(() => rememberedState?.annotationIdFilter ?? '');
@@ -274,7 +257,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     if (!cacheKey) return;
     annotationTableMemory.set(cacheKey, {
       loadedAnnotations,
-      query,
       classFilter,
       typeFilter,
       annotationIdFilter,
@@ -319,7 +301,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     overlapPanelOpen,
     overlapThreshold,
     pointsFilter,
-    query,
     sceneFilter,
     showSceneGroupInfo,
     sortState,
@@ -494,7 +475,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   );
 
   const filteredRows = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
     const normalizedIdFilter = annotationIdFilter.trim().toLowerCase();
     const normalizedTextFilter = textFilter.trim().toLowerCase();
     const normalizedGroupIdFilter = groupIdFilter.trim().toLowerCase();
@@ -528,25 +508,9 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       if (maxWidth !== null && (row.boxWidth === null || row.boxWidth > maxWidth)) return false;
       if (minHeight !== null && (row.boxHeight === null || row.boxHeight < minHeight)) return false;
       if (maxHeight !== null && (row.boxHeight === null || row.boxHeight > maxHeight)) return false;
-      if (!normalizedQuery) return true;
-
-      return [
-        annotation.id,
-        annotation.label,
-        annotation.type,
-        annotation.stem,
-        row.textValue,
-        row.groupIdValue,
-        row.trackIdValue,
-        String(row.pointsCount),
-        row.attributesText,
-        formatBoxDimension(row.boxWidth),
-        formatBoxDimension(row.boxHeight),
-        overlapGroup,
-        showSceneGroupInfo ? sceneGroupMetadataSearchText(sceneGroupMetadata.get(annotation.stem)) : '',
-      ].some((value) => String(value || '').toLowerCase().includes(normalizedQuery));
+      return true;
     });
-  }, [annotationIdFilter, attributesFilter, classFilter, groupIdFilter, maxBoxHeight, maxBoxWidth, minBoxHeight, minBoxWidth, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, query, rows, sceneFilter, sceneGroupMetadata, showSceneGroupInfo, textFilter, trackIdFilter, typeFilter]);
+  }, [annotationIdFilter, attributesFilter, classFilter, groupIdFilter, maxBoxHeight, maxBoxWidth, minBoxHeight, minBoxWidth, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, rows, sceneFilter, textFilter, trackIdFilter, typeFilter]);
 
   const taxonomyAttributeNames = new Set(taxonomyAttributes.map((attribute) => attribute.name));
 
@@ -652,7 +616,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   };
 
   const clearFilters = () => {
-    setQuery('');
     setClassFilter('all');
     setTypeFilter('all');
     setAnnotationIdFilter('');
@@ -740,8 +703,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     });
   }, [filteredRows, hasMainSelection, hideUnselected, overlapCounts, overlapGroups, overlapKeys, selectedIdSet, sortState]);
 
-  const hasFilters = Boolean(query.trim())
-    || classFilter !== 'all'
+  const hasFilters = classFilter !== 'all'
     || typeFilter !== 'all'
     || Boolean(annotationIdFilter.trim())
     || Boolean(textFilter.trim())
@@ -782,27 +744,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
       <div className="p-5 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-1">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
-            <Input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              disabled={!isLoaded}
-              placeholder={t('taxonomyDashboard.annotationSearch', 'Search ID, class, text, group ID, track ID or scene group...')}
-              className="h-9 pl-9 pr-8 text-xs"
-            />
-            {query && (
-              <button
-                type="button"
-                onClick={() => setQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
-                aria-label={t('taxonomyDashboard.clearAnnotationSearch', 'Clear search')}
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
           <Button
             type="button"
             variant={overlapKeys !== null ? 'secondary' : 'outline'}

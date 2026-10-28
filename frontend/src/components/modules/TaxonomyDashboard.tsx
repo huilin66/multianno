@@ -6,8 +6,9 @@ import { AnnotationTable, type AnnotationTableOverlapState } from './AnnotationT
 import { 
   Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
   Plus, Check, X, Loader2, AlertCircle, Upload, Activity,
-  List, LayoutDashboard, ChevronDown, ChevronRight,
+  List, LayoutDashboard, ChevronDown, ChevronLeft, ChevronRight,
   Layers, ShieldCheck, CheckSquare, Square,
+  Table2,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
 import { Button } from '../ui/button';
@@ -1218,6 +1219,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const restoredAttributeIdRef = useRef<string | null>(null);
   const latestViewStateRef = useRef<TaxonomyDashboardViewState | null>(null);
   const [activeTab, setActiveTab] = useState<TaxonomyDashboardTab>('overview');
+  const [leftNavCollapsed, setLeftNavCollapsed] = useState(false);
   const [annotationTableOverlap, setAnnotationTableOverlap] = useState<AnnotationTableOverlapState>({
     active: false,
     mode: 'ios',
@@ -3078,8 +3080,20 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       
       <div className="flex-1 flex overflow-hidden">
         {/* ================= 1. 左侧可收纳导航树 ================= */}
-        <div className="w-64 border-r border-neutral-200 dark:border-neutral-800 flex flex-col bg-white dark:bg-neutral-900 shrink-0">
-          
+        <div className={`relative shrink-0 transition-[width] duration-200 ${leftNavCollapsed ? 'w-6' : 'w-64'}`}>
+          {leftNavCollapsed ? (
+            <button
+              type="button"
+              onClick={() => setLeftNavCollapsed(false)}
+              className="flex h-full w-6 items-center justify-center border-r border-neutral-200 bg-neutral-100 transition-colors hover:bg-neutral-200 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+              title={t('taxonomyDashboard.expandNavigation', 'Expand navigation')}
+              aria-label={t('taxonomyDashboard.expandNavigation', 'Expand navigation')}
+            >
+              <ChevronRight className="h-4 w-4 text-neutral-500" />
+            </button>
+          ) : (
+          <>
+          <div className="w-64 flex h-full flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
             <Button variant={activeTab === 'overview' ? 'secondary' : 'ghost'} 
                     onClick={() => { setActiveTab('overview'); setSelectedClassId(null); setSelectedAttributeId(null); }} 
@@ -3091,7 +3105,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
               onClick={() => { setActiveTab('annotationTable'); setSelectedClassId(null); setSelectedAttributeId(null); }}
               className={`w-full justify-start h-10 font-bold transition-all ${activeTab === 'annotationTable' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800' : ''}`}
             >
-              <List className="w-4 h-4 mr-2" /> {t('taxonomyDashboard.annotationTable', 'Annotation Table')}
+              <Table2 className="w-4 h-4 mr-2" /> {t('taxonomyDashboard.annotationTable', 'Annotation Table')}
             </Button>
             <Button
               variant="ghost"
@@ -3282,8 +3296,19 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                 </div>
               )}
             </div>
-
           </div>
+          <button
+            type="button"
+            onClick={() => setLeftNavCollapsed(true)}
+            className="absolute top-2 -right-3 z-20 flex h-6 w-6 items-center justify-center rounded-full border border-neutral-200 bg-white shadow-sm transition-colors hover:bg-neutral-100 dark:border-neutral-700 dark:bg-neutral-800 dark:hover:bg-neutral-700"
+            title={t('taxonomyDashboard.collapseNavigation', 'Collapse navigation')}
+            aria-label={t('taxonomyDashboard.collapseNavigation', 'Collapse navigation')}
+          >
+            <ChevronLeft className="h-3.5 w-3.5 text-neutral-500" />
+          </button>
+          </>
+          )}
+        </div>
 
         {/* ================= 2. 右侧主体区 ================= */}
         
