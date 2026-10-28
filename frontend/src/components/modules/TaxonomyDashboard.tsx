@@ -8,7 +8,6 @@ import {
   Plus, Check, X, Loader2, AlertCircle, Upload, Activity,
   List, LayoutDashboard, ChevronDown, ChevronRight,
   Layers, ShieldCheck, CheckSquare, Square,
-  Table2, BarChart3, PieChart
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
 import { Button } from '../ui/button';
@@ -122,8 +121,8 @@ const getDistributionBodyHeight = (rowCount: number) => Math.min(
 
 const DistributionTable = ({ rows, columns }: { rows: DistributionRow[]; columns: DistributionColumn[] }) => (
   <div className="h-full overflow-auto custom-scrollbar">
-    <table className="w-full min-w-[270px] text-left text-[10px]">
-      <thead className="sticky top-0 z-10 bg-neutral-50 text-[9px] uppercase tracking-wider text-neutral-400 dark:bg-neutral-800/95">
+    <table className="w-full min-w-[270px] text-left text-sm">
+      <thead className="sticky top-0 z-10 bg-neutral-50 text-xs uppercase tracking-wider text-neutral-400 dark:bg-neutral-800/95">
         <tr>
           {columns.map((column) => (
             <th key={column.key} className={`px-2 py-2 font-black ${column.key === 'count' || column.key === 'share' ? 'text-right' : ''}`}>
@@ -161,7 +160,7 @@ const DistributionBarChart = ({ series }: { series: DistributionSeries[] }) => {
     <div className="flex h-full min-h-[180px] max-h-full items-center justify-center overflow-y-auto custom-scrollbar">
       <div className="w-[92%] max-w-[820px] -translate-x-[3%] space-y-3 pr-1">
         {series.map((item, index) => (
-          <div key={`${item.label}-${index}`} className="grid grid-cols-[minmax(0,7rem)_1fr_auto] items-center gap-2 text-[10px]">
+          <div key={`${item.label}-${index}`} className="grid grid-cols-[minmax(0,7rem)_1fr_auto] items-center gap-2 text-sm">
             <span className="truncate text-neutral-600 dark:text-neutral-300" title={item.label}>{item.label}</span>
             <div className="h-2 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
               <div
@@ -191,7 +190,7 @@ const AttributeGroupedBarChart = ({ detailsData }: { detailsData: AttributeDistr
         const total = entries.reduce((sum, [, count]) => sum + Number(count || 0), 0);
         return (
           <div key={attributeName} className="space-y-1.5">
-            <div className="flex items-center justify-between gap-2 text-[10px]">
+            <div className="flex items-center justify-between gap-2 text-sm">
               <span className="truncate font-bold text-neutral-700 dark:text-neutral-200" title={attributeName}>{attributeName}</span>
               <span className="shrink-0 font-mono text-neutral-400">{total.toLocaleString()}</span>
             </div>
@@ -210,7 +209,7 @@ const AttributeGroupedBarChart = ({ detailsData }: { detailsData: AttributeDistr
             </div>
             <div className="flex flex-wrap gap-x-3 gap-y-1">
               {entries.map(([value, count], valueIndex) => (
-                <span key={value} className="flex max-w-[180px] items-center gap-1 text-[9px] text-neutral-500" title={`${value}: ${count}`}>
+                <span key={value} className="flex max-w-[180px] items-center gap-1 text-xs text-neutral-500" title={`${value}: ${count}`}>
                   <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: DISTRIBUTION_COLORS[(attributeIndex + valueIndex) % DISTRIBUTION_COLORS.length] }} />
                   <span className="truncate">{value}</span>
                   <span className="shrink-0 font-mono text-neutral-400">({count})</span>
@@ -250,7 +249,7 @@ const DistributionPieChart = ({ series }: { series: DistributionSeries[] }) => {
         <div className="h-32 w-32 shrink-0 rounded-full border-4 border-white shadow-sm dark:border-neutral-800" style={{ background: `conic-gradient(${conicStops})` }} />
         <div className="max-h-full min-w-0 flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-1">
           {visibleSeries.map((item, index) => (
-            <div key={`${item.label}-${index}`} className="flex items-center gap-2 text-[10px]">
+            <div key={`${item.label}-${index}`} className="flex items-center gap-2 text-sm">
               <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: item.color || DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length] }} />
               <span className="min-w-0 flex-1 truncate text-neutral-600 dark:text-neutral-300" title={item.label}>{item.label}</span>
               <span className="shrink-0 font-mono text-neutral-500">{item.count.toLocaleString()}</span>
@@ -281,12 +280,12 @@ const AttributePieGrid = ({ detailsData }: { detailsData: AttributeDistributionD
             <div className="h-20 w-20 shrink-0 rounded-full border-2 border-white shadow-sm dark:border-neutral-700" style={{ background: `conic-gradient(${conicStops})` }} />
             <div className="min-w-0 flex-1 space-y-1.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-[10px] font-bold text-neutral-700 dark:text-neutral-200" title={attributeName}>{attributeName}</span>
-                <span className="shrink-0 font-mono text-[9px] text-neutral-400">{total.toLocaleString()}</span>
+                <span className="truncate text-sm font-bold text-neutral-700 dark:text-neutral-200" title={attributeName}>{attributeName}</span>
+                <span className="shrink-0 font-mono text-xs text-neutral-400">{total.toLocaleString()}</span>
               </div>
               <div className="max-h-20 space-y-1 overflow-y-auto custom-scrollbar pr-1">
                 {entries.map(([value, count], valueIndex) => (
-                  <div key={value} className="flex items-center gap-1.5 text-[9px]">
+                  <div key={value} className="flex items-center gap-1.5 text-xs">
                     <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: DISTRIBUTION_COLORS[(attributeIndex + valueIndex) % DISTRIBUTION_COLORS.length] }} />
                     <span className="min-w-0 flex-1 truncate text-neutral-500" title={value}>{value}</span>
                     <span className="shrink-0 font-mono text-neutral-400">{count}</span>
@@ -307,7 +306,7 @@ const DistributionHistogram = ({ series }: { series: DistributionSeries[] }) => 
     <div className="flex h-full min-h-[180px] max-h-full items-end gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar border-b border-neutral-200 px-2 pb-1 dark:border-neutral-700">
       {series.map((item, index) => (
         <div key={`${item.label}-${index}`} className="group flex h-full min-w-[34px] flex-1 flex-col items-center justify-end gap-1">
-          <span className="text-[9px] font-mono text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100">{item.count.toLocaleString()}</span>
+          <span className="text-xs font-mono text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100">{item.count.toLocaleString()}</span>
           <div
             className="w-full min-h-px rounded-t-sm transition-all group-hover:brightness-110"
             style={{
@@ -316,7 +315,7 @@ const DistributionHistogram = ({ series }: { series: DistributionSeries[] }) => 
             }}
             title={`${item.label}: ${item.count}`}
           />
-          <span className="max-w-14 truncate text-[8px] text-neutral-500" title={item.label}>{item.label}</span>
+          <span className="max-w-14 truncate text-xs text-neutral-500" title={item.label}>{item.label}</span>
         </div>
       ))}
     </div>
@@ -340,10 +339,10 @@ const DistributionPanel = ({
   const [mode, setMode] = useState<DistributionViewMode>('table');
   const bodyHeight = getDistributionBodyHeight(rows.length);
   const modes = useMemo(() => ([
-    { id: 'table' as const, label: t('taxonomyDashboard.tableView'), icon: Table2 },
-    { id: 'bar' as const, label: t('taxonomyDashboard.barChartView'), icon: BarChart3 },
-    { id: 'pie' as const, label: t('taxonomyDashboard.pieChartView'), icon: PieChart },
-    ...(includeHistogram ? [{ id: 'histogram' as const, label: t('taxonomyDashboard.histogramView'), icon: BarChart3 }] : []),
+    { id: 'table' as const, label: t('taxonomyDashboard.tableView') },
+    { id: 'bar' as const, label: t('taxonomyDashboard.barChartView') },
+    { id: 'pie' as const, label: t('taxonomyDashboard.pieChartView') },
+    ...(includeHistogram ? [{ id: 'histogram' as const, label: t('taxonomyDashboard.histogramView') }] : []),
   ]), [includeHistogram, t]);
 
   useEffect(() => {
@@ -351,7 +350,7 @@ const DistributionPanel = ({
   }, [mode, modes]);
 
   const content = rows.length === 0 ? (
-    <div className="flex h-full items-center justify-center text-xs text-neutral-400">{t('taxonomyDashboard.noData')}</div>
+    <div className="flex h-full items-center justify-center text-sm text-neutral-400">{t('taxonomyDashboard.noData')}</div>
   ) : mode === 'table' ? (
     <DistributionTable rows={rows} columns={columns} />
   ) : mode === 'bar' ? (
@@ -368,16 +367,15 @@ const DistributionPanel = ({
       style={{ height: `${bodyHeight}px` }}
     >
       <nav className="w-[78px] shrink-0 border-r border-neutral-100 bg-neutral-50/70 p-1.5 dark:border-neutral-800 dark:bg-neutral-950/30">
-        {modes.map(({ id, label, icon: ModeIcon }) => (
+        {modes.map(({ id, label }) => (
           <button
             key={id}
             type="button"
             onClick={() => setMode(id)}
-            className={`mb-1 flex w-full flex-col items-center gap-1 rounded-md px-1 py-2 text-[9px] font-bold transition-colors ${mode === id ? 'bg-white text-blue-600 shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-800 dark:text-blue-400 dark:ring-neutral-700' : 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'}`}
+            className={`mb-1 flex w-full items-center justify-center rounded-md px-1 py-2 text-xs font-bold transition-colors ${mode === id ? 'bg-white text-blue-600 shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-800 dark:text-blue-400 dark:ring-neutral-700' : 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'}`}
             aria-pressed={mode === id}
             title={label}
           >
-            <ModeIcon className="h-3.5 w-3.5" />
             <span className="truncate">{label}</span>
           </button>
         ))}
@@ -3307,19 +3305,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     <div className="flex min-h-10 items-center justify-between gap-3 border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800">
                       <nav className="flex min-w-0 items-center gap-1" role="tablist" aria-label={t('taxonomyDashboard.distribution')}>
                       {[
-                        { id: 'shape' as const, label: t('taxonomyDashboard.shape'), icon: Layers },
-                        { id: 'class' as const, label: t('taxonomyDashboard.class'), icon: Tags },
-                        { id: 'attribute' as const, label: t('taxonomyDashboard.attribute'), icon: Settings },
-                      ].map(({ id, label, icon: TabIcon }) => (
+                        { id: 'shape' as const, label: t('taxonomyDashboard.shape') },
+                        { id: 'class' as const, label: t('taxonomyDashboard.class') },
+                        { id: 'attribute' as const, label: t('taxonomyDashboard.attribute') },
+                      ].map(({ id, label }) => (
                         <button
                           key={id}
                           type="button"
                           role="tab"
                           aria-selected={overviewDistributionTab === id}
                           onClick={() => setOverviewDistributionTab(id)}
-                          className={`flex items-center gap-1.5 border-b-2 px-2.5 py-2 text-[10px] font-bold transition-colors ${overviewDistributionTab === id ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
+                          className={`flex items-center gap-1.5 border-b-2 px-2.5 py-2 text-sm font-bold transition-colors ${overviewDistributionTab === id ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
                         >
-                          <TabIcon className="h-3.5 w-3.5 shrink-0" />
                           <span className="truncate">{label}</span>
                         </button>
                       ))}
@@ -3387,9 +3384,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex overflow-hidden min-h-[600px] shrink-0">
                     
                     {/* 1. 左侧：Shape 垂直导航栏 */}
-                    <div className="w-56 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex flex-col p-3 gap-1 shrink-0">
-                      <h4 className="text-[10px] font-black text-neutral-400 uppercase tracking-wider mb-3 px-2 flex items-center gap-2">
-                        <Layers className="w-3 h-3" /> {t('taxonomyDashboard.geometryFilter')}
+                    <div className="w-44 border-r border-neutral-200 dark:border-neutral-800 bg-neutral-50/50 dark:bg-neutral-950/20 flex flex-col p-3 gap-1 shrink-0">
+                      <h4 className="text-sm font-black text-neutral-800 dark:text-neutral-100 uppercase tracking-wider mb-3 px-2">
+                        {t('taxonomyDashboard.geometryFilter')}
                       </h4>
                       
                       {/* 定义所有支持的几何类型及其状态 */}

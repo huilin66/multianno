@@ -1391,7 +1391,7 @@ export default function App() {
         open={activeModule === 'taxonomy'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-border overflow-hidden">
+        <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col gap-0 p-0 border-border overflow-hidden">
           <DialogHeader className="p-4 pr-14 border-b border-border shrink-0 flex-row items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-4">
               <DialogTitle className="min-w-0 truncate">{t('menu.annotationManager')}</DialogTitle>
