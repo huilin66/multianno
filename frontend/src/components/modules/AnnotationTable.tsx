@@ -89,17 +89,11 @@ interface AnnotationTableMemoryState {
   hiddenColumns?: AnnotationTableColumnKey[];
   classFilter: string;
   typeFilter: string;
-  annotationIdFilter: string;
-  textFilter: string;
   groupIdFilter: string;
   trackIdFilter: string;
   pointsFilter: string;
   attributesFilter: string;
   sceneFilter: string;
-  minBoxWidth: string;
-  maxBoxWidth: string;
-  minBoxHeight: string;
-  maxBoxHeight: string;
   overlapGroupFilter: string;
   sortState: AnnotationTableSortState | null;
   overlapPanelOpen: boolean;
@@ -180,13 +174,6 @@ const formatBoxDimension = (value: number | null) => {
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.00$/, '');
 };
 
-const parseNumberFilter = (value: string) => {
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  const parsed = Number(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
 const compareOptionalNumbers = (first: number | null, second: number | null) => {
   if (first === null && second === null) return 0;
   if (first === null) return 1;
@@ -242,17 +229,11 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   } | null>(null);
   const [classFilter, setClassFilter] = useState(() => rememberedState?.classFilter ?? 'all');
   const [typeFilter, setTypeFilter] = useState(() => rememberedState?.typeFilter ?? 'all');
-  const [annotationIdFilter, setAnnotationIdFilter] = useState(() => rememberedState?.annotationIdFilter ?? '');
-  const [textFilter, setTextFilter] = useState(() => rememberedState?.textFilter ?? '');
   const [groupIdFilter, setGroupIdFilter] = useState(() => rememberedState?.groupIdFilter ?? '');
   const [trackIdFilter, setTrackIdFilter] = useState(() => rememberedState?.trackIdFilter ?? '');
   const [pointsFilter, setPointsFilter] = useState(() => rememberedState?.pointsFilter ?? '');
   const [attributesFilter, setAttributesFilter] = useState(() => rememberedState?.attributesFilter ?? '');
   const [sceneFilter, setSceneFilter] = useState(() => rememberedState?.sceneFilter ?? '');
-  const [minBoxWidth, setMinBoxWidth] = useState(() => rememberedState?.minBoxWidth ?? '');
-  const [maxBoxWidth, setMaxBoxWidth] = useState(() => rememberedState?.maxBoxWidth ?? '');
-  const [minBoxHeight, setMinBoxHeight] = useState(() => rememberedState?.minBoxHeight ?? '');
-  const [maxBoxHeight, setMaxBoxHeight] = useState(() => rememberedState?.maxBoxHeight ?? '');
   const [overlapGroupFilter, setOverlapGroupFilter] = useState(() => rememberedState?.overlapGroupFilter ?? '');
   const [sortState, setSortState] = useState<AnnotationTableSortState | null>(() => (
     rememberedState?.sortState ? { ...rememberedState.sortState } : null
@@ -281,6 +262,27 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const isLoaded = loadedAnnotations !== null;
 
   useEffect(() => {
+    const legacyDefaults: Array<[AnnotationTableColumnKey, number]> = [
+      ['id', 128],
+      ['label', 176],
+      ['type', 112],
+      ['boxWidth', 96],
+      ['boxHeight', 96],
+    ];
+    setColumnWidths((current) => {
+      let changed = false;
+      const next = { ...current };
+      legacyDefaults.forEach(([key, legacyWidth]) => {
+        if (current[key] === legacyWidth && DEFAULT_COLUMN_WIDTHS[key] !== legacyWidth) {
+          next[key] = DEFAULT_COLUMN_WIDTHS[key];
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, []);
+
+  useEffect(() => {
     if (!cacheKey) return;
     annotationTableMemory.set(cacheKey, {
       loadedAnnotations,
@@ -289,17 +291,11 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       hiddenColumns: Array.from(hiddenColumns),
       classFilter,
       typeFilter,
-      annotationIdFilter,
-      textFilter,
       groupIdFilter,
       trackIdFilter,
       pointsFilter,
       attributesFilter,
       sceneFilter,
-      minBoxWidth,
-      maxBoxWidth,
-      minBoxHeight,
-      maxBoxHeight,
       overlapGroupFilter,
       sortState,
       overlapPanelOpen,
@@ -312,7 +308,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       showSceneGroupInfo,
     });
   }, [
-    annotationIdFilter,
     attributesFilter,
     cacheKey,
     classFilter,
@@ -322,10 +317,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     groupIdFilter,
     hideUnselected,
     loadedAnnotations,
-    maxBoxHeight,
-    maxBoxWidth,
-    minBoxHeight,
-    minBoxWidth,
     overlapCounts,
     overlapGroupFilter,
     overlapGroups,
@@ -337,7 +328,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     sceneFilter,
     showSceneGroupInfo,
     sortState,
-    textFilter,
     trackIdFilter,
     typeFilter,
   ]);
@@ -507,43 +497,46 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     [rows],
   );
 
+  const groupIdOptions = useMemo(() => {
+    const values = new Set<string>(rows.map((row) => row.groupIdValue).filter(Boolean));
+    if (groupIdFilter) values.add(groupIdFilter);
+    return Array.from(values).sort((first, second) => first.localeCompare(second, undefined, { numeric: true }));
+  }, [groupIdFilter, rows]);
+
+  const trackIdOptions = useMemo(() => {
+    const values = new Set<string>(rows.map((row) => row.trackIdValue).filter(Boolean));
+    if (trackIdFilter) values.add(trackIdFilter);
+    return Array.from(values).sort((first, second) => first.localeCompare(second, undefined, { numeric: true }));
+  }, [rows, trackIdFilter]);
+
+  const pointsOptions = useMemo(() => {
+    const values = new Set(rows.map((row) => String(row.pointsCount)));
+    if (pointsFilter) values.add(pointsFilter);
+    return Array.from(values).sort((first, second) => Number(first) - Number(second));
+  }, [pointsFilter, rows]);
+
   const filteredRows = useMemo(() => {
-    const normalizedIdFilter = annotationIdFilter.trim().toLowerCase();
-    const normalizedTextFilter = textFilter.trim().toLowerCase();
-    const normalizedGroupIdFilter = groupIdFilter.trim().toLowerCase();
-    const normalizedTrackIdFilter = trackIdFilter.trim().toLowerCase();
-    const normalizedPointsFilter = pointsFilter.trim().toLowerCase();
     const normalizedAttributesFilter = attributesFilter.trim().toLowerCase();
     const normalizedSceneFilter = sceneFilter.trim().toLowerCase();
     const normalizedOverlapGroupFilter = overlapGroupFilter.trim().toLowerCase();
-    const minWidth = parseNumberFilter(minBoxWidth);
-    const maxWidth = parseNumberFilter(maxBoxWidth);
-    const minHeight = parseNumberFilter(minBoxHeight);
-    const maxHeight = parseNumberFilter(maxBoxHeight);
 
     return rows.filter((row) => {
       const { annotation } = row;
       if (classFilter !== 'all' && annotation.label !== classFilter) return false;
       if (typeFilter !== 'all' && annotation.type !== typeFilter) return false;
       if (overlapKeys && !overlapKeys.has(getAnnotationOverlapKey(annotation))) return false;
-      if (normalizedIdFilter && !String(annotation.id).toLowerCase().includes(normalizedIdFilter)) return false;
-      if (normalizedTextFilter && !row.textValue.toLowerCase().includes(normalizedTextFilter)) return false;
-      if (normalizedGroupIdFilter && !row.groupIdValue.toLowerCase().includes(normalizedGroupIdFilter)) return false;
-      if (normalizedTrackIdFilter && !row.trackIdValue.toLowerCase().includes(normalizedTrackIdFilter)) return false;
-      if (normalizedPointsFilter && !String(row.pointsCount).includes(normalizedPointsFilter)) return false;
+      if (groupIdFilter && row.groupIdValue !== groupIdFilter) return false;
+      if (trackIdFilter && row.trackIdValue !== trackIdFilter) return false;
+      if (pointsFilter && String(row.pointsCount) !== pointsFilter) return false;
       if (normalizedAttributesFilter && !row.attributesText.toLowerCase().includes(normalizedAttributesFilter)) return false;
       if (normalizedSceneFilter && !annotation.stem.toLowerCase().includes(normalizedSceneFilter)) return false;
       const overlapGroup = overlapGroups.get(getAnnotationOverlapKey(annotation)) || '';
       if (normalizedOverlapGroupFilter) {
         if (!overlapGroup.toLowerCase().includes(normalizedOverlapGroupFilter)) return false;
       }
-      if (minWidth !== null && (row.boxWidth === null || row.boxWidth < minWidth)) return false;
-      if (maxWidth !== null && (row.boxWidth === null || row.boxWidth > maxWidth)) return false;
-      if (minHeight !== null && (row.boxHeight === null || row.boxHeight < minHeight)) return false;
-      if (maxHeight !== null && (row.boxHeight === null || row.boxHeight > maxHeight)) return false;
       return true;
     });
-  }, [annotationIdFilter, attributesFilter, classFilter, groupIdFilter, maxBoxHeight, maxBoxWidth, minBoxHeight, minBoxWidth, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, rows, sceneFilter, textFilter, trackIdFilter, typeFilter]);
+  }, [attributesFilter, classFilter, groupIdFilter, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, rows, sceneFilter, trackIdFilter, typeFilter]);
 
   const taxonomyAttributeNames = new Set(taxonomyAttributes.map((attribute) => attribute.name));
 
@@ -684,17 +677,11 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const clearFilters = () => {
     setClassFilter('all');
     setTypeFilter('all');
-    setAnnotationIdFilter('');
-    setTextFilter('');
     setGroupIdFilter('');
     setTrackIdFilter('');
     setPointsFilter('');
     setAttributesFilter('');
     setSceneFilter('');
-    setMinBoxWidth('');
-    setMaxBoxWidth('');
-    setMinBoxHeight('');
-    setMaxBoxHeight('');
     setOverlapGroupFilter('');
     setHideUnselected(false);
     resetOverlapScan();
@@ -771,17 +758,11 @@ export const AnnotationTable = React.memo(function AnnotationTable({
 
   const hasFilters = classFilter !== 'all'
     || typeFilter !== 'all'
-    || Boolean(annotationIdFilter.trim())
-    || Boolean(textFilter.trim())
     || Boolean(groupIdFilter.trim())
     || Boolean(trackIdFilter.trim())
     || Boolean(pointsFilter.trim())
     || Boolean(attributesFilter.trim())
     || Boolean(sceneFilter.trim())
-    || Boolean(minBoxWidth.trim())
-    || Boolean(maxBoxWidth.trim())
-    || Boolean(minBoxHeight.trim())
-    || Boolean(maxBoxHeight.trim())
     || Boolean(overlapGroupFilter.trim())
     || overlapKeys !== null
     || (hideUnselected && hasMainSelection);
@@ -847,9 +828,9 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const getColumnLabel = (key: AnnotationTableColumnKey) => {
     switch (key) {
       case 'row': return '#';
-      case 'id': return t('taxonomyDashboard.annotationId', 'Annotation ID');
-      case 'label': return t('taxonomyDashboard.className', 'Class');
-      case 'type': return t('taxonomyDashboard.annotationType', 'Type');
+      case 'id': return t('taxonomyDashboard.annotationIdShort', 'ID');
+      case 'label': return t('taxonomyDashboard.classNameShort', 'Class');
+      case 'type': return t('taxonomyDashboard.annotationTypeShort', 'Type');
       case 'boxWidth': return t('taxonomyDashboard.boxWidthShort', 'Box W');
       case 'boxHeight': return t('taxonomyDashboard.boxHeightShort', 'Box H');
       case 'text': return t('taxonomyDashboard.annotationText', 'Text');
@@ -1054,10 +1035,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     );
 
     switch (key) {
-      case 'id':
-        return cell(
-          <Input value={annotationIdFilter} onChange={(event) => setAnnotationIdFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterId', 'Find ID')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />,
-        );
       case 'label':
         return cell(
           <Select value={classFilter} onValueChange={setClassFilter} disabled={!isLoaded}>
@@ -1078,28 +1055,38 @@ export const AnnotationTable = React.memo(function AnnotationTable({
             </SelectContent>
           </Select>,
         );
-      case 'boxWidth':
-        return cell(
-          <div className="space-y-1">
-            <Input type="number" min="0" value={minBoxWidth} onChange={(event) => setMinBoxWidth(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.min', 'min')} className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900" />
-            <Input type="number" min="0" value={maxBoxWidth} onChange={(event) => setMaxBoxWidth(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.max', 'max')} className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900" />
-          </div>,
-        );
-      case 'boxHeight':
-        return cell(
-          <div className="space-y-1">
-            <Input type="number" min="0" value={minBoxHeight} onChange={(event) => setMinBoxHeight(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.min', 'min')} className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900" />
-            <Input type="number" min="0" value={maxBoxHeight} onChange={(event) => setMaxBoxHeight(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.max', 'max')} className="h-7 w-full bg-white text-right text-[10px] dark:bg-neutral-900" />
-          </div>,
-        );
       case 'text':
-        return cell(<Input value={textFilter} onChange={(event) => setTextFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterText', 'Find text')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+        return cell();
       case 'groupId':
-        return cell(<Input value={groupIdFilter} onChange={(event) => setGroupIdFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterGroupId', 'Find group ID')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+        return cell(
+          <Select value={groupIdFilter || 'all'} onValueChange={(value) => setGroupIdFilter(value === 'all' ? '' : value)} disabled={!isLoaded}>
+            <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"><SelectValue placeholder={t('taxonomyDashboard.annotationGroupId', 'Group ID')} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('taxonomyDashboard.allValues', 'All')}</SelectItem>
+              {groupIdOptions.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+            </SelectContent>
+          </Select>,
+        );
       case 'trackId':
-        return cell(<Input value={trackIdFilter} onChange={(event) => setTrackIdFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterTrackId', 'Find track ID')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+        return cell(
+          <Select value={trackIdFilter || 'all'} onValueChange={(value) => setTrackIdFilter(value === 'all' ? '' : value)} disabled={!isLoaded}>
+            <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"><SelectValue placeholder={t('taxonomyDashboard.annotationTrackId', 'Track ID')} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('taxonomyDashboard.allValues', 'All')}</SelectItem>
+              {trackIdOptions.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+            </SelectContent>
+          </Select>,
+        );
       case 'points':
-        return cell(<Input value={pointsFilter} onChange={(event) => setPointsFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterPoints', 'Find points')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+        return cell(
+          <Select value={pointsFilter || 'all'} onValueChange={(value) => setPointsFilter(value === 'all' ? '' : value)} disabled={!isLoaded}>
+            <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"><SelectValue placeholder={t('taxonomyDashboard.annotationPoints', 'Points')} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('taxonomyDashboard.allValues', 'All')}</SelectItem>
+              {pointsOptions.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+            </SelectContent>
+          </Select>,
+        );
       case 'attributes':
         return cell(<Input value={attributesFilter} onChange={(event) => setAttributesFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterAttributes', 'Find attributes')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
       case 'stem':

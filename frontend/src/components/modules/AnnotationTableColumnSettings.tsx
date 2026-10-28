@@ -31,11 +31,11 @@ export type AnnotationTableColumnKey =
 
 export const DEFAULT_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
   row: 48,
-  id: 208,
-  label: 176,
-  type: 112,
-  boxWidth: 96,
-  boxHeight: 96,
+  id: 64,
+  label: 104,
+  type: 80,
+  boxWidth: 64,
+  boxHeight: 64,
   text: 220,
   groupId: 128,
   trackId: 144,
@@ -56,11 +56,11 @@ export const DEFAULT_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
 
 export const MIN_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
   row: 40,
-  id: 120,
-  label: 120,
-  type: 88,
-  boxWidth: 72,
-  boxHeight: 72,
+  id: 44,
+  label: 72,
+  type: 64,
+  boxWidth: 48,
+  boxHeight: 48,
   text: 160,
   groupId: 96,
   trackId: 96,
@@ -137,9 +137,9 @@ export const AnnotationTableColumnSettings = React.memo(function AnnotationTable
   const getColumnLabel = (key: AnnotationTableColumnKey) => {
     switch (key) {
       case 'row': return '#';
-      case 'id': return t('taxonomyDashboard.annotationId', 'Annotation ID');
-      case 'label': return t('taxonomyDashboard.className', 'Class');
-      case 'type': return t('taxonomyDashboard.annotationType', 'Type');
+      case 'id': return t('taxonomyDashboard.annotationIdShort', 'ID');
+      case 'label': return t('taxonomyDashboard.classNameShort', 'Class');
+      case 'type': return t('taxonomyDashboard.annotationTypeShort', 'Type');
       case 'boxWidth': return t('taxonomyDashboard.boxWidthShort', 'Box W');
       case 'boxHeight': return t('taxonomyDashboard.boxHeightShort', 'Box H');
       case 'text': return t('taxonomyDashboard.annotationText', 'Text');
