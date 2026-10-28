@@ -165,7 +165,13 @@ export const repairData = (
 
 export const batchMergeClassWithAttribute = (params: {
   save_dirs: string[];
-  merges: { old_name: string; new_name: string; attribute_name: string; attribute_value: string }[];
+  merges: {
+    old_name: string;
+    new_name: string;
+    attribute_name?: string;
+    attribute_value?: string;
+    attributes?: Record<string, string>;
+  }[];
 }) => post(`${API_BASE_URL}/taxonomy/merge_with_attribute`, params);
 
 export type TaxonomyJobOperation =

@@ -53,6 +53,14 @@ interface TaxonomyProcessingProgress {
   total: number;
 }
 
+interface MergeTargetDraft {
+  id: string;
+  name: string;
+  color: string;
+}
+
+type MergeAttributeMode = 'single' | 'perTarget';
+
 const TAXONOMY_VIEW_STATE_PREFIX = 'multiAnno_taxonomy_dashboard_view';
 const taxonomyViewStateMemory = new Map<string, TaxonomyDashboardViewState>();
 
@@ -1228,7 +1236,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const { t } = useTranslation();
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
-    taxonomyAttributes = [], addTaxonomyAttribute, updateTaxonomyAttribute, deleteTaxonomyAttribute,
+    taxonomyAttributes = [], addTaxonomyAttribute, upsertTaxonomyAttributes, updateTaxonomyAttribute, deleteTaxonomyAttribute,
     annotations = [], folders, views, sceneGroups, editorSettings, projectMetaPath, projectName, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
     activeAnnotationId = null, selectedAnnotationIds = [],
     mergeTaxonomyClassesWithAttributes, stems, workspacePath, setPendingAnnotationFocus
@@ -1286,14 +1294,43 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [isAddingClass, setIsAddingClass] = useState(false);
 
   const [showMergeWithAttr, setShowMergeWithAttr] = useState(false);
-  const [mergeSourceClassIds, setMergeSourceClassIds] = useState<Set<string>>(new Set());
-  const [mergeAttrName, setMergeAttrName] = useState('');
-  const [mergeAttrValues, setMergeAttrValues] = useState<Record<string, string>>({}); // classId → value
+  const [mergeTargetDrafts, setMergeTargetDrafts] = useState<MergeTargetDraft[]>([]);
+  const [mergeSourceTargetMap, setMergeSourceTargetMap] = useState<Record<string, string>>({});
+  const [mergeAttributeMode, setMergeAttributeMode] = useState<MergeAttributeMode>('single');
+  const [mergeAttrName, setMergeAttrName] = useState('source_class');
+  const [mergeTargetAttributeNames, setMergeTargetAttributeNames] = useState<Record<string, string>>({});
 
   const [classSortDir, setClassSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
   const [attrSortDir, setAttrSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
 
   const [newTargetClassName, setNewTargetClassName] = useState('');
+  const resetMergeWithAttributeDraft = useCallback(() => {
+    setMergeTargetDrafts([]);
+    setMergeSourceTargetMap({});
+    setMergeAttributeMode('single');
+    setMergeAttrName('source_class');
+    setMergeTargetAttributeNames({});
+    setNewTargetClassName('');
+  }, []);
+
+  useEffect(() => {
+    if (showMergeWithAttr) resetMergeWithAttributeDraft();
+  }, [resetMergeWithAttributeDraft, showMergeWithAttr]);
+
+  const addMergeTargetDraft = () => {
+    const name = newTargetClassName.trim();
+    if (!name || mergeTargetDrafts.some((target) => target.name.toLowerCase() === name.toLowerCase())) return;
+
+    const targetId = `merge-target-${Date.now()}-${mergeTargetDrafts.length}`;
+    const color = TAXONOMY_COLORS[mergeTargetDrafts.length % TAXONOMY_COLORS.length];
+    setMergeTargetDrafts((previous) => [...previous, { id: targetId, name, color }]);
+    setMergeTargetAttributeNames((previous) => ({
+      ...previous,
+      [targetId]: `${name}_origin`,
+    }));
+    setNewTargetClassName('');
+  };
+
   const [previewStem, setPreviewStem] = useState<string | null>(null);
   const [previewViewId, setPreviewViewId] = useState<string>('');
   const [previewObjects, setPreviewObjects] = useState<PreviewObject[]>([]);
@@ -2124,125 +2161,114 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     }
   };
 
-  // 🌟 只包含源类，不包括 target
+  // The advanced workflow starts with every current taxonomy class as a source.
+  // Target classes are temporary drafts and only enter the taxonomy after confirmation.
   const allSourceClasses = useMemo(() => {
-    if (!showMergeWithAttr || !activeClass) return [];
-    
-    const classes = new Map<string, any>();
-    
-    // 添加当前 active class
-    classes.set(activeClass.id, activeClass);
-    
-    // 添加已勾选的额外源类
-    for (const sourceId of mergeSourceClassIds) {
-      const cls = taxonomyClasses.find((c: any) => c.id === sourceId);
-      if (cls) classes.set(cls.id, cls);
-    }
-    
-    return Array.from(classes.values());
-  }, [showMergeWithAttr, activeClass, mergeSourceClassIds, taxonomyClasses]);
+    if (!showMergeWithAttr) return [];
+    return [...taxonomyClasses].sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [showMergeWithAttr, taxonomyClasses]);
+
+  const mergeAssignedSourceCount = useMemo(
+    () => allSourceClasses.filter((cls: any) => Boolean(mergeSourceTargetMap[cls.id])).length,
+    [allSourceClasses, mergeSourceTargetMap],
+  );
+  const mappedSourceClasses = useMemo(
+    () => allSourceClasses.filter((cls: any) => Boolean(mergeSourceTargetMap[cls.id])),
+    [allSourceClasses, mergeSourceTargetMap],
+  );
+  const mergeMappingComplete = mappedSourceClasses.length > 0
+    && mergeTargetDrafts.length > 0
+    && mergeTargetDrafts.every((target) => Object.values(mergeSourceTargetMap).includes(target.id));
+  const mergeAttributeNames = mergeAttributeMode === 'single'
+    ? [mergeAttrName.trim()]
+    : mergeTargetDrafts.map((target) => (mergeTargetAttributeNames[target.id] || '').trim());
+  const mergeAttributeNamesValid = mergeAttributeNames.length > 0
+    && mergeAttributeNames.every(Boolean)
+    && new Set(mergeAttributeNames.map((name) => name.toLowerCase())).size === mergeAttributeNames.length;
 
   const executeMergeWithAttribute = async () => {
-    if (!activeClass) return;
-    
-    const sourceClasses = allSourceClasses;
-    
-    if (sourceClasses.length === 0 || !mergeAttrName.trim() || !newTargetClassName.trim()) return;
+    const sourceClasses = mappedSourceClasses;
+    if (!mergeMappingComplete || !mergeAttributeNamesValid) return;
 
-    const targetClassName = newTargetClassName.trim();
-
-    // 验证每个源类都必须选择了 attribute value
-    for (const cls of sourceClasses) {
-      const value = mergeAttrValues[cls.id]?.trim();
-      if (!value) {
-        openDialog({
-          type: 'warning',
-          title: t('taxonomyDashboard.missingValue'),
-          description: t('taxonomyDashboard.missingValueDesc', { attr: mergeAttrName, class: cls.name }),
-          confirmText: t('taxonomyDashboard.gotIt'),
-          hideCancel: true,
-        });
-        return;
-      }
-    }
-
-    const merges = sourceClasses.map(cls => ({
-      old_name: cls.name,
-      new_name: targetClassName,
-      attribute_name: mergeAttrName.trim(),
-      attribute_value: mergeAttrValues[cls.id].trim(),
+    const sourceTargetPairs = sourceClasses.map((sourceClass: any) => ({
+      sourceClass,
+      target: mergeTargetDrafts.find((candidate) => candidate.id === mergeSourceTargetMap[sourceClass.id]),
     }));
-    const attributeName = mergeAttrName.trim();
-    
+    const attributeDefinitions = mergeAttributeMode === 'single'
+      ? [{
+          id: `attr-${Date.now()}-origin`,
+          name: mergeAttributeNames[0],
+          type: 'select',
+          options: sourceClasses.map((cls: any) => cls.name),
+          defaultValue: sourceClasses[0]?.name || '',
+          applyToAll: true,
+        }]
+      : mergeTargetDrafts.map((target) => {
+          const values = sourceTargetPairs
+            .filter(({ target: assignedTarget }) => assignedTarget?.id === target.id)
+            .map(({ sourceClass }) => sourceClass.name);
+          return {
+            id: `attr-${Date.now()}-${target.id}`,
+            name: mergeTargetAttributeNames[target.id].trim(),
+            type: 'select',
+            options: [...values, 'none'],
+            defaultValue: 'none',
+            applyToAll: true,
+          };
+        });
+    const merges = sourceTargetPairs.map(({ sourceClass, target }) => {
+      const attributes = mergeAttributeMode === 'single'
+        ? { [mergeAttributeNames[0]]: sourceClass.name }
+        : Object.fromEntries(
+            mergeTargetDrafts.map((candidate, index) => [
+              mergeAttributeNames[index],
+              candidate.id === target?.id ? sourceClass.name : 'none',
+            ]),
+          );
+      return {
+        old_name: sourceClass.name,
+        new_name: target?.name || sourceClass.name,
+        attributes,
+      };
+    });
+    const targetNames = mergeTargetDrafts.map((target) => target.name);
+    const attributeNames = attributeDefinitions.map((attribute) => attribute.name);
+
     try {
       const safeSaveDirs = getSaveDirs();
-      
       const mergeResult = await runTaxonomyWrite(
         'merge_with_attribute',
-        {
-          save_dirs: safeSaveDirs,
-          merges,
-        },
+        { save_dirs: safeSaveDirs, merges },
         t('taxonomyDashboard.updatingLabelsAndAttributes', 'Updating labels and attributes'),
         Boolean(editorSettings.autoRefreshStats),
       );
-      
-      // 🌟 关键修复：手动更新 annotations 中的 attributes
-      const state = useStore.getState();
-      const mergeMap = new Map(merges.map(m => [m.old_name, m]));
-      
-      const updatedAnnotations = state.annotations.map((ann: any) => {
-        const merge = mergeMap.get(ann.label) as {
-          old_name: string;
-          new_name: string;
-          attribute_name: string;
-          attribute_value: string;
-        } | undefined;
-        if (!merge) return ann;
-        return {
-          ...ann,
-          label: merge.new_name,
-          attributes: {
-            ...(ann.attributes || {}),
-            [merge.attribute_name]: merge.attribute_value,
-          },
-        };
+
+      const targetClassIds: Record<string, string> = {};
+      mergeTargetDrafts.forEach((target, index) => {
+        const existing = taxonomyClasses.find((candidate: any) => candidate.name.toLowerCase() === target.name.toLowerCase());
+        const targetId = existing?.id || `class-${Date.now()}-${index}`;
+        targetClassIds[target.id] = targetId;
+        if (!existing) {
+          addTaxonomyClass({ id: targetId, name: target.name, color: target.color });
+        }
       });
-      
-      // 直接更新 Store 的 annotations
-      useStore.setState({ annotations: updatedAnnotations });
-      
-      // 在本地 Store 中创建新的 target class
-      const newClassId = `class-${Date.now()}`;
-      const targetColor = activeClass?.color || TAXONOMY_COLORS[taxonomyClasses.length % TAXONOMY_COLORS.length];
-      
-      addTaxonomyClass({
-        id: newClassId,
-        name: targetClassName,
-        color: targetColor,
-      });
-      
-      // 合并所有源类到新类（这个调用会再次更新 annotations，但我们已经在上面手动更新过了）
-      const sourceNames = sourceClasses.map(c => c.name);
-      mergeTaxonomyClasses(sourceNames, targetClassName);
-      
+      upsertTaxonomyAttributes(attributeDefinitions);
+      mergeTaxonomyClassesWithAttributes(merges);
+
       useStore.getState().setStatsCacheValid?.(false);
       await refreshStatsIfNeeded(true);
-      // 重置弹窗状态
       setShowMergeWithAttr(false);
-      setMergeSourceClassIds(new Set());
-      setMergeAttrValues({});
-      setMergeAttrName('');
-      setNewTargetClassName('');
-      setSelectedClassId(newClassId);
-      
+      resetMergeWithAttributeDraft();
+      setActiveTab('classes');
+      setSelectedClassId(targetClassIds[mergeTargetDrafts[0]?.id] || null);
+
       queueTaxonomyDialog({
         type: 'success',
         title: t('taxonomyDashboard.updateComplete', 'Update complete'),
         description: t('taxonomyDashboard.mergeClassWithAttributeSummary', {
           count: merges.length,
-          target: targetClassName,
-          attr: attributeName,
+          target: targetNames.join(', '),
+          attr: attributeNames.join(', '),
           files: Number(mergeResult?.modified_files || 0),
           objects: Number(mergeResult?.total_objects || 0),
         }),
@@ -4502,229 +4528,291 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         </div>
       </div>
     
-    {/* 🌟 合并弹窗 - 只能选已有 attribute 和已有值 */}
-{showMergeWithAttr && activeClass && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-    <div className="flex max-h-[85vh] w-[620px] max-w-full flex-col rounded-xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
-      <div className="mb-4 shrink-0 border-b border-neutral-200 pb-3 dark:border-neutral-800">
-        <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
-          {t('workspace.mergeClassesTrackOrigin', 'Merge Classes & Track Origin')}
-        </h3>
-        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-          {t('workspace.trackOriginDesc', 'Select an existing attribute to record which class each shape came from.')}
-        </p>
-      </div>
-
-      <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
-        
-        {/* ========== 1. 源类选择区 ========== */}
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-700 dark:bg-neutral-800/40">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">
-              {t('workspace.sourceClasses', 'Source Classes')}
+    {/* Advanced class merge: create targets, map sources, then configure origin attributes. */}
+    {showMergeWithAttr && activeClass && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="flex max-h-[88vh] w-[760px] max-w-full flex-col rounded-xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+          <div className="mb-4 shrink-0 border-b border-neutral-200 pb-3 dark:border-neutral-800">
+            <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+              {t('workspace.mergeClassesTrackOrigin', 'Merge Classes & Track Origin')}
+            </h3>
+            <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+              {t('workspace.advancedMergeHint', 'Create target classes, map every source class, then preserve its origin with attributes.')}
             </p>
-            <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
-              {allSourceClasses.length} {t('workspace.selected', 'selected')}
-            </span>
           </div>
-          <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
-            {/* 当前 active class（固定参与） */}
-            <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white p-2 dark:border-neutral-700 dark:bg-neutral-900">
-              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: activeClass.color }} />
-              <span className="text-xs font-medium">{activeClass.name}</span>
-              <span className="ml-auto text-[10px] font-medium text-blue-600 dark:text-blue-400">{t('workspace.selected', 'Selected')}</span>
-            </div>
-            {/* 其他可选类 */}
-            {sortedClasses
-              .filter((c: any) => c.id !== activeClass?.id)
-              .map((c: any) => {
-                const isSelected = mergeSourceClassIds.has(c.id);
-                return (
-                  <div
-                    key={c.id}
-                    onClick={() => {
-                      const next = new Set(mergeSourceClassIds);
-                      if (isSelected) {
-                        next.delete(c.id);
-                        const nextValues = { ...mergeAttrValues };
-                        delete nextValues[c.id];
-                        setMergeAttrValues(nextValues);
-                      } else {
-                        next.add(c.id);
-                      }
-                      setMergeSourceClassIds(next);
-                    }}
-                    className={`flex items-center gap-2 p-2 rounded cursor-pointer text-xs transition-colors ${
-                      isSelected
-                        ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800'
-                        : 'hover:bg-neutral-50 dark:hover:bg-neutral-800 border border-transparent'
-                    }`}
-                  >
-                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: c.color }} />
-                    <span className="flex-1 font-medium">{c.name}</span>
-                    {isSelected ? (
-                      <CheckSquare className="w-4 h-4 text-blue-500" />
-                    ) : (
-                      <Square className="w-4 h-4 text-neutral-300" />
-                    )}
+
+          <div className="flex-1 space-y-4 overflow-y-auto pr-1 custom-scrollbar">
+            {/* 1. Create target classes */}
+            <section className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-700 dark:bg-neutral-800/40">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h4 className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">
+                  {t('workspace.targetClassCreation', '1. Create target classes')}
+                </h4>
+                <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+                  {mergeTargetDrafts.length} {t('workspace.created', 'created')}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newTargetClassName}
+                  onChange={(event) => setNewTargetClassName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      event.preventDefault();
+                      addMergeTargetDraft();
+                    }
+                  }}
+                  placeholder={t('workspace.targetClassNamePlaceholder', 'Target class name')}
+                  className="h-9 flex-1 text-sm"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-9 rounded-md px-3 text-sm font-semibold"
+                  onClick={addMergeTargetDraft}
+                  disabled={!newTargetClassName.trim()}
+                >
+                  <Plus className="mr-1 h-4 w-4" />
+                  {t('common.add', 'Add')}
+                </Button>
+              </div>
+              {newTargetClassName.trim() && taxonomyClasses.some((c: any) => c.name.toLowerCase() === newTargetClassName.trim().toLowerCase()) && (
+                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                  {t('workspace.classNameExistsWarning', 'A class with this name already exists. Its objects will be merged into it.')}
+                </p>
+              )}
+            </section>
+
+            {/* 2. Map source classes to target classes */}
+            <section className="rounded-lg border border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h4 className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">
+                  {t('workspace.classMapping', '2. Map source classes to target classes')}
+                </h4>
+                <span className={`text-[11px] font-medium ${mergeMappingComplete ? 'text-blue-600 dark:text-blue-400' : 'text-neutral-500 dark:text-neutral-400'}`}>
+                  {mergeAssignedSourceCount}/{allSourceClasses.length} {t('workspace.assigned', 'assigned')}
+                </span>
+              </div>
+              <div className="grid min-h-[220px] grid-cols-2 gap-4">
+                <div className="min-w-0">
+                  <p className="mb-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                    {t('workspace.sourceClasses', 'Source classes')}
+                  </p>
+                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700">
+                    {allSourceClasses.map((sourceClass: any) => {
+                      const targetId = mergeSourceTargetMap[sourceClass.id];
+                      const target = mergeTargetDrafts.find((candidate) => candidate.id === targetId);
+                      return (
+                        <div
+                          key={sourceClass.id}
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData('text/plain', sourceClass.id);
+                            event.dataTransfer.effectAllowed = 'move';
+                          }}
+                          className={`flex cursor-grab items-center gap-2 rounded-md border px-2 py-1.5 text-xs active:cursor-grabbing ${
+                            target ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30' : 'border-transparent hover:border-neutral-200 hover:bg-neutral-50 dark:hover:border-neutral-700 dark:hover:bg-neutral-800'
+                          }`}
+                        >
+                          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: sourceClass.color }} />
+                          <span className="min-w-0 flex-1 truncate font-medium">{sourceClass.name}</span>
+                          {target && (
+                            <span className="flex max-w-[46%] items-center gap-1 truncate text-[10px] text-blue-600 dark:text-blue-400">
+                              <ArrowRight className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{target.name}</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-          </div>
-        </div>
+                </div>
 
-        {/* ========== 2. 新类名输入区 ========== */}
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-700 dark:bg-neutral-800/40">
-          <p className="mb-2 text-xs font-semibold text-neutral-700 dark:text-neutral-200">
-            {t('workspace.newClassName', 'New Class Name')}
-          </p>
-          <Input
-            value={newTargetClassName}
-            onChange={e => setNewTargetClassName(e.target.value)}
-            placeholder="e.g. crack"
-            className="h-9 text-sm font-bold"
-          />
-          {newTargetClassName.trim() && taxonomyClasses.some((c: any) => c.name.toLowerCase() === newTargetClassName.trim().toLowerCase()) && (
-            <p className="text-[9px] text-amber-600 mt-1">
-              {t('workspace.classNameExistsWarning', 'A class with this name already exists. All shapes will be merged into it.')}
-            </p>
-          )}
-        </div>
+                <div className="min-w-0">
+                  <p className="mb-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+                    {t('workspace.targetClasses', 'Target classes')}
+                  </p>
+                  <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700">
+                    {mergeTargetDrafts.length === 0 && (
+                      <p className="p-4 text-center text-xs text-neutral-400">
+                        {t('workspace.addTargetClassHint', 'Add a target class above.')}
+                      </p>
+                    )}
+                    {mergeTargetDrafts.map((target) => {
+                      const assignedCount = Object.values(mergeSourceTargetMap).filter((targetId) => targetId === target.id).length;
+                      return (
+                        <div
+                          key={target.id}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const sourceId = event.dataTransfer.getData('text/plain');
+                            if (sourceId) setMergeSourceTargetMap((previous) => ({ ...previous, [sourceId]: target.id }));
+                          }}
+                          className="rounded-md border border-neutral-200 bg-neutral-50 p-2.5 dark:border-neutral-700 dark:bg-neutral-800/60"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: target.color }} />
+                            <span className="min-w-0 flex-1 truncate text-xs font-semibold">{target.name}</span>
+                            <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{assignedCount}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 text-neutral-400 hover:text-red-600"
+                              onClick={() => {
+                                setMergeTargetDrafts((previous) => previous.filter((candidate) => candidate.id !== target.id));
+                                setMergeSourceTargetMap((previous) => Object.fromEntries(
+                                  Object.entries(previous).filter(([, targetId]) => targetId !== target.id),
+                                ));
+                                setMergeTargetAttributeNames((previous) => {
+                                  const next = { ...previous };
+                                  delete next[target.id];
+                                  return next;
+                                });
+                              }}
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                          <p className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+                            {t('workspace.dropSourceClassHint', 'Drop source classes here')}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div
+                    onDragOver={(event) => event.preventDefault()}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      const sourceId = event.dataTransfer.getData('text/plain');
+                      if (sourceId) setMergeSourceTargetMap((previous) => {
+                        const next = { ...previous };
+                        delete next[sourceId];
+                        return next;
+                      });
+                    }}
+                    className="mt-2 rounded-md border border-dashed border-neutral-300 px-2 py-1.5 text-center text-[10px] text-neutral-500 dark:border-neutral-600 dark:text-neutral-400"
+                  >
+                    {t('workspace.dropToUnassign', 'Drop here to unassign')}
+                  </div>
+                </div>
+              </div>
+            </section>
 
-        {/* ========== 3. Attribute 选择区（只能选已有，值也只能选已有） ========== */}
-        <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-700 dark:bg-neutral-800/40">
-          <p className="mb-2 text-xs font-semibold text-neutral-700 dark:text-neutral-200">
-            {t('workspace.trackOriginWithAttribute', 'Track Origin With Attribute')}
-          </p>
-          
-          {/* 🌟 Step 1: 选择 Attribute */}
-          <div className="mb-4">
-            <Label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('workspace.stepOneSelectAttribute', '1. Select Attribute')}</Label>
-            <Select value={mergeAttrName} onValueChange={(v) => {
-              setMergeAttrName(v);
-              // 🌟 切换 attribute 时，清空之前的值
-              setMergeAttrValues({});
-            }}>
-              <SelectTrigger className="h-9 text-sm mt-1">
-                <SelectValue placeholder={t('workspace.chooseAttribute', 'Choose an existing attribute...')} />
-              </SelectTrigger>
-              <SelectContent>
-                {taxonomyAttributes.map((a: any) => (
-                  <SelectItem key={a.id} value={a.name}>
-                    <span className="flex items-center gap-2">
-                      <span
-                        className="h-3 w-3 shrink-0 rounded-sm border border-black/10 shadow-sm"
-                        style={{ backgroundColor: ATTRIBUTE_COLUMN_PALETTE[taxonomyAttributes.indexOf(a) % ATTRIBUTE_COLUMN_PALETTE.length] }}
+            {/* 3. Attribute settings appears only after every source is mapped */}
+            {mergeMappingComplete && (
+              <section className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-700 dark:bg-neutral-800/40">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <h4 className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">
+                    {t('workspace.attributeSettings', '3. Attribute settings')}
+                  </h4>
+                  <span className="text-[11px] text-blue-600 dark:text-blue-400">
+                    {t('workspace.mappingComplete', 'Mapping complete')}
+                  </span>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {([
+                    ['single', t('workspace.oneSharedAttribute', 'One shared attribute'), t('workspace.oneSharedAttributeHint', 'All source classes become values of one attribute.')],
+                    ['perTarget', t('workspace.attributePerTarget', 'One attribute per target'), t('workspace.attributePerTargetHint', 'Each target gets its own attribute and a none value.')],
+                  ] as const).map(([mode, label, description]) => (
+                    <label key={mode} className={`flex cursor-pointer items-start gap-2 rounded-md border p-2.5 ${mergeAttributeMode === mode ? 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30' : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900'}`}>
+                      <input
+                        type="radio"
+                        name="merge-attribute-mode"
+                        value={mode}
+                        checked={mergeAttributeMode === mode}
+                        onChange={() => setMergeAttributeMode(mode)}
+                        className="mt-0.5 accent-blue-600"
                       />
-                      {a.name}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {taxonomyAttributes.length === 0 && (
-              <p className="text-[9px] text-amber-500 mt-1">
-                {t('workspace.noAttributesDefinedHint', 'No attributes defined. Please create one in the Attributes tab first.')}
-              </p>
+                      <span className="min-w-0">
+                        <span className="block text-xs font-semibold">{label}</span>
+                        <span className="mt-0.5 block text-[10px] text-neutral-500 dark:text-neutral-400">{description}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                {mergeAttributeMode === 'single' ? (
+                  <div className="mt-3">
+                    <Label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
+                      {t('workspace.attributeName', 'Attribute name')}
+                    </Label>
+                    <Input
+                      value={mergeAttrName}
+                      onChange={(event) => setMergeAttrName(event.target.value)}
+                      placeholder={t('workspace.attributeNamePlaceholder', 'e.g. source_class')}
+                      className="mt-1 h-9 text-sm"
+                    />
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] text-neutral-500">{t('workspace.values', 'Values')}:</span>
+                      {mappedSourceClasses.map((sourceClass: any) => (
+                        <span key={sourceClass.id} className="rounded bg-white px-1.5 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-900 dark:text-neutral-300">
+                          {sourceClass.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {mergeTargetDrafts.map((target) => {
+                      const values = mappedSourceClasses
+                        .filter((sourceClass: any) => mergeSourceTargetMap[sourceClass.id] === target.id)
+                        .map((sourceClass: any) => sourceClass.name);
+                      return (
+                        <div key={target.id} className="rounded-md border border-neutral-200 bg-white p-2.5 dark:border-neutral-700 dark:bg-neutral-900">
+                          <div className="mb-1 flex items-center gap-2">
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: target.color }} />
+                            <span className="text-xs font-semibold">{target.name}</span>
+                          </div>
+                          <Input
+                            value={mergeTargetAttributeNames[target.id] || ''}
+                            onChange={(event) => setMergeTargetAttributeNames((previous) => ({ ...previous, [target.id]: event.target.value }))}
+                            placeholder={t('workspace.attributeNamePlaceholder', 'Attribute name')}
+                            className="h-8 text-xs"
+                          />
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                            {values.map((value) => (
+                              <span key={value} className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{value}</span>
+                            ))}
+                            <span className="rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">none</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </section>
             )}
           </div>
 
-          {/* 🌟 Step 2: 为每个源类选择已有的 attribute value */}
-          {mergeAttrName && allSourceClasses.length > 0 && (() => {
-            // 🌟 获取该 attribute 的可选值列表
-            const selectedAttr = taxonomyAttributes.find((a: any) => a.name === mergeAttrName);
-            const availableValues: string[] = selectedAttr?.options || [];
-            
-            return (
-              <div>
-                  <Label className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-300">
-                  {t('workspace.setValuesForEachClass', '2. Set Values for Each Class')} ({allSourceClasses.length} classes)
-                </Label>
-                
-                {availableValues.length === 0 ? (
-                  <p className="text-[9px] text-amber-500">
-                    {t('workspace.attributeNoValues', 'Attribute "{{name}}" has no defined values. Please add options in the Attributes tab.', { name: mergeAttrName })}
-                  </p>
-                ) : (
-                  <div className="space-y-1.5 mt-1 max-h-48 overflow-y-auto custom-scrollbar">
-                    {allSourceClasses.map((cls: any) => (
-                      <div
-                        key={cls.id}
-                        className="flex items-center gap-2 p-2 rounded border bg-white dark:bg-neutral-800 border-neutral-100 dark:border-neutral-700"
-                      >
-                        <div
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: cls.color }}
-                        />
-                        <span className="text-xs font-medium w-28 truncate">{cls.name}</span>
-                        <span className="text-[10px] text-neutral-400">→</span>
-                        
-                        {/* 🌟 核心修改：用 Select 替代 Input，只能选已有值 */}
-                        <Select
-                          value={mergeAttrValues[cls.id] || ''}
-                          onValueChange={(v) =>
-                            setMergeAttrValues(prev => ({
-                              ...prev,
-                              [String(cls.id)]: v,
-                            }))
-                          }
-                        >
-                          <SelectTrigger className="flex-1 h-7 text-xs">
-                            <SelectValue placeholder={t('workspace.selectValue', 'Select value...')} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {availableValues.map((val: string) => (
-                              <SelectItem key={val} value={val} className="text-xs">
-                                {val}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          <div className="mt-4 flex shrink-0 items-center justify-end gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 rounded-md px-4 text-sm font-semibold"
+              onClick={() => {
+                setShowMergeWithAttr(false);
+                resetMergeWithAttributeDraft();
+              }}
+            >
+              {t('common.cancel')}
+            </Button>
+            <Button
+              size="sm"
+              className="h-9 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
+              onClick={executeMergeWithAttribute}
+              disabled={isProcessing || !mergeMappingComplete || !mergeAttributeNamesValid}
+            >
+              {isProcessing ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : null}
+              {t('common.confirm', 'Confirm')}
+            </Button>
+          </div>
         </div>
       </div>
-
-      {/* ========== 底部按钮 ========== */}
-      <div className="mt-4 flex shrink-0 items-center justify-end gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-9 rounded-md px-4 text-sm font-semibold"
-          onClick={() => {
-            setShowMergeWithAttr(false);
-            setMergeSourceClassIds(new Set());
-            setMergeAttrValues({});
-            setMergeAttrName('');
-            setNewTargetClassName('');
-          }}
-        >
-          {t('common.cancel')}
-        </Button>
-        <Button
-          size="sm"
-          className="h-9 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
-          onClick={executeMergeWithAttribute}
-          disabled={
-            !mergeAttrName.trim() ||
-            !newTargetClassName.trim() ||
-            allSourceClasses.length === 0 ||
-            isProcessing ||
-            allSourceClasses.some((cls: any) => !mergeAttrValues[cls.id]?.trim())
-          }
-        >
-          {isProcessing ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
-          {t('workspace.mergeIntoClass', 'Merge into "{{name}}"', { name: newTargetClassName || '...' })}
-        </Button>
-      </div>
-    </div>
-  </div>
-)}
+    )}
     
     </div>
   );

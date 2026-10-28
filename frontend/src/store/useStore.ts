@@ -348,7 +348,13 @@ export interface AppState {
   updateTaxonomyClass: (id: string, updates: Partial<TaxonomyClass>) => void;
   deleteTaxonomyClass: (id: string, deleteAnnotations: boolean) => void;
   mergeTaxonomyClasses: (sourceIds: string[], targetId: string) => void;
-  mergeTaxonomyClassesWithAttributes: (merges: { old_name: string; new_name: string; attribute_name: string; attribute_value: string }[]) => void;
+  mergeTaxonomyClassesWithAttributes: (merges: {
+    old_name: string;
+    new_name: string;
+    attribute_name?: string;
+    attribute_value?: string;
+    attributes?: Record<string, string>;
+  }[]) => void;
   addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
   upsertTaxonomyAttributes: (attrs: Array<Partial<TaxonomyAttribute> & { name: string }>) => void;
   updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
@@ -726,19 +732,30 @@ export const useStore = create<AppState>()(
         };
       }),
       mergeTaxonomyClassesWithAttributes: (
-        merges: { old_name: string; new_name: string; attribute_name: string; attribute_value: string }[]
+        merges: {
+          old_name: string;
+          new_name: string;
+          attribute_name?: string;
+          attribute_value?: string;
+          attributes?: Record<string, string>;
+        }[]
       ) => set((state) => {
         const oldNames = merges.map(m => m.old_name);
         
         const newAnnotations = state.annotations.map(a => {
           const match = merges.find(m => m.old_name === a.label);
           if (match) {
+            const attributePatch = match.attributes && Object.keys(match.attributes).length > 0
+              ? match.attributes
+              : match.attribute_name && match.attribute_value !== undefined
+                ? { [match.attribute_name]: match.attribute_value }
+                : {};
             return {
               ...a,
               label: match.new_name,
               attributes: {
                 ...a.attributes,
-                [match.attribute_name]: match.attribute_value,
+                ...attributePatch,
               },
             };
           }

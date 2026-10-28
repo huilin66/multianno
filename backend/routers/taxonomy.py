@@ -1447,30 +1447,34 @@ async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
                             new_name = merge.new_name
                             attr_name = merge.attribute_name
                             attr_value = merge.attribute_value
+                            attributes = dict(merge.attributes or {})
                         else:
                             new_name = merge["new_name"]
-                            attr_name = merge["attribute_name"]
-                            attr_value = merge["attribute_value"]
+                            attr_name = merge.get("attribute_name")
+                            attr_value = merge.get("attribute_value")
+                            attributes = dict(merge.get("attributes") or {})
 
-                        old_attr = shape.get("attributes", {}).get(
-                            attr_name, "<not set>"
-                        )
+                        if not attributes and attr_name and attr_value is not None:
+                            attributes[str(attr_name)] = str(attr_value)
 
                         shape["label"] = new_name
                         if "attributes" not in shape:
                             shape["attributes"] = {}
-                        shape["attributes"][attr_name] = attr_value
-
-                        logger.info(
-                            "MERGE_WITH_ATTRIBUTE_OBJECT file=%s label=%s new_label=%s "
-                            "attribute=%s old_value=%s new_value=%s",
-                            file_name,
-                            label,
-                            new_name,
-                            attr_name,
-                            old_attr,
-                            attr_value,
-                        )
+                        for attribute_name, attribute_value in attributes.items():
+                            old_attr = shape["attributes"].get(
+                                attribute_name, "<not set>"
+                            )
+                            shape["attributes"][attribute_name] = attribute_value
+                            logger.info(
+                                "MERGE_WITH_ATTRIBUTE_OBJECT file=%s label=%s new_label=%s "
+                                "attribute=%s old_value=%s new_value=%s",
+                                file_name,
+                                label,
+                                new_name,
+                                attribute_name,
+                                old_attr,
+                                attribute_value,
+                            )
 
                         changed = True
                         file_objects_updated += 1

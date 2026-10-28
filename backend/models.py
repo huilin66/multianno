@@ -290,8 +290,11 @@ class RepairRequest(BaseModel):
 class MergeRule(BaseModel):
     old_name: str
     new_name: str
-    attribute_name: str
-    attribute_value: str
+    # Legacy single-attribute fields remain supported for older clients.
+    attribute_name: Optional[str] = None
+    attribute_value: Optional[str] = None
+    # New clients can apply several attributes to every migrated object.
+    attributes: Dict[str, str] = Field(default_factory=dict)
 
 
 class MergeWithAttributeRequest(BaseModel):
