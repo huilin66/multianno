@@ -5,7 +5,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 
-export type AnnotationTableColumnKey =
+export type BaseAnnotationTableColumnKey =
   | 'row'
   | 'id'
   | 'label'
@@ -16,7 +16,6 @@ export type AnnotationTableColumnKey =
   | 'groupId'
   | 'trackId'
   | 'points'
-  | 'attributes'
   | 'stem'
   | 'imageName'
   | 'imageWidth'
@@ -29,7 +28,19 @@ export type AnnotationTableColumnKey =
   | 'overlap'
   | 'action';
 
-export const DEFAULT_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
+export type AnnotationTableColumnKey = BaseAnnotationTableColumnKey | `attribute:${string}`;
+
+export const ATTRIBUTE_COLUMN_PREFIX = 'attribute:';
+
+export const getAttributeColumnKey = (name: string) => `${ATTRIBUTE_COLUMN_PREFIX}${name}` as `attribute:${string}`;
+
+export const isAttributeColumnKey = (key: AnnotationTableColumnKey) => key.startsWith(ATTRIBUTE_COLUMN_PREFIX);
+
+export const getAttributeNameFromColumnKey = (key: AnnotationTableColumnKey) => (
+  isAttributeColumnKey(key) ? key.slice(ATTRIBUTE_COLUMN_PREFIX.length) : null
+);
+
+export const DEFAULT_COLUMN_WIDTHS: Record<BaseAnnotationTableColumnKey, number> = {
   row: 48,
   id: 64,
   label: 104,
@@ -40,7 +51,6 @@ export const DEFAULT_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
   groupId: 96,
   trackId: 96,
   points: 80,
-  attributes: 220,
   stem: 220,
   imageName: 220,
   imageWidth: 112,
@@ -54,7 +64,7 @@ export const DEFAULT_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
   action: 48,
 };
 
-export const MIN_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
+export const MIN_COLUMN_WIDTHS: Record<BaseAnnotationTableColumnKey, number> = {
   row: 40,
   id: 44,
   label: 72,
@@ -65,7 +75,6 @@ export const MIN_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
   groupId: 64,
   trackId: 64,
   points: 64,
-  attributes: 160,
   stem: 160,
   imageName: 160,
   imageWidth: 88,
@@ -81,7 +90,7 @@ export const MIN_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
 
 export const DEFAULT_COLUMN_ORDER: AnnotationTableColumnKey[] = [
   'row', 'id', 'label', 'type', 'boxWidth', 'boxHeight',
-  'groupId', 'trackId', 'points', 'attributes', 'stem',
+  'groupId', 'trackId', 'points', 'stem',
   'imageName', 'imageWidth', 'imageHeight', 'latitude', 'longitude',
   'altitude', 'heading', 'utc', 'overlap', 'text', 'action',
 ];
@@ -91,11 +100,19 @@ export const SCENE_GROUP_INFO_COLUMNS: AnnotationTableColumnKey[] = [
   'altitude', 'heading', 'utc',
 ];
 
+export const getDefaultColumnWidth = (key: AnnotationTableColumnKey) => (
+  isAttributeColumnKey(key) ? 144 : DEFAULT_COLUMN_WIDTHS[key]
+);
+
+export const getMinColumnWidth = (key: AnnotationTableColumnKey) => (
+  isAttributeColumnKey(key) ? 96 : MIN_COLUMN_WIDTHS[key]
+);
+
 interface AnnotationTableColumnSettingsProps {
   isLoaded: boolean;
   columnSettingsKeys: AnnotationTableColumnKey[];
   visibleColumnKeys: AnnotationTableColumnKey[];
-  columnWidths: Record<AnnotationTableColumnKey, number>;
+  columnWidths: Record<string, number>;
   hiddenColumns: Set<AnnotationTableColumnKey>;
   onColumnWidthChange: (key: AnnotationTableColumnKey, width: number) => void;
   onToggleColumnVisibility: (key: AnnotationTableColumnKey) => void;
@@ -124,17 +141,20 @@ export const AnnotationTableColumnSettings = React.memo(function AnnotationTable
 }: AnnotationTableColumnSettingsProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const [columnWidthDrafts, setColumnWidthDrafts] = useState<Partial<Record<AnnotationTableColumnKey, string>>>(() => (
+  const [columnWidthDrafts, setColumnWidthDrafts] = useState<Partial<Record<string, string>>>(() => (
     Object.fromEntries(
       Object.entries(DEFAULT_COLUMN_WIDTHS).map(([key, value]) => [key, String(value)]),
-    ) as Partial<Record<AnnotationTableColumnKey, string>>
+    ) as Partial<Record<string, string>>
   ));
 
   const getColumnWidth = (key: AnnotationTableColumnKey) => (
-    key === 'row' ? DEFAULT_COLUMN_WIDTHS.row : columnWidths[key]
+    key === 'row' ? DEFAULT_COLUMN_WIDTHS.row : columnWidths[key] ?? getDefaultColumnWidth(key)
   );
 
   const getColumnLabel = (key: AnnotationTableColumnKey) => {
+    const attributeName = getAttributeNameFromColumnKey(key);
+    if (attributeName !== null) return attributeName;
+
     switch (key) {
       case 'row': return '#';
       case 'id': return t('taxonomyDashboard.annotationIdShort', 'ID');
@@ -146,7 +166,6 @@ export const AnnotationTableColumnSettings = React.memo(function AnnotationTable
       case 'groupId': return t('taxonomyDashboard.annotationGroupId', 'Group ID');
       case 'trackId': return t('taxonomyDashboard.annotationTrackId', 'Track ID');
       case 'points': return t('taxonomyDashboard.annotationPoints', 'Points');
-      case 'attributes': return t('taxonomyDashboard.annotationAttributes', 'Attributes');
       case 'stem': return t('taxonomyDashboard.sceneGroup', 'Scene Group');
       case 'imageName': return t('sceneGroupManager.imageName', 'Image');
       case 'imageWidth': return t('sceneGroupManager.imageWidth', 'Image width');
@@ -165,16 +184,16 @@ export const AnnotationTableColumnSettings = React.memo(function AnnotationTable
   useEffect(() => {
     if (!open) return;
     setColumnWidthDrafts(Object.fromEntries(
-      DEFAULT_COLUMN_ORDER.map((key) => [key, String(getColumnWidth(key))]),
+      columnSettingsKeys.map((key) => [key, String(getColumnWidth(key))]),
     ));
-  }, [open, columnWidths]);
+  }, [columnSettingsKeys, columnWidths, open]);
 
   const commitColumnWidth = (key: AnnotationTableColumnKey) => {
     if (key === 'row') return;
     const draft = columnWidthDrafts[key] ?? String(getColumnWidth(key));
     const parsed = Number(draft);
     const nextWidth = Number.isFinite(parsed) && parsed > 0
-      ? Math.max(MIN_COLUMN_WIDTHS[key], Math.round(parsed))
+      ? Math.max(getMinColumnWidth(key), Math.round(parsed))
       : getColumnWidth(key);
     onColumnWidthChange(key, nextWidth);
     setColumnWidthDrafts((current) => ({ ...current, [key]: String(nextWidth) }));
@@ -240,7 +259,7 @@ export const AnnotationTableColumnSettings = React.memo(function AnnotationTable
                   <div className="flex items-center gap-1">
                     <Input
                       type="number"
-                      min={MIN_COLUMN_WIDTHS[key]}
+                      min={getMinColumnWidth(key)}
                       step="1"
                       value={columnWidthDrafts[key] ?? String(getColumnWidth(key))}
                       onChange={(event) => setColumnWidthDrafts((current) => ({ ...current, [key]: event.target.value }))}

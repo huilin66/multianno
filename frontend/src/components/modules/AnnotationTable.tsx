@@ -12,7 +12,11 @@ import {
   AnnotationTableColumnSettings,
   DEFAULT_COLUMN_ORDER,
   DEFAULT_COLUMN_WIDTHS,
-  MIN_COLUMN_WIDTHS,
+  getAttributeColumnKey,
+  getAttributeNameFromColumnKey,
+  getDefaultColumnWidth,
+  getMinColumnWidth,
+  isAttributeColumnKey,
   SCENE_GROUP_INFO_COLUMNS,
   type AnnotationTableColumnKey,
 } from './AnnotationTableColumnSettings';
@@ -44,7 +48,7 @@ interface AnnotationTableProps {
 interface AnnotationTableRow {
   annotation: Annotation;
   sceneObjectIndex: number;
-  attributesText: string;
+  attributeValues: Record<string, string>;
   textValue: string;
   groupIdValue: string;
   trackIdValue: string;
@@ -73,7 +77,6 @@ type AnnotationTableSortKey =
   | 'groupId'
   | 'trackId'
   | 'points'
-  | 'attributes'
   | 'stem'
   | 'overlap';
 
@@ -84,7 +87,7 @@ interface AnnotationTableSortState {
 
 interface AnnotationTableMemoryState {
   loadedAnnotations: Annotation[] | null;
-  columnWidths?: Partial<Record<AnnotationTableColumnKey, number>>;
+  columnWidths?: Record<string, number>;
   columnOrder?: AnnotationTableColumnKey[];
   columnOrderVersion?: number;
   hiddenColumns?: AnnotationTableColumnKey[];
@@ -93,7 +96,7 @@ interface AnnotationTableMemoryState {
   groupIdFilter: string;
   trackIdFilter: string;
   pointsFilter: string;
-  attributesFilter: string;
+  attributeFilters?: Record<string, string>;
   sceneFilter: string;
   overlapGroupFilter: string;
   sortState: AnnotationTableSortState | null;
@@ -105,9 +108,10 @@ interface AnnotationTableMemoryState {
   overlapGroups: Array<[string, string]>;
   hideUnselected: boolean;
   showSceneGroupInfo: boolean;
+  showColumnFilters?: boolean;
 }
 
-const COLUMN_ORDER_VERSION = 2;
+const COLUMN_ORDER_VERSION = 3;
 
 const moveTextColumnToEnd = (order: AnnotationTableColumnKey[]) => {
   const normalized = [
@@ -127,6 +131,19 @@ const moveTextColumnToEnd = (order: AnnotationTableColumnKey[]) => {
 // snapshot and controls outside the component so switching tabs or closing
 // and reopening Annotation Manager does not discard the user's work.
 const annotationTableMemory = new Map<string, AnnotationTableMemoryState>();
+
+const ATTRIBUTE_COLUMN_PALETTE = [
+  '#6d28d9',
+  '#0f766e',
+  '#b45309',
+  '#be185d',
+  '#1d4ed8',
+  '#047857',
+  '#9f1239',
+  '#7c2d12',
+];
+
+const ATTRIBUTE_FILTER_ALL = '__all_attribute_values__';
 
 const formatAttributeValue = (value: string | number | boolean) => {
   if (typeof value === 'boolean') return value ? 'true' : 'false';
@@ -228,7 +245,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [loadedAnnotations, setLoadedAnnotations] = useState<Annotation[] | null>(() => (
     rememberedState?.loadedAnnotations ?? null
   ));
-  const [columnWidths, setColumnWidths] = useState<Record<AnnotationTableColumnKey, number>>(() => ({
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>(() => ({
     ...DEFAULT_COLUMN_WIDTHS,
     ...(rememberedState?.columnWidths || {}),
   }));
@@ -257,7 +274,9 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [groupIdFilter, setGroupIdFilter] = useState(() => rememberedState?.groupIdFilter ?? '');
   const [trackIdFilter, setTrackIdFilter] = useState(() => rememberedState?.trackIdFilter ?? '');
   const [pointsFilter, setPointsFilter] = useState(() => rememberedState?.pointsFilter ?? '');
-  const [attributesFilter, setAttributesFilter] = useState(() => rememberedState?.attributesFilter ?? '');
+  const [attributeFilters, setAttributeFilters] = useState<Record<string, string>>(() => ({
+    ...(rememberedState?.attributeFilters || {}),
+  }));
   const [sceneFilter, setSceneFilter] = useState(() => rememberedState?.sceneFilter ?? '');
   const [overlapGroupFilter, setOverlapGroupFilter] = useState(() => rememberedState?.overlapGroupFilter ?? '');
   const [sortState, setSortState] = useState<AnnotationTableSortState | null>(() => (
@@ -278,6 +297,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
   const [hideUnselected, setHideUnselected] = useState(() => rememberedState?.hideUnselected ?? false);
   const [showSceneGroupInfo, setShowSceneGroupInfo] = useState(() => rememberedState?.showSceneGroupInfo ?? false);
+  const [showColumnFilters, setShowColumnFilters] = useState(() => rememberedState?.showColumnFilters ?? false);
   const lastExternalReloadTokenRef = useRef(0);
   const [sceneGroupMetadata, setSceneGroupMetadata] = useState<Map<string, SceneGroupMetadata>>(new Map());
   const [sceneGroupMetadataLoading, setSceneGroupMetadataLoading] = useState(false);
@@ -300,8 +320,8 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       let changed = false;
       const next = { ...current };
       legacyDefaults.forEach(([key, legacyWidth]) => {
-        if (current[key] === legacyWidth && DEFAULT_COLUMN_WIDTHS[key] !== legacyWidth) {
-          next[key] = DEFAULT_COLUMN_WIDTHS[key];
+        if (current[key] === legacyWidth && getDefaultColumnWidth(key) !== legacyWidth) {
+          next[key] = getDefaultColumnWidth(key);
           changed = true;
         }
       });
@@ -322,7 +342,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       groupIdFilter,
       trackIdFilter,
       pointsFilter,
-      attributesFilter,
+      attributeFilters,
       sceneFilter,
       overlapGroupFilter,
       sortState,
@@ -334,9 +354,10 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       overlapGroups: Array.from(overlapGroups.entries()),
       hideUnselected,
       showSceneGroupInfo,
+      showColumnFilters,
     });
   }, [
-    attributesFilter,
+    attributeFilters,
     cacheKey,
     classFilter,
     columnOrder,
@@ -355,6 +376,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     pointsFilter,
     sceneFilter,
     showSceneGroupInfo,
+    showColumnFilters,
     sortState,
     trackIdFilter,
     typeFilter,
@@ -380,17 +402,15 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         string,
         string | number | boolean,
       ]>;
-      const attributesText = attributeEntries.length > 0
-        ? attributeEntries
-          .map(([name, value]) => `${name}=${formatAttributeValue(value)}`)
-          .join(' · ')
-        : '—';
+      const attributeValues = Object.fromEntries(
+        attributeEntries.map(([name, value]) => [name, formatAttributeValue(value)]),
+      );
       const bounds = getAnnotationBounds(annotation);
 
       return {
         annotation,
         sceneObjectIndex,
-        attributesText,
+        attributeValues,
         textValue: annotation.text?.trim() || '',
         groupIdValue: annotation.group_id === undefined || annotation.group_id === null
           ? ''
@@ -543,9 +563,28 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     return Array.from(values).sort((first, second) => Number(first) - Number(second));
   }, [pointsFilter, rows]);
 
+  const sceneOptions = useMemo(() => {
+    const values = new Set<string>(rows.map((row) => row.annotation.stem).filter(Boolean));
+    if (sceneFilter) values.add(sceneFilter);
+    return Array.from(values).sort((first, second) => first.localeCompare(second, undefined, { numeric: true }));
+  }, [rows, sceneFilter]);
+
+  const attributeValueOptions = useMemo<Record<string, string[]>>(() => {
+    const options: Record<string, string[]> = {};
+    taxonomyAttributes.forEach((attribute) => {
+      const values = new Set<string>(attribute.options || []);
+      rows.forEach((row) => {
+        const value = row.attributeValues[attribute.name];
+        if (value) values.add(value);
+      });
+      const selectedValue = attributeFilters[attribute.name];
+      if (selectedValue) values.add(selectedValue);
+      options[attribute.name] = Array.from(values).sort((first, second) => first.localeCompare(second, undefined, { numeric: true }));
+    });
+    return options;
+  }, [attributeFilters, rows, taxonomyAttributes]);
+
   const filteredRows = useMemo(() => {
-    const normalizedAttributesFilter = attributesFilter.trim().toLowerCase();
-    const normalizedSceneFilter = sceneFilter.trim().toLowerCase();
     const normalizedOverlapGroupFilter = overlapGroupFilter.trim().toLowerCase();
 
     return rows.filter((row) => {
@@ -556,17 +595,17 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       if (groupIdFilter && row.groupIdValue !== groupIdFilter) return false;
       if (trackIdFilter && row.trackIdValue !== trackIdFilter) return false;
       if (pointsFilter && String(row.pointsCount) !== pointsFilter) return false;
-      if (normalizedAttributesFilter && !row.attributesText.toLowerCase().includes(normalizedAttributesFilter)) return false;
-      if (normalizedSceneFilter && !annotation.stem.toLowerCase().includes(normalizedSceneFilter)) return false;
+      for (const [attributeName, attributeValue] of Object.entries(attributeFilters)) {
+        if (attributeValue && row.attributeValues[attributeName] !== attributeValue) return false;
+      }
+      if (sceneFilter && annotation.stem !== sceneFilter) return false;
       const overlapGroup = overlapGroups.get(getAnnotationOverlapKey(annotation)) || '';
       if (normalizedOverlapGroupFilter) {
         if (!overlapGroup.toLowerCase().includes(normalizedOverlapGroupFilter)) return false;
       }
       return true;
     });
-  }, [attributesFilter, classFilter, groupIdFilter, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, rows, sceneFilter, trackIdFilter, typeFilter]);
-
-  const taxonomyAttributeNames = new Set(taxonomyAttributes.map((attribute) => attribute.name));
+  }, [attributeFilters, classFilter, groupIdFilter, overlapGroupFilter, overlapGroups, overlapKeys, pointsFilter, rows, sceneFilter, trackIdFilter, typeFilter]);
 
   const overlapSceneCount = useMemo(
     () => new Set(
@@ -656,7 +695,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       if (!resize) return;
 
       const nextWidth = Math.max(
-        MIN_COLUMN_WIDTHS[resize.key],
+        getMinColumnWidth(resize.key),
         resize.startWidth + event.clientX - resize.startX,
       );
       setColumnWidths((current) => ({ ...current, [resize.key]: nextWidth }));
@@ -708,7 +747,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     setGroupIdFilter('');
     setTrackIdFilter('');
     setPointsFilter('');
-    setAttributesFilter('');
+    setAttributeFilters({});
     setSceneFilter('');
     setOverlapGroupFilter('');
     setHideUnselected(false);
@@ -760,9 +799,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         case 'points':
           comparison = first.pointsCount - second.pointsCount;
           break;
-        case 'attributes':
-          comparison = first.attributesText.localeCompare(second.attributesText, undefined, { numeric: true });
-          break;
         case 'stem':
           comparison = first.annotation.stem.localeCompare(second.annotation.stem, undefined, { numeric: true });
           break;
@@ -789,26 +825,54 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     || Boolean(groupIdFilter.trim())
     || Boolean(trackIdFilter.trim())
     || Boolean(pointsFilter.trim())
-    || Boolean(attributesFilter.trim())
+    || Object.values(attributeFilters).some(Boolean)
     || Boolean(sceneFilter.trim())
     || Boolean(overlapGroupFilter.trim())
     || overlapKeys !== null
     || (hideUnselected && hasMainSelection);
 
-  const configurableColumnKeys = useMemo<AnnotationTableColumnKey[]>(() => (
-    DEFAULT_COLUMN_ORDER.filter((key) => {
+  const attributeColumnKeys = useMemo<AnnotationTableColumnKey[]>(
+    () => taxonomyAttributes.map((attribute) => getAttributeColumnKey(attribute.name)),
+    [taxonomyAttributes],
+  );
+
+  const attributeColumnColors = useMemo<Record<string, string>>(() => (
+    Object.fromEntries(
+      attributeColumnKeys.map((key, index) => [
+        key,
+        ATTRIBUTE_COLUMN_PALETTE[index % ATTRIBUTE_COLUMN_PALETTE.length],
+      ]),
+    )
+  ), [attributeColumnKeys]);
+
+  const configurableColumnKeys = useMemo<AnnotationTableColumnKey[]>(() => {
+    const baseColumns = DEFAULT_COLUMN_ORDER.filter((key) => {
       if (SCENE_GROUP_INFO_COLUMNS.includes(key)) return showSceneGroupInfo;
       if (key === 'overlap') return overlapKeys !== null;
       return true;
-    })
-  ), [overlapKeys, showSceneGroupInfo]);
+    });
+    const stemIndex = baseColumns.indexOf('stem');
+    if (stemIndex < 0) return [...baseColumns, ...attributeColumnKeys];
+    return [
+      ...baseColumns.slice(0, stemIndex),
+      ...attributeColumnKeys,
+      ...baseColumns.slice(stemIndex),
+    ];
+  }, [attributeColumnKeys, overlapKeys, showSceneGroupInfo]);
 
   const columnSettingsKeys = useMemo<AnnotationTableColumnKey[]>(() => {
     const available = new Set(configurableColumnKeys);
     const ordered = [
       ...columnOrder.filter((key) => available.has(key)),
-      ...configurableColumnKeys.filter((key) => !columnOrder.includes(key)),
     ];
+    configurableColumnKeys.forEach((key, index) => {
+      if (ordered.includes(key)) return;
+      const nextExistingKey = configurableColumnKeys
+        .slice(index + 1)
+        .find((candidate) => ordered.includes(candidate));
+      const insertIndex = nextExistingKey ? ordered.indexOf(nextExistingKey) : ordered.length;
+      ordered.splice(insertIndex, 0, key);
+    });
     return ['row', ...ordered.filter((key) => key !== 'row')];
   }, [columnOrder, configurableColumnKeys]);
 
@@ -819,7 +883,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const tableColumnKeys = availableColumnKeys;
 
   const getColumnWidth = (key: AnnotationTableColumnKey) => (
-    key === 'row' ? DEFAULT_COLUMN_WIDTHS.row : columnWidths[key]
+    key === 'row' ? DEFAULT_COLUMN_WIDTHS.row : columnWidths[key] ?? getDefaultColumnWidth(key)
   );
 
   const tableWidth = tableColumnKeys.reduce(
@@ -854,6 +918,9 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   );
 
   const getColumnLabel = (key: AnnotationTableColumnKey) => {
+    const attributeName = getAttributeNameFromColumnKey(key);
+    if (attributeName !== null) return attributeName;
+
     switch (key) {
       case 'row': return '#';
       case 'id': return t('taxonomyDashboard.annotationIdShort', 'ID');
@@ -865,7 +932,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       case 'groupId': return t('taxonomyDashboard.annotationGroupId', 'Group ID');
       case 'trackId': return t('taxonomyDashboard.annotationTrackId', 'Track ID');
       case 'points': return t('taxonomyDashboard.annotationPoints', 'Points');
-      case 'attributes': return t('taxonomyDashboard.annotationAttributes', 'Attributes');
       case 'stem': return t('taxonomyDashboard.sceneGroup', 'Scene Group');
       case 'imageName': return t('sceneGroupManager.imageName', 'Image');
       case 'imageWidth': return t('sceneGroupManager.imageWidth', 'Image width');
@@ -998,7 +1064,12 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     );
   };
 
-  const renderHeaderCell = (key: AnnotationTableColumnKey, children: React.ReactNode, className = 'px-3 py-3') => (
+  const renderHeaderCell = (
+    key: AnnotationTableColumnKey,
+    children: React.ReactNode,
+    className = 'px-3 py-3',
+    style?: React.CSSProperties,
+  ) => (
     <th
       key={key}
       data-column-key={key}
@@ -1007,6 +1078,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       onDragOver={key === 'row' ? undefined : (event) => event.preventDefault()}
       onDrop={key === 'row' ? undefined : (event) => handleColumnDrop(event, key)}
       className={className}
+      style={style}
     >
       {children}
       {renderColumnResizer(key)}
@@ -1014,6 +1086,16 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   );
 
   const renderHeaderForKey = (key: AnnotationTableColumnKey) => {
+    if (isAttributeColumnKey(key)) {
+      const attributeName = getAttributeNameFromColumnKey(key) || key;
+      return renderHeaderCell(
+        key,
+        <span className="block truncate" title={attributeName}>{attributeName}</span>,
+        'px-3 py-3 text-white',
+        { backgroundColor: attributeColumnColors[key] || ATTRIBUTE_COLUMN_PALETTE[0] },
+      );
+    }
+
     switch (key) {
       case 'row':
         return renderHeaderCell(key, '#', 'px-3 py-3 text-left font-black');
@@ -1035,8 +1117,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'trackId'));
       case 'points':
         return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'points', 'right'), 'px-3 py-3 text-right');
-      case 'attributes':
-        return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'attributes'));
       case 'stem':
         return renderHeaderCell(key, renderSortableHeader(getColumnLabel(key), 'stem'));
       case 'imageName':
@@ -1061,6 +1141,33 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     const cell = (children?: React.ReactNode) => (
       <th key={key} className="px-3 py-1.5">{children}</th>
     );
+
+    if (isAttributeColumnKey(key)) {
+      const attributeName = getAttributeNameFromColumnKey(key) || key;
+      const selectedValue = attributeFilters[attributeName] || ATTRIBUTE_FILTER_ALL;
+      const options = attributeValueOptions[attributeName] || [];
+      return cell(
+        <Select
+          value={selectedValue}
+          onValueChange={(value) => setAttributeFilters((current) => ({
+            ...current,
+            [attributeName]: value === ATTRIBUTE_FILTER_ALL ? '' : value,
+          }))}
+          disabled={!isLoaded}
+        >
+          <SelectTrigger
+            className="h-7 w-full border-neutral-300 bg-white text-[10px] dark:border-neutral-600 dark:bg-neutral-900"
+            style={{ borderTopColor: attributeColumnColors[key] || ATTRIBUTE_COLUMN_PALETTE[0] }}
+          >
+            <SelectValue placeholder={attributeName} />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ATTRIBUTE_FILTER_ALL}>{t('taxonomyDashboard.allValues', 'All')}</SelectItem>
+            {options.map((value) => <SelectItem key={value} value={value}>{value}</SelectItem>)}
+          </SelectContent>
+        </Select>,
+      );
+    }
 
     switch (key) {
       case 'label':
@@ -1115,10 +1222,16 @@ export const AnnotationTable = React.memo(function AnnotationTable({
             </SelectContent>
           </Select>,
         );
-      case 'attributes':
-        return cell(<Input value={attributesFilter} onChange={(event) => setAttributesFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterAttributes', 'Find attributes')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
       case 'stem':
-        return cell(<Input value={sceneFilter} onChange={(event) => setSceneFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterScene', 'Find scene')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
+        return cell(
+          <Select value={sceneFilter || 'all'} onValueChange={(value) => setSceneFilter(value === 'all' ? '' : value)} disabled={!isLoaded}>
+            <SelectTrigger className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900"><SelectValue placeholder={t('taxonomyDashboard.sceneGroup', 'Scene Group')} /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t('taxonomyDashboard.allValues', 'All')}</SelectItem>
+              {sceneOptions.map((scene) => <SelectItem key={scene} value={scene}>{scene}</SelectItem>)}
+            </SelectContent>
+          </Select>,
+        );
       case 'overlap':
         return cell(<Input value={overlapGroupFilter} onChange={(event) => setOverlapGroupFilter(event.target.value)} disabled={!isLoaded} placeholder={t('taxonomyDashboard.filterOverlapGroup', 'Find group')} className="h-7 w-full bg-white text-[10px] dark:bg-neutral-900" />);
       default:
@@ -1131,12 +1244,17 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     row: AnnotationTableRow,
     index: number,
     classDefinition: TaxonomyClass | undefined,
-    knownAttributeCount: number,
   ) => {
     const sceneData = sceneGroupMetadata.get(row.annotation.stem);
     const metadata = sceneData?.metadata || null;
     const unavailable = sceneData?.error;
     const cellClass = 'px-3 py-2.5 font-mono text-[11px] text-neutral-600 dark:text-neutral-400';
+
+    if (isAttributeColumnKey(key)) {
+      const attributeName = getAttributeNameFromColumnKey(key) || key;
+      const value = row.attributeValues[attributeName] || '';
+      return <td key={key} className="max-w-[180px] truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-400" title={value || '—'}>{formatCellText(value)}</td>;
+    }
 
     switch (key) {
       case 'row': return <td key={key} className="px-3 py-2.5 text-neutral-400 font-mono">{index + 1}</td>;
@@ -1149,7 +1267,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       case 'groupId': return <td key={key} className={`${cellClass} max-w-[140px] truncate`} title={row.groupIdValue || '—'}>{formatCellText(row.groupIdValue)}</td>;
       case 'trackId': return <td key={key} className={`${cellClass} max-w-[160px] truncate`} title={row.trackIdValue || '—'}>{formatCellText(row.trackIdValue)}</td>;
       case 'points': return <td key={key} className={`${cellClass} text-right`} title={t('taxonomyDashboard.annotationPoints', 'Points')}>{row.pointsCount}</td>;
-      case 'attributes': return <td key={key} className="max-w-[260px] truncate px-3 py-2.5 text-neutral-600 dark:text-neutral-400" title={row.attributesText}><span>{row.attributesText}</span>{knownAttributeCount > 0 && <span className="ml-2 text-[9px] text-purple-600 dark:text-purple-400">{knownAttributeCount}</span>}</td>;
       case 'stem': return <td key={key} className={`${cellClass} max-w-[250px] truncate`} title={row.annotation.stem}>{row.annotation.stem}</td>;
       case 'imageName': return <td key={key} className={`${cellClass} max-w-[260px] truncate`} title={sceneData?.imageName || '—'}>{formatMetadataValue(sceneData?.imageName)}</td>;
       case 'imageWidth': return <td key={key} className={cellClass}>{formatMetadataValue(sceneData?.imageWidth)}</td>;
@@ -1240,6 +1357,26 @@ export const AnnotationTable = React.memo(function AnnotationTable({
             </Button>
           )}
         </div>
+
+        {taxonomyAttributes.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-[10px] dark:border-neutral-700 dark:bg-neutral-800/70">
+            <span className="font-black uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+              {t('taxonomyDashboard.attributeColumnsLegend', 'Attribute columns')}
+            </span>
+            {taxonomyAttributes.map((attribute) => {
+              const columnKey = getAttributeColumnKey(attribute.name);
+              return (
+                <span key={attribute.id || attribute.name} className="inline-flex items-center gap-1.5 font-semibold text-neutral-700 dark:text-neutral-200">
+                  <span
+                    className="h-2.5 w-2.5 rounded-sm"
+                    style={{ backgroundColor: attributeColumnColors[columnKey] || ATTRIBUTE_COLUMN_PALETTE[0] }}
+                  />
+                  {attribute.name}
+                </span>
+              );
+            })}
+          </div>
+        )}
 
         {overlapPanelOpen && (
           <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50/60 p-3 dark:border-blue-900/60 dark:bg-blue-950/20">
@@ -1355,8 +1492,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
               <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
                 {displayRows.map((row, index) => {
                   const classDefinition = taxonomyClasses.find((taxonomyClass) => taxonomyClass.name === row.annotation.label);
-                  const knownAttributeCount = Object.keys(row.annotation.attributes || {})
-                    .filter((name) => taxonomyAttributeNames.has(name)).length;
                   const isSelected = selectedIdSet.has(String(row.annotation.id));
 
                   return (
@@ -1374,7 +1509,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                         row,
                         index,
                         classDefinition,
-                        knownAttributeCount,
                       ))}
                     </tr>
                   );
