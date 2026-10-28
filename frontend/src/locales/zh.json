@@ -1411,7 +1411,7 @@
     "attributeSyncSuccess": "属性已成功同步到所有 JSON 文件！",
     "syncFailed": "同步失败: {{message}}",
     "noDataForTitle": "未找到 '{{title}}' 的数据",
-    "attributeValuesDistribution": "属性值分布 (堆叠条形图)",
+    "attributeValuesDistribution": "属性值分布",
     "proportionsSummary": "比例摘要 (饼图)",
     "annotationCompleteness": "标注完整性",
     "qaMetric": "QA 指标",

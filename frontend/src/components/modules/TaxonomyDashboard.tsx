@@ -6,7 +6,7 @@ import { AnnotationTable, type AnnotationTableOverlapState } from './AnnotationT
 import { 
   Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
   Plus, Check, X, Loader2, AlertCircle, Upload, Activity,
-  List, LayoutDashboard, ChevronDown, ChevronLeft, ChevronRight,
+  LayoutDashboard, ChevronDown, ChevronLeft, ChevronRight,
   Layers, ShieldCheck, CheckSquare, Square,
   Table2,
 } from 'lucide-react';
@@ -120,7 +120,17 @@ const getDistributionBodyHeight = (rowCount: number) => Math.min(
   Math.max(DISTRIBUTION_MIN_BODY_HEIGHT, DISTRIBUTION_MIN_BODY_HEIGHT + Math.min(rowCount, 12) * 24),
 );
 
-const DistributionTable = ({ rows, columns }: { rows: DistributionRow[]; columns: DistributionColumn[] }) => (
+const DistributionTable = ({
+  rows,
+  columns,
+  onRowClick,
+  selectedRowLabel,
+}: {
+  rows: DistributionRow[];
+  columns: DistributionColumn[];
+  onRowClick?: (row: DistributionRow) => void;
+  selectedRowLabel?: string | null;
+}) => (
   <div className="h-full overflow-auto custom-scrollbar">
     <table className="w-full min-w-[270px] text-left text-sm">
       <thead className="sticky top-0 z-10 bg-neutral-50 text-xs uppercase tracking-wider text-neutral-400 dark:bg-neutral-800/95">
@@ -134,7 +144,14 @@ const DistributionTable = ({ rows, columns }: { rows: DistributionRow[]; columns
       </thead>
       <tbody className="divide-y divide-neutral-100 dark:divide-neutral-800">
         {rows.map((row, index) => (
-          <tr key={`${row.group || 'row'}-${row.label}-${index}`} className="hover:bg-blue-50/50 dark:hover:bg-blue-950/20">
+          <tr
+            key={`${row.group || 'row'}-${row.label}-${index}`}
+            onClick={onRowClick ? () => onRowClick(row) : undefined}
+            aria-selected={selectedRowLabel === row.label}
+            className={`hover:bg-blue-50/50 dark:hover:bg-blue-950/20 ${
+              onRowClick ? 'cursor-pointer' : ''
+            } ${selectedRowLabel === row.label ? 'bg-purple-50 dark:bg-purple-950/30' : ''}`}
+          >
             {columns.map((column) => {
               const rawValue = row[column.key];
               const value = column.key === 'share'
@@ -329,12 +346,16 @@ const DistributionPanel = ({
   series,
   includeHistogram = false,
   attributeDetails,
+  onRowClick,
+  selectedRowLabel,
 }: {
   rows: DistributionRow[];
   columns: DistributionColumn[];
   series: DistributionSeries[];
   includeHistogram?: boolean;
   attributeDetails?: AttributeDistributionDetails;
+  onRowClick?: (row: DistributionRow) => void;
+  selectedRowLabel?: string | null;
 }) => {
   const { t } = useTranslation();
   const [mode, setMode] = useState<DistributionViewMode>('table');
@@ -353,7 +374,12 @@ const DistributionPanel = ({
   const content = rows.length === 0 ? (
     <div className="flex h-full items-center justify-center text-sm text-neutral-400">{t('taxonomyDashboard.noData')}</div>
   ) : mode === 'table' ? (
-    <DistributionTable rows={rows} columns={columns} />
+    <DistributionTable
+      rows={rows}
+      columns={columns}
+      onRowClick={onRowClick}
+      selectedRowLabel={selectedRowLabel}
+    />
   ) : mode === 'bar' ? (
     attributeDetails ? <AttributeGroupedBarChart detailsData={attributeDetails} /> : <DistributionBarChart series={series} />
   ) : mode === 'pie' ? (
@@ -555,7 +581,7 @@ const CombinedAttributeView = ({ densityData, detailsData }: { densityData: Reco
       {/* ================= 左侧：条形图列表 ================= */}
       <div className="w-full xl:w-1/2 flex flex-col bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm">
         <h4 className="text-[10px] font-black uppercase text-neutral-400 tracking-wider mb-4 border-b border-neutral-100 dark:border-neutral-800 pb-2 shrink-0">
-          Attribute Values Distribution (Stacked Bars)
+          Attribute Values Distribution
         </h4>
         
         {/* 🌟 核心修复 2：去掉 min-h，只保留 max-h。内容少时自动收缩，内容多时出现滚动条 */}
@@ -1449,6 +1475,24 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       sceneCount: Array.isArray(attributeValueStems[value]) ? attributeValueStems[value].length : 0,
     }));
   }, [activeAttribute?.defaultValue, activeAttribute?.name, activeAttribute?.options, attributeValueStems, statsData]);
+
+  const attributeValueDistributionRows = useMemo<DistributionRow[]>(() => {
+    const total = attributeValueOptions.reduce((sum, option) => sum + option.objectCount, 0);
+    return attributeValueOptions.map((option) => ({
+      label: option.value,
+      secondary: String(option.sceneCount),
+      count: option.objectCount,
+      share: total > 0 ? option.objectCount / total : 0,
+    }));
+  }, [attributeValueOptions]);
+
+  const attributeValueDistributionSeries = useMemo<DistributionSeries[]>(() => (
+    attributeValueDistributionRows.map((row, index) => ({
+      label: row.label,
+      count: row.count,
+      color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length],
+    }))
+  ), [attributeValueDistributionRows]);
 
   const attributeSceneStems = useMemo(
     () => {
@@ -4363,72 +4407,35 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   />
                 </div>
 
-                <div className="w-full min-w-0 grid grid-cols-1 xl:grid-cols-2 gap-3">
-                  <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 shadow-sm">
-                    <div className="flex items-center justify-between gap-3 mb-3 pb-2 border-b border-neutral-100 dark:border-neutral-800">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <List className="w-4 h-4 text-purple-500 shrink-0" />
-                        <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
-                          {t('taxonomyDashboard.valueList', 'Value List')}
-                        </h3>
-                      </div>
-                      <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500 shrink-0">
-                        {attributeValueOptions.length}
-                      </span>
+                <div className="w-full min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                  <div className="mb-3 flex items-center justify-between gap-3 border-b border-neutral-100 pb-2 dark:border-neutral-800">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="h-3.5 w-3.5 shrink-0 rounded-sm border border-black/10 shadow-sm"
+                        style={{ backgroundColor: ATTRIBUTE_COLUMN_PALETTE[0] }}
+                      />
+                      <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+                        {t('taxonomyDashboard.attributeValuesDistribution', 'Attribute Values Distribution')}
+                      </h3>
                     </div>
-
-                    {attributeValueOptions.length > 0 ? (
-                      <>
-                        <div className="grid grid-cols-[minmax(0,1fr)_72px_72px] gap-2 px-3 pb-1 text-[9px] font-black uppercase tracking-wider text-neutral-400">
-                          <span>{t('taxonomyDashboard.valueFilter', 'Value')}</span>
-                          <span className="text-right">{t('taxonomyDashboard.objects', 'Objects')}</span>
-                          <span className="text-right">{t('taxonomyDashboard.scenesCount', 'Scenes')}</span>
-                        </div>
-                        <div className="max-h-[320px] overflow-y-auto custom-scrollbar space-y-1">
-                          {attributeValueOptions.map((option) => {
-                            const isSelected = selectedAttributeValueKey === option.value;
-                            return (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() => handleAttributeValueChange(option.value)}
-                                aria-pressed={isSelected}
-                                className={`w-full grid grid-cols-[minmax(0,1fr)_72px_72px] gap-2 items-center rounded-lg border px-3 py-2 text-left transition-colors ${
-                                  isSelected
-                                    ? 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800'
-                                    : 'bg-neutral-50/60 dark:bg-neutral-950 border-neutral-200 dark:border-neutral-800 hover:border-purple-200 dark:hover:border-purple-800'
-                                }`}
-                              >
-                                <span className={`text-xs font-bold truncate ${isSelected ? 'text-purple-700 dark:text-purple-300' : 'text-neutral-700 dark:text-neutral-300'}`}>
-                                  {option.value}
-                                </span>
-                                <span className="text-right text-[10px] font-mono text-neutral-500">
-                                  {option.objectCount}
-                                </span>
-                                <span className="text-right text-[10px] font-mono text-neutral-500">
-                                  {option.sceneCount}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="py-6 text-center text-neutral-400 text-xs italic">
-                        {t('taxonomyDashboard.noAttributeValues', 'No values found for this attribute.')}
-                      </div>
-                    )}
+                    <span className="shrink-0 rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-neutral-800">
+                      {attributeValueOptions.length}
+                    </span>
                   </div>
 
-                  <AttributeAnalysisCard
-                    title={t('taxonomyDashboard.attributeValuesDistribution', 'Attribute Values Distribution')}
-                    icon={Layers}
-                    totalTags={attributeValueOptions.reduce((total, option) => total + option.objectCount, 0)}
-                    densityData={{}}
-                    detailsData={{ [activeAttribute.name]: statsData?.global?.attribute_details?.[activeAttribute.name] }}
-                    emptyMsg={t('taxonomyDashboard.noDataForTitle', { title: activeAttribute.name })}
+                  <DistributionPanel
+                    rows={attributeValueDistributionRows}
+                    columns={[
+                      { key: 'label', label: t('taxonomyDashboard.valueFilter', 'Value') },
+                      { key: 'secondary', label: t('taxonomyDashboard.scenesCount', 'Scenes') },
+                      { key: 'count', label: t('taxonomyDashboard.objects', 'Objects') },
+                      { key: 'share', label: t('taxonomyDashboard.share', 'Share') },
+                    ]}
+                    series={attributeValueDistributionSeries}
+                    onRowClick={(row) => handleAttributeValueChange(row.label)}
+                    selectedRowLabel={selectedAttributeValueKey}
                   />
-               </div>
+                </div>
              </div>
 
             </div>

@@ -1411,7 +1411,7 @@
     "attributeSyncSuccess": "Attribute synchronized to all JSON files successfully!",
     "syncFailed": "Sync failed: {{message}}",
     "noDataForTitle": "No data found for '{{title}}'",
-    "attributeValuesDistribution": "Attribute Values Distribution (Stacked Bars)",
+    "attributeValuesDistribution": "Attribute Values Distribution",
     "proportionsSummary": "Proportions Summary (Pies)",
     "annotationCompleteness": "Annotation Completeness",
     "qaMetric": "QA Metric",
