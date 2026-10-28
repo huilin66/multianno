@@ -1225,6 +1225,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     mode: 'ios',
     threshold: 80,
   });
+  const [annotationTableReloadToken, setAnnotationTableReloadToken] = useState(0);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
   const [selectedAttributeValue, setSelectedAttributeValue] = useState<string | null>(null);
@@ -2347,6 +2348,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       useStore.getState().setStatsCacheValid?.(true);
     }
     if (progressOperationKey !== null) finishTaxonomyWrite();
+  };
+
+  const handleReload = () => {
+    setAnnotationTableReloadToken((current) => current + 1);
+    void loadStatistics(true, true);
   };
 
   // 旧版 stats_cache.json 没有属性值到场景的索引。打开属性详情时补做一次
@@ -3522,6 +3528,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             viewStateReady={restoredViewStateKey === taxonomyViewStateKey}
             overlapState={annotationTableOverlap}
             onOverlapStateChange={setAnnotationTableOverlap}
+            reloadToken={annotationTableReloadToken}
             selectedAnnotationIds={selectedAnnotationIds}
             activeAnnotationId={activeAnnotationId}
           />
@@ -4419,7 +4426,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           <Button
             variant="outline"
             disabled={statsStatus === 'loading' || isProcessing}
-            onClick={() => { void loadStatistics(true, true); }}
+            onClick={handleReload}
             className="h-9 px-4 font-bold"
           >
             {t('taxonomyDashboard.reload', 'Reload')}

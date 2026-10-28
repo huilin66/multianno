@@ -28,6 +28,7 @@ interface AnnotationTableProps {
   viewStateReady?: boolean;
   overlapState?: AnnotationTableOverlapState;
   onOverlapStateChange?: (state: AnnotationTableOverlapState) => void;
+  reloadToken?: number;
   selectedAnnotationIds?: string[];
   activeAnnotationId?: string | null;
 }
@@ -215,6 +216,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   viewStateReady = true,
   overlapState,
   onOverlapStateChange,
+  reloadToken = 0,
   selectedAnnotationIds = [],
   activeAnnotationId = null,
 }: AnnotationTableProps) {
@@ -260,6 +262,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
   const [isScanningOverlaps, setIsScanningOverlaps] = useState(false);
   const [hideUnselected, setHideUnselected] = useState(() => rememberedState?.hideUnselected ?? false);
   const [showSceneGroupInfo, setShowSceneGroupInfo] = useState(() => rememberedState?.showSceneGroupInfo ?? false);
+  const lastExternalReloadTokenRef = useRef(0);
   const [sceneGroupMetadata, setSceneGroupMetadata] = useState<Map<string, SceneGroupMetadata>>(new Map());
   const [sceneGroupMetadataLoading, setSceneGroupMetadataLoading] = useState(false);
   const [sceneGroupMetadataProgress, setSceneGroupMetadataProgress] = useState({ current: 0, total: 0 });
@@ -612,14 +615,20 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     viewStateReady,
   ]);
 
-  const loadAnnotations = () => {
+  const loadAnnotations = useCallback(() => {
     overlapScanRequestRef.current += 1;
     setLoadedAnnotations(cloneAnnotations(annotations));
     setOverlapKeys(null);
     setOverlapCounts(new Map());
     setOverlapGroups(new Map());
     setIsScanningOverlaps(false);
-  };
+  }, [annotations]);
+
+  useEffect(() => {
+    if (reloadToken <= 0 || reloadToken === lastExternalReloadTokenRef.current) return;
+    lastExternalReloadTokenRef.current = reloadToken;
+    loadAnnotations();
+  }, [loadAnnotations, reloadToken]);
 
   const resetOverlapScan = () => {
     overlapScanRequestRef.current += 1;
