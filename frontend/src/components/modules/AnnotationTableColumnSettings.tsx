@@ -37,8 +37,8 @@ export const DEFAULT_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
   boxWidth: 64,
   boxHeight: 64,
   text: 220,
-  groupId: 128,
-  trackId: 144,
+  groupId: 96,
+  trackId: 96,
   points: 80,
   attributes: 220,
   stem: 220,
@@ -62,8 +62,8 @@ export const MIN_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
   boxWidth: 48,
   boxHeight: 48,
   text: 160,
-  groupId: 96,
-  trackId: 96,
+  groupId: 64,
+  trackId: 64,
   points: 64,
   attributes: 160,
   stem: 160,
@@ -80,10 +80,10 @@ export const MIN_COLUMN_WIDTHS: Record<AnnotationTableColumnKey, number> = {
 };
 
 export const DEFAULT_COLUMN_ORDER: AnnotationTableColumnKey[] = [
-  'row', 'id', 'label', 'type', 'boxWidth', 'boxHeight', 'text',
+  'row', 'id', 'label', 'type', 'boxWidth', 'boxHeight',
   'groupId', 'trackId', 'points', 'attributes', 'stem',
   'imageName', 'imageWidth', 'imageHeight', 'latitude', 'longitude',
-  'altitude', 'heading', 'utc', 'overlap', 'action',
+  'altitude', 'heading', 'utc', 'overlap', 'text', 'action',
 ];
 
 export const SCENE_GROUP_INFO_COLUMNS: AnnotationTableColumnKey[] = [

@@ -86,6 +86,7 @@ interface AnnotationTableMemoryState {
   loadedAnnotations: Annotation[] | null;
   columnWidths?: Partial<Record<AnnotationTableColumnKey, number>>;
   columnOrder?: AnnotationTableColumnKey[];
+  columnOrderVersion?: number;
   hiddenColumns?: AnnotationTableColumnKey[];
   classFilter: string;
   typeFilter: string;
@@ -105,6 +106,22 @@ interface AnnotationTableMemoryState {
   hideUnselected: boolean;
   showSceneGroupInfo: boolean;
 }
+
+const COLUMN_ORDER_VERSION = 2;
+
+const moveTextColumnToEnd = (order: AnnotationTableColumnKey[]) => {
+  const normalized = [
+    ...order,
+    ...DEFAULT_COLUMN_ORDER.filter((key) => !order.includes(key)),
+  ];
+  const textIndex = normalized.indexOf('text');
+  if (textIndex < 0) return normalized;
+
+  normalized.splice(textIndex, 1);
+  const actionIndex = normalized.indexOf('action');
+  normalized.splice(actionIndex < 0 ? normalized.length : actionIndex, 0, 'text');
+  return normalized;
+};
 
 // Annotation Table is mounted only while its tab is active. Keep its loaded
 // snapshot and controls outside the component so switching tabs or closing
@@ -215,9 +232,17 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     ...DEFAULT_COLUMN_WIDTHS,
     ...(rememberedState?.columnWidths || {}),
   }));
-  const [columnOrder, setColumnOrder] = useState<AnnotationTableColumnKey[]>(() => (
-    rememberedState?.columnOrder ? [...rememberedState.columnOrder] : [...DEFAULT_COLUMN_ORDER]
-  ));
+  const [columnOrder, setColumnOrder] = useState<AnnotationTableColumnKey[]>(() => {
+    const rememberedOrder = rememberedState?.columnOrder;
+    if (!rememberedOrder) return [...DEFAULT_COLUMN_ORDER];
+    const normalized = [
+      ...rememberedOrder,
+      ...DEFAULT_COLUMN_ORDER.filter((key) => !rememberedOrder.includes(key)),
+    ];
+    return rememberedState?.columnOrderVersion === COLUMN_ORDER_VERSION
+      ? normalized
+      : moveTextColumnToEnd(normalized);
+  });
   const [hiddenColumns, setHiddenColumns] = useState<Set<AnnotationTableColumnKey>>(() => (
     new Set((rememberedState?.hiddenColumns || []).filter((key) => key !== 'row'))
   ));
@@ -268,6 +293,8 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       ['type', 112],
       ['boxWidth', 96],
       ['boxHeight', 96],
+      ['groupId', 128],
+      ['trackId', 144],
     ];
     setColumnWidths((current) => {
       let changed = false;
@@ -288,6 +315,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       loadedAnnotations,
       columnWidths,
       columnOrder,
+      columnOrderVersion: COLUMN_ORDER_VERSION,
       hiddenColumns: Array.from(hiddenColumns),
       classFilter,
       typeFilter,
