@@ -4688,11 +4688,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   ))}
                 </div>
               </div>
-              {newTargetClassName.trim() && taxonomyClasses.some((c: any) => c.name.toLowerCase() === newTargetClassName.trim().toLowerCase()) && (
-                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
-                  {t('workspace.classNameExistsWarning', 'A class with this name already exists. Its objects will be merged into it.')}
-                </p>
-              )}
             </section>
 
             {/* 2. Map source classes to target classes */}
