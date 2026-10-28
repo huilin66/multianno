@@ -12,6 +12,12 @@ interface EtaTracker {
   samples: number;
 }
 
+interface ProgressSample {
+  stageKey: string;
+  current: number;
+  total: number;
+}
+
 const MIN_ETA_SAMPLE_MS = 1500;
 
 function useMonotonicPercent(percent: number, trackingKey: string): number {
@@ -111,6 +117,10 @@ export interface OperationProgressProps {
   stageName: ReactNode;
   current?: number;
   total?: number;
+  /**
+   * Kept for backwards compatibility with older callers. The visible bar is
+   * intentionally based on the current stage's current/total pair.
+   */
   overallPercent?: number | null;
   stageLabel?: string;
   className?: string;
@@ -123,10 +133,11 @@ export interface OperationProgressProps {
 /**
  * Shared progress presentation for long-running operations.
  *
- * A stage can either expose a determinate current/total pair or omit the pair
- * while the backend is working on an indivisible operation. The latter keeps
- * the UI honest by showing an indeterminate bar instead of inventing a
- * percentage.
+ * The first row communicates overall stage state; the second row reports only
+ * the progress of the active stage. A stage can omit current/total while the
+ * backend is working on an indivisible operation. The latter keeps the UI
+ * honest by showing an empty track instead of inventing a percentage until a
+ * stage total is available.
  */
 export function OperationProgress({
   stageIndex,
@@ -134,58 +145,107 @@ export function OperationProgress({
   stageName,
   current,
   total,
-  overallPercent,
   stageLabel = 'Stage',
   className,
   barClassName,
   operationKey = 'default',
   showEta = true,
 }: OperationProgressProps) {
-  const hasOverallPercent = Number.isFinite(overallPercent);
-  const progress = normalizeProgress({
-    current,
-    total,
-    percent: hasOverallPercent ? overallPercent : undefined,
-  });
+  const safeStageCount = Number.isFinite(stageCount) && stageCount > 0
+    ? Math.floor(stageCount)
+    : 1;
+  const safeStageIndex = Number.isFinite(stageIndex)
+    ? Math.min(safeStageCount, Math.max(1, Math.floor(stageIndex)))
+    : 1;
+  const rawProgress = normalizeProgress({ current, total });
+  const stageKey = `${operationKey}:stage:${safeStageIndex}/${safeStageCount}`;
+  const previousSampleRef = useRef<ProgressSample>({ stageKey: '', current: 0, total: 0 });
+  const previousSample = previousSampleRef.current;
+  const stageChanged = previousSample.stageKey !== stageKey;
+  const isStaleStageSnapshot = stageChanged
+    && previousSample.stageKey !== ''
+    && rawProgress.current === previousSample.current
+    && rawProgress.total === previousSample.total;
+  const progress = isStaleStageSnapshot
+    ? { current: 0, total: rawProgress.total, percent: 0 }
+    : rawProgress;
+  previousSampleRef.current = {
+    stageKey,
+    current: rawProgress.current,
+    total: rawProgress.total,
+  };
   const { current: safeCurrent, total: safeTotal, percent } = progress;
   const hasTotal = safeTotal > 0;
-  const trackingKey = hasOverallPercent
-    ? `${operationKey}:overall`
-    : `${operationKey}:stage:${stageIndex}/${stageCount}:total:${safeTotal}`;
+  const trackingKey = `${stageKey}:total:${safeTotal}`;
   const displayPercent = useMonotonicPercent(percent, trackingKey);
   const etaSeconds = useEstimatedTime(displayPercent, trackingKey, showEta);
-  const showDeterminateProgress = hasOverallPercent || (hasTotal && safeCurrent > 0);
+  const displayPercentLabel = hasTotal ? `${Math.round(displayPercent)}%` : '—';
+  const quantityLabel = hasTotal ? `${safeCurrent}/${safeTotal}` : '—';
   const { t } = useTranslation();
 
   return (
     <div className={cn('min-w-0 flex-1 space-y-1.5', className)}>
       <div className="flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
+        <div
+          className="flex w-20 shrink-0 items-center gap-0.5"
+          aria-label={`${stageLabel} ${safeStageIndex}/${safeStageCount}`}
+        >
+          {Array.from({ length: safeStageCount }, (_, index) => {
+            const stageNumber = index + 1;
+            const isCompleted = stageNumber < safeStageIndex;
+            const isActive = stageNumber === safeStageIndex;
+            return (
+              <span
+                key={stageNumber}
+                className={cn(
+                  'h-1.5 min-w-0 flex-1 rounded-sm border transition-colors',
+                  isCompleted && 'border-blue-500 bg-blue-500',
+                  isActive && 'border-red-500 bg-red-500',
+                  !isCompleted && !isActive && 'border-muted-foreground/40 bg-transparent',
+                )}
+                title={`${stageLabel} ${stageNumber}/${safeStageCount}`}
+              />
+            );
+          })}
+        </div>
         <span className="shrink-0 font-medium text-foreground">
-          {stageLabel} {stageIndex}/{stageCount}
+          {stageLabel} {safeStageIndex}/{safeStageCount}
         </span>
         <span className="min-w-0 flex-1 truncate" title={typeof stageName === 'string' ? stageName : undefined}>
-          {stageName}:
+          [{stageName}]:
         </span>
         {etaSeconds !== null && (
           <span className="shrink-0 text-primary" aria-live="polite">
             {t('common.eta')}: {formatRemainingTime(etaSeconds)}
           </span>
         )}
-        {hasTotal && (
-          <span className="shrink-0 font-mono">
-            {safeCurrent}/{safeTotal}
-          </span>
-        )}
+        <span className="shrink-0 font-mono" aria-label="Current stage quantity">
+          {quantityLabel}
+        </span>
       </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+
+      <div className="flex min-w-0 items-center gap-2">
         <div
-          className={cn(
-            'h-full rounded-full transition-[width] duration-300',
-            showDeterminateProgress ? 'bg-primary' : 'w-1/2 animate-pulse bg-primary',
-            barClassName,
+          className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-muted"
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={hasTotal ? Math.round(displayPercent) : undefined}
+        >
+          {hasTotal && (
+            <div
+              key={trackingKey}
+              className={cn(
+                'h-full rounded-full bg-primary transition-[width] duration-300',
+                barClassName,
+              )}
+              style={{ width: `${displayPercent}%` }}
+            />
           )}
-          style={showDeterminateProgress ? { width: `${displayPercent}%` } : undefined}
-        />
+        </div>
+        <span className="w-10 shrink-0 text-right font-mono text-[10px] text-muted-foreground">
+          {displayPercentLabel}
+        </span>
       </div>
     </div>
   );
