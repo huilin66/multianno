@@ -1035,8 +1035,8 @@ const ScenePreviewPanel = ({
   }, [previewStem, sceneListKey, sceneSelectionKey]);
 
   return (
-    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col overflow-hidden h-[680px]">
-      <div ref={sceneListRef} className="h-[250px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800 shrink-0">
+    <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-row overflow-hidden h-[480px]">
+      <div ref={sceneListRef} className="w-[30%] min-w-[220px] max-w-[360px] h-full overflow-y-auto p-2 custom-scrollbar border-r border-neutral-100 dark:border-neutral-800 shrink-0">
         <div className="px-2 py-1.5 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Layers className="w-4 h-4 text-blue-500 shrink-0" />
@@ -3796,17 +3796,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             </div>
 
             {/* 主体：该类别的专属统计 */}
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar flex flex-col gap-6">
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-3">
               {statsData?.classes?.[activeClass.name] ? (
                 <>
                   {/* --- 上半部分：类的紧凑视图 --- */}
-                  <div className="flex flex-col xl:flex-row gap-6 shrink-0 animate-in fade-in">
+                  <div className="flex flex-col gap-3 shrink-0 animate-in fade-in">
                     
-                    <div className="w-full xl:w-1/3 flex flex-col gap-6">
+                    <div className="w-full flex flex-col">
 
                       
                       {/* Scenes Involved + read-only preview */}
-          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-col h-[680px] overflow-hidden">
+          <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-row h-[480px] overflow-hidden">
+            <div className="w-[30%] min-w-[220px] max-w-[360px] h-full flex flex-col shrink-0 border-r border-neutral-100 dark:border-neutral-800">
             <div className="px-5 py-4 border-b border-neutral-100 dark:border-neutral-800 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <Layers className="w-4 h-4 text-blue-500" />
@@ -3819,7 +3820,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
               </span>
             </div>
 
-            <div ref={classSceneListRef} className="h-[250px] overflow-y-auto p-2 custom-scrollbar border-b border-neutral-100 dark:border-neutral-800">
+            <div ref={classSceneListRef} className="flex-1 min-h-0 overflow-y-auto p-2 custom-scrollbar">
               <div className="flex flex-col gap-1">
                 {classSceneStems.map((stem: string) => {
                   const isSelected = previewStem === stem;
@@ -3859,6 +3860,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   </div>
                 )}
               </div>
+            </div>
+
             </div>
 
             <div className="flex-1 min-h-0 flex flex-col bg-neutral-50/40 dark:bg-neutral-950/30">
@@ -3961,9 +3964,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         </div>
 
                     {/* 右侧：内容展示区 */}
-                    <div className="flex-1 p-8 overflow-y-auto custom-scrollbar bg-white dark:bg-neutral-900">
+                    <div className="w-full p-4 overflow-visible bg-white dark:bg-neutral-900">
                       {/* 🌟 这里才是正确的单类页面：补充 Geometry Filter (水平切换卡) */}
-                      <div className="flex items-center gap-2 mb-6 bg-neutral-100 dark:bg-neutral-800/50 p-1.5 rounded-xl w-fit shrink-0">
+                      <div className="flex items-center gap-2 mb-3 bg-neutral-100 dark:bg-neutral-800/50 p-1.5 rounded-xl w-fit shrink-0">
                         {['bbox', 'polygon'].map((shapeId) => {
                           const isActive = activeClassShapeTab === shapeId;
                           // 🌟 3. 修复：不再用 hasData 决定是否显示，而是直接拿真实数量！
@@ -3995,10 +3998,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       {['bbox', 'polygon'].includes(activeClassShapeTab) ? (
                         statsData.classes[activeClass.name].shapes && statsData.classes[activeClass.name].shapes[activeClassShapeTab] ? (
                           
-                          <div className="flex flex-col w-full gap-10">
+                          <div className="flex flex-col w-full gap-3">
                             
                             {/* 上半部分：4个基础图形图表 (维持 2 列网格) */}
-                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4">
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 animate-in fade-in slide-in-from-right-4">
                               <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                                 <AxisBarChart 
                                   title={`${t('taxonomyDashboard.boxesPerImage')} (${activeClassShapeTab.toUpperCase()})`}
@@ -4313,9 +4316,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             </div>
 
             {/* 2. 主体区 */}
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar flex flex-col gap-6">
-              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,1.1fr)] gap-4 lg:gap-6 items-start animate-in fade-in">
-                <div className="w-full min-w-0 shrink-0 order-last lg:order-first">
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-3">
+              <div className="flex flex-col gap-3 items-stretch animate-in fade-in">
+                <div className="w-full min-w-0 shrink-0">
                   <ScenePreviewPanel
                     sceneStems={attributeSceneStems}
                     sceneSelectionKey={previewFilterKey}
@@ -4339,7 +4342,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   />
                 </div>
 
-                <div className="w-full min-w-0 flex flex-col gap-6 order-first lg:order-last">
+                <div className="w-full min-w-0 grid grid-cols-1 xl:grid-cols-2 gap-3">
                   <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-4 shadow-sm">
                     <div className="flex items-center justify-between gap-3 mb-3 pb-2 border-b border-neutral-100 dark:border-neutral-800">
                       <div className="flex items-center gap-2 min-w-0">
