@@ -3171,7 +3171,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
               <div className="flex items-center justify-between cursor-pointer p-1.5 group rounded hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors" onClick={() => setExpanded(p => ({...p, classes: !p.classes}))}>
                 <span className="text-xs font-black text-neutral-600 dark:text-neutral-300 uppercase tracking-wider flex items-center">
                   <Tags className="w-3.5 h-3.5 mr-2"/> {t('taxonomy.classes')}
-                  <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyClasses.length}</span>
                 </span>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                   <button onClick={() => { 
@@ -3286,7 +3285,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     style={{ backgroundColor: ATTRIBUTE_COLUMN_PALETTE[0] }}
                   />
                   {t('taxonomy.attributes')}
-                  <span className="ml-2 bg-neutral-100 dark:bg-neutral-800 px-1.5 py-0.5 rounded text-[9px]">{taxonomyAttributes.length}</span>
                 </span>
                 <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                   <button onClick={() => { 
