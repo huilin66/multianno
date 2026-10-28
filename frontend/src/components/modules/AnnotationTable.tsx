@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2, RefreshCw, Search, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2, Search, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getFileContent } from '../../api/client';
 import { useStore, type Annotation, type TaxonomyAttribute, type TaxonomyClass } from '../../store/useStore';
@@ -787,9 +787,6 @@ export const AnnotationTable = React.memo(function AnnotationTable({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-xl font-black">{t('taxonomyDashboard.annotationTable', 'Annotation Table')}</h2>
-            <p className="text-xs text-neutral-500 mt-1">
-              {t('taxonomyDashboard.annotationTableDesc', 'Browse and filter every annotation in the current project.')}
-            </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             {isLoaded && (
@@ -805,26 +802,8 @@ export const AnnotationTable = React.memo(function AnnotationTable({
                 </span>
               </div>
             )}
-            <Button
-              type="button"
-              variant={isLoaded ? 'outline' : 'default'}
-              className="h-8 px-3 text-xs font-bold"
-              onClick={loadAnnotations}
-              title={t('taxonomyDashboard.annotationTableLoadHint', 'Load a snapshot of the current annotations into the table')}
-            >
-              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-              {isLoaded
-                ? t('taxonomyDashboard.reloadAnnotations', 'Reload annotations')
-                : t('taxonomyDashboard.loadAnnotations', 'Load annotations')}
-            </Button>
           </div>
         </div>
-
-        {!isLoaded && (
-          <p className="mt-3 text-[11px] text-neutral-500">
-            {t('taxonomyDashboard.annotationTableLoadHint', 'Load a snapshot of the current annotations into the table. The table will not update automatically.')}
-          </p>
-        )}
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <div className="relative min-w-[220px] flex-1">
