@@ -1,12 +1,18 @@
+import asyncio
+import contextvars
 import json
 import math
 import os
 import shutil
+import threading
+import time
+import uuid
 from datetime import datetime
+from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import JSONResponse
 from models import (
     ApplyAttributeRequest,
@@ -17,6 +23,7 @@ from models import (
     MergeWithAttributeRequest,
     RepairRequest,
     StatRequest,
+    TaxonomyJobRequest,
 )
 from utils.annotation_ids import ensure_shape_ids
 from utils.image_io import read_metadata
@@ -24,6 +31,197 @@ from utils.logging_config import get_logger, shorten
 
 router = APIRouter(prefix="/api/taxonomy", tags=["Taxonomy"])
 logger = get_logger("taxonomy")
+
+
+TAXONOMY_JOB_RETENTION_SECONDS = 60 * 60
+_taxonomy_jobs: dict[str, dict[str, Any]] = {}
+_taxonomy_tasks: dict[str, asyncio.Task[Any]] = {}
+_taxonomy_jobs_lock = threading.Lock()
+_taxonomy_progress_context: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
+    "taxonomy_progress_context",
+    default=None,
+)
+
+
+def _list_annotation_files(save_dirs: list[str]) -> list[str]:
+    """Return the same JSON file set used by batch taxonomy operations."""
+
+    files: list[str] = []
+    for folder in save_dirs:
+        if not os.path.exists(folder):
+            continue
+        try:
+            file_names = os.listdir(folder)
+        except OSError:
+            logger.exception("TAXONOMY_PROGRESS_LIST_ERROR path=%s", shorten(folder, 1500))
+            continue
+        files.extend(
+            os.path.join(folder, file_name)
+            for file_name in file_names
+            if file_name.endswith(".json") and not file_name.endswith("_meta.json")
+        )
+    return files
+
+
+def _taxonomy_job_total(operation: str, save_dirs: list[str]) -> int:
+    file_count = len(_list_annotation_files(save_dirs))
+    # Attribute rename performs a read/validation pass and a write pass. Count
+    # both so the progress bar does not reach 100% before the writes finish.
+    return file_count * 2 if operation == "rename_attribute" else file_count
+
+
+def _report_taxonomy_file_progress(message: str = "") -> None:
+    """Advance the active background job after one file-level unit of work."""
+
+    context = _taxonomy_progress_context.get()
+    if context is None:
+        return
+
+    current = min(int(context["current"]) + 1, int(context["total"]))
+    context["current"] = current
+    callback: Callable[[int, int, str], None] = context["callback"]
+    callback(current, int(context["total"]), message)
+
+
+def _prune_taxonomy_jobs() -> None:
+    cutoff = time.time() - TAXONOMY_JOB_RETENTION_SECONDS
+    with _taxonomy_jobs_lock:
+        expired = [
+            job_id
+            for job_id, job in _taxonomy_jobs.items()
+            if job.get("status") in {"completed", "failed"}
+            and float(job.get("updated_at", 0)) < cutoff
+        ]
+        for job_id in expired:
+            _taxonomy_jobs.pop(job_id, None)
+
+
+def _create_taxonomy_job(operation: str, total: int) -> dict[str, Any]:
+    _prune_taxonomy_jobs()
+    now = time.time()
+    job = {
+        "job_id": uuid.uuid4().hex,
+        "operation": operation,
+        "status": "queued",
+        "stage_index": 1,
+        "stage_count": 1,
+        "stage_name": "Updating annotation files",
+        "current": 0,
+        "total": total,
+        "percent": 0,
+        "message": "Waiting to start",
+        "result": None,
+        "error": None,
+        "created_at": now,
+        "updated_at": now,
+    }
+    with _taxonomy_jobs_lock:
+        _taxonomy_jobs[job["job_id"]] = job
+    return dict(job)
+
+
+def _get_taxonomy_job(job_id: str) -> dict[str, Any] | None:
+    with _taxonomy_jobs_lock:
+        job = _taxonomy_jobs.get(job_id)
+        return dict(job) if job is not None else None
+
+
+def _update_taxonomy_job(job_id: str, **updates: Any) -> None:
+    with _taxonomy_jobs_lock:
+        job = _taxonomy_jobs.get(job_id)
+        if job is None:
+            return
+        job.update(updates)
+        current = max(0, int(job.get("current") or 0))
+        total = max(0, int(job.get("total") or 0))
+        job["current"] = min(current, total) if total > 0 else current
+        job["percent"] = (
+            100 if job.get("status") == "completed" and total == 0
+            else round((job["current"] / total) * 100, 1) if total > 0
+            else 0
+        )
+        job["updated_at"] = time.time()
+
+
+def _taxonomy_job_spec(operation: str):
+    """Resolve models/handlers lazily after all route functions are defined."""
+
+    return {
+        "merge_class": (BatchMergeClassRequest, batch_merge_class),
+        "delete_class": (BatchDeleteClassRequest, batch_delete_class),
+        "delete_attribute": (BatchDeleteAttributeRequest, batch_delete_attribute),
+        "rename_attribute": (BatchRenameAttributeRequest, batch_rename_attribute),
+        "apply_attribute": (ApplyAttributeRequest, batch_apply_attribute),
+        "merge_with_attribute": (MergeWithAttributeRequest, batch_merge_with_attribute),
+    }[operation]
+
+
+def _decode_taxonomy_result(result: Any) -> dict[str, Any]:
+    if isinstance(result, JSONResponse):
+        try:
+            payload = json.loads(result.body.decode("utf-8"))
+        except (AttributeError, UnicodeDecodeError, json.JSONDecodeError):
+            payload = {}
+        if result.status_code >= 400:
+            detail = payload.get("detail") if isinstance(payload, dict) else None
+            raise RuntimeError(str(detail or f"Taxonomy update failed ({result.status_code})."))
+        return payload if isinstance(payload, dict) else {"status": "success"}
+    return result if isinstance(result, dict) else {"status": "success", "result": result}
+
+
+def _run_taxonomy_operation_in_thread(
+    operation: str,
+    request_model: Any,
+    total: int,
+    progress_callback: Callable[[int, int, str], None],
+) -> dict[str, Any]:
+    token = _taxonomy_progress_context.set({"current": 0, "total": total, "callback": progress_callback})
+    try:
+        _, handler = _taxonomy_job_spec(operation)
+        result = asyncio.run(handler(request_model))
+        return _decode_taxonomy_result(result)
+    finally:
+        _taxonomy_progress_context.reset(token)
+
+
+async def _run_taxonomy_job(job_id: str, operation: str, request_model: Any, total: int) -> None:
+    _update_taxonomy_job(job_id, status="running", message="Processing annotation files")
+
+    def report_progress(current: int, progress_total: int, message: str) -> None:
+        _update_taxonomy_job(
+            job_id,
+            current=current,
+            total=progress_total,
+            message=message or "Processing annotation files",
+        )
+
+    try:
+        result = await asyncio.to_thread(
+            _run_taxonomy_operation_in_thread,
+            operation,
+            request_model,
+            total,
+            report_progress,
+        )
+        _update_taxonomy_job(
+            job_id,
+            status="completed",
+            current=total,
+            total=total,
+            message="Update complete",
+            result=result,
+            error=None,
+        )
+    except Exception as exc:
+        logger.exception("TAXONOMY_JOB_ERROR job_id=%s operation=%s", job_id, operation)
+        _update_taxonomy_job(
+            job_id,
+            status="failed",
+            message="Update failed",
+            error=str(exc),
+        )
+    finally:
+        _taxonomy_tasks.pop(job_id, None)
 
 
 SHP_RATE_BINS = [
@@ -103,6 +301,7 @@ async def batch_merge_class(request: BatchMergeClassRequest):
                     modified_objects += file_objects_updated
             except Exception as e:
                 logger.exception("MERGE_CLASS_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+            _report_taxonomy_file_progress(os.path.basename(file_path))
 
     logger.info(
         "MERGE_CLASS_END modified_files=%d modified_objects=%d",
@@ -175,6 +374,7 @@ async def batch_delete_class(request: BatchDeleteClassRequest):
                     modified_objects += file_objects_updated
             except Exception as e:
                 logger.exception("DELETE_CLASS_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+            _report_taxonomy_file_progress(os.path.basename(file_path))
 
     logger.info(
         "DELETE_CLASS_END modified_files=%d modified_objects=%d",
@@ -229,6 +429,7 @@ async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
                     modified_count += 1
             except Exception as e:
                 logger.exception("DELETE_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+            _report_taxonomy_file_progress(os.path.basename(file_path))
 
     logger.info(
         "DELETE_ATTRIBUTE_END modified_files=%d removed_attributes=%d",
@@ -288,6 +489,7 @@ async def batch_rename_attribute(request: BatchRenameAttributeRequest):
                     conflicts.append(file_path)
             except Exception as e:
                 logger.exception("RENAME_ATTRIBUTE_FILE_READ_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+            _report_taxonomy_file_progress(os.path.basename(file_path))
 
     if conflicts:
         logger.warning(
@@ -325,6 +527,7 @@ async def batch_rename_attribute(request: BatchRenameAttributeRequest):
                 modified_count += 1
             except Exception as e:
                 logger.exception("RENAME_ATTRIBUTE_FILE_WRITE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+        _report_taxonomy_file_progress(os.path.basename(file_path))
 
     logger.info(
         "RENAME_ATTRIBUTE_END old_name=%s new_name=%s modified_files=%d renamed_shapes=%d",
@@ -756,6 +959,7 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
 
                 except Exception as e:
                     logger.exception("APPLY_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+                _report_taxonomy_file_progress(os.path.basename(file_path))
 
         invalidated_caches = _invalidate_statistics_caches(request.save_dirs) if modified_count else 0
         logger.info(
@@ -1275,6 +1479,7 @@ async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
 
             except Exception as e:
                 logger.exception("MERGE_WITH_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
+            _report_taxonomy_file_progress(os.path.basename(file_path))
 
     logger.info(
         "MERGE_WITH_ATTRIBUTE_END modified_files=%d objects=%d",
@@ -1287,3 +1492,40 @@ async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
         "modified_files": modified_count,
         "total_objects": total_objects,
     }
+
+
+@router.post("/jobs")
+async def create_taxonomy_job(request: TaxonomyJobRequest):
+    """Start a file-level taxonomy update and return its job state."""
+
+    try:
+        request_model_class, _ = _taxonomy_job_spec(request.operation)
+        request_model = request_model_class(**request.payload)
+    except KeyError:
+        raise HTTPException(status_code=400, detail=f"Unsupported taxonomy operation: {request.operation}")
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    total = _taxonomy_job_total(request.operation, request_model.save_dirs)
+    job = _create_taxonomy_job(request.operation, total)
+    job_id = job["job_id"]
+    _taxonomy_tasks[job_id] = asyncio.create_task(
+        _run_taxonomy_job(job_id, request.operation, request_model, total)
+    )
+    logger.info(
+        "TAXONOMY_JOB_START job_id=%s operation=%s total=%d",
+        job_id,
+        request.operation,
+        total,
+    )
+    return job
+
+
+@router.get("/jobs/{job_id}")
+async def get_taxonomy_job(job_id: str):
+    """Return the current progress and final result of a taxonomy job."""
+
+    job = _get_taxonomy_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Taxonomy job not found.")
+    return job

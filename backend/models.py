@@ -165,6 +165,20 @@ class ApplyAttributeRequest(BaseModel):
     value_replacements: Dict[str, str] = Field(default_factory=dict)
 
 
+class TaxonomyJobRequest(BaseModel):
+    """Request envelope for a background taxonomy update job."""
+
+    operation: Literal[
+        "merge_class",
+        "delete_class",
+        "delete_attribute",
+        "rename_attribute",
+        "apply_attribute",
+        "merge_with_attribute",
+    ]
+    payload: Dict[str, Any] = Field(default_factory=dict)
+
+
 class MkdirRequest(BaseModel):
     path: str
     name: str

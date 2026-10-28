@@ -14,7 +14,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { OperationProgress } from '../ui/OperationProgress';
-import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, batchRenameAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
+import { fetchProjectStatistics, getFileContent, getPreviewImageUrl, runTaxonomyJob, type TaxonomyJobOperation, type TaxonomyJobState } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 import { showDialog, useDialogStore, type DialogOptions } from '../../store/useDialogStore';
@@ -46,6 +46,8 @@ interface TaxonomyProcessingProgress {
   stageIndex: number;
   stageCount: number;
   stageName: string;
+  current: number;
+  total: number;
 }
 
 const TAXONOMY_VIEW_STATE_PREFIX = 'multiAnno_taxonomy_dashboard_view';
@@ -1710,8 +1712,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       stageIndex: 1,
       stageCount: includesStatisticsStage ? 2 : 1,
       stageName,
+      current: 0,
+      total: 0,
     });
     setIsProcessing(true);
+    return operationKey;
   };
 
   const moveTaxonomyProgressToStatistics = () => {
@@ -1720,6 +1725,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       stageIndex: 2,
       stageCount: 2,
       stageName: t('taxonomyDashboard.refreshingStatistics', 'Refreshing statistics'),
+      current: 0,
+      total: 0,
     } : current);
   };
 
@@ -1733,6 +1740,25 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   // layout while React is committing the final operation state.
   const queueTaxonomyDialog = (options: DialogOptions) => {
     window.setTimeout(() => openDialog(options), 0);
+  };
+
+  const runTaxonomyWrite = async (
+    operation: TaxonomyJobOperation,
+    payload: Record<string, any>,
+    stageName: string,
+    includesStatisticsStage = false,
+  ) => {
+    const operationKey = beginTaxonomyWrite(stageName, includesStatisticsStage);
+    return runTaxonomyJob(operation, payload, (job: TaxonomyJobState) => {
+      setProcessingProgress((current) => {
+        if (!current || current.operationKey !== operationKey) return current;
+        return {
+          ...current,
+          current: job.current,
+          total: job.total,
+        };
+      });
+    });
   };
 
   const refreshStatsIfNeeded = async (showProgress = false) => {
@@ -1794,17 +1820,18 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     }));
     const attributeName = mergeAttrName.trim();
     
-    beginTaxonomyWrite(
-      t('taxonomyDashboard.updatingLabelsAndAttributes', 'Updating labels and attributes'),
-      Boolean(editorSettings.autoRefreshStats),
-    );
     try {
       const safeSaveDirs = getSaveDirs();
       
-      const mergeResult = await batchMergeClassWithAttribute({
-        save_dirs: safeSaveDirs,
-        merges,
-      });
+      const mergeResult = await runTaxonomyWrite(
+        'merge_with_attribute',
+        {
+          save_dirs: safeSaveDirs,
+          merges,
+        },
+        t('taxonomyDashboard.updatingLabelsAndAttributes', 'Updating labels and attributes'),
+        Boolean(editorSettings.autoRefreshStats),
+      );
       
       // 🌟 关键修复：手动更新 annotations 中的 attributes
       const state = useStore.getState();
@@ -2094,21 +2121,22 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     const targetClass = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
     if (!targetClass) return;
 
-    beginTaxonomyWrite(
-      t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
-      Boolean(editorSettings.autoRefreshStats),
-    );
     try {
       const safeSaveDirs = getSaveDirs();
       const sourceStats = statsData?.classes?.[activeClass.name] || {};
       const estimatedImages = Array.isArray(sourceStats.stems) ? sourceStats.stems.length : 0;
       const estimatedObjects = Number(sourceStats.total_objects || 0);
       // 1. 后端合并：将所有标注从 old_name 改为 new_name
-      const mergeResult = await batchMergeClass({
-        save_dirs: safeSaveDirs, 
-        old_names: [activeClass.name], 
-        new_name: targetClass.name 
-      });
+      const mergeResult = await runTaxonomyWrite(
+        'merge_class',
+        {
+          save_dirs: safeSaveDirs,
+          old_names: [activeClass.name],
+          new_name: targetClass.name,
+        },
+        t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
+        Boolean(editorSettings.autoRefreshStats),
+      );
 
       // 2. 本地标注重命名 (使用我们自定义的逻辑，避免销毁类)
       // 如果直接调用 store.mergeTaxonomyClasses，它会删掉源类
@@ -2181,17 +2209,18 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       
       // 如果是软删除，点击一次直接执行（或者你也可以给它加一级）
       
-      beginTaxonomyWrite(
-        t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
-        Boolean(editorSettings.autoRefreshStats),
-      );
       try {
         const safeSaveDirs = getSaveDirs();
-        const deleteResult = await batchDeleteClass({
-          save_dirs: safeSaveDirs, 
-          class_name: activeClass.name, 
-          hard_delete: isHardDelete 
-        });
+        const deleteResult = await runTaxonomyWrite(
+          'delete_class',
+          {
+            save_dirs: safeSaveDirs,
+            class_name: activeClass.name,
+            hard_delete: isHardDelete,
+          },
+          t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
+          Boolean(editorSettings.autoRefreshStats),
+        );
         
         deleteTaxonomyClass(activeClass.id, isHardDelete);
         await refreshStatsIfNeeded(true);
@@ -2232,19 +2261,20 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setDeleteStage(1);
       return;
     }
-    beginTaxonomyWrite(
-      t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
-      true,
-    );
     try {
       const safeSaveDirs = getSaveDirs();
       
       // 1. 调用后端的删除接口，使用 hard_delete 物理抹除所有的 background 框
-      const cleanResult = await batchDeleteClass({
-        save_dirs: safeSaveDirs, 
-        class_name: 'background', 
-        hard_delete: true 
-      });
+      const cleanResult = await runTaxonomyWrite(
+        'delete_class',
+        {
+          save_dirs: safeSaveDirs,
+          class_name: 'background',
+          hard_delete: true,
+        },
+        t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
+        true,
+      );
       
       // 2. 🌟 极速响应：清理本地 Store 中的标注，让画布上的框瞬间消失
       const state = useStore.getState() as any;
@@ -2311,16 +2341,17 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       return;
     }
 
-    beginTaxonomyWrite(
-      t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
-      true,
-    );
     try {
-      const result = await batchRenameAttribute({
-        save_dirs: getSaveDirs(),
-        old_name: oldName,
-        new_name: newName,
-      });
+      const result = await runTaxonomyWrite(
+        'rename_attribute',
+        {
+          save_dirs: getSaveDirs(),
+          old_name: oldName,
+          new_name: newName,
+        },
+        t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
+        true,
+      );
 
       const state = useStore.getState() as any;
       const updatedAnnotations = (state.annotations || []).map((annotation: any) => {
@@ -2438,10 +2469,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   // 🌟 修复后的完整版：执行属性的批量应用与同步
   const executeApplyAttribute = async () => {
     if (!activeAttribute || !attrDraft) return;
-    beginTaxonomyWrite(
-      t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
-      true,
-    );
     try {
       const safeSaveDirs = getSaveDirs();
       const currentPreviewStemBeforeEdit = previewStem ?? restoredPreviewStemRef.current;
@@ -2492,13 +2519,18 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       restoredPreviewStemRef.current = currentPreviewStemBeforeEdit;
       
       // 1. 同步到所有后端的 JSON 文件
-      const result = await batchApplyAttribute({
-        save_dirs: safeSaveDirs,
-        attribute_name: activeAttribute.name,
-        new_default: nextDefault,
-        old_default: activeAttribute.defaultValue,
-        value_replacements: valueReplacements,
-      });
+      const result = await runTaxonomyWrite(
+        'apply_attribute',
+        {
+          save_dirs: safeSaveDirs,
+          attribute_name: activeAttribute.name,
+          new_default: nextDefault,
+          old_default: activeAttribute.defaultValue,
+          value_replacements: valueReplacements,
+        },
+        t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
+        true,
+      );
 
       // 2. 更新本地 Store 中关于该 Attribute 的全局定义
       updateTaxonomyAttribute(activeAttribute.id, { 
@@ -2581,15 +2613,16 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   // 🌟 新增：带二次确认的删除属性执行
   const executeDeleteAttribute = async () => {
     if (!activeAttribute) return;
-    beginTaxonomyWrite(
-      t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
-      Boolean(editorSettings.autoRefreshStats),
-    );
     try {
       const safeSaveDirs = getSaveDirs();
       
       // 同步删除后端 JSON 里的该属性
-      const deleteResult = await batchDeleteAttribute({ save_dirs: safeSaveDirs, attribute_name: activeAttribute.name });
+      const deleteResult = await runTaxonomyWrite(
+        'delete_attribute',
+        { save_dirs: safeSaveDirs, attribute_name: activeAttribute.name },
+        t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
+        Boolean(editorSettings.autoRefreshStats),
+      );
       
       // 删本地 Store
       deleteTaxonomyAttribute(activeAttribute.id);
@@ -3127,18 +3160,18 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             if (!newName) return;
                             
                             const oldName = activeClass.name;
-                            beginTaxonomyWrite(
-                              t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
-                              true,
-                            );
-                            
                             try {
                               const safeSaveDirs = getSaveDirs();
-                              const result = await batchMergeClass({
-                                save_dirs: safeSaveDirs,
-                                old_names: [oldName],
-                                new_name: newName
-                              });
+                              const result = await runTaxonomyWrite(
+                                'merge_class',
+                                {
+                                  save_dirs: safeSaveDirs,
+                                  old_names: [oldName],
+                                  new_name: newName,
+                                },
+                                t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
+                                true,
+                              );
                               
                               updateTaxonomyClass(activeClass.id, { name: newName });
                               moveTaxonomyProgressToStatistics();
@@ -3960,6 +3993,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               stageIndex={processingProgress.stageIndex}
               stageCount={processingProgress.stageCount}
               stageName={processingProgress.stageName}
+              current={processingProgress.current}
+              total={processingProgress.total}
               operationKey={processingProgress.operationKey}
             />
           </div>

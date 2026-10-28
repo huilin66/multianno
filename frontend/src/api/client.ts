@@ -168,6 +168,82 @@ export const batchMergeClassWithAttribute = (params: {
   merges: { old_name: string; new_name: string; attribute_name: string; attribute_value: string }[];
 }) => post(`${API_BASE_URL}/taxonomy/merge_with_attribute`, params);
 
+export type TaxonomyJobOperation =
+  | 'merge_class'
+  | 'delete_class'
+  | 'delete_attribute'
+  | 'rename_attribute'
+  | 'apply_attribute'
+  | 'merge_with_attribute';
+
+export interface TaxonomyJobState {
+  job_id: string;
+  operation: TaxonomyJobOperation;
+  status: 'queued' | 'running' | 'completed' | 'failed';
+  stage_index: number;
+  stage_count: number;
+  stage_name: string;
+  current: number;
+  total: number;
+  percent: number;
+  message?: string;
+  result?: Record<string, any> | null;
+  error?: string | null;
+}
+
+export const startTaxonomyJob = (
+  operation: TaxonomyJobOperation,
+  payload: Record<string, any>,
+) => post(`${API_BASE_URL}/taxonomy/jobs`, { operation, payload }) as Promise<TaxonomyJobState>;
+
+export const getTaxonomyJob = (jobId: string, signal?: AbortSignal) =>
+  get(`${API_BASE_URL}/taxonomy/jobs/${encodeURIComponent(jobId)}`, {
+    signal,
+    cache: 'no-store',
+  }) as Promise<TaxonomyJobState>;
+
+const waitForTaxonomyJobPoll = (milliseconds: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, milliseconds);
+    const abort = () => {
+      window.clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
+
+export const runTaxonomyJob = async (
+  operation: TaxonomyJobOperation,
+  payload: Record<string, any>,
+  onProgress?: (job: TaxonomyJobState) => void,
+  signal?: AbortSignal,
+) => {
+  let job = await startTaxonomyJob(operation, payload);
+  onProgress?.(job);
+
+  for (let attempt = 0; attempt < 3600; attempt += 1) {
+    if (job.status === 'completed') return job.result || {};
+    if (job.status === 'failed') {
+      throw new Error(job.error || job.message || 'Taxonomy update failed.');
+    }
+
+    await waitForTaxonomyJobPoll(200, signal);
+    job = await getTaxonomyJob(job.job_id, signal);
+    onProgress?.(job);
+  }
+
+  throw new Error('Taxonomy update timed out.');
+};
+
 export const fetchProjectStatistics = (saveDirs: string[], forceRefresh = false) =>
   post(`${API_BASE_URL}/taxonomy/statistics`, { save_dirs: saveDirs, force_refresh: forceRefresh });
 
