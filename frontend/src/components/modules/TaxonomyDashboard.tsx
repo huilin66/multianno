@@ -3193,7 +3193,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   >
                     {classSortDir === 'asc' ? '↑' : classSortDir === 'desc' ? '↓' : '↕'}
                   </button>
-                  {expanded.classes ? <ChevronDown className="w-4 h-4 text-neutral-400"/> : <ChevronRight className="w-4 h-4 text-neutral-400"/>}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setExpanded((previous) => ({ ...previous, classes: !previous.classes }));
+                    }}
+                    className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                    title={expanded.classes ? t('taxonomyDashboard.collapse', 'Collapse') : t('taxonomyDashboard.expand', 'Expand')}
+                    aria-label={expanded.classes ? t('taxonomyDashboard.collapse', 'Collapse') : t('taxonomyDashboard.expand', 'Expand')}
+                  >
+                    {expanded.classes ? <ChevronDown className="w-4 h-4"/> : <ChevronRight className="w-4 h-4"/>}
+                  </button>
                 </div>
               </div>
               {expanded.classes && (
@@ -3307,7 +3318,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   >
                     {attrSortDir === 'asc' ? '↑' : attrSortDir === 'desc' ? '↓' : '↕'}
                   </button>
-                  {expanded.attributes ? <ChevronDown className="w-4 h-4 text-neutral-400"/> : <ChevronRight className="w-4 h-4 text-neutral-400"/>}
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setExpanded((previous) => ({ ...previous, attributes: !previous.attributes }));
+                    }}
+                    className="flex h-5 w-5 items-center justify-center rounded text-neutral-400 hover:bg-neutral-200 dark:hover:bg-neutral-700"
+                    title={expanded.attributes ? t('taxonomyDashboard.collapse', 'Collapse') : t('taxonomyDashboard.expand', 'Expand')}
+                    aria-label={expanded.attributes ? t('taxonomyDashboard.collapse', 'Collapse') : t('taxonomyDashboard.expand', 'Expand')}
+                  >
+                    {expanded.attributes ? <ChevronDown className="w-4 h-4"/> : <ChevronRight className="w-4 h-4"/>}
+                  </button>
                 </div>
               </div>
               {expanded.attributes && (
