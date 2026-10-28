@@ -41,7 +41,7 @@ export const getAttributeNameFromColumnKey = (key: AnnotationTableColumnKey) => 
 );
 
 export const DEFAULT_COLUMN_WIDTHS: Record<BaseAnnotationTableColumnKey, number> = {
-  row: 48,
+  row: 64,
   id: 64,
   label: 104,
   type: 80,
@@ -65,7 +65,7 @@ export const DEFAULT_COLUMN_WIDTHS: Record<BaseAnnotationTableColumnKey, number>
 };
 
 export const MIN_COLUMN_WIDTHS: Record<BaseAnnotationTableColumnKey, number> = {
-  row: 40,
+  row: 56,
   id: 44,
   label: 72,
   type: 64,

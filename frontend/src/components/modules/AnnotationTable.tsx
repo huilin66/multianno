@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2 } from 'lucide-react';
+import { ChevronDown, ChevronUp, ChevronsUpDown, Copy, ExternalLink, Filter, Link2, MapPin } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { getFileContent } from '../../api/client';
 import { useStore, type Annotation, type TaxonomyAttribute, type TaxonomyClass } from '../../store/useStore';
@@ -133,14 +133,14 @@ const moveTextColumnToEnd = (order: AnnotationTableColumnKey[]) => {
 const annotationTableMemory = new Map<string, AnnotationTableMemoryState>();
 
 const ATTRIBUTE_COLUMN_PALETTE = [
-  '#6d28d9',
-  '#0f766e',
-  '#b45309',
-  '#be185d',
-  '#1d4ed8',
-  '#047857',
-  '#9f1239',
-  '#7c2d12',
+  '#f3f4f6',
+  '#e5e7eb',
+  '#d1d5db',
+  '#eef0f2',
+  '#e2e8f0',
+  '#cbd5e1',
+  '#edf1f4',
+  '#dfe4e8',
 ];
 
 const ATTRIBUTE_FILTER_ALL = '__all_attribute_values__';
@@ -1091,7 +1091,7 @@ export const AnnotationTable = React.memo(function AnnotationTable({
       return renderHeaderCell(
         key,
         <span className="block truncate" title={attributeName}>{attributeName}</span>,
-        'px-3 py-3 text-white',
+        'px-3 py-3 text-neutral-700 dark:text-neutral-900',
         { backgroundColor: attributeColumnColors[key] || ATTRIBUTE_COLUMN_PALETTE[0] },
       );
     }
@@ -1257,7 +1257,25 @@ export const AnnotationTable = React.memo(function AnnotationTable({
     }
 
     switch (key) {
-      case 'row': return <td key={key} className="px-3 py-2.5 text-neutral-400 font-mono">{index + 1}</td>;
+      case 'row': return (
+        <td key={key} className="px-1.5 py-2.5 text-neutral-400 font-mono">
+          <span className="inline-flex items-center gap-1 whitespace-nowrap">
+            <span>{index + 1}</span>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenAnnotation(row.annotation, row.sceneObjectIndex);
+              }}
+              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-blue-100 hover:text-blue-700 dark:hover:bg-blue-900/40 dark:hover:text-blue-300"
+              title={t('taxonomyDashboard.locateAnnotation', 'Locate annotation')}
+              aria-label={t('taxonomyDashboard.locateAnnotation', 'Locate annotation')}
+            >
+              <MapPin className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+          </span>
+        </td>
+      );
       case 'id': return <td key={key} className={`${cellClass} max-w-[210px] truncate text-neutral-700 dark:text-neutral-300`} title={row.annotation.id}>{row.annotation.id}</td>;
       case 'label': return <td key={key} className="px-3 py-2.5"><span className="inline-flex max-w-full items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: classDefinition?.color || '#64748b' }} /><span className="truncate font-semibold" title={row.annotation.label}>{row.annotation.label}</span></span></td>;
       case 'type': return <td key={key} className="px-3 py-2.5"><span className="rounded bg-neutral-100 px-2 py-1 text-[10px] font-mono text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">{row.annotation.type}</span></td>;
