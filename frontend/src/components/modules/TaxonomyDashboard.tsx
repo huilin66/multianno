@@ -5147,23 +5147,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       const otherSourceClasses = values.map((sourceClass: any) => sourceClass.name).join(', ');
                       return (
                         <div key={target.id} className="rounded-md border border-neutral-200 bg-white p-2.5 dark:border-neutral-700 dark:bg-neutral-900">
-                          <div className="mb-1 flex justify-end">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              title={t('workspace.deleteAttribute', 'Delete attribute')}
-                              aria-label={t('workspace.deleteAttribute', 'Delete attribute')}
-                              className="h-6 w-6 p-0 text-neutral-400 hover:text-red-600"
-                              onClick={() => setMergeDeletedTargetAttributeIds((previous) => {
-                                const next = new Set(previous);
-                                next.add(target.id);
-                                return next;
-                              })}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
                           <div className="mt-2 grid items-start gap-3 sm:grid-cols-2">
                             <div>
                               <Label className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
@@ -5181,9 +5164,26 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                               </div>
                             </div>
                             <div>
-                              <Label className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
-                                {t('workspace.attributeValues', 'Attribute values')}
-                              </Label>
+                              <div className="flex items-center justify-between gap-2">
+                                <Label className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
+                                  {t('workspace.attributeValues', 'Attribute values')}
+                                </Label>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  title={t('workspace.deleteAttribute', 'Delete attribute')}
+                                  aria-label={t('workspace.deleteAttribute', 'Delete attribute')}
+                                  className="h-5 w-5 p-0 text-neutral-400 hover:text-red-600"
+                                  onClick={() => setMergeDeletedTargetAttributeIds((previous) => {
+                                    const next = new Set(previous);
+                                    next.add(target.id);
+                                    return next;
+                                  })}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
                               <div className="mt-1.5 max-h-40 space-y-1.5 overflow-y-auto custom-scrollbar">
                                 {values.map((sourceClass: any) => (
                                   <div key={sourceClass.id} className="rounded border border-neutral-200 p-1.5 dark:border-neutral-700">
