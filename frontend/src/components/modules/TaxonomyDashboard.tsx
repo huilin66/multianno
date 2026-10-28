@@ -112,6 +112,13 @@ interface DistributionSeries {
 }
 
 const DISTRIBUTION_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#ef4444', '#14b8a6', '#6366f1'];
+const DISTRIBUTION_MIN_BODY_HEIGHT = 180;
+const DISTRIBUTION_MAX_BODY_HEIGHT = 500;
+
+const getDistributionBodyHeight = (rowCount: number) => Math.min(
+  DISTRIBUTION_MAX_BODY_HEIGHT,
+  Math.max(DISTRIBUTION_MIN_BODY_HEIGHT, DISTRIBUTION_MIN_BODY_HEIGHT + Math.min(rowCount, 12) * 24),
+);
 
 const DistributionTable = ({ rows, columns }: { rows: DistributionRow[]; columns: DistributionColumn[] }) => (
   <div className="h-full overflow-auto custom-scrollbar">
@@ -151,22 +158,68 @@ const DistributionTable = ({ rows, columns }: { rows: DistributionRow[]; columns
 const DistributionBarChart = ({ series }: { series: DistributionSeries[] }) => {
   const maxValue = Math.max(...series.map((item) => item.count), 1);
   return (
-    <div className="h-full space-y-3 overflow-y-auto custom-scrollbar pr-1">
-      {series.map((item, index) => (
-        <div key={`${item.label}-${index}`} className="grid grid-cols-[minmax(0,7rem)_1fr_auto] items-center gap-2 text-[10px]">
-          <span className="truncate text-neutral-600 dark:text-neutral-300" title={item.label}>{item.label}</span>
-          <div className="h-2 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${(item.count / maxValue) * 100}%`,
-                backgroundColor: item.color || DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length],
-              }}
-            />
+    <div className="flex h-full min-h-[180px] max-h-full items-center justify-center overflow-y-auto custom-scrollbar">
+      <div className="w-[92%] max-w-[820px] -translate-x-[3%] space-y-3 pr-1">
+        {series.map((item, index) => (
+          <div key={`${item.label}-${index}`} className="grid grid-cols-[minmax(0,7rem)_1fr_auto] items-center gap-2 text-[10px]">
+            <span className="truncate text-neutral-600 dark:text-neutral-300" title={item.label}>{item.label}</span>
+            <div className="h-2 overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{
+                  width: `${(item.count / maxValue) * 100}%`,
+                  backgroundColor: item.color || DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length],
+                }}
+              />
+            </div>
+            <span className="w-10 text-right font-mono text-neutral-500 dark:text-neutral-400">{item.count.toLocaleString()}</span>
           </div>
-          <span className="w-10 text-right font-mono text-neutral-500 dark:text-neutral-400">{item.count.toLocaleString()}</span>
-        </div>
-      ))}
+        ))}
+      </div>
+    </div>
+  );
+};
+
+type AttributeDistributionDetails = Record<string, Record<string, number>>;
+
+const AttributeGroupedBarChart = ({ detailsData }: { detailsData: AttributeDistributionDetails }) => {
+  const attributes = Object.entries(detailsData || {}).filter(([, values]) => Object.keys(values || {}).length > 0);
+  return (
+    <div className="flex h-full min-h-[180px] max-h-full flex-col gap-4 overflow-y-auto custom-scrollbar pr-1">
+      {attributes.map(([attributeName, values], attributeIndex) => {
+        const entries = Object.entries(values).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
+        const total = entries.reduce((sum, [, count]) => sum + Number(count || 0), 0);
+        return (
+          <div key={attributeName} className="space-y-1.5">
+            <div className="flex items-center justify-between gap-2 text-[10px]">
+              <span className="truncate font-bold text-neutral-700 dark:text-neutral-200" title={attributeName}>{attributeName}</span>
+              <span className="shrink-0 font-mono text-neutral-400">{total.toLocaleString()}</span>
+            </div>
+            <div className="flex h-3 w-full overflow-hidden rounded-full bg-neutral-100 dark:bg-neutral-800">
+              {entries.map(([value, count], valueIndex) => (
+                <div
+                  key={value}
+                  className="h-full min-w-px transition-all hover:brightness-110"
+                  style={{
+                    width: `${total > 0 ? (Number(count || 0) / total) * 100 : 0}%`,
+                    backgroundColor: DISTRIBUTION_COLORS[(attributeIndex + valueIndex) % DISTRIBUTION_COLORS.length],
+                  }}
+                  title={`${attributeName}: ${value} (${count})`}
+                />
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {entries.map(([value, count], valueIndex) => (
+                <span key={value} className="flex max-w-[180px] items-center gap-1 text-[9px] text-neutral-500" title={`${value}: ${count}`}>
+                  <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: DISTRIBUTION_COLORS[(attributeIndex + valueIndex) % DISTRIBUTION_COLORS.length] }} />
+                  <span className="truncate">{value}</span>
+                  <span className="shrink-0 font-mono text-neutral-400">({count})</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -192,17 +245,58 @@ const DistributionPieChart = ({ series }: { series: DistributionSeries[] }) => {
   }
 
   return (
-    <div className="flex h-full min-h-[220px] items-center gap-4">
-      <div className="h-32 w-32 shrink-0 rounded-full border-4 border-white shadow-sm dark:border-neutral-800" style={{ background: `conic-gradient(${conicStops})` }} />
-      <div className="max-h-full min-w-0 flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-1">
-        {visibleSeries.map((item, index) => (
-          <div key={`${item.label}-${index}`} className="flex items-center gap-2 text-[10px]">
-            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: item.color || DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length] }} />
-            <span className="min-w-0 flex-1 truncate text-neutral-600 dark:text-neutral-300" title={item.label}>{item.label}</span>
-            <span className="shrink-0 font-mono text-neutral-500">{item.count.toLocaleString()}</span>
-          </div>
-        ))}
+    <div className="flex h-full min-h-[180px] max-h-full items-center justify-center">
+      <div className="flex w-[92%] max-w-[620px] -translate-x-[3%] items-center gap-4">
+        <div className="h-32 w-32 shrink-0 rounded-full border-4 border-white shadow-sm dark:border-neutral-800" style={{ background: `conic-gradient(${conicStops})` }} />
+        <div className="max-h-full min-w-0 flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-1">
+          {visibleSeries.map((item, index) => (
+            <div key={`${item.label}-${index}`} className="flex items-center gap-2 text-[10px]">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: item.color || DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length] }} />
+              <span className="min-w-0 flex-1 truncate text-neutral-600 dark:text-neutral-300" title={item.label}>{item.label}</span>
+              <span className="shrink-0 font-mono text-neutral-500">{item.count.toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
       </div>
+    </div>
+  );
+};
+
+const AttributePieGrid = ({ detailsData }: { detailsData: AttributeDistributionDetails }) => {
+  const attributes = Object.entries(detailsData || {}).filter(([, values]) => Object.keys(values || {}).length > 0);
+  return (
+    <div className="grid h-full min-h-[180px] max-h-full grid-cols-1 gap-3 overflow-y-auto custom-scrollbar pr-1 sm:grid-cols-2">
+      {attributes.map(([attributeName, values], attributeIndex) => {
+        const entries = Object.entries(values).sort((a, b) => Number(b[1] || 0) - Number(a[1] || 0));
+        const total = entries.reduce((sum, [, count]) => sum + Number(count || 0), 0);
+        let cumulative = 0;
+        const conicStops = entries.map(([value, count], valueIndex) => {
+          const start = cumulative;
+          cumulative += total > 0 ? (Number(count || 0) / total) * 100 : 0;
+          return `${DISTRIBUTION_COLORS[(attributeIndex + valueIndex) % DISTRIBUTION_COLORS.length]} ${start}% ${cumulative}%`;
+        }).join(', ');
+
+        return (
+          <div key={attributeName} className="flex min-h-[140px] items-center gap-3 rounded-lg border border-neutral-100 bg-neutral-50/60 p-3 dark:border-neutral-800 dark:bg-neutral-800/40">
+            <div className="h-20 w-20 shrink-0 rounded-full border-2 border-white shadow-sm dark:border-neutral-700" style={{ background: `conic-gradient(${conicStops})` }} />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="truncate text-[10px] font-bold text-neutral-700 dark:text-neutral-200" title={attributeName}>{attributeName}</span>
+                <span className="shrink-0 font-mono text-[9px] text-neutral-400">{total.toLocaleString()}</span>
+              </div>
+              <div className="max-h-20 space-y-1 overflow-y-auto custom-scrollbar pr-1">
+                {entries.map(([value, count], valueIndex) => (
+                  <div key={value} className="flex items-center gap-1.5 text-[9px]">
+                    <span className="h-2 w-2 shrink-0 rounded-sm" style={{ backgroundColor: DISTRIBUTION_COLORS[(attributeIndex + valueIndex) % DISTRIBUTION_COLORS.length] }} />
+                    <span className="min-w-0 flex-1 truncate text-neutral-500" title={value}>{value}</span>
+                    <span className="shrink-0 font-mono text-neutral-400">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -210,7 +304,7 @@ const DistributionPieChart = ({ series }: { series: DistributionSeries[] }) => {
 const DistributionHistogram = ({ series }: { series: DistributionSeries[] }) => {
   const maxValue = Math.max(...series.map((item) => item.count), 1);
   return (
-    <div className="flex h-full min-h-[220px] items-end gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar border-b border-neutral-200 px-2 pb-1 dark:border-neutral-700">
+    <div className="flex h-full min-h-[180px] max-h-full items-end gap-2 overflow-x-auto overflow-y-hidden custom-scrollbar border-b border-neutral-200 px-2 pb-1 dark:border-neutral-700">
       {series.map((item, index) => (
         <div key={`${item.label}-${index}`} className="group flex h-full min-w-[34px] flex-1 flex-col items-center justify-end gap-1">
           <span className="text-[9px] font-mono text-neutral-500 opacity-0 transition-opacity group-hover:opacity-100">{item.count.toLocaleString()}</span>
@@ -234,14 +328,17 @@ const DistributionPanel = ({
   columns,
   series,
   includeHistogram = false,
+  attributeDetails,
 }: {
   rows: DistributionRow[];
   columns: DistributionColumn[];
   series: DistributionSeries[];
   includeHistogram?: boolean;
+  attributeDetails?: AttributeDistributionDetails;
 }) => {
   const { t } = useTranslation();
   const [mode, setMode] = useState<DistributionViewMode>('table');
+  const bodyHeight = getDistributionBodyHeight(rows.length);
   const modes = useMemo(() => ([
     { id: 'table' as const, label: t('taxonomyDashboard.tableView'), icon: Table2 },
     { id: 'bar' as const, label: t('taxonomyDashboard.barChartView'), icon: BarChart3 },
@@ -254,19 +351,22 @@ const DistributionPanel = ({
   }, [mode, modes]);
 
   const content = rows.length === 0 ? (
-    <div className="flex h-full min-h-[220px] items-center justify-center text-xs text-neutral-400">{t('taxonomyDashboard.noData')}</div>
+    <div className="flex h-full items-center justify-center text-xs text-neutral-400">{t('taxonomyDashboard.noData')}</div>
   ) : mode === 'table' ? (
     <DistributionTable rows={rows} columns={columns} />
   ) : mode === 'bar' ? (
-    <DistributionBarChart series={series} />
+    attributeDetails ? <AttributeGroupedBarChart detailsData={attributeDetails} /> : <DistributionBarChart series={series} />
   ) : mode === 'pie' ? (
-    <DistributionPieChart series={series} />
+    attributeDetails ? <AttributePieGrid detailsData={attributeDetails} /> : <DistributionPieChart series={series} />
   ) : (
     <DistributionHistogram series={series} />
   );
 
   return (
-    <div className="flex min-h-[220px] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+    <div
+      className="flex max-h-[500px] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800"
+      style={{ height: `${bodyHeight}px` }}
+    >
       <nav className="w-[78px] shrink-0 border-r border-neutral-100 bg-neutral-50/70 p-1.5 dark:border-neutral-800 dark:bg-neutral-950/30">
         {modes.map(({ id, label, icon: ModeIcon }) => (
           <button
@@ -282,7 +382,7 @@ const DistributionPanel = ({
           </button>
         ))}
       </nav>
-      <div className="min-w-0 flex-1 p-3">{content}</div>
+      <div className="min-h-0 min-w-0 flex-1 p-3">{content}</div>
     </div>
   );
 };
@@ -1135,7 +1235,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const attributeEditRestoreRef = useRef<{ value: string | null } | null>(null);
   const [activeShapeTab, setActiveShapeTab] = useState<'bbox' | 'polygon'>('polygon'); // Overview 下方的 Shape Tab
   const [overviewDistributionTab, setOverviewDistributionTab] = useState<OverviewDistributionTab>('shape');
-  const [overviewAttributeName, setOverviewAttributeName] = useState('');
   const [activeClassShapeTab, setActiveClassShapeTab] = useState<string>('polygon'); // 🌟 新增：单类别的 Shape 切换状态
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<TaxonomyProcessingProgress | null>(null);
@@ -2936,12 +3035,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     [overviewAttributeDetails],
   );
 
-  useEffect(() => {
-    setOverviewAttributeName((current) => (
-      overviewAttributeNames.includes(current) ? current : overviewAttributeNames[0] || ''
-    ));
-  }, [overviewAttributeNames]);
-
   const overviewAttributeRows = useMemo<DistributionRow[]>(() => (
     overviewAttributeNames.flatMap((attributeName) => {
       const entries = Object.entries(overviewAttributeDetails[attributeName] || {});
@@ -2955,19 +3048,21 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     })
   ), [overviewAttributeDetails, overviewAttributeNames]);
 
-  const activeOverviewAttributeName = overviewAttributeName || overviewAttributeNames[0] || '';
-  const activeOverviewAttributeEntries = Object.entries(overviewAttributeDetails[activeOverviewAttributeName] || {});
   const overviewAttributeSeries = useMemo<DistributionSeries[]>(() => (
-    activeOverviewAttributeEntries
-      .map(([label, value], index) => ({
-        label,
-        count: Number(value || 0),
-        color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length],
+    overviewAttributeNames.flatMap((attributeName, attributeIndex) => (
+      Object.entries(overviewAttributeDetails[attributeName] || {}).map(([value, count], valueIndex) => ({
+        label: `${attributeName}: ${value}`,
+        count: Number(count || 0),
+        color: DISTRIBUTION_COLORS[(attributeIndex + valueIndex) % DISTRIBUTION_COLORS.length],
       }))
+    ))
       .sort((a, b) => b.count - a.count)
-  ), [activeOverviewAttributeEntries]);
-  const overviewAttributeIsNumeric = activeOverviewAttributeEntries.length > 0
-    && activeOverviewAttributeEntries.every(([value]) => value !== '(empty)' && value.trim() !== '' && Number.isFinite(Number(value)));
+  ), [overviewAttributeDetails, overviewAttributeNames]);
+  const overviewAttributeValues = overviewAttributeNames.flatMap((attributeName) => (
+    Object.keys(overviewAttributeDetails[attributeName] || {})
+  ));
+  const overviewAttributeIsNumeric = overviewAttributeValues.length > 0
+    && overviewAttributeValues.every((value) => value !== '(empty)' && value.trim() !== '' && Number.isFinite(Number(value)));
 
   const overviewViewCount = views?.length || 0;
   const overviewSceneGroupCount = Object.keys(sceneGroups || {}).length;
@@ -3204,7 +3299,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
               </div>
             </div>
            {/* 🌟 核心修复：外层使用 flex flex-col gap-4，子元素使用 shrink-0，彻底避免重叠 */}
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-4">
+            <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col gap-3">
               {statsStatus === 'idle' && !statsData && (
                 <div className="flex flex-col items-center justify-center py-20 text-neutral-400 shrink-0">
                   <Activity className="w-12 h-12 mb-4 opacity-20" />
@@ -3214,7 +3309,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
               {statsData?.global && (
                 <>
-                  <section className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                  <section className="flex min-h-[220px] max-h-[560px] shrink-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                     <div className="flex min-h-10 items-center justify-between gap-3 border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800">
                       <nav className="flex min-w-0 items-center gap-1" role="tablist" aria-label={t('taxonomyDashboard.distribution')}>
                       {[
@@ -3240,22 +3335,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         <h3 className="text-sm font-black uppercase tracking-widest text-neutral-700 dark:text-neutral-200">
                           {t('taxonomyDashboard.distribution')}
                         </h3>
-                        {overviewDistributionTab === 'attribute' && overviewAttributeNames.length > 0 && (
-                          <select
-                            value={activeOverviewAttributeName}
-                            onChange={(event) => setOverviewAttributeName(event.target.value)}
-                            className="max-w-[150px] rounded-md border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-600 outline-none focus:border-blue-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
-                            aria-label={t('taxonomyDashboard.selectAttribute')}
-                          >
-                            {overviewAttributeNames.map((attributeName) => (
-                              <option key={attributeName} value={attributeName}>{attributeName}</option>
-                            ))}
-                          </select>
-                        )}
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto p-3 custom-scrollbar">
+                    <div className="overflow-x-auto p-2 custom-scrollbar">
                         {overviewDistributionTab === 'shape' && (
                           <DistributionPanel
                             rows={overviewShapeRows}
@@ -3300,6 +3383,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                             ]}
                             series={overviewAttributeSeries}
                             includeHistogram={overviewAttributeIsNumeric}
+                            attributeDetails={overviewAttributeDetails}
                           />
                         )}
                     </div>
@@ -3361,7 +3445,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       {/* 检查当前 Tab 是否已实现 */}
                       {['bbox', 'polygon'].includes(activeShapeTab) ? (
                         statsData.shapes && statsData.shapes[activeShapeTab] ? (
-                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 animate-in fade-in slide-in-from-right-4">
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 animate-in fade-in slide-in-from-right-4">
                             {/* 🌟 修复：每个图表外层套一个独立的卡片，增加 min-w-0 防止文字撑爆容器 */}
                             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                               <AxisBarChart 
