@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '..
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { OperationProgress } from '../ui/OperationProgress';
 import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, batchRenameAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
@@ -38,6 +39,13 @@ interface TaxonomyDashboardViewState {
     classes?: boolean;
     attributes?: boolean;
   };
+}
+
+interface TaxonomyProcessingProgress {
+  operationKey: number;
+  stageIndex: number;
+  stageCount: number;
+  stageName: string;
 }
 
 const TAXONOMY_VIEW_STATE_PREFIX = 'multiAnno_taxonomy_dashboard_view';
@@ -925,6 +933,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [activeShapeTab, setActiveShapeTab] = useState<'bbox' | 'polygon'>('polygon'); // Overview 下方的 Shape Tab
   const [activeClassShapeTab, setActiveClassShapeTab] = useState<string>('polygon'); // 🌟 新增：单类别的 Shape 切换状态
   const [isProcessing, setIsProcessing] = useState(false);
+  const [processingProgress, setProcessingProgress] = useState<TaxonomyProcessingProgress | null>(null);
+  const processingOperationKeyRef = useRef(0);
   const [mergeTargetId, setMergeTargetId] = useState<string>('');
   const [renameValue, setRenameValue] = useState('');
   const [attributeRenameValue, setAttributeRenameValue] = useState('');
@@ -1692,8 +1702,35 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     t,
   ]);
 
-  const refreshStatsIfNeeded = async () => {
+  const beginTaxonomyWrite = (stageName: string, includesStatisticsStage = false) => {
+    const operationKey = processingOperationKeyRef.current + 1;
+    processingOperationKeyRef.current = operationKey;
+    setProcessingProgress({
+      operationKey,
+      stageIndex: 1,
+      stageCount: includesStatisticsStage ? 2 : 1,
+      stageName,
+    });
+    setIsProcessing(true);
+  };
+
+  const moveTaxonomyProgressToStatistics = () => {
+    setProcessingProgress((current) => current ? {
+      ...current,
+      stageIndex: 2,
+      stageCount: 2,
+      stageName: t('taxonomyDashboard.refreshingStatistics', 'Refreshing statistics'),
+    } : current);
+  };
+
+  const finishTaxonomyWrite = () => {
+    setProcessingProgress(null);
+    setIsProcessing(false);
+  };
+
+  const refreshStatsIfNeeded = async (showProgress = false) => {
     if (editorSettings.autoRefreshStats) {
+      if (showProgress) moveTaxonomyProgressToStatistics();
       await loadStatistics(true);
     } else {
       useStore.getState().setStatsCacheValid?.(false);
@@ -1749,7 +1786,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       attribute_value: mergeAttrValues[cls.id].trim(),
     }));
     
-    setIsProcessing(true);
+    beginTaxonomyWrite(
+      t('taxonomyDashboard.updatingLabelsAndAttributes', 'Updating labels and attributes'),
+      Boolean(editorSettings.autoRefreshStats),
+    );
     try {
       const safeSaveDirs = getSaveDirs();
       
@@ -1798,7 +1838,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       mergeTaxonomyClasses(sourceNames, targetClassName);
       
       useStore.getState().setStatsCacheValid?.(false);
-      await refreshStatsIfNeeded();
+      await refreshStatsIfNeeded(true);
       // 重置弹窗状态
       setShowMergeWithAttr(false);
       setMergeSourceClassIds(new Set());
@@ -1823,7 +1863,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         hideCancel: true,
       });
     } finally {
-      setIsProcessing(false);
+      finishTaxonomyWrite();
     }
   };
 
@@ -2040,7 +2080,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     const targetClass = taxonomyClasses.find((c: any) => c.id === mergeTargetId);
     if (!targetClass) return;
 
-    setIsProcessing(true);
+    beginTaxonomyWrite(
+      t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
+      Boolean(editorSettings.autoRefreshStats),
+    );
     try {
       const safeSaveDirs = getSaveDirs();
       const sourceStats = statsData?.classes?.[activeClass.name] || {};
@@ -2083,7 +2126,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       }
       
       useStore.getState().setStatsCacheValid?.(false);
-      await refreshStatsIfNeeded();
+      await refreshStatsIfNeeded(true);
       const updatedImages = Number(
         mergeResult?.modified_images ?? mergeResult?.modified_files ?? estimatedImages,
       );
@@ -2108,7 +2151,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         hideCancel: true,
       });
     } finally {
-      setIsProcessing(false);
+      finishTaxonomyWrite();
     }
   };
 
@@ -2124,7 +2167,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       
       // 如果是软删除，点击一次直接执行（或者你也可以给它加一级）
       
-      setIsProcessing(true);
+      beginTaxonomyWrite(
+        t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
+        Boolean(editorSettings.autoRefreshStats),
+      );
       try {
         const safeSaveDirs = getSaveDirs();
         await batchDeleteClass({ 
@@ -2134,7 +2180,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         });
         
         deleteTaxonomyClass(activeClass.id, isHardDelete);
-        await refreshStatsIfNeeded();
+        await refreshStatsIfNeeded(true);
         setSelectedClassId(null);
         setDeleteStage(0); // 重置状态
 
@@ -2142,7 +2188,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       } catch (err: any) { 
         alert(t('taxonomyDashboard.deleteFailed', { message: err.message }));
       } finally { 
-        setIsProcessing(false); 
+        finishTaxonomyWrite();
       }
     };
 
@@ -2152,7 +2198,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setDeleteStage(1);
       return;
     }
-    setIsProcessing(true);
+    beginTaxonomyWrite(
+      t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
+      true,
+    );
     try {
       const safeSaveDirs = getSaveDirs();
       
@@ -2169,14 +2218,15 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       useStore.setState({ annotations: updatedAnnotations });
       
       // 3. 刷新统计大盘
-      loadStatistics(true);
+      moveTaxonomyProgressToStatistics();
+      await loadStatistics(true);
       setDeleteStage(0);
       useStore.getState().setStatsCacheValid?.(false);
       alert(t('taxonomyDashboard.cleanSuccess'));
     } catch (err: any) { 
       alert(t('taxonomyDashboard.cleanFailed', { message: err.message }));
     } finally { 
-      setIsProcessing(false); 
+      finishTaxonomyWrite();
     }
   };
 
@@ -2212,7 +2262,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       return;
     }
 
-    setIsProcessing(true);
+    beginTaxonomyWrite(
+      t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
+      true,
+    );
     try {
       const result = await batchRenameAttribute({
         save_dirs: getSaveDirs(),
@@ -2232,6 +2285,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       updateTaxonomyAttribute(activeAttribute.id, { name: newName });
       setAttributeRenameValue(newName);
       useStore.getState().setStatsCacheValid?.(false);
+      moveTaxonomyProgressToStatistics();
       await loadStatistics(true);
 
       alert(t('taxonomyDashboard.attributeRenameSuccess', { count: result.modified_files }));
@@ -2239,7 +2293,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setAttributeRenameValue(oldName);
       alert(t('taxonomyDashboard.attributeRenameFailed', { message: err.message }));
     } finally {
-      setIsProcessing(false);
+      finishTaxonomyWrite();
     }
   };
 
@@ -2318,7 +2372,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   // 🌟 修复后的完整版：执行属性的批量应用与同步
   const executeApplyAttribute = async () => {
     if (!activeAttribute || !attrDraft) return;
-    setIsProcessing(true);
+    beginTaxonomyWrite(
+      t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
+      true,
+    );
     try {
       const safeSaveDirs = getSaveDirs();
       const currentPreviewStemBeforeEdit = previewStem ?? restoredPreviewStemRef.current;
@@ -2414,6 +2471,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         previewStem: currentPreviewStemBeforeEdit,
         previousPreviewStem: previousPreviewStemRef.current,
       });
+      moveTaxonomyProgressToStatistics();
       await loadStatistics(true);
       // Keep the explicit value as the final state after the refresh. The
       // scene state is owned by the current/previous scene resolver above.
@@ -2433,14 +2491,17 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       attributeEditRestoreRef.current = null;
       alert(t('taxonomyDashboard.syncFailed', { message: err.message }));
     } finally {
-      setIsProcessing(false);
+      finishTaxonomyWrite();
     }
   };
 
   // 🌟 新增：带二次确认的删除属性执行
   const executeDeleteAttribute = async () => {
     if (!activeAttribute) return;
-    setIsProcessing(true);
+    beginTaxonomyWrite(
+      t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
+      Boolean(editorSettings.autoRefreshStats),
+    );
     try {
       const safeSaveDirs = getSaveDirs();
       
@@ -2449,14 +2510,14 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       
       // 删本地 Store
       deleteTaxonomyAttribute(activeAttribute.id);
-      await refreshStatsIfNeeded();
+      await refreshStatsIfNeeded(true);
       setSelectedAttributeId(null);
       useStore.getState().setStatsCacheValid?.(false);
       setShowAttrDeleteConfirm(false);
     } catch (err: any) {
       alert(t('taxonomyDashboard.deleteFailed', { message: err.message }));
     } finally {
-      setIsProcessing(false);
+      finishTaxonomyWrite();
     }
   };
   // 排序后的 Classes
@@ -2479,6 +2540,22 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   return (
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
       <input type="file" accept=".txt,.yaml,.yml" ref={fileInputRef} className="hidden" onChange={handleImportFile} />
+
+      {processingProgress && (
+        <div
+          className="shrink-0 border-b border-blue-100 bg-blue-50/80 px-4 py-2.5 dark:border-blue-900/50 dark:bg-blue-950/30"
+          role="status"
+          aria-live="polite"
+        >
+          <OperationProgress
+            stageIndex={processingProgress.stageIndex}
+            stageCount={processingProgress.stageCount}
+            stageName={processingProgress.stageName}
+            operationKey={processingProgress.operationKey}
+            className="max-w-3xl"
+          />
+        </div>
+      )}
       
       <div className="flex-1 flex overflow-hidden">
         {/* ================= 1. 左侧可收纳导航树 ================= */}
@@ -2966,7 +3043,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                             if (!newName) return;
                             
                             const oldName = activeClass.name;
-                            setIsProcessing(true);
+                            beginTaxonomyWrite(
+                              t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
+                              true,
+                            );
                             
                             try {
                               const safeSaveDirs = getSaveDirs();
@@ -2977,6 +3057,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               });
                               
                               updateTaxonomyClass(activeClass.id, { name: newName });
+                              moveTaxonomyProgressToStatistics();
                               await loadStatistics(true);
                               
                               alert(t('taxonomyDashboard.renameSuccess', { count: result.modified_files }));
@@ -2984,7 +3065,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               alert(t('taxonomyDashboard.renameFailed', { message: err.message }));
                               setRenameValue(oldName);
                             } finally {
-                              setIsProcessing(false);
+                              finishTaxonomyWrite();
                             }
                           }}
                         >
