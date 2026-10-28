@@ -230,23 +230,15 @@ const DistributionHistogram = ({ series }: { series: DistributionSeries[] }) => 
 };
 
 const DistributionPanel = ({
-  title,
-  icon: Icon,
-  accentColor,
   rows,
   columns,
   series,
   includeHistogram = false,
-  headerControl,
 }: {
-  title: string;
-  icon: React.ComponentType<{ className?: string }>;
-  accentColor: string;
   rows: DistributionRow[];
   columns: DistributionColumn[];
   series: DistributionSeries[];
   includeHistogram?: boolean;
-  headerControl?: React.ReactNode;
 }) => {
   const { t } = useTranslation();
   const [mode, setMode] = useState<DistributionViewMode>('table');
@@ -274,34 +266,24 @@ const DistributionPanel = ({
   );
 
   return (
-    <section className="overflow-hidden">
-      <div className="flex min-h-10 items-center justify-between gap-2 px-1 pb-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="h-4 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: accentColor }} />
-          <Icon className="h-4 w-4 shrink-0 text-neutral-500" />
-          <h4 className="truncate text-[11px] font-black uppercase tracking-wider text-neutral-700 dark:text-neutral-200">{title}</h4>
-        </div>
-        {headerControl}
-      </div>
-      <div className="flex min-h-[300px] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
-        <nav className="w-[78px] shrink-0 border-r border-neutral-100 bg-neutral-50/70 p-1.5 dark:border-neutral-800 dark:bg-neutral-950/30">
-          {modes.map(({ id, label, icon: ModeIcon }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setMode(id)}
-              className={`mb-1 flex w-full flex-col items-center gap-1 rounded-md px-1 py-2 text-[9px] font-bold transition-colors ${mode === id ? 'bg-white text-blue-600 shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-800 dark:text-blue-400 dark:ring-neutral-700' : 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'}`}
-              aria-pressed={mode === id}
-              title={label}
-            >
-              <ModeIcon className="h-3.5 w-3.5" />
-              <span className="truncate">{label}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="min-w-0 flex-1 p-3">{content}</div>
-      </div>
-    </section>
+    <div className="flex min-h-[220px] overflow-hidden rounded-lg border border-neutral-200 dark:border-neutral-800">
+      <nav className="w-[78px] shrink-0 border-r border-neutral-100 bg-neutral-50/70 p-1.5 dark:border-neutral-800 dark:bg-neutral-950/30">
+        {modes.map(({ id, label, icon: ModeIcon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setMode(id)}
+            className={`mb-1 flex w-full flex-col items-center gap-1 rounded-md px-1 py-2 text-[9px] font-bold transition-colors ${mode === id ? 'bg-white text-blue-600 shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-800 dark:text-blue-400 dark:ring-neutral-700' : 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200'}`}
+            aria-pressed={mode === id}
+            title={label}
+          >
+            <ModeIcon className="h-3.5 w-3.5" />
+            <span className="truncate">{label}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="min-w-0 flex-1 p-3">{content}</div>
+    </div>
   );
 };
 
@@ -3221,8 +3203,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                 </span>
               </div>
             </div>
-           {/* 🌟 核心修复：外层使用 flex flex-col gap-6，子元素使用 shrink-0，彻底避免重叠 */}
-            <div className="flex-1 overflow-y-auto p-6 custom-scrollbar flex flex-col gap-6">
+           {/* 🌟 核心修复：外层使用 flex flex-col gap-4，子元素使用 shrink-0，彻底避免重叠 */}
+            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-4">
               {statsStatus === 'idle' && !statsData && (
                 <div className="flex flex-col items-center justify-center py-20 text-neutral-400 shrink-0">
                   <Activity className="w-12 h-12 mb-4 opacity-20" />
@@ -3232,105 +3214,94 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
               {statsData?.global && (
                 <>
-                  <section className="shrink-0 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
-                    <div className="flex flex-wrap items-end justify-between gap-3 border-b border-neutral-100 px-4 pt-4 dark:border-neutral-800">
-                      <div className="px-1 pb-3">
+                  <section className="flex shrink-0 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                    <div className="flex min-h-10 items-center justify-between gap-3 border-b border-neutral-100 px-3 py-1.5 dark:border-neutral-800">
+                      <nav className="flex min-w-0 items-center gap-1" role="tablist" aria-label={t('taxonomyDashboard.distribution')}>
+                      {[
+                        { id: 'shape' as const, label: t('taxonomyDashboard.shape'), icon: Layers },
+                        { id: 'class' as const, label: t('taxonomyDashboard.class'), icon: Tags },
+                        { id: 'attribute' as const, label: t('taxonomyDashboard.attribute'), icon: Settings },
+                      ].map(({ id, label, icon: TabIcon }) => (
+                        <button
+                          key={id}
+                          type="button"
+                          role="tab"
+                          aria-selected={overviewDistributionTab === id}
+                          onClick={() => setOverviewDistributionTab(id)}
+                          className={`flex items-center gap-1.5 border-b-2 px-2.5 py-2 text-[10px] font-bold transition-colors ${overviewDistributionTab === id ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
+                        >
+                          <TabIcon className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{label}</span>
+                        </button>
+                      ))}
+                      </nav>
+
+                      <div className="flex shrink-0 items-center gap-2">
                         <h3 className="text-sm font-black uppercase tracking-widest text-neutral-700 dark:text-neutral-200">
                           {t('taxonomyDashboard.distribution')}
                         </h3>
-                        <p className="mt-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-                          {t('taxonomyDashboard.distributionDesc')}
-                        </p>
-                      </div>
-                      <div className="flex items-end gap-1" role="tablist" aria-label={t('taxonomyDashboard.distribution')}>
-                        {[
-                          { id: 'shape' as const, label: t('taxonomyDashboard.shape'), icon: Layers },
-                          { id: 'class' as const, label: t('taxonomyDashboard.class'), icon: Tags },
-                          { id: 'attribute' as const, label: t('taxonomyDashboard.attribute'), icon: Settings },
-                        ].map(({ id, label, icon: TabIcon }) => (
-                          <button
-                            key={id}
-                            type="button"
-                            role="tab"
-                            aria-selected={overviewDistributionTab === id}
-                            onClick={() => setOverviewDistributionTab(id)}
-                            className={`flex items-center gap-1.5 border-b-2 px-3 py-2 text-[10px] font-bold transition-colors ${overviewDistributionTab === id ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200'}`}
+                        {overviewDistributionTab === 'attribute' && overviewAttributeNames.length > 0 && (
+                          <select
+                            value={activeOverviewAttributeName}
+                            onChange={(event) => setOverviewAttributeName(event.target.value)}
+                            className="max-w-[150px] rounded-md border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-600 outline-none focus:border-blue-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
+                            aria-label={t('taxonomyDashboard.selectAttribute')}
                           >
-                            <TabIcon className="h-3.5 w-3.5" />
-                            {label}
-                          </button>
-                        ))}
+                            {overviewAttributeNames.map((attributeName) => (
+                              <option key={attributeName} value={attributeName}>{attributeName}</option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto p-4 custom-scrollbar">
-                      {overviewDistributionTab === 'shape' && (
-                        <DistributionPanel
-                          title={t('taxonomyDashboard.shapeTypeDistribution')}
-                          icon={Layers}
-                          accentColor="#3b82f6"
-                          rows={overviewShapeRows}
-                          columns={[
-                            { key: 'label', label: t('taxonomyDashboard.shape') },
-                            { key: 'count', label: t('taxonomyDashboard.count') },
-                            { key: 'share', label: t('taxonomyDashboard.share') },
-                          ]}
-                          series={overviewShapeRows.map((row, index) => ({
-                            label: row.label,
-                            count: row.count,
-                            color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length],
-                          }))}
-                        />
-                      )}
+                    <div className="overflow-x-auto p-3 custom-scrollbar">
+                        {overviewDistributionTab === 'shape' && (
+                          <DistributionPanel
+                            rows={overviewShapeRows}
+                            columns={[
+                              { key: 'label', label: t('taxonomyDashboard.shape') },
+                              { key: 'count', label: t('taxonomyDashboard.count') },
+                              { key: 'share', label: t('taxonomyDashboard.share') },
+                            ]}
+                            series={overviewShapeRows.map((row, index) => ({
+                              label: row.label,
+                              count: row.count,
+                              color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length],
+                            }))}
+                          />
+                        )}
 
-                      {overviewDistributionTab === 'class' && (
-                        <DistributionPanel
-                          title={t('taxonomyDashboard.classDistribution')}
-                          icon={Tags}
-                          accentColor="#6366f1"
-                          rows={overviewClassRows}
-                          columns={[
-                            { key: 'label', label: t('taxonomyDashboard.className') },
-                            { key: 'secondary', label: t('taxonomyDashboard.images') },
-                            { key: 'count', label: t('taxonomyDashboard.count') },
-                            { key: 'share', label: t('taxonomyDashboard.share') },
-                          ]}
-                          series={overviewClassRows.map((row, index) => ({
-                            label: row.label,
-                            count: row.count,
-                            color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length],
-                          }))}
-                        />
-                      )}
+                        {overviewDistributionTab === 'class' && (
+                          <DistributionPanel
+                            rows={overviewClassRows}
+                            columns={[
+                              { key: 'label', label: t('taxonomyDashboard.className') },
+                              { key: 'secondary', label: t('taxonomyDashboard.images') },
+                              { key: 'count', label: t('taxonomyDashboard.count') },
+                              { key: 'share', label: t('taxonomyDashboard.share') },
+                            ]}
+                            series={overviewClassRows.map((row, index) => ({
+                              label: row.label,
+                              count: row.count,
+                              color: DISTRIBUTION_COLORS[index % DISTRIBUTION_COLORS.length],
+                            }))}
+                          />
+                        )}
 
-                      {overviewDistributionTab === 'attribute' && (
-                        <DistributionPanel
-                          title={t('taxonomyDashboard.attributeDistribution')}
-                          icon={Settings}
-                          accentColor="#8b5cf6"
-                          rows={overviewAttributeRows}
-                          columns={[
-                            { key: 'group', label: t('taxonomyDashboard.attribute') },
-                            { key: 'label', label: t('taxonomyDashboard.value') },
-                            { key: 'count', label: t('taxonomyDashboard.count') },
-                            { key: 'share', label: t('taxonomyDashboard.share') },
-                          ]}
-                          series={overviewAttributeSeries}
-                          includeHistogram={overviewAttributeIsNumeric}
-                          headerControl={overviewAttributeNames.length > 0 ? (
-                            <select
-                              value={activeOverviewAttributeName}
-                              onChange={(event) => setOverviewAttributeName(event.target.value)}
-                              className="max-w-[125px] rounded-md border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-600 outline-none focus:border-blue-400 dark:border-neutral-700 dark:bg-neutral-800 dark:text-neutral-300"
-                              aria-label={t('taxonomyDashboard.selectAttribute')}
-                            >
-                              {overviewAttributeNames.map((attributeName) => (
-                                <option key={attributeName} value={attributeName}>{attributeName}</option>
-                              ))}
-                            </select>
-                          ) : undefined}
-                        />
-                      )}
+                        {overviewDistributionTab === 'attribute' && (
+                          <DistributionPanel
+                            rows={overviewAttributeRows}
+                            columns={[
+                              { key: 'group', label: t('taxonomyDashboard.attribute') },
+                              { key: 'label', label: t('taxonomyDashboard.value') },
+                              { key: 'count', label: t('taxonomyDashboard.count') },
+                              { key: 'share', label: t('taxonomyDashboard.share') },
+                            ]}
+                            series={overviewAttributeSeries}
+                            includeHistogram={overviewAttributeIsNumeric}
+                          />
+                        )}
                     </div>
                   </section>
 
@@ -3390,7 +3361,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       {/* 检查当前 Tab 是否已实现 */}
                       {['bbox', 'polygon'].includes(activeShapeTab) ? (
                         statsData.shapes && statsData.shapes[activeShapeTab] ? (
-                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 animate-in fade-in slide-in-from-right-4">
+                          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 animate-in fade-in slide-in-from-right-4">
                             {/* 🌟 修复：每个图表外层套一个独立的卡片，增加 min-w-0 防止文字撑爆容器 */}
                             <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl p-5 shadow-sm min-w-0 overflow-hidden">
                               <AxisBarChart 
