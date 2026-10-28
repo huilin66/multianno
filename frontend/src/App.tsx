@@ -654,6 +654,7 @@ export default function App() {
     updateEditorSettings,
     projectMetaPath,
     annotations,
+    taxonomyClasses,
     taxonomyAttributes,
     workspacePath,
     stems,
@@ -1403,6 +1404,12 @@ export default function App() {
                 </span>
                 <span className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 dark:border-neutral-700 dark:bg-neutral-800">
                   {t('taxonomyDashboard.footprintAnnotation', 'Annotation')}: <strong className="font-mono text-foreground">{annotations.length}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 dark:border-neutral-700 dark:bg-neutral-800">
+                  {t('taxonomy.classes', 'Classes')}: <strong className="font-mono text-foreground">{taxonomyClasses.length}</strong>
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full border border-neutral-200 bg-neutral-100 px-2.5 py-1 dark:border-neutral-700 dark:bg-neutral-800">
+                  {t('taxonomy.attributes', 'Attributes')}: <strong className="font-mono text-foreground">{taxonomyAttributes.length}</strong>
                 </span>
               </span>
             </div>
