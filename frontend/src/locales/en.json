@@ -803,6 +803,9 @@
     "attributeValues": "Attribute values",
     "sourceClass": "Source class",
     "otherClassesExcept": "Other classes except {{classes}}",
+    "targetClass": "Target class",
+    "deleteAttribute": "Delete attribute",
+    "noAttributesConfigured": "No target attributes configured",
     "values": "Values"
   },
   "dataExport": {

@@ -803,6 +803,9 @@
     "attributeValues": "属性值",
     "sourceClass": "源类别",
     "otherClassesExcept": "除 {{classes}} 外的其他类别",
+    "targetClass": "目标类别",
+    "deleteAttribute": "删除属性",
+    "noAttributesConfigured": "未配置目标属性",
     "values": "属性值"
   },
     "dataExport": {

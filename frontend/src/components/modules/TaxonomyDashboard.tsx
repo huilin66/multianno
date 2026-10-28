@@ -1318,6 +1318,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [mergeTargetAttributeNames, setMergeTargetAttributeNames] = useState<Record<string, string>>({});
   const [mergeAttributeValueOverrides, setMergeAttributeValueOverrides] = useState<Record<string, string>>({});
   const [mergeTargetNoneValueOverrides, setMergeTargetNoneValueOverrides] = useState<Record<string, string>>({});
+  const [mergeDeletedTargetAttributeIds, setMergeDeletedTargetAttributeIds] = useState<Set<string>>(new Set());
   const mergeMappingGridRef = useRef<HTMLDivElement>(null);
   const mergeSourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const mergeTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -1341,6 +1342,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setMergeTargetAttributeNames({});
     setMergeAttributeValueOverrides({});
     setMergeTargetNoneValueOverrides({});
+    setMergeDeletedTargetAttributeIds(new Set());
     setMergeSelectedSourceIds(new Set());
     setMergeSourceSelectionRect(null);
     mergeSourceSelectionStartRef.current = null;
@@ -2406,9 +2408,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     && mergeAssignedSourceCount === allSourceClasses.length
     && mergeTargetDrafts.length > 0
     && mergeTargetDrafts.every((target) => Object.values(mergeSourceTargetMap).includes(target.id));
+  const mergeAttributeTargets = mergeTargetDrafts.filter((target) => !mergeDeletedTargetAttributeIds.has(target.id));
   const mergeAttributeNames = mergeAttributeMode === 'single'
     ? [mergeAttrName.trim()]
-    : mergeTargetDrafts.map((target) => (mergeTargetAttributeNames[target.id] || '').trim());
+    : mergeAttributeTargets.map((target) => (mergeTargetAttributeNames[target.id] || '').trim());
   const mergeAttributeNamesValid = mergeAttributeNames.length > 0
     && mergeAttributeNames.every(Boolean)
     && new Set(mergeAttributeNames.map((name) => name.toLowerCase())).size === mergeAttributeNames.length;
@@ -2423,7 +2426,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const mergeAttributeValuesValid = mappedSourceClasses.length > 0
     && mappedSourceClasses.every((sourceClass: any) => getMergeAttributeValue(sourceClass).trim().length > 0)
     && (mergeAttributeMode === 'single'
-      || mergeTargetDrafts.every((target) => getMergeNoneAttributeValue(target).trim().length > 0));
+      || mergeAttributeTargets.length > 0 && mergeAttributeTargets.every((target) => getMergeNoneAttributeValue(target).trim().length > 0));
 
   const executeMergeWithAttribute = async () => {
     const sourceClasses = mappedSourceClasses;
@@ -2442,7 +2445,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
            defaultValue: sourceClasses[0] ? getMergeAttributeValue(sourceClasses[0]).trim() : '',
           applyToAll: true,
         }]
-      : mergeTargetDrafts.map((target) => {
+       : mergeAttributeTargets.map((target) => {
           const values = sourceTargetPairs
             .filter(({ target: assignedTarget }) => assignedTarget?.id === target.id)
             .map(({ sourceClass }) => getMergeAttributeValue(sourceClass).trim());
@@ -2460,7 +2463,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       const attributes = mergeAttributeMode === 'single'
         ? { [mergeAttributeNames[0]]: getMergeAttributeValue(sourceClass).trim() }
         : Object.fromEntries(
-            mergeTargetDrafts.map((candidate, index) => [
+             mergeAttributeTargets.map((candidate, index) => [
               mergeAttributeNames[index],
               candidate.id === target?.id
                 ? getMergeAttributeValue(sourceClass).trim()
@@ -5018,6 +5021,16 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                   delete next[target.id];
                                   return next;
                                 });
+                                setMergeTargetNoneValueOverrides((previous) => {
+                                  const next = { ...previous };
+                                  delete next[target.id];
+                                  return next;
+                                });
+                                setMergeDeletedTargetAttributeIds((previous) => {
+                                  const next = new Set(previous);
+                                  next.delete(target.id);
+                                  return next;
+                                });
                               }}
                             >
                               <X className="h-3.5 w-3.5" />
@@ -5110,15 +5123,33 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   </div>
                 ) : (
                   <div className="mt-3 space-y-2">
-                    {mergeTargetDrafts.map((target) => {
+                    {mergeAttributeTargets.length === 0 && (
+                      <p className="rounded-md border border-dashed border-neutral-300 p-3 text-center text-xs text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                        {t('workspace.noAttributesConfigured', 'No target attributes configured')}
+                      </p>
+                    )}
+                    {mergeAttributeTargets.map((target) => {
                       const values = mappedSourceClasses
                         .filter((sourceClass: any) => mergeSourceTargetMap[sourceClass.id] === target.id);
                       const otherSourceClasses = values.map((sourceClass: any) => sourceClass.name).join(', ');
                       return (
                         <div key={target.id} className="rounded-md border border-neutral-200 bg-white p-2.5 dark:border-neutral-700 dark:bg-neutral-900">
-                          <div className="mb-1 flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: target.color }} />
-                            <span className="text-xs font-semibold">{target.name}</span>
+                          <div className="mb-1 flex justify-end">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              title={t('workspace.deleteAttribute', 'Delete attribute')}
+                              aria-label={t('workspace.deleteAttribute', 'Delete attribute')}
+                              className="h-6 w-6 p-0 text-neutral-400 hover:text-red-600"
+                              onClick={() => setMergeDeletedTargetAttributeIds((previous) => {
+                                const next = new Set(previous);
+                                next.add(target.id);
+                                return next;
+                              })}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                           <div className="mt-2 grid items-start gap-3 sm:grid-cols-2">
                             <div>
@@ -5131,6 +5162,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                 placeholder={t('workspace.attributeNamePlaceholder', 'Attribute name')}
                                 className="mt-1 h-8 text-xs"
                               />
+                              <div className="mt-1 flex items-center gap-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+                                <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: target.color }} />
+                                {t('workspace.targetClass', 'Target class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">{target.name}</span>
+                              </div>
                             </div>
                             <div>
                               <Label className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
