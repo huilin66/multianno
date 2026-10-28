@@ -1378,7 +1378,7 @@
     "mergeValuePrompt": "Merge \"{{value}}\" into:",
     "mergeValueCannotDelete": "Cannot remove the last attribute value",
     "mergeValueCannotDeleteDesc": "Keep at least one value so a removed value has a merge target.",
-    "mergeInto": "Merge into",
+    "mergeInto": "Merge into:",
     "selectClass": "Select class",
     "merge": "Merge",
     "mergeWithAttr": "Merge with Attr",

@@ -1378,7 +1378,7 @@
     "mergeValuePrompt": "将“{{value}}”合并到：",
     "mergeValueCannotDelete": "不能删除最后一个属性值",
     "mergeValueCannotDeleteDesc": "至少保留一个属性值，才能作为被删除值的合并目标。",
-    "mergeInto": "合并到",
+    "mergeInto": "合并到：",
     "selectClass": "选择类别",
     "merge": "合并",
     "mergeWithAttr": "带属性合并",

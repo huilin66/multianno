@@ -3664,7 +3664,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         <Button
                           size="sm"
                           disabled={isProcessing}
-                          className="h-7 px-3 text-[10px] font-black transition-all bg-blue-600 hover:bg-blue-700 text-white shadow-md ring-2 ring-blue-400/50"
+                          className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
                           onClick={async () => {
                             const newName = renameValue.trim();
                             if (!newName) return;
@@ -3747,7 +3747,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
               {/* 右侧：Merge 合并与删除操作 */}
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-1.5">
-                  <span className="px-1 text-[10px] font-bold text-neutral-500 dark:text-neutral-400">
+                  <span className="px-1 text-xs font-bold text-neutral-500 dark:text-neutral-400">
                     {t('taxonomyDashboard.mergeInto', 'Merge into')}
                   </span>
                   <Select value={mergeTargetId} onValueChange={setMergeTargetId}>
@@ -3766,19 +3766,21 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         ))}
                     </SelectContent>
                   </Select>
-                  <Button
-                    size="sm"
-                    className="ml-1 h-7 rounded bg-orange-500 px-3 text-xs text-white hover:bg-orange-600"
-                    disabled={!mergeTargetId || isProcessing}
-                    onClick={requestMergeClass}
-                  >
-                    {t('taxonomyDashboard.confirmMerge', 'Confirm')}
-                  </Button>
+                  {mergeTargetId && (
+                    <Button
+                      size="sm"
+                      className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
+                      disabled={isProcessing}
+                      onClick={requestMergeClass}
+                    >
+                      {t('taxonomyDashboard.confirmMerge', 'Confirm')}
+                    </Button>
+                  )}
                   {activeClass && (
                     <Button
                       size="sm"
                       variant="outline"
-                      className="h-7 border-purple-200 px-3 text-[10px] text-purple-600 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-400"
+                      className="h-8 rounded-md border-neutral-200 px-3 text-xs font-semibold text-neutral-700 transition-colors hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
                       onClick={() => setShowMergeWithAttr(true)}
                     >
                       {t('taxonomyDashboard.advanced', 'Advanced')}
@@ -3792,18 +3794,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   <div className="flex items-center">
                     {deleteStage === 0 ? (
                       <Button
-                        variant="outline"
                         size="sm"
-                        className="h-9 border-orange-200 px-4 font-bold text-orange-600 hover:bg-orange-50 dark:border-orange-900/50 dark:hover:bg-orange-900/20"
+                        variant="destructive"
+                        className="h-8 rounded-md px-3 text-xs font-semibold"
                         onClick={() => setDeleteStage(1)}
                       >
                         {t('taxonomyDashboard.clean')}
                       </Button>
                     ) : (
-                      <div className="flex items-center gap-1.5 rounded-lg border border-orange-200 bg-orange-50 p-1.5 animate-in slide-in-from-right-2 dark:bg-orange-950/30">
+                      <div className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 p-1.5 animate-in slide-in-from-right-2 dark:bg-red-950/30">
                         <Button
                           size="sm"
-                          className="h-7 bg-orange-500 px-3 text-[10px] font-black text-white shadow-lg ring-2 ring-orange-400 transition-all hover:bg-orange-600 animate-pulse"
+                          className="h-8 rounded-md bg-red-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-red-700"
                           onClick={executeCleanBackground}
                           disabled={isProcessing}
                         >
@@ -3812,7 +3814,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200"
+                          className="h-8 w-8 p-0 text-neutral-500 hover:bg-neutral-200"
                           onClick={() => setDeleteStage(0)}
                         >
                           <X className="w-4 h-4" />
@@ -3826,7 +3828,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       <Button
                         variant="destructive"
                         size="sm"
-                        className="h-9 px-4 font-bold"
+                        className="h-8 rounded-md px-3 text-xs font-semibold"
                         onClick={() => setDeleteStage(1)}
                       >
                         {t('taxonomyDashboard.delete')}
@@ -4484,11 +4486,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             variant="outline"
             disabled={statsStatus === 'loading' || isProcessing}
             onClick={handleReload}
-            className="h-9 px-4 font-bold"
+            className="h-8 rounded-md px-3 text-xs font-semibold"
           >
             {t('taxonomyDashboard.reload', 'Reload')}
           </Button>
-          <Button disabled={isProcessing} onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="h-9 px-6 font-bold shadow-md bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-black">
+          <Button disabled={isProcessing} onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="h-8 rounded-md bg-blue-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-blue-700">
             {t('common.confirm', 'Confirm & Close')}
           </Button>
         </div>

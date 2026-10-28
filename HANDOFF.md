@@ -322,6 +322,15 @@ The UI should remain:
 - Use compact headings inside side panels.
 - Check contrast in both light and dark themes.
 
+### Button Color and Size Conventions
+
+- Buttons at the same interaction level use a consistent `h-8` (32px) height, `text-xs` (12px) size, `rounded-md` radius, and `font-semibold` weight.
+- Normal confirmation and submit actions use the blue primary style: `bg-blue-600`, `bg-blue-700` on hover, and white text. This applies to `Rename`, `Confirm`, and `Confirm & Close`.
+- Secondary actions use a neutral outline style with neutral border/text and a light neutral hover background. This applies to `Advanced` and `Reload`.
+- Delete, cleanup, and their second-step confirmations use the red destructive style; red is the only semantic color exception for destructive actions.
+- Do not introduce one-off orange, purple, black, or other colors for actions at the same interaction level. New buttons should reuse these semantic and size rules.
+- Check text, border, hover, and disabled-state contrast in both light and dark themes.
+
 ## 5. Main Features
 
 ### 5.1 Project Creation and Data Preload
