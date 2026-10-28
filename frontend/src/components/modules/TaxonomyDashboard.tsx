@@ -2266,7 +2266,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     () => allSourceClasses.filter((cls: any) => Boolean(mergeSourceTargetMap[cls.id])),
     [allSourceClasses, mergeSourceTargetMap],
   );
-  const mergeMappingComplete = mappedSourceClasses.length > 0
+  const mergeMappingComplete = allSourceClasses.length > 0
+    && mergeAssignedSourceCount === allSourceClasses.length
     && mergeTargetDrafts.length > 0
     && mergeTargetDrafts.every((target) => Object.values(mergeSourceTargetMap).includes(target.id));
   const mergeAttributeNames = mergeAttributeMode === 'single'
