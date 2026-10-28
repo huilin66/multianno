@@ -43,6 +43,17 @@ export function ObjectEditorForm({
   const isFieldVisible = (field: DrawingObjectEditorField) =>
     template !== 'custom' || visibleFieldSet?.has(field) === true;
 
+  const definedAttributes = (taxonomyAttributes || []).filter((attr: any) =>
+    String(attr?.name || '').trim().length > 0,
+  );
+  const definedAttributeNames = new Set(
+    definedAttributes.map((attr: any) => String(attr.name).trim().toLowerCase()),
+  );
+  const additionalAttributes = Object.entries(attributes || {}).filter(([name]) => {
+    const normalizedName = String(name).trim().toLowerCase();
+    return normalizedName.length > 0 && !definedAttributeNames.has(normalizedName);
+  });
+
   if (template === 'quick') {
     return (
       <div className="space-y-2.5">
@@ -174,24 +185,45 @@ export function ObjectEditorForm({
       {isFieldVisible('attributes') && (
       <div className="pt-1.5 border-t border-neutral-100 dark:border-neutral-800">
         <Label className="text-[10px] text-neutral-400 mb-1 block uppercase tracking-wider">{t('objectEditor.attributes')}</Label>
-          {taxonomyAttributes && taxonomyAttributes.length > 0 ? (
+          {definedAttributes.length > 0 || additionalAttributes.length > 0 ? (
+            <>
             <div className="space-y-0.5 max-h-[128px] overflow-y-auto custom-scrollbar pr-1">
-              {taxonomyAttributes.map((attr: any) => (
-                <div key={attr.id} className="flex items-center gap-1.5 bg-neutral-50 dark:bg-black/40 px-1.5 py-0.5 rounded border border-neutral-100 dark:border-neutral-800/50">
+              {definedAttributes.map((attr: any) => (
+                <div key={attr.id || attr.name} className="flex items-center gap-1.5 bg-neutral-50 dark:bg-black/40 px-1.5 py-0.5 rounded border border-neutral-100 dark:border-neutral-800/50">
                   <span className="text-[10px] text-neutral-500 truncate w-2/5 min-w-0 shrink-0" title={attr.name}>{attr.name}</span>
-                  {attr.options ? (
-                    <Select value={attributes[attr.name] || ''} onValueChange={(val) => onAttributesChange({ ...attributes, [attr.name]: val })}>
+                  {Array.isArray(attr.options) && attr.options.length > 0 ? (
+                    <Select value={String(attributes[attr.name] ?? '')} onValueChange={(val) => onAttributesChange({ ...attributes, [attr.name]: val })}>
                       <SelectTrigger className="h-5 text-[9px] flex-1 min-w-0 bg-white dark:bg-neutral-900"><SelectValue placeholder={t('common.select', 'Select...')} /></SelectTrigger>
                       <SelectContent>
                         {attr.options.map((opt: string) => <SelectItem key={opt} value={opt} className="text-[10px]">{opt}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   ) : (
-                    <Input value={attributes[attr.name] || ''} onChange={(e) => onAttributesChange({ ...attributes, [attr.name]: e.target.value })} className="h-5 text-[9px] flex-1 min-w-0 bg-white dark:bg-neutral-900" />
+                    <Input value={String(attributes[attr.name] ?? '')} onChange={(e) => onAttributesChange({ ...attributes, [attr.name]: e.target.value })} className="h-5 text-[9px] flex-1 min-w-0 bg-white dark:bg-neutral-900" />
                   )}
                 </div>
             ))}
-          </div>
+              {additionalAttributes.length > 0 && (
+                <div className="mt-1.5 border-t border-dashed border-neutral-200 pt-1.5 dark:border-neutral-700">
+                  <Label className="mb-1 block text-[9px] uppercase tracking-wider text-neutral-400">
+                    {t('objectEditor.additionalAttributes')}
+                  </Label>
+                  <div className="space-y-0.5">
+                    {additionalAttributes.map(([name, value]) => (
+                      <div key={name} className="flex items-center gap-1.5 bg-neutral-50 dark:bg-black/40 px-1.5 py-0.5 rounded border border-neutral-100 dark:border-neutral-800/50">
+                        <span className="text-[10px] text-neutral-500 truncate w-2/5 min-w-0 shrink-0" title={name}>{name}</span>
+                        <Input
+                          value={String(value ?? '')}
+                          onChange={(e) => onAttributesChange({ ...attributes, [name]: e.target.value })}
+                          className="h-5 text-[9px] flex-1 min-w-0 bg-white dark:bg-neutral-900"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            </>
           ) : (
           <div className="text-center py-2 text-[10px] text-neutral-400 border border-dashed border-neutral-200 dark:border-neutral-700 rounded">
             {t('objectEditor.noAttributesDefined')}

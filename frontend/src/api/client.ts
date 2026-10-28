@@ -111,6 +111,11 @@ export const getFileContent = (path: string) =>
     cache: 'no-store',
   });
 
+export const resolveAttributeConfig = (sourcePath: string) =>
+  get(`${API_BASE_URL}/exchange/resolve_attributes?source_path=${encodeURIComponent(sourcePath)}`, {
+    cache: 'no-store',
+  });
+
 export const batchMergeClass = (payload: {
   save_dirs: string[];
   old_names: string[];

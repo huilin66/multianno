@@ -5,6 +5,8 @@ import type { LayerGroup, Map as LeafletMap, TileLayer } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import {
   Check,
+  ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Link2,
   Layers,
@@ -15,7 +17,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
-import { getFileContent } from '../../api/client';
+import { getFileContent, getPreviewImageUrl } from '../../api/client';
 import {
   useStore,
   type Annotation,
@@ -67,6 +69,12 @@ interface AssociationGroup {
   id: string;
   members: string[];
   updatedAt: number;
+}
+
+interface MapPreviewTarget {
+  trackId: string;
+  stem: string;
+  annotationId: string;
 }
 
 interface MapBounds {
@@ -360,6 +368,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
   const annotations = useStore((state) => state.annotations);
   const folders = useStore((state) => state.folders);
   const views = useStore((state) => state.views);
+  const sceneGroups = useStore((state) => state.sceneGroups);
   const workspacePath = useStore((state) => state.workspacePath);
   const projectMetaPath = useStore((state) => state.projectMetaPath);
   const projectName = useStore((state) => state.projectName);
@@ -378,6 +387,8 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
     points: true,
     lines: true,
   });
+  const [previewTarget, setPreviewTarget] = React.useState<MapPreviewTarget | null>(null);
+  const [previewImageError, setPreviewImageError] = React.useState(false);
   const [associationGroups, setAssociationGroups] = React.useState<AssociationGroup[]>([]);
   const [activeAssociationId, setActiveAssociationId] = React.useState<string | null>(null);
   const mapContainerRef = React.useRef<HTMLDivElement>(null);
@@ -505,6 +516,67 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
     });
     return Array.from(byId.values()).sort((left, right) => compareTrackIds(left.id, right.id));
   }, [annotations, metadataByStem]);
+
+  const setPreviewForObservation = React.useCallback((summary: TrackSummary, observation: TrackObservation | undefined) => {
+    if (!observation) return;
+    setPreviewTarget({
+      trackId: summary.id,
+      stem: observation.annotation.stem,
+      annotationId: String(observation.annotation.id),
+    });
+    setPreviewImageError(false);
+  }, []);
+
+  const previewData = React.useMemo(() => {
+    if (!previewTarget) return null;
+    const summary = trackSummaries.find((item) => item.id === previewTarget.trackId);
+    if (!summary || summary.observations.length === 0) return null;
+    const previewIndex = summary.observations.findIndex((item) => (
+      item.annotation.stem === previewTarget.stem
+      && String(item.annotation.id) === previewTarget.annotationId
+    ));
+    const observationIndex = previewIndex >= 0
+      ? previewIndex
+      : Math.max(0, summary.observations.indexOf(getLargestObservation(summary)));
+    const observation = summary.observations[observationIndex];
+    if (!observation) return null;
+
+    const mainView = views.find((view) => view.isMain) || views[0];
+    const folder = folders.find((item) => item.id === mainView?.folderId) || folders[0];
+    if (!mainView || !folder) return null;
+    const extension = folder.extension || '';
+    const normalizedExtension = extension && !extension.startsWith('.') ? `.${extension}` : extension;
+    const fileName = sceneGroups?.[observation.annotation.stem]?.[folder.path]
+      || `${observation.annotation.stem}${folder.suffix || ''}${normalizedExtension}`;
+    const bounds = getAnnotationBounds(observation.annotation);
+    return {
+      summary,
+      observation,
+      observationIndex,
+      imageUrl: getPreviewImageUrl(
+        folder.path,
+        fileName,
+        mainView.bands,
+        mainView.colormap || 'gray',
+        mainView.settings,
+        folder.rawProfile,
+      ),
+      imageWidth: folder.metadata.width || 1,
+      imageHeight: folder.metadata.height || 1,
+      bounds,
+    };
+  }, [folders, previewTarget, sceneGroups, trackSummaries, views]);
+
+  React.useEffect(() => {
+    setPreviewImageError(false);
+  }, [previewTarget]);
+
+  React.useEffect(() => {
+    const normalizedInitialId = getTrackIdLabel(initialTrackId);
+    if (!normalizedInitialId || previewTarget) return;
+    const summary = trackSummaries.find((item) => item.id === normalizedInitialId);
+    if (summary) setPreviewForObservation(summary, getLargestObservation(summary));
+  }, [initialTrackId, previewTarget, setPreviewForObservation, trackSummaries]);
 
   const filteredTrackSummaries = React.useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -674,6 +746,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
         );
         point.on('click', (event) => {
           L.DomEvent.stopPropagation(event);
+          setPreviewForObservation(summary, anchorObservation);
           toggleTrackSelection(summary.id, Boolean(event.originalEvent?.shiftKey) || selectedTrackIds.has(summary.id));
         });
         point.on('dblclick', (event) => {
@@ -711,12 +784,13 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
         });
         label.on('click', (event) => {
           L.DomEvent.stopPropagation(event);
+          setPreviewForObservation(summary, anchorObservation);
           toggleTrackSelection(summary.id, Boolean(event.originalEvent?.shiftKey));
         });
         label.addTo(layerGroup);
       }
     });
-  }, [filteredTrackSummaries, layerVisibility, mapReady, mapViewRevision, onOpenObservation, selectedTrackIds, t, toggleTrackSelection]);
+  }, [filteredTrackSummaries, layerVisibility, mapReady, mapViewRevision, onOpenObservation, selectedTrackIds, setPreviewForObservation, t, toggleTrackSelection]);
 
   const addAssociationGroup = React.useCallback(() => {
     const members = Array.from(selectedTrackIds, (trackId) => String(trackId)).sort(compareTrackIds);
@@ -829,6 +903,101 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
                   ))}
                 </div>
               </div>
+              {previewData && (
+                <div className="pointer-events-auto absolute bottom-3 right-3 z-[1000] w-[min(19rem,calc(100%-1.5rem))] rounded-lg border border-neutral-200 bg-white/95 p-2 shadow-lg backdrop-blur-sm dark:border-neutral-700 dark:bg-neutral-900/95">
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="truncate text-[11px] font-semibold text-neutral-800 dark:text-neutral-100">
+                        {previewData.summary.id}
+                        <span className="ml-1 font-normal text-neutral-500">{t('trackIdWindow.mapPreviewTitle')}</span>
+                      </div>
+                      <div className="truncate text-[9px] text-neutral-500 dark:text-neutral-400" title={previewData.observation.annotation.stem}>
+                        {previewData.observation.annotation.stem}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                      onClick={() => setPreviewTarget(null)}
+                      title={t('trackIdWindow.mapClosePreview')}
+                      aria-label={t('trackIdWindow.mapClosePreview')}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  {previewImageError ? (
+                    <div className="flex aspect-video items-center justify-center rounded-md bg-neutral-100 px-4 text-center text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                      {t('trackIdWindow.mapPreviewUnavailable')}
+                    </div>
+                  ) : (
+                    <div
+                      className="relative overflow-hidden rounded-md bg-black"
+                      style={{ aspectRatio: `${previewData.imageWidth} / ${previewData.imageHeight}` }}
+                    >
+                      <img
+                        src={previewData.imageUrl}
+                        alt={previewData.observation.annotation.stem}
+                        className="block h-full w-full object-contain"
+                        onError={() => setPreviewImageError(true)}
+                      />
+                      {previewData.bounds && (
+                        <div
+                          className="pointer-events-none absolute border-2 border-red-400 shadow-[0_0_0_1px_rgba(255,255,255,0.75)]"
+                          style={{
+                            left: `${Math.max(0, (previewData.bounds.minX / previewData.imageWidth) * 100)}%`,
+                            top: `${Math.max(0, (previewData.bounds.minY / previewData.imageHeight) * 100)}%`,
+                            width: `${Math.max(0, ((previewData.bounds.maxX - previewData.bounds.minX) / previewData.imageWidth) * 100)}%`,
+                            height: `${Math.max(0, ((previewData.bounds.maxY - previewData.bounds.minY) / previewData.imageHeight) * 100)}%`,
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                  <div className="mt-1.5 flex items-center justify-between gap-2 text-[9px] text-neutral-500 dark:text-neutral-400">
+                    <span>{previewData.observationIndex + 1}/{previewData.summary.observations.length}</span>
+                    <span className="truncate text-right" title={previewData.observation.annotation.label}>
+                      {previewData.observation.annotation.label || t('trackIdWindow.mapPreviewTitle')}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      className="flex h-7 w-7 items-center justify-center rounded border border-neutral-200 text-neutral-500 hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300"
+                      onClick={() => {
+                        const observations = previewData.summary.observations;
+                        const nextIndex = (previewData.observationIndex - 1 + observations.length) % observations.length;
+                        setPreviewForObservation(previewData.summary, observations[nextIndex]);
+                      }}
+                      disabled={previewData.summary.observations.length < 2}
+                      title={t('trackIdWindow.mapPreviousImage')}
+                      aria-label={t('trackIdWindow.mapPreviousImage')}
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      className="flex h-7 flex-1 items-center justify-center rounded border border-blue-200 bg-blue-50 px-2 text-[10px] font-medium text-blue-700 hover:bg-blue-100 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300"
+                      onClick={() => onOpenObservation(previewData.observation.annotation)}
+                    >
+                      {t('trackIdWindow.mapOpenFrame')}
+                    </button>
+                    <button
+                      type="button"
+                      className="flex h-7 w-7 items-center justify-center rounded border border-neutral-200 text-neutral-500 hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:text-neutral-300"
+                      onClick={() => {
+                        const observations = previewData.summary.observations;
+                        const nextIndex = (previewData.observationIndex + 1) % observations.length;
+                        setPreviewForObservation(previewData.summary, observations[nextIndex]);
+                      }}
+                      disabled={previewData.summary.observations.length < 2}
+                      title={t('trackIdWindow.mapNextImage')}
+                      aria-label={t('trackIdWindow.mapNextImage')}
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
               {tileError && (
                 <div className="pointer-events-none absolute left-3 top-3 rounded-md border border-amber-200 bg-amber-50/95 px-2 py-1 text-[10px] text-amber-700 shadow-sm dark:border-amber-500/30 dark:bg-amber-950/85 dark:text-amber-300">
                   {t('trackIdWindow.mapTileError')}
@@ -898,6 +1067,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
                 onClick={() => {
                   setSelectedTrackIds(new Set([summary.id]));
                   setActiveAssociationId(null);
+                  setPreviewForObservation(summary, getLargestObservation(summary));
                 }}
               >
                 <div className="flex items-start gap-2">
@@ -915,6 +1085,7 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
                       event.stopPropagation();
                       setSelectedTrackIds(new Set([summary.id]));
                       setActiveAssociationId(null);
+                      setPreviewForObservation(summary, getLargestObservation(summary));
                     }}
                   >
                     <span className="flex items-center gap-1.5 text-xs font-semibold text-neutral-800 dark:text-neutral-100">
@@ -1000,7 +1171,10 @@ export function TrackIdMapView({ initialTrackId, onOpenObservation }: TrackIdMap
                 <button
                   type="button"
                   key={summary.id}
-                  onClick={() => openFirstObservation(summary)}
+                  onClick={() => {
+                    setPreviewForObservation(summary, getLargestObservation(summary));
+                    openFirstObservation(summary);
+                  }}
                   className="rounded-full border border-neutral-200 bg-white px-1.5 py-0.5 text-[9px] text-neutral-600 hover:border-blue-300 hover:text-blue-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300"
                   title={t('trackIdWindow.mapOpenObservation')}
                 >

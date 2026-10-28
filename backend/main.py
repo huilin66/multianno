@@ -133,7 +133,12 @@ async def request_logging_middleware(request: Request, call_next):
 async def health_check():
     logger.info("HEALTH_CHECK")
     return JSONResponse(
-        content={"status": "ok"},
+        content={
+            "status": "ok",
+            "features": {
+                "multianno_attribute_autodiscovery": True,
+            },
+        },
         headers={
             "Cache-Control": "no-store, no-cache, must-revalidate",
             "Pragma": "no-cache",

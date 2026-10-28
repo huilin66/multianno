@@ -1,5 +1,5 @@
 // src/components/modules/DataImport.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useStore } from '../../store/useStore';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../ui/button';
@@ -7,7 +7,12 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Switch } from '../ui/switch';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
-import { importDataStream, loadProjectMetaFromServer, analyzeWorkspaceFolders } from '../../api/client';
+import {
+  importDataStream,
+  loadProjectMetaFromServer,
+  analyzeWorkspaceFolders,
+  resolveAttributeConfig,
+} from '../../api/client';
 import { Legend } from '../ui/legend';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, type TaskType } from '../../config/supportedFormats';
@@ -69,6 +74,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [sourceDataPath, setSourceDataPath] = useState('');
   const [externalClassFile, setExternalClassFile] = useState('');
   const [attributeFile, setAttributeFile] = useState('');
+  const [recommendedAttributeFile, setRecommendedAttributeFile] = useState('');
   const [importZeroClass, setImportZeroClass] = useState(false);
   const [cocoMode, setCocoMode] = useState<'polygon' | 'bbox'>('polygon');
 
@@ -82,6 +88,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   const [importStageProgress, setImportStageProgress] = useState({ current: 0, total: 0 });
   const [overallProgress, setOverallProgress] = useState<number | null>(null);
   const isImageMetaTask = taskType === 'image_meta';
+  const attributeResolveRequestRef = useRef(0);
 
   const updateOverallProgress = (nextPercent: number) => {
     const safePercent = Math.min(100, Math.max(0, Number(nextPercent) || 0));
@@ -118,10 +125,36 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
   }, [format]);
 
   useEffect(() => {
-    if (format !== 'yolo' || taskType !== 'object_detection') {
+    const supportsAttributeConfig = !isImageMetaTask
+      && (format === 'multianno' || (format === 'yolo' && taskType === 'object_detection'));
+    if (!supportsAttributeConfig) {
       setAttributeFile('');
+      setRecommendedAttributeFile('');
     }
-  }, [format, taskType]);
+  }, [format, taskType, isImageMetaTask]);
+
+  useEffect(() => {
+    const supportsAttributeConfig = !isImageMetaTask
+      && (format === 'multianno' || (format === 'yolo' && taskType === 'object_detection'));
+    const requestId = ++attributeResolveRequestRef.current;
+    const sourcePath = sourceDataPath.trim();
+    setRecommendedAttributeFile('');
+
+    if (!supportsAttributeConfig || !sourcePath) return;
+
+    const timer = window.setTimeout(() => {
+      void resolveAttributeConfig(sourcePath)
+        .then((result: any) => {
+          if (requestId !== attributeResolveRequestRef.current) return;
+          setRecommendedAttributeFile(result?.found ? String(result.path || '') : '');
+        })
+        .catch(() => {
+          if (requestId === attributeResolveRequestRef.current) setRecommendedAttributeFile('');
+        });
+    }, 250);
+
+    return () => window.clearTimeout(timer);
+  }, [sourceDataPath, format, taskType, isImageMetaTask]);
 
   // ==========================================
   // 步骤定义
@@ -196,7 +229,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         image_paths: imagePaths,
         image_raw_profile: mainViewFolder?.rawProfile,
         attributes_file:
-          !isImageMetaTask && format === 'yolo' && taskType === 'object_detection'
+          !isImageMetaTask
+          && (format === 'multianno' || (format === 'yolo' && taskType === 'object_detection'))
             ? (attributeFile || undefined)
             : undefined,
       }, (progress) => {
@@ -565,7 +599,8 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                 </div>
               )}
 
-              {format === 'yolo' && taskType === 'object_detection' && (
+              {!isImageMetaTask
+                && (format === 'multianno' || (format === 'yolo' && taskType === 'object_detection')) && (
                 <div className="pt-3 border-t border-border">
                   <Label className="text-[10px] text-muted-foreground flex items-center gap-1 mb-2">
                     <AlertCircle className="w-3 h-3" />
@@ -586,6 +621,23 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
                     />
                     <FileText className="absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                   </div>
+                  {recommendedAttributeFile && recommendedAttributeFile !== attributeFile && (
+                    <button
+                      type="button"
+                      onClick={() => setAttributeFile(recommendedAttributeFile)}
+                      className="mt-2 flex w-full items-center gap-2 rounded-md border border-dashed border-primary/40 bg-primary/[0.04] px-2.5 py-2 text-left text-[10px] text-muted-foreground transition-colors hover:border-primary/70 hover:bg-primary/[0.08]"
+                    >
+                      <span className="shrink-0 font-semibold text-primary">
+                        {t('dataImport.source.recommendedAttributesFile')}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate font-mono" title={recommendedAttributeFile}>
+                        {recommendedAttributeFile}
+                      </span>
+                      <span className="shrink-0 font-semibold text-primary">
+                        {t('dataImport.source.useRecommendedAttributesFile')}
+                      </span>
+                    </button>
+                  )}
                 </div>
               )}
 

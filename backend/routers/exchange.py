@@ -43,10 +43,51 @@ from utils.logging_config import get_logger, shorten
 router = APIRouter(prefix="/api/exchange", tags=["Data Exchange"])
 logger = get_logger("exchange")
 
+ANNOTATION_ATTRIBUTE_FILE_NAMES = frozenset({
+    "attribute.yaml",
+    "attributes.yaml",
+    "attribute.yml",
+    "attributes.yml",
+})
+
 
 # ==========================================
 # 辅助类与函数
 # ==========================================
+def _find_nearby_attribute_file(path: str) -> str:
+    """Find a conventional attribute schema beside an annotation source.
+
+    MultiAnno exports commonly keep ``attributes.yaml`` next to the
+    ``annotations`` directory. The import UI does not need to force users to
+    select that file again, so search the source directory and its two nearest
+    parents. A generic ``data.yaml`` remains explicit because it may be a
+    dataset file without an attributes block.
+    """
+    if not path:
+        return ""
+
+    current = os.path.dirname(path) if os.path.isfile(path) else path
+    for _ in range(3):
+        if not current:
+            break
+        try:
+            with os.scandir(current) as entries:
+                for entry in entries:
+                    if (
+                        entry.is_file()
+                        and entry.name.casefold() in ANNOTATION_ATTRIBUTE_FILE_NAMES
+                    ):
+                        return entry.path
+        except (OSError, PermissionError):
+            return ""
+
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return ""
+
+
 class ExportReporter:
     def __init__(self, target_dir, generate_report=True):
         self.target_dir = target_dir
@@ -452,6 +493,27 @@ def _mdet_export_enabled(req: ExportRequest) -> bool:
         and req.task_type == "object_detection"
         and req.export_attributes
     )
+
+
+@router.get("/resolve_attributes")
+async def resolve_attribute_config(source_path: str):
+    """Resolve the attribute schema for the import dialog.
+
+    The import worker can discover this file when it starts, but the dialog
+    also needs the concrete path so the user can verify which schema will be
+    used. Keep this endpoint read-only and return an empty result when the
+    source has no conventional attribute file.
+    """
+    resolved_path = _find_nearby_attribute_file(source_path)
+    if not resolved_path:
+        return {"found": False, "path": "", "attribute_definitions": []}
+
+    attributes_map = _resolve_attributes_map(resolved_path)
+    return {
+        "found": True,
+        "path": os.path.abspath(resolved_path),
+        "attribute_definitions": _build_attribute_definitions(attributes_map),
+    }
 
 
 @router.get("/read_text")
@@ -2390,6 +2452,20 @@ async def import_from_multianno(req: ImportRequest, progress_callback=None):
     if not os.path.exists(req.source_path):
         raise HTTPException(status_code=404, detail="源目录不存在")
 
+    # MultiAnno keeps its editable attribute schema beside the annotation
+    # files. Honor an explicitly selected file first, then discover the
+    # conventional attributes.yaml automatically so taxonomy and Object
+    # Editor receive the same schema as the imported JSON shapes.
+    attributes_file = req.attributes_file or _find_nearby_attribute_file(req.source_path)
+    attributes_map = _resolve_attributes_map(attributes_file)
+    attribute_definitions = _build_attribute_definitions(attributes_map)
+    if attributes_map:
+        logger.info(
+            "IMPORT_MULTIANNOTATION_ATTRIBUTES enabled file=%s names=%s",
+            shorten(attributes_file, 1500),
+            list(attributes_map.keys()),
+        )
+
     imported_count = 0
     empty_json_count = 0
     missing_source_count = 0
@@ -2588,6 +2664,8 @@ async def import_from_multianno(req: ImportRequest, progress_callback=None):
         "empty_json_count": empty_json_count,
         "missing_source_count": missing_source_count,
         "dimension_fallback_count": dimension_fallback_count,
+        "attribute_definitions": attribute_definitions,
+        "attribute_source": attributes_file or "",
     }
 
 
