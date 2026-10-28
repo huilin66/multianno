@@ -2258,6 +2258,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
   useEffect(() => { 
     if (folders?.length > 0) {
+      // Prepare the Annotation Table snapshot while the manager initializes.
+      // The table reads the already-loaded in-memory annotations, so this does
+      // not trigger another backend JSON scan.
+      setAnnotationTableReloadToken((current) => current + 1);
       void loadStatistics(editorSettings.autoRefreshStats === true, true);
     } 
   }, []);
