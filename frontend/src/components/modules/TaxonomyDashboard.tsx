@@ -17,7 +17,7 @@ import { OperationProgress } from '../ui/OperationProgress';
 import { batchMergeClass, batchMergeClassWithAttribute, batchDeleteClass, fetchProjectStatistics, batchApplyAttribute, batchDeleteAttribute, batchRenameAttribute, getFileContent, getPreviewImageUrl } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
-import { showDialog, useDialogStore } from '../../store/useDialogStore';
+import { showDialog, useDialogStore, type DialogOptions } from '../../store/useDialogStore';
 
 interface TaxonomyDashboardProps {
   onClose?: () => void;
@@ -1728,6 +1728,13 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     setIsProcessing(false);
   };
 
+  // Wait for the bottom progress row to be removed before opening the result
+  // dialog. Otherwise the dialog can briefly appear over a stale progress
+  // layout while React is committing the final operation state.
+  const queueTaxonomyDialog = (options: DialogOptions) => {
+    window.setTimeout(() => openDialog(options), 0);
+  };
+
   const refreshStatsIfNeeded = async (showProgress = false) => {
     if (editorSettings.autoRefreshStats) {
       if (showProgress) moveTaxonomyProgressToStatistics();
@@ -1785,6 +1792,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       attribute_name: mergeAttrName.trim(),
       attribute_value: mergeAttrValues[cls.id].trim(),
     }));
+    const attributeName = mergeAttrName.trim();
     
     beginTaxonomyWrite(
       t('taxonomyDashboard.updatingLabelsAndAttributes', 'Updating labels and attributes'),
@@ -1793,7 +1801,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     try {
       const safeSaveDirs = getSaveDirs();
       
-      await batchMergeClassWithAttribute({
+      const mergeResult = await batchMergeClassWithAttribute({
         save_dirs: safeSaveDirs,
         merges,
       });
@@ -1847,15 +1855,21 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setNewTargetClassName('');
       setSelectedClassId(newClassId);
       
-      openDialog({
+      queueTaxonomyDialog({
         type: 'success',
-        title: t('taxonomyDashboard.mergeComplete'),
-        description: t('taxonomyDashboard.mergeCompleteDesc', { count: merges.length, target: targetClassName, attr: mergeAttrName }),
+        title: t('taxonomyDashboard.updateComplete', 'Update complete'),
+        description: t('taxonomyDashboard.mergeClassWithAttributeSummary', {
+          count: merges.length,
+          target: targetClassName,
+          attr: attributeName,
+          files: Number(mergeResult?.modified_files || 0),
+          objects: Number(mergeResult?.total_objects || 0),
+        }),
         confirmText: t('taxonomyDashboard.done'),
         hideCancel: true,
       });
     } catch (err: any) {
-      openDialog({
+      queueTaxonomyDialog({
         type: 'danger',
         title: t('taxonomyDashboard.mergeFailed'),
         description: err.message,
@@ -2131,9 +2145,9 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         mergeResult?.modified_images ?? mergeResult?.modified_files ?? estimatedImages,
       );
       const updatedObjects = Number(mergeResult?.modified_objects ?? estimatedObjects);
-      openDialog({
+      queueTaxonomyDialog({
         type: 'success',
-        title: t('taxonomyDashboard.mergeComplete'),
+        title: t('taxonomyDashboard.updateComplete', 'Update complete'),
         description: t('taxonomyDashboard.mergeSuccessDesc', {
           target: targetClass.name,
           images: updatedImages,
@@ -2143,7 +2157,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         hideCancel: true,
       });
     } catch (err: any) {
-      openDialog({
+      queueTaxonomyDialog({
         type: 'danger',
         title: t('taxonomyDashboard.mergeFailed'),
         description: t('taxonomyDashboard.mergeFailedMsg', { message: err.message }),
@@ -2173,7 +2187,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       );
       try {
         const safeSaveDirs = getSaveDirs();
-        await batchDeleteClass({ 
+        const deleteResult = await batchDeleteClass({
           save_dirs: safeSaveDirs, 
           class_name: activeClass.name, 
           hard_delete: isHardDelete 
@@ -2185,8 +2199,28 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         setDeleteStage(0); // 重置状态
 
         useStore.getState().setStatsCacheValid?.(false);
+        queueTaxonomyDialog({
+          type: 'success',
+          title: t('taxonomyDashboard.updateComplete', 'Update complete'),
+          description: t('taxonomyDashboard.deleteClassSummary', {
+            action: isHardDelete
+              ? t('taxonomyDashboard.hardDeleted', 'hard-deleted')
+              : t('taxonomyDashboard.softDeleted', 'soft-deleted'),
+            name: activeClass.name,
+            files: Number(deleteResult?.modified_files || 0),
+            objects: Number(deleteResult?.modified_objects || 0),
+          }),
+          confirmText: t('taxonomyDashboard.done'),
+          hideCancel: true,
+        });
       } catch (err: any) { 
-        alert(t('taxonomyDashboard.deleteFailed', { message: err.message }));
+        queueTaxonomyDialog({
+          type: 'danger',
+          title: t('taxonomyDashboard.deleteFailed', { message: '' }).replace(/:\s*$/, ''),
+          description: err.message,
+          confirmText: t('taxonomyDashboard.ok'),
+          hideCancel: true,
+        });
       } finally { 
         finishTaxonomyWrite();
       }
@@ -2206,7 +2240,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       const safeSaveDirs = getSaveDirs();
       
       // 1. 调用后端的删除接口，使用 hard_delete 物理抹除所有的 background 框
-      await batchDeleteClass({ 
+      const cleanResult = await batchDeleteClass({
         save_dirs: safeSaveDirs, 
         class_name: 'background', 
         hard_delete: true 
@@ -2222,9 +2256,24 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       await loadStatistics(true);
       setDeleteStage(0);
       useStore.getState().setStatsCacheValid?.(false);
-      alert(t('taxonomyDashboard.cleanSuccess'));
+      queueTaxonomyDialog({
+        type: 'success',
+        title: t('taxonomyDashboard.updateComplete', 'Update complete'),
+        description: t('taxonomyDashboard.cleanBackgroundSummary', {
+          files: Number(cleanResult?.modified_files || 0),
+          objects: Number(cleanResult?.modified_objects || 0),
+        }),
+        confirmText: t('taxonomyDashboard.done'),
+        hideCancel: true,
+      });
     } catch (err: any) { 
-      alert(t('taxonomyDashboard.cleanFailed', { message: err.message }));
+      queueTaxonomyDialog({
+        type: 'danger',
+        title: t('taxonomyDashboard.cleanFailed', { message: '' }).replace(/:\s*$/, ''),
+        description: err.message,
+        confirmText: t('taxonomyDashboard.ok'),
+        hideCancel: true,
+      });
     } finally { 
       finishTaxonomyWrite();
     }
@@ -2288,10 +2337,27 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       moveTaxonomyProgressToStatistics();
       await loadStatistics(true);
 
-      alert(t('taxonomyDashboard.attributeRenameSuccess', { count: result.modified_files }));
+      queueTaxonomyDialog({
+        type: 'success',
+        title: t('taxonomyDashboard.updateComplete', 'Update complete'),
+        description: t('taxonomyDashboard.renameAttributeSummary', {
+          old: oldName,
+          new: newName,
+          files: Number(result?.modified_files || 0),
+          objects: Number(result?.renamed_shapes || 0),
+        }),
+        confirmText: t('taxonomyDashboard.done'),
+        hideCancel: true,
+      });
     } catch (err: any) {
       setAttributeRenameValue(oldName);
-      alert(t('taxonomyDashboard.attributeRenameFailed', { message: err.message }));
+      queueTaxonomyDialog({
+        type: 'danger',
+        title: t('taxonomyDashboard.attributeRenameFailed', { message: '' }).replace(/:\s*$/, ''),
+        description: err.message,
+        confirmText: t('taxonomyDashboard.ok'),
+        hideCancel: true,
+      });
     } finally {
       finishTaxonomyWrite();
     }
@@ -2426,7 +2492,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       restoredPreviewStemRef.current = currentPreviewStemBeforeEdit;
       
       // 1. 同步到所有后端的 JSON 文件
-      await batchApplyAttribute({
+      const result = await batchApplyAttribute({
         save_dirs: safeSaveDirs,
         attribute_name: activeAttribute.name,
         new_default: nextDefault,
@@ -2486,10 +2552,27 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setAttrDraft(null); // 清空草稿，退出编辑状态
       setAttributeValueMerges({});
       setPendingValueMerge(null);
-      alert(t('taxonomyDashboard.attributeSyncSuccess'));
+      queueTaxonomyDialog({
+        type: 'success',
+        title: t('taxonomyDashboard.updateComplete', 'Update complete'),
+        description: t('taxonomyDashboard.applyAttributeSummary', {
+          name: activeAttribute.name,
+          files: Number(result?.modified_files || 0),
+          objects: Number(result?.modified_objects || 0),
+          values: Number(result?.replaced_values || 0),
+        }),
+        confirmText: t('common.confirm'),
+        hideCancel: true,
+      });
     } catch (err: any) {
       attributeEditRestoreRef.current = null;
-      alert(t('taxonomyDashboard.syncFailed', { message: err.message }));
+      queueTaxonomyDialog({
+        type: 'danger',
+        title: t('taxonomyDashboard.syncFailed', { message: '' }).replace(/:\s*$/, ''),
+        description: err.message,
+        confirmText: t('taxonomyDashboard.ok'),
+        hideCancel: true,
+      });
     } finally {
       finishTaxonomyWrite();
     }
@@ -2506,7 +2589,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       const safeSaveDirs = getSaveDirs();
       
       // 同步删除后端 JSON 里的该属性
-      await batchDeleteAttribute({ save_dirs: safeSaveDirs, attribute_name: activeAttribute.name });
+      const deleteResult = await batchDeleteAttribute({ save_dirs: safeSaveDirs, attribute_name: activeAttribute.name });
       
       // 删本地 Store
       deleteTaxonomyAttribute(activeAttribute.id);
@@ -2514,8 +2597,25 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       setSelectedAttributeId(null);
       useStore.getState().setStatsCacheValid?.(false);
       setShowAttrDeleteConfirm(false);
+      queueTaxonomyDialog({
+        type: 'success',
+        title: t('taxonomyDashboard.updateComplete', 'Update complete'),
+        description: t('taxonomyDashboard.deleteAttributeSummary', {
+          name: activeAttribute.name,
+          files: Number(deleteResult?.modified_files || 0),
+          objects: Number(deleteResult?.removed_attributes || 0),
+        }),
+        confirmText: t('common.confirm'),
+        hideCancel: true,
+      });
     } catch (err: any) {
-      alert(t('taxonomyDashboard.deleteFailed', { message: err.message }));
+      queueTaxonomyDialog({
+        type: 'danger',
+        title: t('taxonomyDashboard.deleteFailed', { message: '' }).replace(/:\s*$/, ''),
+        description: err.message,
+        confirmText: t('taxonomyDashboard.ok'),
+        hideCancel: true,
+      });
     } finally {
       finishTaxonomyWrite();
     }
@@ -2540,22 +2640,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   return (
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
       <input type="file" accept=".txt,.yaml,.yml" ref={fileInputRef} className="hidden" onChange={handleImportFile} />
-
-      {processingProgress && (
-        <div
-          className="shrink-0 border-b border-blue-100 bg-blue-50/80 px-4 py-2.5 dark:border-blue-900/50 dark:bg-blue-950/30"
-          role="status"
-          aria-live="polite"
-        >
-          <OperationProgress
-            stageIndex={processingProgress.stageIndex}
-            stageCount={processingProgress.stageCount}
-            stageName={processingProgress.stageName}
-            operationKey={processingProgress.operationKey}
-            className="max-w-3xl"
-          />
-        </div>
-      )}
       
       <div className="flex-1 flex overflow-hidden">
         {/* ================= 1. 左侧可收纳导航树 ================= */}
@@ -3060,9 +3144,26 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               moveTaxonomyProgressToStatistics();
                               await loadStatistics(true);
                               
-                              alert(t('taxonomyDashboard.renameSuccess', { count: result.modified_files }));
+                              queueTaxonomyDialog({
+                                type: 'success',
+                                title: t('taxonomyDashboard.updateComplete', 'Update complete'),
+                                description: t('taxonomyDashboard.renameClassSummary', {
+                                  old: oldName,
+                                  new: newName,
+                                  files: Number(result?.modified_files || 0),
+                                  objects: Number(result?.modified_objects || 0),
+                                }),
+                                confirmText: t('common.confirm'),
+                                hideCancel: true,
+                              });
                             } catch (err: any) {
-                              alert(t('taxonomyDashboard.renameFailed', { message: err.message }));
+                              queueTaxonomyDialog({
+                                type: 'danger',
+                                title: t('taxonomyDashboard.renameFailed', { message: '' }).replace(/:\s*$/, ''),
+                                description: err.message,
+                                confirmText: t('taxonomyDashboard.ok'),
+                                hideCancel: true,
+                              });
                               setRenameValue(oldName);
                             } finally {
                               finishTaxonomyWrite();
@@ -3849,14 +3950,29 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
 
       {/* ================= 3. 底部持久状态栏 ================= */}
       <div className="p-3 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex justify-between items-center shrink-0 z-20 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-        <span className="text-xs text-neutral-500 flex items-center gap-2 font-mono bg-neutral-50 dark:bg-neutral-800 px-3 py-1.5 rounded-full border border-neutral-200 dark:border-neutral-700">
-          <Database className="w-3.5 h-3.5 text-blue-500"/> 
-          {t('workspace.projectAnalytics', 'Project Analytics')}
-          <span className="text-neutral-300 dark:text-neutral-600 mx-1">|</span>
-          <Clock className="w-3.5 h-3.5 text-neutral-400" />
-          {statsData?.last_updated ? `${t('workspace.cached', 'Cached')}: ${statsData.last_updated}` : t('workspace.noLocalCache', 'No local cache found')}
-        </span>
-        <Button onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="px-8 font-bold shadow-md bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-black">
+        {processingProgress ? (
+          <div
+            className="min-w-0 flex-1 mr-4 rounded-md border border-blue-100 bg-blue-50/80 px-3 py-2 dark:border-blue-900/50 dark:bg-blue-950/30"
+            role="status"
+            aria-live="polite"
+          >
+            <OperationProgress
+              stageIndex={processingProgress.stageIndex}
+              stageCount={processingProgress.stageCount}
+              stageName={processingProgress.stageName}
+              operationKey={processingProgress.operationKey}
+            />
+          </div>
+        ) : (
+          <span className="text-xs text-neutral-500 flex items-center gap-2 font-mono bg-neutral-50 dark:bg-neutral-800 px-3 py-1.5 rounded-full border border-neutral-200 dark:border-neutral-700">
+            <Database className="w-3.5 h-3.5 text-blue-500"/>
+            {t('workspace.projectAnalytics', 'Project Analytics')}
+            <span className="text-neutral-300 dark:text-neutral-600 mx-1">|</span>
+            <Clock className="w-3.5 h-3.5 text-neutral-400" />
+            {statsData?.last_updated ? `${t('workspace.cached', 'Cached')}: ${statsData.last_updated}` : t('workspace.noLocalCache', 'No local cache found')}
+          </span>
+        )}
+        <Button disabled={isProcessing} onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="px-8 font-bold shadow-md bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-black">
           {t('common.confirm', 'Confirm & Close')}
         </Button>
       </div>

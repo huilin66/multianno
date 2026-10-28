@@ -127,6 +127,7 @@ async def batch_delete_class(request: BatchDeleteClassRequest):
         request.hard_delete,
     )
     modified_count = 0
+    modified_objects = 0
     import json
 
     for folder in request.save_dirs:
@@ -146,29 +147,45 @@ async def batch_delete_class(request: BatchDeleteClassRequest):
 
                 if request.hard_delete:
                     # 硬删除：过滤掉该类别的框
+                    matching_shapes = [
+                        s for s in anno_data.get("shapes", [])
+                        if s.get("label") == request.class_name
+                    ]
                     anno_data["shapes"] = [
                         s
                         for s in anno_data.get("shapes", [])
                         if s.get("label") != request.class_name
                     ]
                     changed = len(anno_data["shapes"]) != original_len
+                    file_objects_updated = len(matching_shapes)
                 else:
                     # 软删除：把类别名改成 'background'
                     changed = False
+                    file_objects_updated = 0
                     for shape in anno_data.get("shapes", []):
                         if shape.get("label") == request.class_name:
                             shape["label"] = "background"
                             changed = True
+                            file_objects_updated += 1
 
                 if changed:
                     with open(file_path, "w", encoding="utf-8") as f:
                         json.dump(anno_data, f, indent=2, ensure_ascii=False)
                     modified_count += 1
+                    modified_objects += file_objects_updated
             except Exception as e:
                 logger.exception("DELETE_CLASS_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
-    logger.info("DELETE_CLASS_END modified_files=%d", modified_count)
-    return {"status": "success", "modified_files": modified_count}
+    logger.info(
+        "DELETE_CLASS_END modified_files=%d modified_objects=%d",
+        modified_count,
+        modified_objects,
+    )
+    return {
+        "status": "success",
+        "modified_files": modified_count,
+        "modified_objects": modified_objects,
+    }
 
 
 @router.post("/delete_attribute")
@@ -179,6 +196,7 @@ async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
         request.attribute_name,
     )
     modified_count = 0
+    removed_attributes = 0
     import json
 
     for folder in request.save_dirs:
@@ -203,6 +221,7 @@ async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
                     ):
                         del shape["attributes"][request.attribute_name]
                         changed = True
+                        removed_attributes += 1
 
                 if changed:
                     with open(file_path, "w", encoding="utf-8") as f:
@@ -211,8 +230,16 @@ async def batch_delete_attribute(request: BatchDeleteAttributeRequest):
             except Exception as e:
                 logger.exception("DELETE_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
-    logger.info("DELETE_ATTRIBUTE_END modified_files=%d", modified_count)
-    return {"status": "success", "modified_files": modified_count}
+    logger.info(
+        "DELETE_ATTRIBUTE_END modified_files=%d removed_attributes=%d",
+        modified_count,
+        removed_attributes,
+    )
+    return {
+        "status": "success",
+        "modified_files": modified_count,
+        "removed_attributes": removed_attributes,
+    }
 
 
 @router.post("/rename_attribute")
@@ -659,6 +686,7 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
     )
 
     modified_count = 0
+    modified_objects = 0
     replaced_count = 0
     import json
     import os
@@ -686,7 +714,9 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
                         anno_data = json.load(f)
 
                     changed = False
+                    file_objects_updated = 0
                     for shape in anno_data.get("shapes", []):
+                        shape_changed = False
                         attributes = shape.get("attributes")
                         if not isinstance(attributes, dict):
                             attributes = {}
@@ -701,35 +731,44 @@ async def batch_apply_attribute(request: ApplyAttributeRequest):
                                     attributes[request.attribute_name] = replacement
                                     replaced_count += 1
                                     changed = True
+                                    shape_changed = True
 
                         if request.attribute_name not in attributes:
                             attributes[request.attribute_name] = request.new_default
                             changed = True
+                            shape_changed = True
                         elif (
                             request.old_default is not None
                             and attributes.get(request.attribute_name) == request.old_default
                         ):
                             attributes[request.attribute_name] = request.new_default
                             changed = True
+                            shape_changed = True
+
+                        if shape_changed:
+                            file_objects_updated += 1
 
                     if changed:
                         with open(file_path, "w", encoding="utf-8") as f:
                             json.dump(anno_data, f, indent=2, ensure_ascii=False)
                         modified_count += 1
+                        modified_objects += file_objects_updated
 
                 except Exception as e:
                     logger.exception("APPLY_ATTRIBUTE_FILE_ERROR path=%s error=%s", shorten(file_path, 1500), e)
 
         invalidated_caches = _invalidate_statistics_caches(request.save_dirs) if modified_count else 0
         logger.info(
-            "APPLY_ATTRIBUTE_END modified_files=%d replaced_values=%d invalidated_caches=%d",
+            "APPLY_ATTRIBUTE_END modified_files=%d modified_objects=%d replaced_values=%d invalidated_caches=%d",
             modified_count,
+            modified_objects,
             replaced_count,
             invalidated_caches,
         )
         return {
             "status": "success",
             "modified_files": modified_count,
+            "modified_objects": modified_objects,
             "replaced_values": replaced_count,
             "invalidated_caches": invalidated_caches,
         }
