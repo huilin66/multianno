@@ -796,10 +796,8 @@
     "removeMapping": "Click to remove mapping",
     "attributeSettings": "3. Attribute settings",
     "mappingComplete": "Mapping complete",
-    "oneSharedAttribute": "One shared attribute",
-    "oneSharedAttributeHint": "All source classes become values of one attribute.",
+    "oneSharedAttribute": "One attribute for all",
     "attributePerTarget": "One attribute per target",
-    "attributePerTargetHint": "Each target gets its own attribute and a none value.",
     "attributeName": "Attribute name",
     "attributeNamePlaceholder": "e.g. source_class",
     "values": "Values"

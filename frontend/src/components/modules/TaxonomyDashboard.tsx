@@ -4850,23 +4850,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                 </div>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {([
-                    ['single', t('workspace.oneSharedAttribute', 'One shared attribute'), t('workspace.oneSharedAttributeHint', 'All source classes become values of one attribute.')],
-                    ['perTarget', t('workspace.attributePerTarget', 'One attribute per target'), t('workspace.attributePerTargetHint', 'Each target gets its own attribute and a none value.')],
-                  ] as const).map(([mode, label, description]) => (
-                    <label key={mode} className={`flex cursor-pointer items-start gap-2 rounded-md border p-2.5 ${mergeAttributeMode === mode ? 'border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30' : 'border-neutral-200 bg-white dark:border-neutral-700 dark:bg-neutral-900'}`}>
-                      <input
-                        type="radio"
-                        name="merge-attribute-mode"
-                        value={mode}
-                        checked={mergeAttributeMode === mode}
-                        onChange={() => setMergeAttributeMode(mode)}
-                        className="mt-0.5 accent-blue-600"
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-xs font-semibold">{label}</span>
-                        <span className="mt-0.5 block text-[10px] text-neutral-500 dark:text-neutral-400">{description}</span>
-                      </span>
-                    </label>
+                    ['single', t('workspace.oneSharedAttribute', 'One attribute for all')],
+                    ['perTarget', t('workspace.attributePerTarget', 'One attribute per target')],
+                  ] as const).map(([mode, label]) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      aria-pressed={mergeAttributeMode === mode}
+                      onClick={() => setMergeAttributeMode(mode)}
+                      className={`rounded-md border px-3 py-2.5 text-left text-xs font-semibold transition-colors ${mergeAttributeMode === mode ? 'border-blue-400 bg-blue-600 text-white shadow-sm dark:border-blue-500 dark:bg-blue-600' : 'border-neutral-200 bg-white text-neutral-600 hover:border-blue-300 hover:bg-blue-50 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-blue-700 dark:hover:bg-blue-950/30'}`}
+                    >
+                      {label}
+                    </button>
                   ))}
                 </div>
 

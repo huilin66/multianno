@@ -796,10 +796,8 @@
     "removeMapping": "点击连线取消映射",
     "attributeSettings": "3. 属性设置",
     "mappingComplete": "映射完成",
-    "oneSharedAttribute": "创建一个共用属性",
-    "oneSharedAttributeHint": "所有源类别名称都作为这个属性的属性值。",
+    "oneSharedAttribute": "一个属性应用于全部",
     "attributePerTarget": "每个目标类别创建一个属性",
-    "attributePerTargetHint": "每个目标类别拥有独立属性，并增加 none 属性值。",
     "attributeName": "属性名称",
     "attributeNamePlaceholder": "例如 source_class",
     "values": "属性值"
