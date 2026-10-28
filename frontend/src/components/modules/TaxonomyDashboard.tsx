@@ -4504,26 +4504,35 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     
     {/* 🌟 合并弹窗 - 只能选已有 attribute 和已有值 */}
 {showMergeWithAttr && activeClass && (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-    <div className="bg-white dark:bg-neutral-900 rounded-xl p-6 w-[550px] max-h-[85vh] shadow-2xl border border-neutral-200 dark:border-neutral-800 flex flex-col">
-      <div className="flex items-center gap-3 mb-4 shrink-0">
-        <GitMerge className="w-6 h-6 text-purple-500" />
-        <h3 className="font-black text-lg">{t('workspace.mergeClassesTrackOrigin', 'Merge Classes & Track Origin')}</h3>
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+    <div className="flex max-h-[85vh] w-[620px] max-w-full flex-col rounded-xl border border-neutral-200 bg-white p-5 shadow-xl dark:border-neutral-700 dark:bg-neutral-900">
+      <div className="mb-4 shrink-0 border-b border-neutral-200 pb-3 dark:border-neutral-800">
+        <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
+          {t('workspace.mergeClassesTrackOrigin', 'Merge Classes & Track Origin')}
+        </h3>
+        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+          {t('workspace.trackOriginDesc', 'Select an existing attribute to record which class each shape came from.')}
+        </p>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-5 custom-scrollbar pr-1">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-1 custom-scrollbar">
         
         {/* ========== 1. 源类选择区 ========== */}
-        <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800/50">
-          <p className="text-[10px] font-black text-amber-700 dark:text-amber-500 uppercase mb-2">
-            {t('workspace.sourceClasses', 'Source Classes')} ({allSourceClasses.length} selected)
-          </p>
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-700 dark:bg-neutral-800/40">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-200">
+              {t('workspace.sourceClasses', 'Source Classes')}
+            </p>
+            <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
+              {allSourceClasses.length} {t('workspace.selected', 'selected')}
+            </span>
+          </div>
           <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
             {/* 当前 active class（固定参与） */}
-            <div className="flex items-center gap-2 p-2 rounded bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700">
+            <div className="flex items-center gap-2 rounded-md border border-neutral-200 bg-white p-2 dark:border-neutral-700 dark:bg-neutral-900">
               <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: activeClass.color }} />
-              <span className="text-xs font-bold">{activeClass.name}</span>
-              <span className="ml-auto text-[9px] text-amber-600 font-bold uppercase">{t('workspace.selected', 'Selected')}</span>
+              <span className="text-xs font-medium">{activeClass.name}</span>
+              <span className="ml-auto text-[10px] font-medium text-blue-600 dark:text-blue-400">{t('workspace.selected', 'Selected')}</span>
             </div>
             {/* 其他可选类 */}
             {sortedClasses
@@ -4565,8 +4574,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         </div>
 
         {/* ========== 2. 新类名输入区 ========== */}
-        <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded-lg border border-green-200 dark:border-green-800/50">
-          <p className="text-[10px] font-black text-green-700 dark:text-green-500 uppercase mb-2">
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-700 dark:bg-neutral-800/40">
+          <p className="mb-2 text-xs font-semibold text-neutral-700 dark:text-neutral-200">
             {t('workspace.newClassName', 'New Class Name')}
           </p>
           <Input
@@ -4583,17 +4592,14 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         </div>
 
         {/* ========== 3. Attribute 选择区（只能选已有，值也只能选已有） ========== */}
-        <div className="bg-purple-50 dark:bg-purple-950/20 p-3 rounded-lg border border-purple-200 dark:border-purple-800/50">
-          <p className="text-[10px] font-black text-purple-700 dark:text-purple-500 uppercase mb-2">
+        <div className="rounded-lg border border-neutral-200 bg-neutral-50/60 p-3 dark:border-neutral-700 dark:bg-neutral-800/40">
+          <p className="mb-2 text-xs font-semibold text-neutral-700 dark:text-neutral-200">
             {t('workspace.trackOriginWithAttribute', 'Track Origin With Attribute')}
-          </p>
-          <p className="text-[9px] text-neutral-500 mb-3">
-            {t('workspace.trackOriginDesc', 'Select an existing attribute to record which class each shape came from.')}
           </p>
           
           {/* 🌟 Step 1: 选择 Attribute */}
           <div className="mb-4">
-            <Label className="text-[10px] font-bold text-neutral-500 uppercase">{t('workspace.stepOneSelectAttribute', '1. Select Attribute')}</Label>
+            <Label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">{t('workspace.stepOneSelectAttribute', '1. Select Attribute')}</Label>
             <Select value={mergeAttrName} onValueChange={(v) => {
               setMergeAttrName(v);
               // 🌟 切换 attribute 时，清空之前的值
@@ -4631,7 +4637,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             
             return (
               <div>
-                <Label className="text-[10px] font-bold text-neutral-500 uppercase mb-1">
+                  <Label className="mb-1 text-xs font-medium text-neutral-600 dark:text-neutral-300">
                   {t('workspace.setValuesForEachClass', '2. Set Values for Each Class')} ({allSourceClasses.length} classes)
                 </Label>
                 
@@ -4685,10 +4691,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       </div>
 
       {/* ========== 底部按钮 ========== */}
-      <div className="flex justify-end items-center gap-2 mt-6 pt-4 border-t border-neutral-100 dark:border-neutral-800 shrink-0">
+      <div className="mt-4 flex shrink-0 items-center justify-end gap-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
         <Button
-          variant="ghost"
+          variant="outline"
           size="sm"
+          className="h-9 rounded-md px-4 text-sm font-semibold"
           onClick={() => {
             setShowMergeWithAttr(false);
             setMergeSourceClassIds(new Set());
@@ -4701,7 +4708,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         </Button>
         <Button
           size="sm"
-          className="bg-purple-600 hover:bg-purple-700 text-white font-bold"
+          className="h-9 rounded-md bg-blue-600 px-4 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
           onClick={executeMergeWithAttribute}
           disabled={
             !mergeAttrName.trim() ||
