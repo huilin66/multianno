@@ -6,7 +6,7 @@ import { AnnotationTable, type AnnotationTableOverlapState } from './AnnotationT
 import { 
   Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
   Plus, Check, X, Loader2, AlertCircle, Upload, Activity,
-  List, LayoutDashboard, Clock, ChevronDown, ChevronRight,
+  List, LayoutDashboard, ChevronDown, ChevronRight,
   Layers, ShieldCheck, CheckSquare, Square
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
@@ -21,6 +21,7 @@ import { showDialog, useDialogStore, type DialogOptions } from '../../store/useD
 
 interface TaxonomyDashboardProps {
   onClose?: () => void;
+  onCacheTimestampChange?: (timestamp: string | null) => void;
 }
 
 type TaxonomyDashboardTab = 'overview' | 'annotationTable' | 'classes' | 'attributes';
@@ -897,7 +898,7 @@ const ScenePreviewPanel = ({
 // ============================================================================
 // 🌟 主页面组件
 // ============================================================================
-export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
+export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyDashboardProps = {}) {
   const { t } = useTranslation();
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
@@ -973,6 +974,12 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const [previewError, setPreviewError] = useState('');
   const [previewAnnotationDimensions, setPreviewAnnotationDimensions] = useState<PreviewDimensions | null>(null);
   const [previewImageDimensions, setPreviewImageDimensions] = useState<PreviewDimensions | null>(null);
+
+  useEffect(() => {
+    onCacheTimestampChange?.(
+      typeof statsData?.last_updated === 'string' ? statsData.last_updated : null,
+    );
+  }, [onCacheTimestampChange, statsData?.last_updated]);
 
   // Keep a render-time snapshot so a dialog unmount can persist the latest
   // browsing position even when React effects have not run yet.
@@ -2698,15 +2705,6 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
       <input type="file" accept=".txt,.yaml,.yml" ref={fileInputRef} className="hidden" onChange={handleImportFile} />
       
-      <div className="h-9 shrink-0 border-b border-neutral-200 bg-white px-4 dark:border-neutral-800 dark:bg-neutral-900 flex items-center justify-end">
-        <span className="text-[10px] text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 font-mono">
-          <Clock className="w-3.5 h-3.5 text-neutral-400" />
-          {statsData?.last_updated
-            ? `${t('workspace.cached', 'Cached')}: ${statsData.last_updated}`
-            : t('workspace.noLocalCache', 'No local cache found')}
-        </span>
-      </div>
-
       <div className="flex-1 flex overflow-hidden">
         {/* ================= 1. 左侧可收纳导航树 ================= */}
         <div className="w-64 border-r border-neutral-200 dark:border-neutral-800 flex flex-col bg-white dark:bg-neutral-900 shrink-0">

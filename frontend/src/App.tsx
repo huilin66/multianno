@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2, Route, Layers, Save } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2, Route, Layers, Save, Clock } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -662,6 +662,7 @@ export default function App() {
     resetProject,
   } = useStore();
   const annotationLastSavedTime = useStore((s) => s.annotationLastSavedTime);
+  const [taxonomyCacheTimestamp, setTaxonomyCacheTimestamp] = useState<string | null>(null);
   const hasAttributeContent = hasAnnotationAttributeContent(annotations, taxonomyAttributes);
   const attributeDisplayEnabled = editorSettings.att_show === true && hasAttributeContent;
   const startupAnnotationReloadKey = useRef<string | null>(null);
@@ -672,6 +673,10 @@ export default function App() {
   const metaTooltipTime = formatSavedTimestamp(metaLastSavedTime, i18n.language, true);
   const annotationDisplayTime = formatSavedTimestamp(annotationLastSavedTime, i18n.language);
   const annotationTooltipTime = formatSavedTimestamp(annotationLastSavedTime, i18n.language, true);
+
+  useEffect(() => {
+    if (activeModule !== 'taxonomy') setTaxonomyCacheTimestamp(null);
+  }, [activeModule]);
 
   const metaStatusText = metaSaveStatus === 'error'
     ? 'Error'
@@ -1386,11 +1391,20 @@ export default function App() {
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
         <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-border overflow-hidden">
-          <DialogHeader className="p-4 border-b border-border shrink-0">
-            <DialogTitle>{t('menu.annotationManager')}</DialogTitle>
+          <DialogHeader className="p-4 pr-14 border-b border-border shrink-0 flex-row items-center justify-between gap-4">
+            <DialogTitle className="min-w-0 flex-1 truncate">{t('menu.annotationManager')}</DialogTitle>
+            <span className="shrink-0 max-w-[40%] truncate text-[10px] font-mono text-muted-foreground flex items-center gap-1.5" title={taxonomyCacheTimestamp ? `${t('workspace.cached', 'Cached')}: ${taxonomyCacheTimestamp}` : t('workspace.noLocalCache', 'No local cache found')}>
+              <Clock className="w-3.5 h-3.5 text-muted-foreground/70" />
+              {taxonomyCacheTimestamp
+                ? `${t('workspace.cached', 'Cached')}: ${taxonomyCacheTimestamp}`
+                : t('workspace.noLocalCache', 'No local cache found')}
+            </span>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-            <TaxonomyDashboard onClose={() => setActiveModule('workspace')} />
+            <TaxonomyDashboard
+              onClose={() => setActiveModule('workspace')}
+              onCacheTimestampChange={setTaxonomyCacheTimestamp}
+            />
           </div>
         </DialogContent>
       </Dialog>
