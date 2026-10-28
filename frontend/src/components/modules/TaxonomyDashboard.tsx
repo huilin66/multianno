@@ -1,5 +1,5 @@
 // src/components/modules/TaxonomyDashboard.tsx
-import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback, useLayoutEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import type { Annotation } from '../../store/useStore';
 import { AnnotationTable, type AnnotationTableOverlapState } from './AnnotationTable';
@@ -56,6 +56,16 @@ interface TaxonomyProcessingProgress {
 interface MergeTargetDraft {
   id: string;
   name: string;
+  color: string;
+}
+
+interface MergeConnectionLine {
+  sourceId: string;
+  targetId: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
   color: string;
 }
 
@@ -1299,6 +1309,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [mergeAttributeMode, setMergeAttributeMode] = useState<MergeAttributeMode>('single');
   const [mergeAttrName, setMergeAttrName] = useState('source_class');
   const [mergeTargetAttributeNames, setMergeTargetAttributeNames] = useState<Record<string, string>>({});
+  const mergeMappingGridRef = useRef<HTMLDivElement>(null);
+  const mergeSourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const mergeTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [mergeConnectionLines, setMergeConnectionLines] = useState<MergeConnectionLine[]>([]);
 
   const [classSortDir, setClassSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
   const [attrSortDir, setAttrSortDir] = useState<'asc' | 'desc' | 'manual'>('manual');
@@ -1330,6 +1344,82 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     }));
     setNewTargetClassName('');
   };
+
+  const keepMergeSourceClass = (sourceId: string) => {
+    const sourceClass = allSourceClasses.find((candidate: any) => candidate.id === sourceId);
+    if (!sourceClass) return;
+
+    const existingTarget = mergeTargetDrafts.find(
+      (target) => target.name.toLowerCase() === sourceClass.name.toLowerCase(),
+    );
+    const targetId = existingTarget?.id || `merge-target-${Date.now()}-keep-${sourceId}`;
+
+    if (!existingTarget) {
+      setMergeTargetDrafts((previous) => [
+        ...previous,
+        {
+          id: targetId,
+          name: sourceClass.name,
+          color: sourceClass.color || TAXONOMY_COLORS[previous.length % TAXONOMY_COLORS.length],
+        },
+      ]);
+      setMergeTargetAttributeNames((previous) => ({
+        ...previous,
+        [targetId]: `${sourceClass.name}_origin`,
+      }));
+    }
+
+    setMergeSourceTargetMap((previous) => ({ ...previous, [sourceId]: targetId }));
+  };
+
+  const recalculateMergeConnectionLines = useCallback(() => {
+    const container = mergeMappingGridRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const lines = Object.entries(mergeSourceTargetMap).flatMap(([sourceId, targetId]) => {
+      const sourceElement = mergeSourceRefs.current[sourceId];
+      const targetElement = mergeTargetRefs.current[targetId];
+      const target = mergeTargetDrafts.find((candidate) => candidate.id === targetId);
+      if (!sourceElement || !targetElement || !target) return [];
+
+      const sourceRect = sourceElement.getBoundingClientRect();
+      const targetRect = targetElement.getBoundingClientRect();
+      return [{
+        sourceId,
+        targetId,
+        x1: sourceRect.right - containerRect.left,
+        y1: sourceRect.top + sourceRect.height / 2 - containerRect.top,
+        x2: targetRect.left - containerRect.left,
+        y2: targetRect.top + targetRect.height / 2 - containerRect.top,
+        color: target.color,
+      }];
+    });
+
+    setMergeConnectionLines(lines);
+  }, [mergeSourceTargetMap, mergeTargetDrafts]);
+
+  useLayoutEffect(() => {
+    if (!showMergeWithAttr) {
+      setMergeConnectionLines([]);
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(recalculateMergeConnectionLines);
+    const handleResize = () => recalculateMergeConnectionLines();
+    window.addEventListener('resize', handleResize);
+    const container = mergeMappingGridRef.current;
+    const resizeObserver = typeof ResizeObserver !== 'undefined' && container
+      ? new ResizeObserver(handleResize)
+      : null;
+    if (resizeObserver && container) resizeObserver.observe(container);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener('resize', handleResize);
+      resizeObserver?.disconnect();
+    };
+  }, [recalculateMergeConnectionLines, showMergeWithAttr]);
 
   const [previewStem, setPreviewStem] = useState<string | null>(null);
   const [previewViewId, setPreviewViewId] = useState<string>('');
@@ -4536,9 +4626,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             <h3 className="text-base font-semibold text-neutral-900 dark:text-neutral-100">
               {t('workspace.mergeClassesTrackOrigin', 'Merge Classes & Track Origin')}
             </h3>
-            <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
-              {t('workspace.advancedMergeHint', 'Create target classes, map every source class, then preserve its origin with attributes.')}
-            </p>
           </div>
 
           <div className="flex-1 space-y-4 overflow-y-auto pr-1 custom-scrollbar">
@@ -4577,6 +4664,29 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   {t('common.add', 'Add')}
                 </Button>
               </div>
+              <div className="mt-2">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
+                    {t('workspace.originalClassNames', 'Original class names')}
+                  </span>
+                  <span className="text-[10px] text-neutral-400 dark:text-neutral-500">
+                    {t('workspace.clickToUseClassName', 'Click to use')}
+                  </span>
+                </div>
+                <div className="flex max-h-16 flex-wrap gap-1 overflow-y-auto custom-scrollbar">
+                  {allSourceClasses.map((sourceClass: any) => (
+                    <button
+                      key={sourceClass.id}
+                      type="button"
+                      title={sourceClass.name}
+                      onClick={() => setNewTargetClassName(sourceClass.name)}
+                      className="rounded border border-neutral-200 bg-white px-2 py-1 text-[10px] text-neutral-600 transition-colors hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300 dark:hover:border-blue-700 dark:hover:bg-blue-950/30 dark:hover:text-blue-300"
+                    >
+                      {sourceClass.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
               {newTargetClassName.trim() && taxonomyClasses.some((c: any) => c.name.toLowerCase() === newTargetClassName.trim().toLowerCase()) && (
                 <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
                   {t('workspace.classNameExistsWarning', 'A class with this name already exists. Its objects will be merged into it.')}
@@ -4594,18 +4704,46 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   {mergeAssignedSourceCount}/{allSourceClasses.length} {t('workspace.assigned', 'assigned')}
                 </span>
               </div>
-              <div className="grid min-h-[220px] grid-cols-2 gap-4">
-                <div className="min-w-0">
+              <div ref={mergeMappingGridRef} className="relative grid min-h-[220px] grid-cols-2 gap-4">
+                <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full overflow-visible" aria-hidden="true">
+                  {mergeConnectionLines.map((line) => {
+                    const curveOffset = Math.max(28, (line.x2 - line.x1) / 2);
+                    const path = `M ${line.x1} ${line.y1} C ${line.x1 + curveOffset} ${line.y1}, ${line.x2 - curveOffset} ${line.y2}, ${line.x2} ${line.y2}`;
+                    return (
+                      <g
+                        key={`${line.sourceId}-${line.targetId}`}
+                        className="pointer-events-auto cursor-pointer"
+                        role="button"
+                        aria-label={t('workspace.removeMapping', 'Click to remove mapping')}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setMergeSourceTargetMap((previous) => {
+                            const next = { ...previous };
+                            delete next[line.sourceId];
+                            return next;
+                          });
+                        }}
+                      >
+                        <title>{t('workspace.removeMapping', 'Click to remove mapping')}</title>
+                        <path d={path} fill="none" stroke="transparent" strokeWidth="12" />
+                        <path d={path} fill="none" stroke={line.color} strokeWidth="2.5" strokeLinecap="round" />
+                        <circle cx={line.x2} cy={line.y2} r="3.5" fill={line.color} />
+                      </g>
+                    );
+                  })}
+                </svg>
+                <div className="relative z-20 min-w-0">
                   <p className="mb-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                     {t('workspace.sourceClasses', 'Source classes')}
                   </p>
-                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700">
+                  <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700" onScroll={recalculateMergeConnectionLines}>
                     {allSourceClasses.map((sourceClass: any) => {
                       const targetId = mergeSourceTargetMap[sourceClass.id];
                       const target = mergeTargetDrafts.find((candidate) => candidate.id === targetId);
                       return (
                         <div
                           key={sourceClass.id}
+                          ref={(element) => { mergeSourceRefs.current[sourceClass.id] = element; }}
                           draggable
                           onDragStart={(event) => {
                             event.dataTransfer.setData('text/plain', sourceClass.id);
@@ -4629,11 +4767,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   </div>
                 </div>
 
-                <div className="min-w-0">
+                <div className="relative z-20 min-w-0">
                   <p className="mb-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
                     {t('workspace.targetClasses', 'Target classes')}
                   </p>
-                  <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700">
+                  <div className="max-h-64 space-y-1.5 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700" onScroll={recalculateMergeConnectionLines}>
                     {mergeTargetDrafts.length === 0 && (
                       <p className="p-4 text-center text-xs text-neutral-400">
                         {t('workspace.addTargetClassHint', 'Add a target class above.')}
@@ -4644,6 +4782,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       return (
                         <div
                           key={target.id}
+                          ref={(element) => { mergeTargetRefs.current[target.id] = element; }}
                           onDragOver={(event) => event.preventDefault()}
                           onDrop={(event) => {
                             event.preventDefault();
@@ -4688,15 +4827,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     onDrop={(event) => {
                       event.preventDefault();
                       const sourceId = event.dataTransfer.getData('text/plain');
-                      if (sourceId) setMergeSourceTargetMap((previous) => {
-                        const next = { ...previous };
-                        delete next[sourceId];
-                        return next;
-                      });
+                      if (sourceId) keepMergeSourceClass(sourceId);
                     }}
                     className="mt-2 rounded-md border border-dashed border-neutral-300 px-2 py-1.5 text-center text-[10px] text-neutral-500 dark:border-neutral-600 dark:text-neutral-400"
                   >
-                    {t('workspace.dropToUnassign', 'Drop here to unassign')}
+                    {t('workspace.dropToKeep', 'Drop here to keep')}
                   </div>
                 </div>
               </div>
