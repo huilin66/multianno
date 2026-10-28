@@ -4393,9 +4393,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       {/* ================= 3. 底部持久状态栏 ================= */}
       <div className="p-3 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center gap-3 shrink-0 z-20 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
         <div
-          className={processingProgress
-            ? 'min-w-0 flex-1 rounded-md border border-neutral-200 bg-neutral-50/80 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-800/60'
-            : 'min-w-0 flex-1'}
+          className="min-w-0 flex-1 h-9 flex items-center overflow-hidden"
           role="status"
           aria-live="polite"
         >
