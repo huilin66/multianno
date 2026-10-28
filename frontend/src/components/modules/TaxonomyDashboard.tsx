@@ -937,6 +937,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   const shouldScrollClassSceneOnMountRef = useRef(true);
   const [deleteStage, setDeleteStage] = useState<0 | 1 | 2>(0); 
   const [attrDraft, setAttrDraft] = useState<{options: string[], defaultValue: string} | null>(null);
+  const [attributeValueMerges, setAttributeValueMerges] = useState<Record<string, string>>({});
+  const [pendingValueMerge, setPendingValueMerge] = useState<{value: string; target: string} | null>(null);
   const [showAttrDeleteConfirm, setShowAttrDeleteConfirm] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [isAddingClass, setIsAddingClass] = useState(false);
@@ -1828,6 +1830,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   // 监听切换属性时，清空草稿
   useEffect(() => {
     setAttrDraft(null);
+    setAttributeValueMerges({});
+    setPendingValueMerge(null);
     setShowAttrDeleteConfirm(false);
     if (activeAttribute?.id === restoredAttributeIdRef.current) {
       restoredAttributeIdRef.current = null;
@@ -2239,6 +2243,77 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     }
   };
 
+  const requestAttributeValueMerge = (value: string, currentOptions: string[]) => {
+    const normalizedValue = String(value).trim();
+    const target = currentOptions.find((option) => String(option).trim() !== normalizedValue) || '';
+    if (currentOptions.length <= 1 || !target) {
+      openDialog({
+        type: 'warning',
+        title: t('taxonomyDashboard.mergeValueCannotDelete', 'Cannot remove the last attribute value'),
+        description: t(
+          'taxonomyDashboard.mergeValueCannotDeleteDesc',
+          'Keep at least one value so a removed value has a merge target.',
+        ),
+        confirmText: t('taxonomyDashboard.gotIt'),
+        hideCancel: true,
+      });
+      return;
+    }
+    setPendingValueMerge({ value: normalizedValue, target });
+  };
+
+  const confirmAttributeValueMerge = (currentOptions: string[], currentDefault: string) => {
+    if (!pendingValueMerge) return;
+    const value = pendingValueMerge.value;
+    const target = String(pendingValueMerge.target || '').trim();
+    if (!target || target === value || !currentOptions.some((option) => String(option).trim() === target)) return;
+
+    const valueIndex = currentOptions.findIndex((option) => String(option).trim() === value);
+    if (valueIndex < 0) {
+      setPendingValueMerge(null);
+      return;
+    }
+
+    const nextOptions = currentOptions.filter((_: string, index: number) => index !== valueIndex);
+    const nextMerges = { ...attributeValueMerges, [value]: target };
+    // If another removed value was previously merged into this value, keep the
+    // chain closed by redirecting it to the new target as well.
+    Object.entries(attributeValueMerges).forEach(([source, existingTarget]) => {
+      if (existingTarget === value) nextMerges[source] = target;
+    });
+
+    setAttributeValueMerges(nextMerges);
+    setAttrDraft({
+      options: nextOptions,
+      defaultValue: String(currentDefault).trim() === value ? target : currentDefault,
+    });
+    setPendingValueMerge(null);
+  };
+
+  const handleAttributeOptionChange = (
+    index: number,
+    value: string,
+    currentOptions: string[],
+    currentDefault: string,
+  ) => {
+    const previousValue = String(currentOptions[index] || '').trim();
+    const nextOptions = [...currentOptions];
+    nextOptions[index] = value;
+    setAttrDraft({
+      options: nextOptions,
+      defaultValue: currentDefault === currentOptions[index] ? value : currentDefault,
+    });
+
+    if (previousValue && previousValue !== value.trim()) {
+      setAttributeValueMerges((previousMerges) => Object.fromEntries(
+        Object.entries(previousMerges).map(([source, target]) => [
+          source === previousValue ? value.trim() : source,
+          target === previousValue ? value.trim() : target,
+        ]),
+      ));
+    }
+  };
+
   // 🌟 新增：执行属性的批量应用与同步
   // 🌟 修复后的完整版：执行属性的批量应用与同步
   const executeApplyAttribute = async () => {
@@ -2253,7 +2328,21 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         : [];
       const nextOptions = attrDraft.options.map((value) => String(value).trim());
       const nextDefault = String(attrDraft.defaultValue || '').trim();
-      const valueReplacements = buildAttributeValueReplacements(oldOptions, nextOptions);
+      const automaticReplacements = buildAttributeValueReplacements(oldOptions, nextOptions);
+      const explicitMerges: Record<string, string> = {};
+      (Object.entries(attributeValueMerges) as Array<[string, string]>).forEach(([oldValue, newValue]) => {
+        if (
+          oldValue !== newValue
+          && !nextOptions.includes(oldValue)
+          && nextOptions.includes(newValue)
+        ) {
+          explicitMerges[oldValue] = newValue;
+        }
+      });
+      const valueReplacements = {
+        ...automaticReplacements,
+        ...explicitMerges,
+      };
       const selectedValueWasConfigured = Boolean(
         currentValueBeforeEdit && oldOptions.includes(currentValueBeforeEdit),
       );
@@ -2337,6 +2426,8 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       });
       attributeEditRestoreRef.current = null;
       setAttrDraft(null); // 清空草稿，退出编辑状态
+      setAttributeValueMerges({});
+      setPendingValueMerge(null);
       alert(t('taxonomyDashboard.attributeSyncSuccess'));
     } catch (err: any) {
       attributeEditRestoreRef.current = null;
@@ -3363,7 +3454,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                   currentDefault !== savedDefault
                   || currentOptions.length !== savedOptions.length
                   || currentOptions.some((option: string, index: number) => option !== savedOptions[index])
-                );
+                ) || Object.keys(attributeValueMerges).length > 0;
 
                 const renderAddButton = () => (
                   <Button
@@ -3447,7 +3538,11 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               variant="ghost"
                               disabled={isProcessing}
                               className="h-7 w-7 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
-                              onClick={() => setAttrDraft(null)}
+                              onClick={() => {
+                                setAttrDraft(null);
+                                setAttributeValueMerges({});
+                                setPendingValueMerge(null);
+                              }}
                               title={t('common.cancel')}
                             >
                               <X className="w-4 h-4" />
@@ -3486,37 +3581,66 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
                               </button>
                               <Input
                                 value={opt}
-                                onChange={e => {
-                                  const value = e.target.value;
-                                  const nextOptions = [...currentOptions];
-                                  nextOptions[index] = value;
-                                  setAttrDraft({
-                                    options: nextOptions,
-                                    defaultValue: currentDefault === opt ? value : currentDefault,
-                                  });
-                                }}
+                                onChange={e => handleAttributeOptionChange(index, e.target.value, currentOptions, currentDefault)}
                                 className={`h-5 w-20 px-1 text-[10px] font-bold border-transparent focus:border-purple-400 focus:ring-0 shadow-none bg-transparent ${currentDefault === opt ? 'text-purple-700 dark:text-purple-300' : ''}`}
                               />
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon"
-                                title={t('common.delete', 'Delete value')}
+                                title={t('taxonomyDashboard.mergeValue', 'Merge value')}
                                 className="h-5 w-5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 shrink-0"
-                                onClick={() => {
-                                  const nextOptions = currentOptions.filter((_: string, optionIndex: number) => optionIndex !== index);
-                                  setAttrDraft({
-                                    options: nextOptions,
-                                    defaultValue: currentDefault === opt ? (nextOptions[0] || '') : currentDefault,
-                                  });
-                                }}
+                                onClick={() => requestAttributeValueMerge(opt, currentOptions)}
                               >
-                                <X className="w-3 h-3" />
+                                <GitMerge className="w-3 h-3" />
                               </Button>
                             </div>
                           ))}
                           {renderAddButton()}
                         </div>
+                        {pendingValueMerge && (
+                          <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 dark:border-amber-800/60 dark:bg-amber-950/20">
+                            <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                              {t('taxonomyDashboard.mergeValuePrompt', { value: pendingValueMerge.value })}
+                            </span>
+                            <Select
+                              value={pendingValueMerge.target}
+                              onValueChange={(target) => setPendingValueMerge((current) => current ? { ...current, target } : current)}
+                            >
+                              <SelectTrigger className="h-6 min-w-[100px] flex-1 text-[10px] bg-white dark:bg-neutral-900">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {currentOptions
+                                  .filter((option) => String(option).trim() !== pendingValueMerge.value)
+                                  .map((option) => (
+                                    <SelectItem key={option} value={option} className="text-[10px]">
+                                      {option}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-6 px-2 text-[9px] bg-amber-600 text-white hover:bg-amber-700"
+                              onClick={() => confirmAttributeValueMerge(currentOptions, currentDefault)}
+                            >
+                              <GitMerge className="mr-1 h-3 w-3" />
+                              {t('taxonomyDashboard.merge')}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              className="h-6 w-6 text-neutral-500"
+                              onClick={() => setPendingValueMerge(null)}
+                              title={t('common.cancel')}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
