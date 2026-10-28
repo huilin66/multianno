@@ -1392,8 +1392,21 @@ export default function App() {
       >
         <DialogContent className="max-w-[95vw] sm:max-w-[95vw] w-[95vw] h-[90vh] flex flex-col p-0 border-border overflow-hidden">
           <DialogHeader className="p-4 pr-14 border-b border-border shrink-0 flex-row items-center justify-between gap-4">
-            <DialogTitle className="min-w-0 flex-1 truncate">{t('menu.annotationManager')}</DialogTitle>
-            <span className="shrink-0 max-w-[40%] truncate text-[10px] font-mono text-muted-foreground flex items-center gap-1.5" title={taxonomyCacheTimestamp ? `${t('workspace.cached', 'Cached')}: ${taxonomyCacheTimestamp}` : t('workspace.noLocalCache', 'No local cache found')}>
+            <div className="flex min-w-0 items-center gap-4">
+              <DialogTitle className="min-w-0 truncate">{t('menu.annotationManager')}</DialogTitle>
+              <span className="shrink-0 flex items-center gap-3 text-[10px] font-medium text-muted-foreground">
+                <span>
+                  {t('taxonomyDashboard.footprintView', 'View')}: <strong className="font-mono text-foreground">{views.length}</strong>
+                </span>
+                <span>
+                  {t('taxonomyDashboard.footprintSceneGroup', 'Scene Group')}: <strong className="font-mono text-foreground">{Object.keys(sceneGroups || {}).length}</strong>
+                </span>
+                <span>
+                  {t('taxonomyDashboard.footprintAnnotation', 'Annotation')}: <strong className="font-mono text-foreground">{annotations.length}</strong>
+                </span>
+              </span>
+            </div>
+            <span className="ml-auto shrink-0 max-w-[40%] truncate text-[10px] font-mono text-muted-foreground flex items-center gap-1.5" title={taxonomyCacheTimestamp ? `${t('workspace.cached', 'Cached')}: ${taxonomyCacheTimestamp}` : t('workspace.noLocalCache', 'No local cache found')}>
               <Clock className="w-3.5 h-3.5 text-muted-foreground/70" />
               {taxonomyCacheTimestamp
                 ? `${t('workspace.cached', 'Cached')}: ${taxonomyCacheTimestamp}`

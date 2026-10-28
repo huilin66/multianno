@@ -3070,9 +3070,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const overviewAttributeIsNumeric = overviewAttributeValues.length > 0
     && overviewAttributeValues.every((value) => value !== '(empty)' && value.trim() !== '' && Number.isFinite(Number(value)));
 
-  const overviewViewCount = views?.length || 0;
-  const overviewSceneGroupCount = Object.keys(sceneGroups || {}).length;
-  const overviewAnnotationCount = Number(statsData?.global?.total_objects || 0);
   return (
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
       <input type="file" accept=".txt,.yaml,.yml" ref={fileInputRef} className="hidden" onChange={handleImportFile} />
@@ -3291,19 +3288,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         {/* 🌟 模式 A：Overview 纯粹大盘展示 */}
         {activeTab === 'overview' && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
-            <div className="shrink-0 border-b border-neutral-200 bg-white px-6 py-3 dark:border-neutral-800 dark:bg-neutral-900">
-              <div className="flex items-center gap-6 text-xs text-neutral-500 dark:text-neutral-400">
-                <span>
-                  {t('taxonomyDashboard.footprintView', 'View')}: <strong className="font-mono text-neutral-800 dark:text-neutral-200">{overviewViewCount}</strong>
-                </span>
-                <span>
-                  {t('taxonomyDashboard.footprintSceneGroup', 'Scene Group')}: <strong className="font-mono text-neutral-800 dark:text-neutral-200">{overviewSceneGroupCount}</strong>
-                </span>
-                <span>
-                  {t('taxonomyDashboard.footprintAnnotation', 'Annotation')}: <strong className="font-mono text-neutral-800 dark:text-neutral-200">{overviewAnnotationCount}</strong>
-                </span>
-              </div>
-            </div>
            {/* 🌟 核心修复：外层使用 flex flex-col gap-4，子元素使用 shrink-0，彻底避免重叠 */}
             <div className="flex-1 overflow-y-auto p-3 custom-scrollbar flex flex-col gap-3">
               {statsStatus === 'idle' && !statsData && (
