@@ -43,8 +43,8 @@ _taxonomy_progress_context: contextvars.ContextVar[dict[str, Any] | None] = cont
 )
 
 
-def _list_annotation_files(save_dirs: list[str]) -> list[str]:
-    """Return the same JSON file set used by batch taxonomy operations."""
+def _list_annotation_files(save_dirs: list[str], include_meta: bool = False) -> list[str]:
+    """Return the JSON file set used by a taxonomy operation."""
 
     files: list[str] = []
     for folder in save_dirs:
@@ -58,13 +58,14 @@ def _list_annotation_files(save_dirs: list[str]) -> list[str]:
         files.extend(
             os.path.join(folder, file_name)
             for file_name in file_names
-            if file_name.endswith(".json") and not file_name.endswith("_meta.json")
+            if file_name.endswith(".json")
+            and (include_meta or not file_name.endswith("_meta.json"))
         )
     return files
 
 
 def _taxonomy_job_total(operation: str, save_dirs: list[str]) -> int:
-    file_count = len(_list_annotation_files(save_dirs))
+    file_count = len(_list_annotation_files(save_dirs, include_meta=operation == "statistics"))
     # Attribute rename performs a read/validation pass and a write pass. Count
     # both so the progress bar does not reach 100% before the writes finish.
     return file_count * 2 if operation == "rename_attribute" else file_count
@@ -147,6 +148,7 @@ def _taxonomy_job_spec(operation: str):
     """Resolve models/handlers lazily after all route functions are defined."""
 
     return {
+        "statistics": (StatRequest, get_project_statistics),
         "merge_class": (BatchMergeClassRequest, batch_merge_class),
         "delete_class": (BatchDeleteClassRequest, batch_delete_class),
         "delete_attribute": (BatchDeleteAttributeRequest, batch_delete_attribute),
@@ -698,7 +700,9 @@ async def get_project_statistics(req: StatRequest):
                     )
             except Exception as e:
                 logger.exception("TAXONOMY_STATISTICS_FILE_ERROR path=%s error=%s", shorten(fpath, 1500), e)
+                _report_taxonomy_file_progress(os.path.basename(fpath))
                 continue
+            _report_taxonomy_file_progress(os.path.basename(fpath))
 
     # 如果完全没有标注数据，直接返回空
     if not records:

@@ -5,8 +5,8 @@ import type { Annotation } from '../../store/useStore';
 import { AnnotationTable, type AnnotationTableOverlapState } from './AnnotationTable';
 import { 
   Tags, Settings, Trash2, ArrowRight, GitMerge, Eraser,
-  Plus, Check, X, Loader2, AlertCircle, Upload, Database, Activity,
-  List, LayoutDashboard, Clock, RefreshCw, ChevronDown, ChevronRight, 
+  Plus, Check, X, Loader2, AlertCircle, Upload, Activity,
+  List, LayoutDashboard, Clock, ChevronDown, ChevronRight,
   Layers, ShieldCheck, CheckSquare, Square
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '../ui/select';
@@ -14,7 +14,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { OperationProgress } from '../ui/OperationProgress';
-import { fetchProjectStatistics, getFileContent, getPreviewImageUrl, runTaxonomyJob, type TaxonomyJobOperation, type TaxonomyJobState } from '../../api/client';
+import { getFileContent, getPreviewImageUrl, runTaxonomyJob, type TaxonomyJobOperation, type TaxonomyJobState } from '../../api/client';
 import { useTranslation } from 'react-i18next';
 import { TAXONOMY_COLORS } from '../../config/colors';
 import { showDialog, useDialogStore, type DialogOptions } from '../../store/useDialogStore';
@@ -1949,7 +1949,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
   // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
   useEffect(() => { 
     if (folders?.length > 0) {
-      loadStatistics(editorSettings.autoRefreshStats === true);
+      void loadStatistics(editorSettings.autoRefreshStats === true, true);
     } 
   }, []);
 
@@ -1968,7 +1968,7 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     }
   }, [taxonomyClasses]);
 
-  const loadStatistics = async (forceRefresh: boolean) => {
+  const loadStatistics = async (forceRefresh: boolean, showProgress = false) => {
     if (folders.length === 0) return;
     const { statsCacheValid } = useStore.getState() as any;
     if (!forceRefresh && statsCacheValid && statsData) {
@@ -1977,12 +1977,32 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     }
 
     const requestId = ++statsRequestIdRef.current;
+    const progressOperationKey = showProgress
+      ? beginTaxonomyWrite(t('taxonomyDashboard.loadingStatistics', 'Loading statistics'))
+      : null;
+    const trackedOperationKey = progressOperationKey ?? processingOperationKeyRef.current;
 
     setStatsStatus('loading');
     try {
       const saveDirs = getSaveDirs();
-      const rawData = await fetchProjectStatistics(saveDirs, forceRefresh);
-      if (requestId !== statsRequestIdRef.current) return;
+      const rawData = await runTaxonomyJob(
+        'statistics',
+        { save_dirs: saveDirs, force_refresh: forceRefresh },
+        (job: TaxonomyJobState) => {
+          setProcessingProgress((current) => {
+            if (!current || current.operationKey !== trackedOperationKey) return current;
+            return {
+              ...current,
+              current: job.current,
+              total: job.total,
+            };
+          });
+        },
+      );
+      if (requestId !== statsRequestIdRef.current) {
+        if (progressOperationKey !== null) finishTaxonomyWrite();
+        return;
+      }
       
       // 🌟 核心修复 1：拦截后端数据，把不兼容的 'rectangle' 或 'Rectangle' 强制转为引擎识别的 'bbox'
       const dataStr = JSON.stringify(rawData).replace(/"rectangle"/gi, '"bbox"').replace(/"Rectangle"/g, '"bbox"');
@@ -2008,13 +2028,17 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       useStore.getState().setStatsCacheValid?.(false);
       setStatsStatus('done');
     } catch (e: any) { 
-      if (requestId !== statsRequestIdRef.current) return;
+      if (requestId !== statsRequestIdRef.current) {
+        if (progressOperationKey !== null) finishTaxonomyWrite();
+        return;
+      }
       console.error(e); 
       setStatsStatus('idle'); 
     }
     if (requestId === statsRequestIdRef.current) {
       useStore.getState().setStatsCacheValid?.(true);
     }
+    if (progressOperationKey !== null) finishTaxonomyWrite();
   };
 
   // 旧版 stats_cache.json 没有属性值到场景的索引。打开属性详情时补做一次
@@ -2674,6 +2698,15 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
     <div className="flex flex-col h-full bg-neutral-50 dark:bg-neutral-950 overflow-hidden relative">
       <input type="file" accept=".txt,.yaml,.yml" ref={fileInputRef} className="hidden" onChange={handleImportFile} />
       
+      <div className="h-9 shrink-0 border-b border-neutral-200 bg-white px-4 dark:border-neutral-800 dark:bg-neutral-900 flex items-center justify-end">
+        <span className="text-[10px] text-neutral-500 dark:text-neutral-400 flex items-center gap-1.5 font-mono">
+          <Clock className="w-3.5 h-3.5 text-neutral-400" />
+          {statsData?.last_updated
+            ? `${t('workspace.cached', 'Cached')}: ${statsData.last_updated}`
+            : t('workspace.noLocalCache', 'No local cache found')}
+        </span>
+      </div>
+
       <div className="flex-1 flex overflow-hidden">
         {/* ================= 1. 左侧可收纳导航树 ================= */}
         <div className="w-64 border-r border-neutral-200 dark:border-neutral-800 flex flex-col bg-white dark:bg-neutral-900 shrink-0">
@@ -2888,16 +2921,10 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
         {/* 🌟 模式 A：Overview 纯粹大盘展示 */}
         {activeTab === 'overview' && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-100/50 dark:bg-neutral-950/30">
-            <div className="p-5 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex justify-between items-center shrink-0 z-10">
+            <div className="p-5 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center shrink-0 z-10">
               <div>
                 <h2 className="text-xl font-black">{t('taxonomyDashboard.dataStatisticsOverview')}</h2>
                 <p className="text-xs text-neutral-500 mt-1">{t('taxonomyDashboard.globalAnalyticsDesc')}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button onClick={() => loadStatistics(true)} disabled={statsStatus === 'loading'} className="bg-blue-600 hover:bg-blue-700 text-white shadow-md font-bold">
-                  {statsStatus === 'loading' ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
-                  {t('taxonomyDashboard.refreshStatistics')}
-                </Button>
               </div>
             </div>
 
@@ -3982,13 +4009,15 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
       </div>
 
       {/* ================= 3. 底部持久状态栏 ================= */}
-      <div className="p-3 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex justify-between items-center shrink-0 z-20 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
-        {processingProgress ? (
-          <div
-            className="min-w-0 flex-1 mr-4 rounded-md border border-blue-100 bg-blue-50/80 px-3 py-2 dark:border-blue-900/50 dark:bg-blue-950/30"
-            role="status"
-            aria-live="polite"
-          >
+      <div className="p-3 border-t border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 flex items-center gap-3 shrink-0 z-20 shadow-[0_-4px_10px_rgba(0,0,0,0.02)]">
+        <div
+          className={processingProgress
+            ? 'min-w-0 flex-1 rounded-md border border-neutral-200 bg-neutral-50/80 px-3 py-2 dark:border-neutral-700 dark:bg-neutral-800/60'
+            : 'min-w-0 flex-1'}
+          role="status"
+          aria-live="polite"
+        >
+          {processingProgress && (
             <OperationProgress
               stageIndex={processingProgress.stageIndex}
               stageCount={processingProgress.stageCount}
@@ -3997,19 +4026,21 @@ export function TaxonomyDashboard({ onClose }: TaxonomyDashboardProps = {}) {
               total={processingProgress.total}
               operationKey={processingProgress.operationKey}
             />
-          </div>
-        ) : (
-          <span className="text-xs text-neutral-500 flex items-center gap-2 font-mono bg-neutral-50 dark:bg-neutral-800 px-3 py-1.5 rounded-full border border-neutral-200 dark:border-neutral-700">
-            <Database className="w-3.5 h-3.5 text-blue-500"/>
-            {t('workspace.projectAnalytics', 'Project Analytics')}
-            <span className="text-neutral-300 dark:text-neutral-600 mx-1">|</span>
-            <Clock className="w-3.5 h-3.5 text-neutral-400" />
-            {statsData?.last_updated ? `${t('workspace.cached', 'Cached')}: ${statsData.last_updated}` : t('workspace.noLocalCache', 'No local cache found')}
-          </span>
-        )}
-        <Button disabled={isProcessing} onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="px-8 font-bold shadow-md bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-black">
-          {t('common.confirm', 'Confirm & Close')}
-        </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            variant="outline"
+            disabled={statsStatus === 'loading' || isProcessing}
+            onClick={() => { void loadStatistics(true, true); }}
+            className="h-9 px-4 font-bold"
+          >
+            {t('taxonomyDashboard.reload', 'Reload')}
+          </Button>
+          <Button disabled={isProcessing} onClick={(e) => { e.preventDefault(); if (onClose) onClose(); }} className="h-9 px-6 font-bold shadow-md bg-neutral-900 text-white hover:bg-neutral-800 dark:bg-white dark:text-black">
+            {t('common.confirm', 'Confirm & Close')}
+          </Button>
+        </div>
       </div>
     
     {/* 🌟 合并弹窗 - 只能选已有 attribute 和已有值 */}

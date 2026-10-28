@@ -169,6 +169,7 @@ export const batchMergeClassWithAttribute = (params: {
 }) => post(`${API_BASE_URL}/taxonomy/merge_with_attribute`, params);
 
 export type TaxonomyJobOperation =
+  | 'statistics'
   | 'merge_class'
   | 'delete_class'
   | 'delete_attribute'

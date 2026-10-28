@@ -169,6 +169,7 @@ class TaxonomyJobRequest(BaseModel):
     """Request envelope for a background taxonomy update job."""
 
     operation: Literal[
+        "statistics",
         "merge_class",
         "delete_class",
         "delete_attribute",
