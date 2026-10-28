@@ -3964,37 +3964,49 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         </div>
 
                     {/* 右侧：内容展示区 */}
-                    <div className="w-full p-4 overflow-visible bg-white dark:bg-neutral-900">
-                      {/* 🌟 这里才是正确的单类页面：补充 Geometry Filter (水平切换卡) */}
-                      <div className="flex items-center gap-2 mb-3 bg-neutral-100 dark:bg-neutral-800/50 p-1.5 rounded-xl w-fit shrink-0">
-                        {['bbox', 'polygon'].map((shapeId) => {
-                          const isActive = activeClassShapeTab === shapeId;
-                          // 🌟 3. 修复：不再用 hasData 决定是否显示，而是直接拿真实数量！
-                          const shapeCount = statsData?.classes?.[activeClass.name]?.shapes?.[shapeId]?.total_objects || 0;
-                          
-                          return (
-                            <button
-                              key={shapeId}
-                              onClick={() => setActiveClassShapeTab(shapeId)}
-                              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-all ${
-                                isActive
-                                  ? 'bg-white dark:bg-neutral-900 text-blue-600 shadow-sm'
-                                  : 'text-neutral-500 hover:text-neutral-700 hover:bg-neutral-200/50'
-                              }`}
-                            >
-                              <Layers className="w-3.5 h-3.5" />
-                              {shapeId === 'bbox' ? t('taxonomyDashboard.boundingBox') : t('taxonomyDashboard.polygon')}
-                              <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded ${
-                                isActive 
-                                  ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400' 
-                                  : 'bg-neutral-200 text-neutral-500 dark:bg-neutral-800'
-                              }`}>
-                                {shapeCount}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
+                    <div className="w-full overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+                      <div className="flex min-h-[420px] overflow-hidden">
+                        <div className="w-44 shrink-0 border-r border-neutral-200 bg-neutral-50/50 p-3 dark:border-neutral-800 dark:bg-neutral-950/20">
+                          <h4 className="mb-3 px-2 text-sm font-black uppercase tracking-wider text-neutral-800 dark:text-neutral-100">
+                            {t('taxonomyDashboard.geometryFilter')}
+                          </h4>
+                          <div className="flex flex-col gap-1">
+                            {['bbox', 'polygon'].map((shapeId) => {
+                              const isActive = activeClassShapeTab === shapeId;
+                              const shapeCount = statsData?.classes?.[activeClass.name]?.shapes?.[shapeId]?.total_objects || 0;
+                              const shapeLabel = shapeId === 'bbox'
+                                ? t('taxonomyDashboard.boundingBox')
+                                : t('taxonomyDashboard.polygon');
+
+                              return (
+                                <button
+                                  key={shapeId}
+                                  type="button"
+                                  onClick={() => setActiveClassShapeTab(shapeId)}
+                                  className={`group flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left text-xs font-bold transition-all ${
+                                    isActive
+                                      ? 'bg-white text-blue-600 shadow-sm ring-1 ring-neutral-200 dark:bg-neutral-800 dark:text-blue-400 dark:ring-neutral-700'
+                                      : 'text-neutral-500 hover:bg-neutral-200/50 dark:text-neutral-400 dark:hover:bg-neutral-800/50'
+                                  }`}
+                                >
+                                  <span className="flex items-center gap-2">
+                                    <Layers className="h-3.5 w-3.5" />
+                                    {shapeLabel}
+                                  </span>
+                                  <span className={`rounded px-1.5 py-0.5 font-mono text-[9px] ${
+                                    isActive
+                                      ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                                      : 'bg-neutral-100 text-neutral-400 dark:bg-neutral-900'
+                                  }`}>
+                                    {shapeCount}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="min-w-0 flex-1 overflow-y-auto p-4 custom-scrollbar">
                       {['bbox', 'polygon'].includes(activeClassShapeTab) ? (
                         statsData.classes[activeClass.name].shapes && statsData.classes[activeClass.name].shapes[activeClassShapeTab] ? (
                           
@@ -4072,6 +4084,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           </Button>
                         </div>
                       )}
+                        </div>
+                      </div>
                     </div>
 
                     
