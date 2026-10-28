@@ -791,7 +791,6 @@
     "sourceClasses": "Source classes",
     "targetClasses": "Target classes",
     "addTargetClassHint": "Add a target class above.",
-    "dropSourceClassHint": "Drop source classes here",
     "dropToKeep": "Drop here to keep",
     "removeMapping": "Click to remove mapping",
     "dragToTarget": "Drag to target class",

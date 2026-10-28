@@ -4986,7 +4986,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                               setMergeSelectedSourceIds(new Set());
                             }
                           }}
-                          className="rounded-md border border-neutral-200 bg-neutral-50 p-2.5 dark:border-neutral-700 dark:bg-neutral-800/60"
+                          className="rounded-md border border-neutral-200 bg-neutral-50 p-1.5 dark:border-neutral-700 dark:bg-neutral-800/60"
                         >
                           <div className="flex items-center gap-2">
                             <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: target.color }} />
@@ -5012,9 +5012,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </div>
-                          <p className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
-                            {t('workspace.dropSourceClassHint', 'Drop source classes here')}
-                          </p>
                         </div>
                       );
                     })}
@@ -5064,7 +5061,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
                 {mergeAttributeMode === 'single' ? (
                   <div className="mt-3">
-                    <div className="grid gap-2 sm:grid-cols-2">
+                    <div className="grid items-start gap-2 sm:grid-cols-2">
                       <div>
                         <Label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
                           {t('workspace.attributeName', 'Attribute name')}
@@ -5080,27 +5077,24 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         <Label className="text-xs font-medium text-neutral-600 dark:text-neutral-300">
                           {t('workspace.attributeValues', 'Attribute values')}
                         </Label>
-                        <div className="mt-1 flex h-9 items-center rounded-md border border-neutral-200 bg-white px-2 text-xs text-neutral-500 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400">
-                          {mappedSourceClasses.length} {t('workspace.values', 'values')}
+                        <div className="mt-1 max-h-48 space-y-1.5 overflow-y-auto custom-scrollbar">
+                          {mappedSourceClasses.map((sourceClass: any) => (
+                            <div key={sourceClass.id} className="rounded-md border border-neutral-200 bg-white p-2 dark:border-neutral-700 dark:bg-neutral-900">
+                              <div className="flex items-center gap-2">
+                                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: sourceClass.color }} />
+                                <Input
+                                  value={getMergeAttributeValue(sourceClass)}
+                                  onChange={(event) => setMergeAttributeValueOverrides((previous) => ({ ...previous, [sourceClass.id]: event.target.value }))}
+                                  className="h-8 flex-1 text-xs"
+                                />
+                              </div>
+                              <div className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+                                {t('workspace.sourceClass', 'Source class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">{sourceClass.name}</span>
+                              </div>
+                            </div>
+                          ))}
                         </div>
                       </div>
-                    </div>
-                    <div className="mt-2 max-h-48 space-y-1.5 overflow-y-auto custom-scrollbar">
-                      {mappedSourceClasses.map((sourceClass: any) => (
-                        <div key={sourceClass.id} className="rounded-md border border-neutral-200 bg-white p-2 dark:border-neutral-700 dark:bg-neutral-900">
-                          <div className="flex items-center gap-2">
-                            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: sourceClass.color }} />
-                            <Input
-                              value={getMergeAttributeValue(sourceClass)}
-                              onChange={(event) => setMergeAttributeValueOverrides((previous) => ({ ...previous, [sourceClass.id]: event.target.value }))}
-                              className="h-8 flex-1 text-xs"
-                            />
-                          </div>
-                          <div className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
-                            {t('workspace.sourceClass', 'Source class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">{sourceClass.name}</span>
-                          </div>
-                        </div>
-                      ))}
                     </div>
                   </div>
                 ) : (
@@ -5114,32 +5108,38 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: target.color }} />
                             <span className="text-xs font-semibold">{target.name}</span>
                           </div>
-                          <Label className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
-                            {t('workspace.attributeName', 'Attribute name')}
-                          </Label>
-                          <Input
-                            value={mergeTargetAttributeNames[target.id] || ''}
-                            onChange={(event) => setMergeTargetAttributeNames((previous) => ({ ...previous, [target.id]: event.target.value }))}
-                            placeholder={t('workspace.attributeNamePlaceholder', 'Attribute name')}
-                            className="mt-1 h-8 text-xs"
-                          />
-                          <Label className="mt-2 block text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
-                            {t('workspace.attributeValues', 'Attribute values')}
-                          </Label>
-                          <div className="mt-1.5 space-y-1.5">
-                            {values.map((sourceClass: any) => (
-                              <div key={sourceClass.id} className="rounded border border-neutral-200 p-1.5 dark:border-neutral-700">
-                                <Input
-                                  value={getMergeAttributeValue(sourceClass)}
-                                  onChange={(event) => setMergeAttributeValueOverrides((previous) => ({ ...previous, [sourceClass.id]: event.target.value }))}
-                                  className="h-7 text-xs"
-                                />
-                                <div className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
-                                  {t('workspace.sourceClass', 'Source class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">{sourceClass.name}</span>
-                                </div>
+                          <div className="mt-2 grid items-start gap-3 sm:grid-cols-2">
+                            <div>
+                              <Label className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
+                                {t('workspace.attributeName', 'Attribute name')}
+                              </Label>
+                              <Input
+                                value={mergeTargetAttributeNames[target.id] || ''}
+                                onChange={(event) => setMergeTargetAttributeNames((previous) => ({ ...previous, [target.id]: event.target.value }))}
+                                placeholder={t('workspace.attributeNamePlaceholder', 'Attribute name')}
+                                className="mt-1 h-8 text-xs"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-[10px] font-medium text-neutral-600 dark:text-neutral-300">
+                                {t('workspace.attributeValues', 'Attribute values')}
+                              </Label>
+                              <div className="mt-1.5 max-h-40 space-y-1.5 overflow-y-auto custom-scrollbar">
+                                {values.map((sourceClass: any) => (
+                                  <div key={sourceClass.id} className="rounded border border-neutral-200 p-1.5 dark:border-neutral-700">
+                                    <Input
+                                      value={getMergeAttributeValue(sourceClass)}
+                                      onChange={(event) => setMergeAttributeValueOverrides((previous) => ({ ...previous, [sourceClass.id]: event.target.value }))}
+                                      className="h-7 text-xs"
+                                    />
+                                    <div className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
+                                      {t('workspace.sourceClass', 'Source class')}: <span className="font-medium text-neutral-700 dark:text-neutral-200">{sourceClass.name}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                                <span className="inline-flex rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">none</span>
                               </div>
-                            ))}
-                            <span className="inline-flex rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">none</span>
+                            </div>
                           </div>
                         </div>
                       );

@@ -791,7 +791,6 @@
     "sourceClasses": "源类别",
     "targetClasses": "目标类别",
     "addTargetClassHint": "请先在上方添加目标类别。",
-    "dropSourceClassHint": "将源类别拖到这里",
     "dropToKeep": "拖到这里保留原类别",
     "removeMapping": "点击连线取消映射",
     "dragToTarget": "拖动到目标类别",
