@@ -19,7 +19,7 @@ import { fetchProjectStatistics, getFileContent, getPreviewImageUrl, getTaxonomy
 import { saveDirtyAnnotations } from '../../lib/annotationSaveService';
 import { useTranslation } from 'react-i18next';
 import { ATTRIBUTE_COLUMN_PALETTE, TAXONOMY_COLORS } from '../../config/colors';
-import { showDialog, useDialogStore, type DialogOptions } from '../../store/useDialogStore';
+import { showDialog, useDialogStore, type DialogOptions, type DialogResultDetail } from '../../store/useDialogStore';
 
 interface TaxonomyDashboardProps {
   onClose?: () => void;
@@ -2480,6 +2480,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     window.setTimeout(() => openDialog(resultOptions), 0);
   };
 
+  const createTaxonomyResult = (
+    details: DialogResultDetail[],
+    operation?: string,
+    note?: string,
+  ) => ({
+    operation: operation || taxonomyOperationNameRef.current || '',
+    startTime: taxonomyOperationStartTimeRef.current || undefined,
+    endTime: new Date().toISOString(),
+    details,
+    ...(note ? { note } : {}),
+  });
+
   const runTaxonomyWrite = async (
     operation: TaxonomyJobOperation,
     payload: Record<string, any>,
@@ -2780,6 +2792,22 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           files: Number(mergeResult?.modified_files || 0),
           objects: Number(mergeResult?.total_objects || 0),
         }),
+        result: createTaxonomyResult([
+          {
+            label: t('taxonomyDashboard.sourceClassesDetail'),
+            value: sourceClasses.map((sourceClass: any) => sourceClass.name).join(', '),
+          },
+          { label: t('taxonomyDashboard.targetClassesDetail'), value: targetNames.join(', ') },
+          { label: t('taxonomyDashboard.attributesDetail'), value: attributeNames.join(', ') },
+          {
+            label: t('taxonomyDashboard.changedFilesDetail'),
+            value: String(mergeResult?.modified_files || 0),
+          },
+          {
+            label: t('taxonomyDashboard.changedAnnotationsDetail'),
+            value: String(mergeResult?.total_objects || 0),
+          },
+        ], t('taxonomyDashboard.mergeWithAttributeOperation')),
         confirmText: t('taxonomyDashboard.done'),
         hideCancel: true,
       });
@@ -3242,6 +3270,12 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           images: updatedImages,
           objects: updatedObjects,
         }),
+        result: createTaxonomyResult([
+          { label: t('taxonomyDashboard.sourceClassDetail'), value: activeClass.name },
+          { label: t('taxonomyDashboard.targetClassDetail'), value: targetClass.name },
+          { label: t('taxonomyDashboard.involvedScenesDetail'), value: String(updatedImages) },
+          { label: t('taxonomyDashboard.changedAnnotationsDetail'), value: String(updatedObjects) },
+        ], t('taxonomyDashboard.mergeClassOperation')),
         confirmText: t('taxonomyDashboard.done'),
         hideCancel: true,
       });
@@ -3300,6 +3334,23 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             files: Number(deleteResult?.modified_files || 0),
             objects: Number(deleteResult?.modified_objects || 0),
           }),
+          result: createTaxonomyResult([
+            { label: t('taxonomyDashboard.classNameDetail'), value: activeClass.name },
+            {
+              label: t('taxonomyDashboard.actionDetail'),
+              value: isHardDelete
+                ? t('taxonomyDashboard.hardDeleted', 'hard-deleted')
+                : t('taxonomyDashboard.softDeleted', 'soft-deleted'),
+            },
+            {
+              label: t('taxonomyDashboard.changedFilesDetail'),
+              value: String(deleteResult?.modified_files || 0),
+            },
+            {
+              label: t('taxonomyDashboard.removedAnnotationsDetail'),
+              value: String(deleteResult?.modified_objects || 0),
+            },
+          ], t('taxonomyDashboard.deleteClassOperation')),
           confirmText: t('taxonomyDashboard.done'),
           hideCancel: true,
         });
@@ -3354,6 +3405,17 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           files: Number(cleanResult?.modified_files || 0),
           objects: Number(cleanResult?.modified_objects || 0),
         }),
+        result: createTaxonomyResult([
+          { label: t('taxonomyDashboard.classNameDetail'), value: 'background' },
+          {
+            label: t('taxonomyDashboard.changedFilesDetail'),
+            value: String(cleanResult?.modified_files || 0),
+          },
+          {
+            label: t('taxonomyDashboard.removedAnnotationsDetail'),
+            value: String(cleanResult?.modified_objects || 0),
+          },
+        ], t('taxonomyDashboard.cleanBackgroundOperation')),
         confirmText: t('taxonomyDashboard.done'),
         hideCancel: true,
       });
@@ -3439,6 +3501,12 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           files: Number(result?.modified_files || 0),
           objects: Number(result?.renamed_shapes || 0),
         }),
+        result: createTaxonomyResult([
+          { label: t('taxonomyDashboard.oldAttributeDetail'), value: oldName },
+          { label: t('taxonomyDashboard.newAttributeDetail'), value: newName },
+          { label: t('taxonomyDashboard.changedFilesDetail'), value: String(result?.modified_files || 0) },
+          { label: t('taxonomyDashboard.changedAnnotationsDetail'), value: String(result?.renamed_shapes || 0) },
+        ], t('taxonomyDashboard.renameAttributeOperation')),
         confirmText: t('taxonomyDashboard.done'),
         hideCancel: true,
       });
@@ -3721,6 +3789,12 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           objects: Number(result?.modified_objects || 0),
           values: Number(result?.replaced_values || 0),
         }),
+        result: createTaxonomyResult([
+          { label: t('taxonomyDashboard.attributeNameDetail'), value: activeAttribute.name },
+          { label: t('taxonomyDashboard.changedFilesDetail'), value: String(result?.modified_files || 0) },
+          { label: t('taxonomyDashboard.changedAnnotationsDetail'), value: String(result?.modified_objects || 0) },
+          { label: t('taxonomyDashboard.changedValuesDetail'), value: String(result?.replaced_values || 0) },
+        ], t('taxonomyDashboard.applyAttributeOperation')),
         confirmText: t('common.confirm'),
         hideCancel: true,
       });
@@ -3766,6 +3840,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           files: Number(deleteResult?.modified_files || 0),
           objects: Number(deleteResult?.removed_attributes || 0),
         }),
+        result: createTaxonomyResult([
+          { label: t('taxonomyDashboard.attributeNameDetail'), value: activeAttribute.name },
+          { label: t('taxonomyDashboard.changedFilesDetail'), value: String(deleteResult?.modified_files || 0) },
+          { label: t('taxonomyDashboard.removedAttributeEntriesDetail'), value: String(deleteResult?.removed_attributes || 0) },
+        ], t('taxonomyDashboard.deleteAttributeOperation')),
         confirmText: t('common.confirm'),
         hideCancel: true,
       });
@@ -4467,6 +4546,12 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                   files: Number(result?.modified_files || 0),
                                   objects: Number(result?.modified_objects || 0),
                                 }),
+                                result: createTaxonomyResult([
+                                  { label: t('taxonomyDashboard.oldClassDetail'), value: oldName },
+                                  { label: t('taxonomyDashboard.newClassDetail'), value: newName },
+                                  { label: t('taxonomyDashboard.changedFilesDetail'), value: String(result?.modified_files || 0) },
+                                  { label: t('taxonomyDashboard.changedAnnotationsDetail'), value: String(result?.modified_objects || 0) },
+                                ], t('taxonomyDashboard.renameClassOperation')),
                                 confirmText: t('common.confirm'),
                                 hideCancel: true,
                               });
