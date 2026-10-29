@@ -1307,6 +1307,15 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [attributeValueMerges, setAttributeValueMerges] = useState<Record<string, string>>({});
   const [pendingValueMerge, setPendingValueMerge] = useState<{value: string; target: string} | null>(null);
   const [showAttrDeleteConfirm, setShowAttrDeleteConfirm] = useState(false);
+  const [showAttributeValueManager, setShowAttributeValueManager] = useState(false);
+  const closeAttributeValueManager = useCallback(() => {
+    setShowAttributeValueManager(false);
+    setAttrDraft(null);
+    setAttributeValueMerges({});
+    setPendingValueMerge(null);
+    setShowAttrDeleteConfirm(false);
+    if (activeAttribute?.name) setAttributeRenameValue(activeAttribute.name);
+  }, [activeAttribute?.name]);
   const [newClassName, setNewClassName] = useState('');
   const [isAddingClass, setIsAddingClass] = useState(false);
 
@@ -2542,6 +2551,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setAttributeValueMerges({});
     setPendingValueMerge(null);
     setShowAttrDeleteConfirm(false);
+    setShowAttributeValueManager(false);
     if (activeAttribute?.id === restoredAttributeIdRef.current) {
       restoredAttributeIdRef.current = null;
     } else if (activeAttribute?.id) {
@@ -4016,7 +4026,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       {t('taxonomyDashboard.systemClassRecycleBin')}
                     </span>
                   )}
-
                 </div>
               </div>
               {/* 右侧：Merge 合并与删除操作 */}
@@ -4457,228 +4466,313 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         {activeTab === 'attributes' && activeAttribute && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
             
-            {/* 1. 顶部：名称、属性值标题与编辑操作 */}
-            <div className="px-3 pt-2 pb-1 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0 shadow-sm z-10">
-              {(() => {
-                const savedOptions = Array.isArray(activeAttribute.options) ? activeAttribute.options : [];
-                const savedDefault = activeAttribute.defaultValue || '';
-                const currentOptions = attrDraft?.options ?? savedOptions;
-                const currentDefault = attrDraft?.defaultValue ?? (activeAttribute.defaultValue || '');
-                const isValueDirty = attrDraft !== null && (
-                  currentDefault !== savedDefault
-                  || currentOptions.length !== savedOptions.length
-                  || currentOptions.some((option: string, index: number) => option !== savedOptions[index])
-                ) || Object.keys(attributeValueMerges).length > 0;
-
-                const renderAddButton = () => (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-6 px-2 text-[9px] font-bold border-purple-200 text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-900/30 shrink-0"
-                    onClick={() => {
-                      const nextOptions = [...currentOptions, `new_option_${currentOptions.length + 1}`];
-                      setAttrDraft({ options: nextOptions, defaultValue: currentDefault || nextOptions[0] });
+            {/* 1. 紧凑标题：属性页只展示属性值，编辑入口放入独立窗口 */}
+            <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0 shadow-sm z-10">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3 rounded-lg border border-neutral-200 bg-white px-2 py-1.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
+                  <span
+                    className="h-8 w-8 shrink-0 rounded-md border border-black/10 shadow-sm"
+                    style={{
+                      backgroundColor: ATTRIBUTE_COLUMN_PALETTE[
+                        Math.max(0, sortedAttributes.findIndex((attribute: any) => attribute.id === activeAttribute.id))
+                        % ATTRIBUTE_COLUMN_PALETTE.length
+                      ],
                     }}
+                  />
+                  <span
+                    className="h-8 min-w-0 max-w-[min(24rem,45vw)] truncate text-sm font-black leading-8 text-neutral-900 dark:text-neutral-100"
                   >
-                    <Plus className="w-3 h-3 mr-1" /> {t('common.add')}
-                  </Button>
-                );
-
-                return (
-                  <div className="grid grid-cols-[minmax(150px,180px)_minmax(0,1fr)] xl:grid-cols-[minmax(160px,180px)_minmax(0,1fr)_auto] gap-x-3 gap-y-2 items-start">
-                    <div className="min-w-0">
-                      <div className="h-7 flex items-center gap-2">
-                        <span className="text-[10px] text-neutral-400 font-black uppercase tracking-widest">
-                          {t('workspace.attributeName', 'Attribute Name')}
-                        </span>
-                        {attributeRenameValue.trim() !== activeAttribute.name && (
-                          <div className="flex items-center gap-1 bg-blue-50 dark:bg-blue-950/30 p-1 rounded-lg border border-blue-200 dark:border-blue-900/50 animate-in slide-in-from-left-2 shrink-0">
-                            <Button
-                              size="sm"
-                              disabled={isProcessing}
-                              className="h-6 px-2 text-[9px] font-black bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
-                              onClick={() => void executeRenameAttribute()}
-                            >
-                              {isProcessing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Check className="w-3 h-3 mr-1" />}
-                              {t('common.confirm')}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              disabled={isProcessing}
-                              className="h-6 w-6 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
-                              onClick={() => setAttributeRenameValue(activeAttribute.name)}
-                              title={t('common.cancel')}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-2 flex items-center gap-1.5 min-w-0">
-                        <Input
-                          value={attributeRenameValue}
-                          onChange={e => setAttributeRenameValue(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') void executeRenameAttribute();
-                          }}
-                          className="text-base font-black border-transparent hover:border-neutral-200 focus:border-blue-500 bg-transparent px-1 h-7 flex-1 min-w-0 shadow-none"
-                          placeholder={t('workspace.attributeName', 'Attribute Name')}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="h-7 flex items-center gap-2">
-                        <span className="text-[10px] text-neutral-400 font-black uppercase tracking-widest">
-                          {t('taxonomyDashboard.attributeValues', 'Attribute Values')}
-                        </span>
-                        {isValueDirty && (
-                          <>
-                            <Button
-                              type="button"
-                              size="sm"
-                              disabled={isProcessing}
-                              className="h-7 px-2 text-[9px] font-bold bg-blue-600 hover:bg-blue-700 text-white"
-                              onClick={() => void executeApplyAttribute()}
-                            >
-                              {isProcessing ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Check className="w-3 h-3 mr-1" />}
-                              {t('workspace.syncToFiles', 'Confirm')}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              disabled={isProcessing}
-                              className="h-7 w-7 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
-                              onClick={() => {
-                                setAttrDraft(null);
-                                setAttributeValueMerges({});
-                                setPendingValueMerge(null);
-                              }}
-                              title={t('common.cancel')}
-                            >
-                              <X className="w-4 h-4" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-
-                      <div className="mt-1 pt-1 border-t border-neutral-100 dark:border-neutral-800">
-                        <div className="flex flex-wrap items-center gap-1">
-                          {currentOptions.length === 0 && (
-                            <span className="text-[10px] text-neutral-400 italic">
-                              {t('workspace.noOptionsDefined', 'No options defined.')}
-                            </span>
-                          )}
-                          {currentOptions.map((opt: string, index: number) => (
-                            <div
-                              key={`attribute-option-${index}`}
-                              className={`inline-flex items-center gap-0.5 min-w-0 px-1 py-0 rounded-md border transition-colors ${
-                                isValueDirty
-                                  ? 'border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-900/10'
-                                  : 'border-neutral-200 bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-950'
-                              }`}
-                            >
-                              <button
-                                type="button"
-                                title={currentDefault === opt ? t('workspace.default', 'Default') : t('workspace.setDefault', 'Set Default')}
-                                onClick={() => setAttrDraft({ options: currentOptions, defaultValue: opt })}
-                                className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors ${
-                                  currentDefault === opt
-                                    ? 'bg-purple-500 border-purple-500 text-white'
-                                    : 'border-neutral-300 dark:border-neutral-600 bg-white dark:bg-neutral-800 hover:border-purple-400'
-                                }`}
-                              >
-                                {currentDefault === opt && <Check className="w-2 h-2" />}
-                              </button>
-                              <Input
-                                value={opt}
-                                onChange={e => handleAttributeOptionChange(index, e.target.value, currentOptions, currentDefault)}
-                                className={`h-5 w-20 px-1 text-[10px] font-bold border-transparent focus:border-purple-400 focus:ring-0 shadow-none bg-transparent ${currentDefault === opt ? 'text-purple-700 dark:text-purple-300' : ''}`}
-                              />
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                title={t('taxonomyDashboard.mergeValue', 'Merge value')}
-                                className="h-5 w-5 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 shrink-0"
-                                onClick={() => requestAttributeValueMerge(opt, currentOptions)}
-                              >
-                                <GitMerge className="w-3 h-3" />
-                              </Button>
-                            </div>
-                          ))}
-                          {renderAddButton()}
-                        </div>
-                        {pendingValueMerge && (
-                          <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 dark:border-amber-800/60 dark:bg-amber-950/20">
-                            <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">
-                              {t('taxonomyDashboard.mergeValuePrompt', { value: pendingValueMerge.value })}
-                            </span>
-                            <Select
-                              value={pendingValueMerge.target}
-                              onValueChange={(target) => setPendingValueMerge((current) => current ? { ...current, target } : current)}
-                            >
-                              <SelectTrigger className="h-6 min-w-[100px] flex-1 text-[10px] bg-white dark:bg-neutral-900">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {currentOptions
-                                  .filter((option) => String(option).trim() !== pendingValueMerge.value)
-                                  .map((option) => (
-                                    <SelectItem key={option} value={option} className="text-[10px]">
-                                      {option}
-                                    </SelectItem>
-                                  ))}
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              type="button"
-                              size="sm"
-                              className="h-6 px-2 text-[9px] bg-amber-600 text-white hover:bg-amber-700"
-                              onClick={() => confirmAttributeValueMerge(currentOptions, currentDefault)}
-                            >
-                              <GitMerge className="mr-1 h-3 w-3" />
-                              {t('taxonomyDashboard.merge')}
-                            </Button>
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="ghost"
-                              className="h-6 w-6 text-neutral-500"
-                              onClick={() => setPendingValueMerge(null)}
-                              title={t('common.cancel')}
-                            >
-                              <X className="h-3 w-3" />
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="col-span-2 xl:col-span-1 xl:row-span-2 xl:justify-self-end shrink-0">
-                      {showAttrDeleteConfirm ? (
-                        <div className="flex items-center gap-1.5 bg-red-50 dark:bg-red-950/30 p-1 rounded-lg border border-red-200 dark:border-red-900/50 animate-in slide-in-from-right-2">
-                          <span className="text-[10px] font-bold text-red-600 px-2 uppercase tracking-wider">{t('workspace.deleteFromAllFiles', 'Delete from all files?')}</span>
-                          <Button size="sm" className="h-7 px-3 text-[10px] bg-red-600 hover:bg-red-700 text-white font-bold" onClick={executeDeleteAttribute} disabled={isProcessing}>
-                            {t('common.confirm')}
-                          </Button>
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500" onClick={() => setShowAttrDeleteConfirm(false)} disabled={isProcessing}>
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <Button variant="destructive" size="sm" className="h-8 px-3 font-bold shadow-sm" onClick={() => setShowAttrDeleteConfirm(true)}>
-                          <Trash2 className="w-4 h-4 mr-2" /> {t('workspace.deleteAttribute', 'Delete Attribute')}
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
+                    {activeAttribute.name}
+                  </span>
+                  <span className="shrink-0 whitespace-nowrap rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                    {attributeValueOptions.reduce((sum, option) => sum + option.objectCount, 0)} {t('taxonomyDashboard.objects', 'objects')}
+                  </span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0 rounded-md border-neutral-200 px-3 text-xs font-semibold dark:border-neutral-700"
+                  onClick={() => setShowAttributeValueManager(true)}
+                >
+                  <Settings className="mr-1.5 h-3.5 w-3.5" />
+                  {t('taxonomyDashboard.manageAttributeValues', 'Manage values')}
+                </Button>
+              </div>
             </div>
+
+            {showAttributeValueManager && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+                onMouseDown={(event) => {
+                  if (event.target === event.currentTarget) closeAttributeValueManager();
+                }}
+              >
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={t('taxonomyDashboard.attributeValueManager', 'Attribute value manager')}
+                  className="flex max-h-[86vh] w-[820px] max-w-full flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-xl dark:border-neutral-700 dark:bg-neutral-900"
+                  onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span
+                        className="h-5 w-5 shrink-0 rounded border border-black/10"
+                        style={{
+                          backgroundColor: ATTRIBUTE_COLUMN_PALETTE[
+                            Math.max(0, sortedAttributes.findIndex((attribute: any) => attribute.id === activeAttribute.id))
+                            % ATTRIBUTE_COLUMN_PALETTE.length
+                          ],
+                        }}
+                      />
+                      <h2 className="truncate text-sm font-bold text-neutral-900 dark:text-neutral-100">
+                        {t('taxonomyDashboard.attributeValueManager', 'Attribute value manager')}
+                      </h2>
+                      <span className="truncate text-xs text-neutral-500 dark:text-neutral-400">{activeAttribute.name}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-neutral-500"
+                      onClick={closeAttributeValueManager}
+                      title={t('common.cancel')}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
+                    {(() => {
+                      const savedOptions = Array.isArray(activeAttribute.options) ? activeAttribute.options : [];
+                      const savedDefault = activeAttribute.defaultValue || '';
+                      const currentOptions = attrDraft?.options ?? savedOptions;
+                      const currentDefault = attrDraft?.defaultValue ?? (activeAttribute.defaultValue || '');
+                      const isValueDirty = (attrDraft !== null && (
+                        currentDefault !== savedDefault
+                        || currentOptions.length !== savedOptions.length
+                        || currentOptions.some((option: string, index: number) => option !== savedOptions[index])
+                      )) || Object.keys(attributeValueMerges).length > 0;
+
+                      const renderAddButton = () => (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0 border-purple-200 px-2 text-[10px] font-bold text-purple-700 hover:bg-purple-50 dark:border-purple-800 dark:text-purple-300 dark:hover:bg-purple-900/30"
+                          onClick={() => {
+                            const nextOptions = [...currentOptions, `new_option_${currentOptions.length + 1}`];
+                            setAttrDraft({ options: nextOptions, defaultValue: currentDefault || nextOptions[0] });
+                          }}
+                        >
+                          <Plus className="mr-1 h-3 w-3" /> {t('common.add')}
+                        </Button>
+                      );
+
+                      return (
+                        <div className="grid gap-4 xl:grid-cols-[minmax(180px,0.42fr)_minmax(0,1fr)_auto] xl:items-start">
+                          <div className="min-w-0">
+                            <div className="flex h-7 items-center gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                                {t('workspace.attributeName', 'Attribute name')}
+                              </span>
+                              {attributeRenameValue.trim() !== activeAttribute.name && (
+                                <div className="flex shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 p-1 dark:border-blue-900/50 dark:bg-blue-950/30">
+                                  <Button
+                                    size="sm"
+                                    disabled={isProcessing}
+                                    className="h-6 bg-blue-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-blue-700"
+                                    onClick={() => void executeRenameAttribute()}
+                                  >
+                                    {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+                                    {t('common.confirm')}
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={isProcessing}
+                                    className="h-6 w-6 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                                    onClick={() => setAttributeRenameValue(activeAttribute.name)}
+                                    title={t('common.cancel')}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                            <Input
+                              value={attributeRenameValue}
+                              onChange={e => setAttributeRenameValue(e.target.value)}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') void executeRenameAttribute();
+                              }}
+                              className="mt-2 h-8 min-w-0 border-transparent bg-transparent px-1 text-base font-black shadow-none hover:border-neutral-200 focus:border-blue-500"
+                              placeholder={t('workspace.attributeName', 'Attribute name')}
+                            />
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="flex h-7 items-center gap-2">
+                              <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
+                                {t('taxonomyDashboard.attributeValues', 'Attribute values')}
+                              </span>
+                              {isValueDirty && (
+                                <>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={isProcessing}
+                                    className="h-7 bg-blue-600 px-2 text-[9px] font-bold text-white hover:bg-blue-700"
+                                    onClick={() => void executeApplyAttribute()}
+                                  >
+                                    {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+                                    {t('workspace.syncToFiles', 'Confirm')}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    disabled={isProcessing}
+                                    className="h-7 w-7 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                                    onClick={() => {
+                                      setAttrDraft(null);
+                                      setAttributeValueMerges({});
+                                      setPendingValueMerge(null);
+                                    }}
+                                    title={t('common.cancel')}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </>
+                              )}
+                            </div>
+
+                            <div className="mt-1 border-t border-neutral-100 pt-1 dark:border-neutral-800">
+                              <div className="flex flex-wrap items-center gap-1">
+                                {currentOptions.length === 0 && (
+                                  <span className="text-[10px] italic text-neutral-400">
+                                    {t('workspace.noOptionsDefined', 'No options defined.')}
+                                  </span>
+                                )}
+                                {currentOptions.map((opt: string, index: number) => (
+                                  <div
+                                    key={`attribute-option-${index}`}
+                                    className={`inline-flex min-w-0 items-center gap-0.5 rounded-md border px-1 py-0 transition-colors ${
+                                      isValueDirty
+                                        ? 'border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-900/10'
+                                        : 'border-neutral-200 bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-950'
+                                    }`}
+                                  >
+                                    <button
+                                      type="button"
+                                      title={currentDefault === opt ? t('workspace.default', 'Default') : t('workspace.setDefault', 'Set Default')}
+                                      onClick={() => setAttrDraft({ options: currentOptions, defaultValue: opt })}
+                                      className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border transition-colors ${
+                                        currentDefault === opt
+                                          ? 'border-purple-500 bg-purple-500 text-white'
+                                          : 'border-neutral-300 bg-white hover:border-purple-400 dark:border-neutral-600 dark:bg-neutral-800'
+                                      }`}
+                                    >
+                                      {currentDefault === opt && <Check className="h-2 w-2" />}
+                                    </button>
+                                    <Input
+                                      value={opt}
+                                      onChange={e => handleAttributeOptionChange(index, e.target.value, currentOptions, currentDefault)}
+                                      className={`h-6 w-24 bg-transparent px-1 text-[10px] font-bold shadow-none focus:border-purple-400 focus:ring-0 ${currentDefault === opt ? 'text-purple-700 dark:text-purple-300' : ''}`}
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="icon"
+                                      title={t('taxonomyDashboard.mergeValue', 'Merge value')}
+                                      className="h-5 w-5 shrink-0 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30"
+                                      onClick={() => requestAttributeValueMerge(opt, currentOptions)}
+                                    >
+                                      <GitMerge className="h-3 w-3" />
+                                    </Button>
+                                  </div>
+                                ))}
+                                {renderAddButton()}
+                              </div>
+                              {pendingValueMerge && (
+                                <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 dark:border-amber-800/60 dark:bg-amber-950/20">
+                                  <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                                    {t('taxonomyDashboard.mergeValuePrompt', { value: pendingValueMerge.value })}
+                                  </span>
+                                  <Select
+                                    value={pendingValueMerge.target}
+                                    onValueChange={(target) => setPendingValueMerge((current) => current ? { ...current, target } : current)}
+                                  >
+                                    <SelectTrigger className="h-6 min-w-[100px] flex-1 bg-white text-[10px] dark:bg-neutral-900">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {currentOptions
+                                        .filter((option) => String(option).trim() !== pendingValueMerge.value)
+                                        .map((option) => (
+                                          <SelectItem key={option} value={option} className="text-[10px]">
+                                            {option}
+                                          </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    className="h-6 bg-amber-600 px-2 text-[9px] text-white hover:bg-amber-700"
+                                    onClick={() => confirmAttributeValueMerge(currentOptions, currentDefault)}
+                                  >
+                                    <GitMerge className="mr-1 h-3 w-3" />
+                                    {t('taxonomyDashboard.merge')}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="icon"
+                                    variant="ghost"
+                                    className="h-6 w-6 text-neutral-500"
+                                    onClick={() => setPendingValueMerge(null)}
+                                    title={t('common.cancel')}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 xl:justify-self-end">
+                            {showAttrDeleteConfirm ? (
+                              <div className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 p-1 dark:border-red-900/50 dark:bg-red-950/30">
+                                <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                                  {t('workspace.deleteFromAllFiles', 'Delete from all files?')}
+                                </span>
+                                <Button size="sm" className="h-7 bg-red-600 px-3 text-[10px] font-bold text-white hover:bg-red-700" onClick={executeDeleteAttribute} disabled={isProcessing}>
+                                  {t('common.confirm')}
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500" onClick={() => setShowAttrDeleteConfirm(false)} disabled={isProcessing}>
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button variant="destructive" size="sm" className="h-8 px-3 font-bold shadow-sm" onClick={() => setShowAttrDeleteConfirm(true)}>
+                                <Trash2 className="mr-2 h-4 w-4" /> {t('workspace.deleteAttribute', 'Delete attribute')}
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="flex shrink-0 justify-end border-t border-neutral-200 px-5 py-3 dark:border-neutral-800">
+                    <Button type="button" variant="outline" className="h-9 px-4 text-sm" onClick={closeAttributeValueManager}>
+                      {t('common.cancel')}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* 2. 主体区 */}
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-3">
