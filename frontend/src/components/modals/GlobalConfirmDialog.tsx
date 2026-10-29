@@ -94,51 +94,51 @@ export function GlobalConfirmDialog() {
         <div aria-hidden="true" className={`h-1 w-full ${config.accentClass}`} />
         <div className="min-w-0 px-5 py-4 pr-12 sm:px-6 sm:py-4">
           {isResultDialog && result ? (
-            <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-x-4">
-              <div className="row-span-2 flex items-start justify-center pt-0.5">
-                <div className={`flex size-10 shrink-0 items-center justify-center rounded-full ring-4 ring-background ${config.iconBg}`}>
-                  <Icon className={`size-5 ${config.iconColor}`} />
-                </div>
-              </div>
-              <DialogTitle className="break-words pt-0.5 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
+            <div className="min-w-0">
+              <DialogTitle className="break-words pl-[4.5rem] pt-0.5 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
                 {resultTitle}
               </DialogTitle>
-              <div className="mt-3 space-y-2 text-[13px] leading-5">
-                  <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3">
-                    <span className="font-medium text-muted-foreground">{t('common.operation')}:</span>
-                    <span className="min-w-0 break-words text-foreground">{result.operation}</span>
+              <div className="mt-3 grid grid-cols-[3.5rem_4.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 text-[13px] leading-5">
+                <div className="row-start-1 flex items-start justify-center">
+                  <div className={`flex size-10 shrink-0 items-center justify-center rounded-full ring-4 ring-background ${config.iconBg}`}>
+                    <Icon className={`size-5 ${config.iconColor}`} />
                   </div>
-                  <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-x-3">
-                    <span className="font-medium text-muted-foreground">{t('common.time')}:</span>
-                    <span className="min-w-0 break-words text-foreground">
-                      {formatDuration(result.durationMs, result.startTime, result.endTime)}{' '}
-                      <span className="text-muted-foreground">
-                        [{formatClockTime(result.startTime, i18n.language)} - {formatClockTime(result.endTime, i18n.language)}]
-                      </span>
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-x-3">
-                    <span className="font-medium text-muted-foreground">{t('common.details')}:</span>
-                    {result.details && result.details.length > 0 ? (
-                      <ul className="min-w-0 space-y-1 text-foreground">
-                        {result.details.map((detail, index) => (
-                          <li key={`${detail.label}-${index}`} className="break-words [overflow-wrap:anywhere]">
-                            <span className="font-medium">{detail.label}:</span>{' '}{detail.value}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    )}
-                  </div>
-                  {resultNote && (
-                    <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-x-3 pt-0.5">
-                      <span className="font-medium text-muted-foreground">{t('common.note')}:</span>
-                      <p className="min-w-0 whitespace-pre-wrap break-words text-muted-foreground [overflow-wrap:anywhere]">
-                        {resultNote}
-                      </p>
-                    </div>
-                  )}
+                </div>
+                <div className="col-start-2 row-start-1" />
+                <div className="col-start-3 row-start-1" />
+
+                <span className="col-start-2 font-medium text-muted-foreground">{t('common.operation')}:</span>
+                <span className="col-start-3 min-w-0 break-words text-foreground">{result.operation}</span>
+
+                <span className="col-start-2 font-medium text-muted-foreground">{t('common.time')}:</span>
+                <span className="col-start-3 min-w-0 break-words text-foreground">
+                  {formatDuration(result.durationMs, result.startTime, result.endTime)}{' '}
+                  <span className="text-muted-foreground">
+                    [{formatClockTime(result.startTime, i18n.language)} - {formatClockTime(result.endTime, i18n.language)}]
+                  </span>
+                </span>
+
+                <span className="col-start-2 font-medium text-muted-foreground">{t('common.details')}:</span>
+                {result.details && result.details.length > 0 ? (
+                  <ul className="col-start-3 min-w-0 space-y-1 text-foreground">
+                    {result.details.map((detail, index) => (
+                      <li key={`${detail.label}-${index}`} className="break-words [overflow-wrap:anywhere]">
+                        <span className="font-medium">{detail.label}:</span>{' '}{detail.value}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="col-start-3 text-muted-foreground">—</span>
+                )}
+
+                {resultNote && (
+                  <>
+                    <span className="col-start-2 font-medium text-muted-foreground">{t('common.note')}:</span>
+                    <p className="col-start-3 min-w-0 whitespace-pre-wrap break-words text-muted-foreground [overflow-wrap:anywhere]">
+                      {resultNote}
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           ) : (
