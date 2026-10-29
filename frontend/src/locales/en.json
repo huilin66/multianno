@@ -1356,6 +1356,7 @@
     "noData": "No data",
     "noScenesFound": "No scenes found for this class.",
     "attributeValues": "Attribute Values",
+    "attributeValueLabel": "Attribute value",
     "manageAttributeValues": "Settings",
     "attributeValueManager": "Attribute value manager",
     "valueList": "Value List",

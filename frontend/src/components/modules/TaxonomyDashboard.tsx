@@ -1687,6 +1687,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   // value-list highlight. This keeps whitespace-only differences from
   // making the list look unselected while the filter is active.
   const selectedAttributeValueKey = normalizeAttributeValue(selectedAttributeValue);
+  const attributeDefaultValue = normalizeAttributeValue(activeAttribute?.defaultValue);
+  const attributeSelectValue = selectedAttributeValueKey
+    || (attributeDefaultValue && attributeValueOptions.some((option) => option.value === attributeDefaultValue)
+      ? attributeDefaultValue
+      : attributeValueOptions[0]?.value);
 
   const isClassPreview = activeTab === 'classes' && !!activeClass;
   const isAttributePreview = activeTab === 'attributes' && !!activeAttribute;
@@ -4528,26 +4533,27 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   </span>
                 </div>
                 <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
-                  <div className="flex min-w-0 max-w-[min(32rem,42vw)] flex-1 items-center gap-1 overflow-x-auto custom-scrollbar">
-                    {attributeValueOptions.map((option) => {
-                      const isSelected = selectedAttributeValueKey === option.value;
-                      return (
-                        <button
-                          key={`attribute-header-value-${option.value}`}
-                          type="button"
-                          onClick={() => handleAttributeValueChange(option.value)}
-                          title={`${option.value} · ${option.sceneCount} ${t('taxonomyDashboard.scenesCount', 'scenes')}`}
-                          className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
-                            isSelected
-                              ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300'
-                              : 'border-neutral-200 bg-white text-neutral-500 hover:border-blue-200 hover:text-blue-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-blue-800 dark:hover:text-blue-300'
-                          }`}
-                        >
+                  <span className="px-1 text-xs font-bold text-neutral-500 dark:text-neutral-400">
+                    {t('taxonomyDashboard.attributeValueLabel', 'Attribute value')}:
+                  </span>
+                  <Select
+                    value={attributeSelectValue || undefined}
+                    onValueChange={handleAttributeValueChange}
+                  >
+                    <SelectTrigger
+                      aria-label={t('taxonomyDashboard.valueList', 'Value list')}
+                      className="h-8 w-32 rounded-md border border-neutral-200 bg-white text-xs shadow-none focus:ring-1 focus:ring-blue-500 dark:border-neutral-700 dark:bg-neutral-900"
+                    >
+                      <SelectValue placeholder={t('taxonomyDashboard.valueList', 'Value list')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {attributeValueOptions.map((option) => (
+                        <SelectItem key={`attribute-header-value-${option.value}`} value={option.value} className="text-xs">
                           {option.value}
-                        </button>
-                      );
-                    })}
-                  </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <Button
                     type="button"
                     variant="outline"
