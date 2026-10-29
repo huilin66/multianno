@@ -1087,7 +1087,9 @@ const ScenePreviewPanel = ({
       const container = sceneListRef.current;
       const containerRect = container.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      const nextScrollTop = container.scrollTop + (targetRect.top - containerRect.top);
+      const headerElement = container.firstElementChild as HTMLElement | null;
+      const headerHeight = headerElement?.getBoundingClientRect().height || 0;
+      const nextScrollTop = container.scrollTop + (targetRect.top - containerRect.top) - headerHeight - 4;
       container.scrollTop = Math.max(0, nextScrollTop);
       shouldScrollOnMountRef.current = false;
     }
@@ -1096,7 +1098,7 @@ const ScenePreviewPanel = ({
   return (
     <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-row overflow-hidden h-[480px]">
       <div ref={sceneListRef} className="w-[30%] min-w-[220px] max-w-[360px] h-full overflow-y-auto p-2 custom-scrollbar border-r border-neutral-100 dark:border-neutral-800 shrink-0">
-        <div className="px-2 py-1.5 flex items-center justify-between gap-2">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-neutral-100 bg-white px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex items-center gap-2 min-w-0">
             <Layers className="w-4 h-4 text-blue-500 shrink-0" />
             <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
