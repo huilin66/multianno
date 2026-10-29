@@ -5,7 +5,7 @@ import type { Annotation } from '../../store/useStore';
 import { AnnotationTable, type AnnotationTableOverlapState } from './AnnotationTable';
 import { 
   Tags, Settings, Trash2, ArrowRight, Eraser,
-  Plus, Check, X, Loader2, AlertCircle, Upload, Activity,
+  Plus, Check, X, Loader2, AlertCircle, Download, Activity,
   LayoutDashboard, ChevronDown, ChevronLeft, ChevronRight,
   Layers, ShieldCheck, CheckSquare, Square,
   Table2, GripVertical,
@@ -3710,7 +3710,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           ) : (
           <>
           <div className="w-64 flex h-full flex-col border-r border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+           <div className="flex-1 overflow-y-auto p-3 custom-scrollbar space-y-1">
             <Button variant={activeTab === 'overview' ? 'secondary' : 'ghost'} 
                     onClick={() => { setActiveTab('overview'); setSelectedClassId(null); setSelectedAttributeId(null); }} 
                     className={`w-full justify-start h-10 font-bold transition-all ${activeTab === 'overview' ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-800' : ''}`}>
@@ -3855,7 +3855,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           <Plus className="w-3 h-3 mr-1"/> {t('common.add')}
                         </Button>
                         <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('classes'); fileInputRef.current?.click(); }}>
-                          <Upload className="w-3 h-3 mr-1"/> {t('common.import')}
+                          <Download className="w-3 h-3 mr-1"/> {t('common.import')}
                         </Button>
                       </>
                     )}
@@ -3936,7 +3936,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   ))}
                   <div className="flex gap-2 mt-3 mb-1 pr-1">
                     <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('attributes')}><Plus className="w-3 h-3 mr-1"/> {t('common.add')}</Button>
-                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('attributes'); fileInputRef.current?.click(); }}><Upload className="w-3 h-3 mr-1"/> {t('common.import')}</Button>
+                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('attributes'); fileInputRef.current?.click(); }}><Download className="w-3 h-3 mr-1"/> {t('common.import')}</Button>
                   </div>
                 </div>
               )}
