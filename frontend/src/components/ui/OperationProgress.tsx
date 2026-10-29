@@ -236,7 +236,11 @@ export function OperationProgress({
             <div
               key={trackingKey}
               className={cn(
-                'h-full rounded-full bg-primary transition-[width] duration-300',
+                // Progress callbacks can arrive faster than a CSS width
+                // transition (for example, one callback per saved scene).
+                // Render the latest value immediately so the bar cannot lag
+                // behind the current/total text.
+                'h-full rounded-full bg-primary',
                 barClassName,
               )}
               style={{ width: `${displayPercent}%` }}
