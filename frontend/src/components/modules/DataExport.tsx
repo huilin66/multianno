@@ -104,6 +104,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
   const views = useStore(s => s.views);
   const stems = useStore(s => s.stems);
   const currentStem = useStore(s => s.currentStem);
+  const annotations = useStore(s => s.annotations);
   const taxonomyClasses = useStore(s => s.taxonomyClasses) || [];
   const workspacePath = useStore(s => s.workspacePath);
   const [selectedStems, setSelectedStems] = useState<string[]>([]);
@@ -167,6 +168,10 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     () => stems.filter(stem => selectedStemSet.has(stem)),
     [stems, selectedStemSet],
   );
+  const annotatedStemSet = useMemo(
+    () => new Set((annotations || []).map((annotation: any) => annotation.stem).filter(Boolean)),
+    [annotations],
+  );
   const currentStemIndex = currentStem ? stems.indexOf(currentStem) : -1;
 
   const updateExportProgress = useCallback((event: ProgressEvent) => {
@@ -219,6 +224,12 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
     setSelectedStems(stems);
     lastSelectedStemIndexRef.current = null;
   }, [stems]);
+
+  const selectNonEmptyStems = useCallback(() => {
+    setSelectedStems(stems.filter(stem => annotatedStemSet.has(stem)));
+    setIncludeUnlabeledImages(false);
+    lastSelectedStemIndexRef.current = null;
+  }, [annotatedStemSet, stems]);
 
   const clearSelectedStems = useCallback(() => {
     setSelectedStems([]);
@@ -772,6 +783,16 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
               </span>
             </div>
 
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
+              <Checkbox
+                checked={includeUnlabeledImages}
+                onCheckedChange={(checked) => setIncludeUnlabeledImages(Boolean(checked))}
+              />
+              <Label className="text-xs font-bold">
+                {t('dataExport.stepScenes.includeEmpty')}
+              </Label>
+            </div>
+
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 type="button"
@@ -786,6 +807,9 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={selectAllStems}>
                 {t('dataExport.stepScenes.selectAll')}
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={selectNonEmptyStems}>
+                {t('dataExport.stepScenes.selectNonEmpty')}
               </Button>
               <Button type="button" variant="outline" size="sm" className="h-7 text-[10px]" onClick={clearSelectedStems}>
                 {t('dataExport.stepScenes.clear')}
@@ -1221,16 +1245,6 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       case 'shapes':
         return (
           <div className="space-y-5">
-            <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
-              <Checkbox
-                checked={includeUnlabeledImages}
-                onCheckedChange={(checked) => setIncludeUnlabeledImages(Boolean(checked))}
-              />
-              <Label className="text-xs font-bold">
-                {t('dataExport.stepTask.includeUnlabeled')}
-              </Label>
-            </div>
-
             <div className="grid grid-cols-2 gap-5">
 
               {/* Shape Filter 面板 */}

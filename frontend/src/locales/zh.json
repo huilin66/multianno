@@ -834,15 +834,16 @@
       "data": "数据",
       "dataFull": "导出完整数据 (标注 + 图像)",
       "task": "任务类型",
-      "format": "格式",
-      "includeUnlabeled": "导出空标注结果"
+      "format": "格式"
     },
     "stepScenes": {
       "title": "场景组选择",
       "selection": "选择要导出的 Scene Group",
       "selectionHint": "单击切换单个场景；按住 Shift 再单击可连续选择一段场景。这里只控制导出范围，不会修改项目中的标注。",
+      "includeEmpty": "包含空 Scene Group",
       "selectToCurrent": "选到当前 Scene",
       "selectAll": "全选",
+      "selectNonEmpty": "选择有标注",
       "clear": "清空选择",
       "invert": "反向选择",
       "listTitle": "Scene Group 列表",

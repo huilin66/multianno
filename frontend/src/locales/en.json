@@ -834,15 +834,16 @@
       "data": "Data",
       "dataFull": "Export Full Data (annotation + images)",
       "task": "Task Type",
-      "format": "Format",
-      "includeUnlabeled": "Export Empty Annotation Results"
+      "format": "Format"
     },
     "stepScenes": {
       "title": "Scene Group Selection",
       "selection": "Select Scene Groups to Export",
       "selectionHint": "Click to toggle one scene. Hold Shift and click to select a continuous range. This only changes the export scope; project annotations are not modified.",
+      "includeEmpty": "Include empty Scene Groups",
       "selectToCurrent": "Select to current",
       "selectAll": "Select all",
+      "selectNonEmpty": "Select non-empty",
       "clear": "Clear",
       "invert": "Invert selection",
       "listTitle": "Scene Group list",
