@@ -13,7 +13,11 @@ import { COLOR_MAPS, BAND_COLORS, BAND_UNSELECTED_STYLE } from '../../config/col
 import { SUPPORTED_IMAGE_EXTENSIONS } from '../../config/supportedFormats';
 import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
-import { rememberRecentProject } from '../../lib/projectHistory';
+import {
+  RECENT_PROJECTS_KEY,
+  parseRecentProjects,
+  rememberRecentProject,
+} from '../../lib/projectHistory';
 import {
   saveProjectMeta,
   analyzeWorkspaceFolders,
@@ -899,7 +903,8 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       const projectMeta = generateProjectMetaConfig(useStore.getState());
       if (metaPath) await saveProjectMeta({ file_path: metaPath, content: projectMeta });
       if (isCreatingProject && metaPath) {
-        rememberRecentProject(metaPath, projectNameDraft);
+        const recentProjects = parseRecentProjects(localStorage.getItem(RECENT_PROJECTS_KEY));
+        rememberRecentProject(metaPath, projectNameDraft, recentProjects);
       }
       setProgressStage('complete');
       setOperationProgress({ current: 1, total: 1 });
