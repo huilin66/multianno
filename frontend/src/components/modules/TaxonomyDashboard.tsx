@@ -4620,20 +4620,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   onMouseDown={(event) => event.stopPropagation()}
                 >
                   <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-5 py-3 dark:border-neutral-800">
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="h-5 w-5 shrink-0 rounded border border-black/10"
-                        style={{
-                          backgroundColor: ATTRIBUTE_COLUMN_PALETTE[
-                            Math.max(0, sortedAttributes.findIndex((attribute: any) => attribute.id === activeAttribute.id))
-                            % ATTRIBUTE_COLUMN_PALETTE.length
-                          ],
-                        }}
-                      />
+                    <div className="flex min-w-0 items-center">
                       <h2 className="truncate text-sm font-bold text-neutral-900 dark:text-neutral-100">
                         {t('taxonomyDashboard.attributeValueManager', 'Attribute value manager')}
                       </h2>
-                      <span className="truncate text-xs text-neutral-500 dark:text-neutral-400">{activeAttribute.name}</span>
                     </div>
                     <Button
                       type="button"
