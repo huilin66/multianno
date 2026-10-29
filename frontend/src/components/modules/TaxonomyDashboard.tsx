@@ -4858,9 +4858,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                 {mappedEntries.length} {t('taxonomyDashboard.mapped', 'mapped')}
                               </span>
                             </div>
-                            <p className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
-                              {t('taxonomyDashboard.attributeValueMergeDesc', 'Drag a source value to a target value, or select a source and click a target.')}
-                            </p>
                             <div className="mt-3 grid min-h-[180px] grid-cols-2 gap-3">
                               <div className="min-w-0">
                                 <p className="mb-1.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
@@ -4958,7 +4955,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                           <span className="min-w-0 flex-1 truncate text-[11px] font-semibold">{target}</span>
                                           <span className="text-[10px] text-neutral-400">{mappedSources.length}</span>
                                         </div>
-                                        {mappedSources.length > 0 ? (
+                                        {mappedSources.length > 0 && (
                                           <div className="mt-1 flex flex-wrap gap-1">
                                             {mappedSources.map((source) => (
                                               <button
@@ -4976,10 +4973,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                               </button>
                                             ))}
                                           </div>
-                                        ) : (
-                                          <p className="mt-1 text-[9px] text-neutral-400">
-                                            {t('taxonomyDashboard.dropSourceValueHere', 'Drop source values here')}
-                                          </p>
                                         )}
                                       </div>
                                     );
