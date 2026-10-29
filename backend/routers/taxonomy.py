@@ -1442,20 +1442,11 @@ async def batch_merge_with_attribute(request: MergeWithAttributeRequest):
                     if label in merge_map:
                         merge = merge_map[label]
 
-                        # 🌟 兼容 Pydantic 和 dict
-                        if hasattr(merge, "new_name"):
-                            new_name = merge.new_name
-                            attr_name = merge.attribute_name
-                            attr_value = merge.attribute_value
-                            attributes = dict(merge.attributes or {})
-                        else:
-                            new_name = merge["new_name"]
-                            attr_name = merge.get("attribute_name")
-                            attr_value = merge.get("attribute_value")
-                            attributes = dict(merge.get("attributes") or {})
-
-                        if not attributes and attr_name and attr_value is not None:
-                            attributes[str(attr_name)] = str(attr_value)
+                        new_name = merge.new_name
+                        attributes = {
+                            str(attribute_name): str(attribute_value)
+                            for attribute_name, attribute_value in merge.attributes.items()
+                        }
 
                         shape["label"] = new_name
                         if "attributes" not in shape:

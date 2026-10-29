@@ -351,9 +351,7 @@ export interface AppState {
   mergeTaxonomyClassesWithAttributes: (merges: {
     old_name: string;
     new_name: string;
-    attribute_name?: string;
-    attribute_value?: string;
-    attributes?: Record<string, string>;
+    attributes: Record<string, string>;
   }[]) => void;
   addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
   upsertTaxonomyAttributes: (attrs: Array<Partial<TaxonomyAttribute> & { name: string }>) => void;
@@ -735,9 +733,7 @@ export const useStore = create<AppState>()(
         merges: {
           old_name: string;
           new_name: string;
-          attribute_name?: string;
-          attribute_value?: string;
-          attributes?: Record<string, string>;
+          attributes: Record<string, string>;
         }[]
       ) => set((state) => {
         const oldNames = merges.map(m => m.old_name);
@@ -745,17 +741,12 @@ export const useStore = create<AppState>()(
         const newAnnotations = state.annotations.map(a => {
           const match = merges.find(m => m.old_name === a.label);
           if (match) {
-            const attributePatch = match.attributes && Object.keys(match.attributes).length > 0
-              ? match.attributes
-              : match.attribute_name && match.attribute_value !== undefined
-                ? { [match.attribute_name]: match.attribute_value }
-                : {};
             return {
               ...a,
               label: match.new_name,
               attributes: {
                 ...a.attributes,
-                ...attributePatch,
+                ...match.attributes,
               },
             };
           }

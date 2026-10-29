@@ -168,9 +168,7 @@ export const batchMergeClassWithAttribute = (params: {
   merges: {
     old_name: string;
     new_name: string;
-    attribute_name?: string;
-    attribute_value?: string;
-    attributes?: Record<string, string>;
+    attributes: Record<string, string>;
   }[];
 }) => post(`${API_BASE_URL}/taxonomy/merge_with_attribute`, params);
 
