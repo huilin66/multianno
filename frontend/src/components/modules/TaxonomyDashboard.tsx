@@ -1313,17 +1313,33 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [attributeValueMerges, setAttributeValueMerges] = useState<Record<string, string>>({});
   const [attributeValueMergeSource, setAttributeValueMergeSource] = useState<string | null>(null);
   const attributeValueMappingGridRef = useRef<HTMLDivElement>(null);
+  const attributeValueSourceListRef = useRef<HTMLDivElement>(null);
   const attributeValueSourceRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const attributeValueTargetRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [attributeValueConnectionLines, setAttributeValueConnectionLines] = useState<MergeConnectionLine[]>([]);
+  const attributeValueSelectionStartRef = useRef<{ x: number; y: number } | null>(null);
+  const attributeValueSelectionMovedRef = useRef(false);
+  const attributeValueSuppressNextSourceClickRef = useRef(false);
+  const [attributeValueSelectionRect, setAttributeValueSelectionRect] = useState<MergeSelectionRect | null>(null);
+  const [attributeValueMergeSelectedSources, setAttributeValueMergeSelectedSources] = useState<Set<string>>(new Set());
   const [showAttrDeleteConfirm, setShowAttrDeleteConfirm] = useState(false);
   const [showAttributeValueManager, setShowAttributeValueManager] = useState(false);
+  const attributeValueSettingsDirty = Boolean(activeAttribute && attrDraft && (
+    String(attrDraft.defaultValue || '') !== String(activeAttribute.defaultValue || '')
+    || attrDraft.options.length !== (Array.isArray(activeAttribute.options) ? activeAttribute.options.length : 0)
+    || attrDraft.options.some((option, index) => option !== activeAttribute.options?.[index])
+  ));
   const closeAttributeValueManager = useCallback(() => {
     setShowAttributeValueManager(false);
     setAttrDraft(null);
     setAttributeValueMerges({});
     setAttributeValueMergeSource(null);
     setAttributeValueConnectionLines([]);
+    setAttributeValueMergeSelectedSources(new Set());
+    setAttributeValueSelectionRect(null);
+    attributeValueSelectionStartRef.current = null;
+    attributeValueSelectionMovedRef.current = false;
+    attributeValueSuppressNextSourceClickRef.current = false;
     setShowAttrDeleteConfirm(false);
   }, []);
   const [newClassName, setNewClassName] = useState('');
@@ -1490,6 +1506,101 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       resizeObserver?.disconnect();
     };
   }, [recalculateAttributeValueConnectionLines, showAttributeValueManager]);
+
+  const updateAttributeValueSourceSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    const container = attributeValueSourceListRef.current;
+    const start = attributeValueSelectionStartRef.current;
+    if (!container || !start) return;
+
+    const containerRect = container.getBoundingClientRect();
+    const current = {
+      x: event.clientX - containerRect.left + container.scrollLeft,
+      y: event.clientY - containerRect.top + container.scrollTop,
+    };
+    const selection = {
+      left: Math.min(start.x, current.x),
+      top: Math.min(start.y, current.y),
+      right: Math.max(start.x, current.x),
+      bottom: Math.max(start.y, current.y),
+    };
+    if (selection.right - selection.left > 4 || selection.bottom - selection.top > 4) {
+      attributeValueSelectionMovedRef.current = true;
+    }
+    setAttributeValueSelectionRect({
+      left: selection.left,
+      top: selection.top,
+      width: selection.right - selection.left,
+      height: selection.bottom - selection.top,
+    });
+
+    const selectionViewport = {
+      left: containerRect.left + selection.left - container.scrollLeft,
+      right: containerRect.left + selection.right - container.scrollLeft,
+      top: containerRect.top + selection.top - container.scrollTop,
+      bottom: containerRect.top + selection.bottom - container.scrollTop,
+    };
+    const selectedSources = (Object.entries(attributeValueSourceRefs.current) as Array<[string, HTMLDivElement | null]>)
+      .filter(([, element]) => {
+        if (!element) return false;
+        const cardRect = element.getBoundingClientRect();
+        return cardRect.right >= selectionViewport.left
+          && cardRect.left <= selectionViewport.right
+          && cardRect.bottom >= selectionViewport.top
+          && cardRect.top <= selectionViewport.bottom;
+      })
+      .map(([source]) => source);
+    setAttributeValueMergeSelectedSources(new Set(selectedSources));
+    setAttributeValueMergeSource(selectedSources[0] || null);
+  };
+
+  const startAttributeValueSourceSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || (event.target as HTMLElement).closest('[data-attribute-value-drag-handle]')) return;
+    const container = attributeValueSourceListRef.current;
+    if (!container) return;
+
+    const containerRect = container.getBoundingClientRect();
+    attributeValueSelectionStartRef.current = {
+      x: event.clientX - containerRect.left + container.scrollLeft,
+      y: event.clientY - containerRect.top + container.scrollTop,
+    };
+    attributeValueSelectionMovedRef.current = false;
+    attributeValueSuppressNextSourceClickRef.current = false;
+    setAttributeValueSelectionRect({
+      left: attributeValueSelectionStartRef.current.x,
+      top: attributeValueSelectionStartRef.current.y,
+      width: 0,
+      height: 0,
+    });
+    setAttributeValueMergeSelectedSources(new Set());
+    container.setPointerCapture(event.pointerId);
+  };
+
+  const finishAttributeValueSourceSelection = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!attributeValueSelectionStartRef.current) return;
+    updateAttributeValueSourceSelection(event);
+    attributeValueSuppressNextSourceClickRef.current = attributeValueSelectionMovedRef.current;
+    attributeValueSelectionStartRef.current = null;
+    attributeValueSelectionMovedRef.current = false;
+    setAttributeValueSelectionRect(null);
+    if (attributeValueSourceListRef.current?.hasPointerCapture(event.pointerId)) {
+      attributeValueSourceListRef.current.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  useEffect(() => {
+    if (!showAttributeValueManager) return;
+    const clearAttributeValueSelectionOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      attributeValueSelectionStartRef.current = null;
+      attributeValueSelectionMovedRef.current = false;
+      attributeValueSuppressNextSourceClickRef.current = false;
+      setAttributeValueSelectionRect(null);
+      setAttributeValueMergeSelectedSources(new Set());
+      setAttributeValueMergeSource(null);
+    };
+    window.addEventListener('keydown', clearAttributeValueSelectionOnEscape);
+    return () => window.removeEventListener('keydown', clearAttributeValueSelectionOnEscape);
+  }, [showAttributeValueManager]);
 
   const [previewStem, setPreviewStem] = useState<string | null>(null);
   const [previewViewId, setPreviewViewId] = useState<string>('');
@@ -2619,6 +2730,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setAttrDraft(null);
     setAttributeValueMerges({});
     setAttributeValueMergeSource(null);
+    setAttributeValueMergeSelectedSources(new Set());
+    setAttributeValueSelectionRect(null);
     setShowAttrDeleteConfirm(false);
     setShowAttributeValueManager(false);
     if (activeAttribute?.id === restoredAttributeIdRef.current) {
@@ -3134,66 +3247,46 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     }
   };
 
-  const mapAttributeValue = (
-    sourceValue: string,
+  const mapAttributeValues = (
+    sourceValues: string[],
     targetValue: string,
     currentOptions: string[],
-    currentDefault: string,
   ) => {
-    const source = String(sourceValue || '').trim();
     const target = String(targetValue || '').trim();
-    if (!source || !target || source === target) return;
+    const sources: string[] = Array.from(new Set<string>(sourceValues
+      .map((value) => String(value || '').trim())
+      .filter((value) => value && value !== target)));
+    if (sources.length === 0 || !target) return;
     if (!currentOptions.some((option) => String(option).trim() === target)) return;
+    const sourceSet = new Set<string>(sources);
 
     setAttributeValueMerges((previous) => {
-      const next = { ...previous, [source]: target };
+      const next = { ...previous };
       // Keep every existing source pointed at a value that will remain after
       // the merge. This prevents a chain from ending at a removed value.
       Object.entries(next).forEach(([existingSource, existingTarget]) => {
-        if (existingSource !== source && existingTarget === source) next[existingSource] = target;
+        if (sourceSet.has(String(existingTarget))) next[existingSource] = target;
       });
+      sources.forEach((source) => { next[source] = target; });
       return next;
     });
-    setAttrDraft({
-      options: currentOptions.filter((option) => String(option).trim() !== source),
-      defaultValue: String(currentDefault).trim() === source ? target : currentDefault,
-    });
     setAttributeValueMergeSource(null);
+    setAttributeValueMergeSelectedSources(new Set());
   };
 
   const unmapAttributeValue = (
     sourceValue: string,
-    sourceOptions: string[],
-    currentOptions: string[],
-    currentDefault: string,
   ) => {
     const source = String(sourceValue || '').trim();
     if (!source || !Object.prototype.hasOwnProperty.call(attributeValueMerges, source)) return;
-
-    const sourceIndex = sourceOptions.findIndex((option) => String(option).trim() === source);
-    const nextOptions = [...currentOptions];
-    if (!nextOptions.some((option) => String(option).trim() === source)) {
-      nextOptions.splice(Math.max(0, Math.min(sourceIndex < 0 ? nextOptions.length : sourceIndex, nextOptions.length)), 0, source);
-    }
-    const orderedOptions = sourceOptions.filter((option) => (
-      nextOptions.some((candidate) => String(candidate).trim() === String(option).trim())
-    ));
-    nextOptions.forEach((option) => {
-      if (!orderedOptions.some((candidate) => String(candidate).trim() === String(option).trim())) {
-        orderedOptions.push(option);
-      }
-    });
 
     setAttributeValueMerges((previous) => {
       const next = { ...previous };
       delete next[source];
       return next;
     });
-    setAttrDraft({
-      options: orderedOptions,
-      defaultValue: currentDefault,
-    });
     setAttributeValueMergeSource(null);
+    setAttributeValueMergeSelectedSources(new Set());
   };
 
   const deleteAttributeValue = (
@@ -3233,6 +3326,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         : currentDefault,
     });
     setAttributeValueMergeSource(null);
+    setAttributeValueMergeSelectedSources(new Set());
   };
 
   const handleAttributeOptionChange = (
@@ -3250,19 +3344,29 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     });
 
     if (previousValue && previousValue !== value.trim()) {
-      setAttributeValueMerges((previousMerges) => Object.fromEntries(
-        Object.entries(previousMerges).map(([source, target]) => [
-          source === previousValue ? value.trim() : source,
-          target === previousValue ? value.trim() : target,
-        ]),
-      ));
+      const nextValue = value.trim();
+      setAttributeValueMerges((previousMerges) => {
+        if (Object.keys(previousMerges).length === 0) return previousMerges;
+        return Object.fromEntries(
+          Object.entries(previousMerges)
+            .map(([source, target]) => [
+              source === previousValue ? nextValue : source,
+              target === previousValue ? nextValue : target,
+            ])
+            .filter(([source, target]) => source !== target),
+        );
+      });
     }
   };
 
-  // 🌟 新增：执行属性的批量应用与同步
-  // 🌟 修复后的完整版：执行属性的批量应用与同步
-  const executeApplyAttribute = async () => {
-    if (!activeAttribute || !attrDraft) return;
+  // Apply either the value-settings draft or the merge draft. Keeping the
+  // scopes separate prevents a merge confirmation from silently saving an
+  // unrelated value-name edit (and vice versa).
+  const executeApplyAttribute = async (scope: 'values' | 'merges') => {
+    if (!activeAttribute) return;
+    if (scope === 'values' && !attrDraft) return;
+    if (scope === 'merges' && Object.keys(attributeValueMerges).length === 0) return;
+    if (scope === 'merges' && attributeValueSettingsDirty) return;
     try {
       const safeSaveDirs = getSaveDirs();
       const currentPreviewStemBeforeEdit = previewStem ?? restoredPreviewStemRef.current;
@@ -3270,11 +3374,24 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       const oldOptions = Array.isArray(activeAttribute.options)
         ? activeAttribute.options.map((value: any) => String(value).trim())
         : [];
-      const nextOptions = attrDraft.options.map((value) => String(value).trim());
-      const nextDefault = String(attrDraft.defaultValue || '').trim();
-      const automaticReplacements = buildAttributeValueReplacements(oldOptions, nextOptions);
+      const draftOptions = attrDraft?.options.map((value) => String(value).trim()) || oldOptions;
+      const mergeEntries = (Object.entries(attributeValueMerges) as Array<[string, string]>)
+        .map(([source, target]) => [String(source).trim(), String(target).trim()] as [string, string])
+        .filter(([source, target]) => source && target && source !== target);
+      const mergeTargets = new Map(mergeEntries);
+      const mergeSources = new Set(mergeEntries.map(([source]) => source));
+      const nextOptions = scope === 'merges'
+        ? draftOptions.filter((value) => !mergeSources.has(value))
+        : draftOptions;
+      const draftDefault = String(attrDraft?.defaultValue ?? activeAttribute.defaultValue ?? '').trim();
+      const nextDefault = scope === 'merges'
+        ? (mergeTargets.get(draftDefault) || draftDefault)
+        : draftDefault;
+      const automaticReplacements = scope === 'values'
+        ? buildAttributeValueReplacements(oldOptions, nextOptions)
+        : {};
       const explicitMerges: Record<string, string> = {};
-      (Object.entries(attributeValueMerges) as Array<[string, string]>).forEach(([oldValue, newValue]) => {
+      mergeEntries.forEach(([oldValue, newValue]) => {
         if (
           oldValue !== newValue
           && !nextOptions.includes(oldValue)
@@ -3283,10 +3400,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           explicitMerges[oldValue] = newValue;
         }
       });
-      const valueReplacements = {
-        ...automaticReplacements,
-        ...explicitMerges,
-      };
+      const valueReplacements = scope === 'merges'
+        ? explicitMerges
+        : automaticReplacements;
       const selectedValueWasConfigured = Boolean(
         currentValueBeforeEdit && oldOptions.includes(currentValueBeforeEdit),
       );
@@ -3375,9 +3491,14 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         previousPreviewStem: previousPreviewStemRef.current,
       });
       attributeEditRestoreRef.current = null;
-      setAttrDraft(null); // 清空草稿，退出编辑状态
-      setAttributeValueMerges({});
-      setAttributeValueMergeSource(null);
+      if (scope === 'values') {
+        setAttrDraft(null);
+      } else {
+        setAttributeValueMerges({});
+        setAttributeValueMergeSource(null);
+        setAttributeValueMergeSelectedSources(new Set());
+        setAttributeValueSelectionRect(null);
+      }
       queueTaxonomyDialog({
         type: 'success',
         title: t('taxonomyDashboard.updateComplete', 'Update complete'),
@@ -4774,17 +4895,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           return mappedTarget === normalizedValue ? total + Number(count || 0) : total;
                         }, 0);
                       };
-                      const mappedEntries = Object.entries(attributeValueMerges).filter(([source, target]) => (
-        source !== target
-        &&
-                        sourceOptions.some((option) => option.trim() === source)
+                      const candidateMergeEntries = Object.entries(attributeValueMerges).filter(([source, target]) => (
+                        source !== target
+                        && sourceOptions.some((option) => option.trim() === source)
                         && currentOptions.some((option) => option.trim() === target)
                       ));
-                      const isValueDirty = (attrDraft !== null && (
-                        currentDefault !== savedDefault
-                        || currentOptions.length !== savedOptions.length
-                        || currentOptions.some((option: string, index: number) => option !== savedOptions[index])
-                      )) || mappedEntries.length > 0;
+                      const mappedSourceSet = new Set(candidateMergeEntries.map(([source]) => source));
+                      const mergeTargetOptions = currentOptions.filter((option) => !mappedSourceSet.has(option.trim()));
+                      const mappedEntries = candidateMergeEntries.filter(([, target]) => (
+                        mergeTargetOptions.some((option) => option.trim() === target)
+                      ));
+                      const valueSettingsDirty = attributeValueSettingsDirty;
+                      const mergeSettingsDirty = mappedEntries.length > 0;
 
                       const renderAddButton = () => (
                         <Button
@@ -4801,10 +4923,23 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         </Button>
                       );
 
-                      const readDroppedSource = (event: React.DragEvent) => {
-                        const raw = event.dataTransfer.getData('application/x-multianno-attribute-value')
+                      const readDroppedSources = (event: React.DragEvent) => {
+                        const raw = event.dataTransfer.getData('application/x-multianno-attribute-values')
+                          || event.dataTransfer.getData('application/x-multianno-attribute-value')
                           || event.dataTransfer.getData('text/plain');
-                        return String(raw || '').trim();
+                        if (!raw) return [];
+                        try {
+                          const parsed = JSON.parse(raw);
+                          if (Array.isArray(parsed)) {
+                            return Array.from(new Set(parsed
+                              .filter((value): value is string => typeof value === 'string')
+                              .map((value) => value.trim())
+                              .filter(Boolean)));
+                          }
+                        } catch {
+                          // A single source value is stored as plain text.
+                        }
+                        return [String(raw).trim()].filter(Boolean);
                       };
 
                       return (
@@ -4825,7 +4960,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                 <div
                                   key={`attribute-option-${index}`}
                                   className={`inline-flex min-w-0 items-center gap-0.5 rounded-md border px-1 py-0 transition-colors ${
-                                    isValueDirty
+                                    valueSettingsDirty
                                       ? 'border-purple-200 bg-purple-50/50 dark:border-purple-800 dark:bg-purple-900/10'
                                       : 'border-neutral-200 bg-neutral-50/70 dark:border-neutral-800 dark:bg-neutral-950'
                                   }`}
@@ -4879,14 +5014,14 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                             </div>
                             <div className="mt-3 flex items-center justify-between gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
                               {renderAddButton()}
-                              {isValueDirty && (
+                              {valueSettingsDirty && (
                                 <div className="flex shrink-0 items-center gap-1">
                                   <Button
                                     type="button"
                                     size="sm"
                                     disabled={isProcessing}
                                     className="h-7 bg-blue-600 px-3 text-[10px] font-bold text-white hover:bg-blue-700"
-                                    onClick={() => void executeApplyAttribute()}
+                                    onClick={() => void executeApplyAttribute('values')}
                                   >
                                     {isProcessing && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
                                     {t('workspace.syncToFiles', 'Confirm')}
@@ -4899,8 +5034,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                     className="h-7 px-2 text-[10px] font-medium text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
                                     onClick={() => {
                                       setAttrDraft(null);
-                                      setAttributeValueMerges({});
                                       setAttributeValueMergeSource(null);
+                                      setAttributeValueMergeSelectedSources(new Set());
+                                      setAttributeValueSelectionRect(null);
                                     }}
                                   >
                                     {t('common.cancel')}
@@ -4932,7 +5068,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                       aria-label={t('workspace.removeMapping', 'Click to remove mapping')}
                                       onClick={(event) => {
                                         event.stopPropagation();
-                                        unmapAttributeValue(line.sourceId, sourceOptions, currentOptions, currentDefault);
+                                        unmapAttributeValue(line.sourceId);
                                       }}
                                     >
                                       <title>{t('workspace.removeMapping', 'Click to remove mapping')}</title>
@@ -4947,15 +5083,40 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                 <p className="mb-1.5 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
                                   {t('taxonomyDashboard.sourceAttributeValues', 'Source values')}
                                 </p>
-                                <div className="relative z-20 max-h-64 space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700" onScroll={recalculateAttributeValueConnectionLines}>
+                                <div
+                                  ref={attributeValueSourceListRef}
+                                  className="relative z-20 max-h-64 select-none space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700"
+                                  onPointerDown={startAttributeValueSourceSelection}
+                                  onPointerMove={updateAttributeValueSourceSelection}
+                                  onPointerUp={finishAttributeValueSourceSelection}
+                                  onPointerCancel={finishAttributeValueSourceSelection}
+                                  onScroll={recalculateAttributeValueConnectionLines}
+                                >
                                   {sourceOptions.map((source, index) => {
                                     const target = attributeValueMerges[source.trim()];
-                                    const isSelected = attributeValueMergeSource === source.trim();
+                                    const sourceId = source.trim();
+                                    const isSelected = attributeValueMergeSelectedSources.has(sourceId)
+                                      || attributeValueMergeSource === sourceId;
                                     return (
                                       <div
                                         key={`attribute-merge-source-${source}`}
                                         ref={(element) => { attributeValueSourceRefs.current[source.trim()] = element; }}
-                                        onClick={() => setAttributeValueMergeSource(isSelected ? null : source.trim())}
+                                        onClick={(event) => {
+                                          if (attributeValueSuppressNextSourceClickRef.current) {
+                                            attributeValueSuppressNextSourceClickRef.current = false;
+                                            return;
+                                          }
+                                          if (event.ctrlKey || event.metaKey) {
+                                            const next = new Set(attributeValueMergeSelectedSources);
+                                            if (next.has(sourceId)) next.delete(sourceId);
+                                            else next.add(sourceId);
+                                            setAttributeValueMergeSelectedSources(next);
+                                            setAttributeValueMergeSource(Array.from(next)[0] || null);
+                                          } else {
+                                            setAttributeValueMergeSelectedSources(new Set([sourceId]));
+                                            setAttributeValueMergeSource(sourceId);
+                                          }
+                                        }}
                                         className={`flex min-w-0 items-center gap-1.5 rounded-md border px-1.5 py-1.5 text-[11px] transition-colors ${
                                           isSelected
                                             ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-300 dark:border-blue-500 dark:bg-blue-950/40 dark:ring-blue-700'
@@ -4966,12 +5127,18 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                       >
                                         <span
                                           draggable
+                                          data-attribute-value-drag-handle="true"
                                           title={t('taxonomyDashboard.dragValueToTarget', 'Drag to a target value')}
                                           onDragStart={(event) => {
-                                            event.dataTransfer.setData('application/x-multianno-attribute-value', source.trim());
-                                            event.dataTransfer.setData('text/plain', source.trim());
+                                            const selectedSources = attributeValueMergeSelectedSources.has(sourceId)
+                                              ? Array.from(attributeValueMergeSelectedSources)
+                                              : [sourceId];
+                                            event.dataTransfer.setData('application/x-multianno-attribute-values', JSON.stringify(selectedSources));
+                                            event.dataTransfer.setData('application/x-multianno-attribute-value', sourceId);
+                                            event.dataTransfer.setData('text/plain', sourceId);
                                             event.dataTransfer.effectAllowed = 'move';
-                                            setAttributeValueMergeSource(source.trim());
+                                            setAttributeValueMergeSelectedSources(new Set(selectedSources));
+                                            setAttributeValueMergeSource(sourceId);
                                           }}
                                           className="flex h-5 w-4 shrink-0 cursor-grab items-center justify-center text-neutral-400 active:cursor-grabbing dark:text-neutral-500"
                                         >
@@ -4982,6 +5149,17 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                       </div>
                                     );
                                   })}
+                                  {attributeValueSelectionRect && (
+                                    <div
+                                      className="pointer-events-none absolute z-30 rounded border border-blue-500 bg-blue-500/10"
+                                      style={{
+                                        left: attributeValueSelectionRect.left,
+                                        top: attributeValueSelectionRect.top,
+                                        width: attributeValueSelectionRect.width,
+                                        height: attributeValueSelectionRect.height,
+                                      }}
+                                    />
+                                  )}
                                 </div>
                               </div>
 
@@ -4990,12 +5168,12 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                   {t('taxonomyDashboard.targetAttributeValues', 'Target values')}
                                 </p>
                                 <div className="relative z-20 max-h-64 space-y-1 overflow-y-auto rounded-md border border-neutral-200 p-1.5 dark:border-neutral-700" onScroll={recalculateAttributeValueConnectionLines}>
-                                  {currentOptions.length === 0 && (
+                                  {mergeTargetOptions.length === 0 && (
                                     <p className="p-4 text-center text-[10px] text-neutral-400">
                                       {t('workspace.noOptionsDefined', 'No options defined.')}
                                     </p>
                                   )}
-                                  {currentOptions.map((target, index) => {
+                                  {mergeTargetOptions.map((target, index) => {
                                     const normalizedTarget = target.trim();
                                     const mappedSources = mappedEntries
                                       .filter(([, mappedTarget]) => mappedTarget === normalizedTarget)
@@ -5007,11 +5185,16 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                         onDragOver={(event) => event.preventDefault()}
                                         onDrop={(event) => {
                                           event.preventDefault();
-                                          const droppedSource = readDroppedSource(event);
-                                          if (droppedSource) mapAttributeValue(droppedSource, normalizedTarget, currentOptions, currentDefault);
+                                          const droppedSources = readDroppedSources(event);
+                                          if (droppedSources.length > 0) mapAttributeValues(droppedSources, normalizedTarget, mergeTargetOptions);
                                         }}
                                         onClick={() => {
-                                          if (attributeValueMergeSource) mapAttributeValue(attributeValueMergeSource, normalizedTarget, currentOptions, currentDefault);
+                                          const selectedSources = attributeValueMergeSelectedSources.size > 0
+                                            ? Array.from(attributeValueMergeSelectedSources)
+                                            : attributeValueMergeSource
+                                              ? [attributeValueMergeSource]
+                                              : [];
+                                          if (selectedSources.length > 0) mapAttributeValues(selectedSources, normalizedTarget, mergeTargetOptions);
                                         }}
                                         className="rounded-md border border-neutral-200 bg-neutral-50 p-1.5 transition-colors hover:border-blue-300 hover:bg-blue-50/50 dark:border-neutral-700 dark:bg-neutral-800/60 dark:hover:border-blue-700 dark:hover:bg-blue-950/20"
                                       >
@@ -5026,6 +5209,42 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                 </div>
                               </div>
                             </div>
+                            {mergeSettingsDirty && (
+                              <div className="mt-3 flex justify-end gap-1 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                                <span
+                                  className="inline-flex"
+                                  title={valueSettingsDirty
+                                    ? t('taxonomyDashboard.attributeValueMergeConfirmPendingSettings', 'Confirm value settings first.')
+                                    : undefined}
+                                >
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={isProcessing || valueSettingsDirty}
+                                    className="h-7 bg-blue-600 px-3 text-[10px] font-bold text-white hover:bg-blue-700"
+                                    onClick={() => void executeApplyAttribute('merges')}
+                                  >
+                                    {isProcessing && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                                    {t('workspace.syncToFiles', 'Confirm')}
+                                  </Button>
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={isProcessing}
+                                  className="h-7 px-2 text-[10px] font-medium text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                                  onClick={() => {
+                                    setAttributeValueMerges({});
+                                    setAttributeValueMergeSource(null);
+                                    setAttributeValueMergeSelectedSources(new Set());
+                                    setAttributeValueSelectionRect(null);
+                                  }}
+                                >
+                                  {t('common.cancel')}
+                                </Button>
+                              </div>
+                            )}
                           </section>
                         </div>
                       );

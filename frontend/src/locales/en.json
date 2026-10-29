@@ -1364,6 +1364,7 @@
     "deleteValue": "Delete value",
     "attributeValueDeleteStatisticsPending": "Load statistics before deleting this value.",
     "attributeValueDeleteDisabled": "This value is used by {{count}} objects. Use value merge instead.",
+    "attributeValueMergeConfirmPendingSettings": "Confirm value settings first.",
     "sourceAttributeValues": "Source values",
     "targetAttributeValues": "Target values",
     "dragValueToTarget": "Drag to a target value",
