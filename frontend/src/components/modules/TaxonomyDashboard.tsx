@@ -4566,7 +4566,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       className="h-8 rounded-md px-3 text-xs font-semibold"
                       onClick={() => setShowAttrDeleteConfirm(true)}
                     >
-                      <Trash2 className="mr-1.5 h-4 w-4" />
                       {t('taxonomyDashboard.delete', 'Delete')}
                     </Button>
                   )}
