@@ -188,7 +188,6 @@ export interface EditorSettings {
   showToolLabels: boolean; 
   showGroupId: boolean;
   showTrackId: boolean;
-  autoRefreshStats: boolean; 
   fillAnnotationShapes: boolean;
   att_show: boolean;
   att_hide_no: boolean;
@@ -441,7 +440,6 @@ export const useStore = create<AppState>()(
         showToolLabels: false, 
         showGroupId: false,
         showTrackId: false,
-        autoRefreshStats: true,
         fillAnnotationShapes: true,
         att_show: false,
         att_hide_no: true,

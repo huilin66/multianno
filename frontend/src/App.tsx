@@ -1198,14 +1198,6 @@ export default function App() {
                 </SettingsSection>
 
                 <SettingsSection title={t('headerSetting.groups.data')}>
-                  <div className="flex items-center justify-between gap-3 rounded-md px-1.5 py-1">
-                    <Label className="text-xs">{t('headerSetting.autoRefreshStats')}</Label>
-                    <Switch
-                      className="scale-90 origin-right"
-                      checked={editorSettings.autoRefreshStats}
-                      onCheckedChange={(v) => updateEditorSettings({ autoRefreshStats: v })}
-                    />
-                  </div>
                   <button
                     type="button"
                     onClick={handleReloadAll}

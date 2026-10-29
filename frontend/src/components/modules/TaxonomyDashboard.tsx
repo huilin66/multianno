@@ -1293,7 +1293,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const { 
     taxonomyClasses, addTaxonomyClass, updateTaxonomyClass, deleteTaxonomyClass, mergeTaxonomyClasses,
     taxonomyAttributes = [], addTaxonomyAttribute, upsertTaxonomyAttributes, updateTaxonomyAttribute, deleteTaxonomyAttribute,
-    annotations = [], folders, views, sceneGroups, editorSettings, projectMetaPath, projectName, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
+    annotations = [], folders, views, sceneGroups, projectMetaPath, projectName, setCurrentStem, setActiveModule, classOrder, setClassOrder, attributeOrder, setAttributeOrder,
     activeAnnotationId = null, selectedAnnotationIds = [],
     mergeTaxonomyClassesWithAttributes, stems, workspacePath, setPendingAnnotationFocus
   } = useStore() as any;
@@ -2467,13 +2467,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     });
   };
 
-  const refreshStatsIfNeeded = async (showProgress = false) => {
-    if (editorSettings.autoRefreshStats) {
-      if (showProgress) moveTaxonomyProgressToStatistics();
-      await loadStatistics(true);
-    } else {
-      useStore.getState().setStatsCacheValid?.(false);
-    }
+  const refreshStats = async () => {
+    moveTaxonomyProgressToStatistics();
+    await loadStatistics(true);
   };
 
   // The advanced workflow starts with every current taxonomy class as a source.
@@ -2716,7 +2712,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         'merge_with_attribute',
         { save_dirs: safeSaveDirs, merges },
         t('taxonomyDashboard.updatingLabelsAndAttributes', 'Updating labels and attributes'),
-        Boolean(editorSettings.autoRefreshStats),
+        true,
       );
 
       const targetClassIds: Record<string, string> = {};
@@ -2735,7 +2731,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       // Advanced merge creates new attribute definitions and writes several
       // attribute keys at once. Reload the backend snapshot immediately so
       // Attribute statistics cannot remain on the pre-merge cache.
-      await loadStatistics(true, true);
+      moveTaxonomyProgressToStatistics();
+      await loadStatistics(true);
       setShowMergeWithAttr(false);
       resetMergeWithAttributeDraft();
       setActiveTab('classes');
@@ -3005,7 +3002,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
     const operationKey = beginTaxonomyWrite(
       t('taxonomyDashboard.addingAttributeValues', 'Adding attribute values'),
-      Boolean(editorSettings.autoRefreshStats),
+      true,
     );
     try {
       await saveDirtyAnnotations((current, total) => {
@@ -3015,12 +3012,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         });
       });
       setAnnotationTableReloadToken((current) => current + 1);
-      if (editorSettings.autoRefreshStats) {
-        moveTaxonomyProgressToStatistics();
-        await loadStatistics(true);
-      } else {
-        useStore.getState().setStatsCacheValid?.(false);
-      }
+      moveTaxonomyProgressToStatistics();
+      await loadStatistics(true);
     } catch (error: any) {
       queueTaxonomyDialog({
         type: 'danger',
@@ -3126,7 +3119,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           new_name: targetClass.name,
         },
         t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
-        Boolean(editorSettings.autoRefreshStats),
+        true,
       );
 
       // 2. 本地标注重命名 (使用我们自定义的逻辑，避免销毁类)
@@ -3159,7 +3152,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       }
       
       useStore.getState().setStatsCacheValid?.(false);
-      await refreshStatsIfNeeded(true);
+      await refreshStats();
       const updatedImages = Number(
         mergeResult?.modified_images ?? mergeResult?.modified_files ?? estimatedImages,
       );
@@ -3210,11 +3203,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             hard_delete: isHardDelete,
           },
           t('taxonomyDashboard.updatingClassLabels', 'Updating class labels'),
-          Boolean(editorSettings.autoRefreshStats),
+          true,
         );
         
         deleteTaxonomyClass(activeClass.id, isHardDelete);
-        await refreshStatsIfNeeded(true);
+        await refreshStats();
         setSelectedClassId(null);
         setDeleteStage(0); // 重置状态
 
@@ -3679,12 +3672,12 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         'delete_attribute',
         { save_dirs: safeSaveDirs, attribute_name: activeAttribute.name },
         t('taxonomyDashboard.updatingAttributeLabels', 'Updating attribute labels'),
-        Boolean(editorSettings.autoRefreshStats),
+        true,
       );
       
       // 删本地 Store
       deleteTaxonomyAttribute(activeAttribute.id);
-      await refreshStatsIfNeeded(true);
+      await refreshStats();
       setSelectedAttributeId(null);
       useStore.getState().setStatsCacheValid?.(false);
       setShowAttrDeleteConfirm(false);
