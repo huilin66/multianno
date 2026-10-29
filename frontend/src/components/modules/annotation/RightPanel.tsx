@@ -170,6 +170,7 @@ export function RightPanel({
     folders, views, annotations, updateAnnotation, removeAnnotation, 
     stems, currentStem, setCurrentStem, taxonomyClasses, taxonomyAttributes, 
     activeAnnotationId, setActiveAnnotationId, setActiveModule, updateStemMetadata, currentMeta,
+    selectedAnnotationIds,
     updateView, tempViewSettings, setTempViewSettings, applyViewSettingsToAll, addTaxonomyClass,
     hiddenClasses, setHiddenClasses, toggleClassVisibility, classOrder, viewport, setViewport,
     pendingAnnotationFocus, setPendingAnnotationFocus,
@@ -1459,6 +1460,7 @@ export function RightPanel({
               const clsDef = taxonomyClasses.find((c: any) => c.name === ann.label);
               const color = clsDef?.color || '#3B82F6';
               const isActive = ann.id === activeAnnotationId;
+              const isSelected = isActive || (selectedAnnotationIds || []).some((id: string) => String(id) === String(ann.id));
 
               const isHidden = isObjectHidden(ann);
 
@@ -1492,8 +1494,11 @@ export function RightPanel({
                     setActiveAnnotationId(ann.id);
                     setExpanded(prev => ({ ...prev, editor: true }));
                   }}
+                  aria-selected={isSelected}
                   className={`group p-2 rounded border text-[11px] flex items-center justify-between transition-all h-[40px] ${
-                    isHidden
+                    isSelected
+                      ? 'bg-blue-100 border-blue-400 text-blue-950 shadow-sm dark:bg-blue-950/45 dark:border-blue-500 dark:text-blue-50'
+                      : isHidden
                       ? 'opacity-40 bg-neutral-100/50 dark:bg-neutral-900/20'
                       : isRedundant 
                         ? 'bg-red-50/50 dark:bg-red-900/10 border-red-300' 
@@ -1505,7 +1510,7 @@ export function RightPanel({
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
                     <ShapeIcon 
-                      className={`w-3.5 h-3.5 shrink-0 ml-0.5 ${isActive ? 'text-blue-500 dark:text-blue-400' : 'text-neutral-400'}`} 
+                      className={`w-3.5 h-3.5 shrink-0 ml-0.5 ${isSelected ? 'text-blue-600 dark:text-blue-300' : 'text-neutral-400'}`}
                       title={`${t('rightPanel.shapeType')}: ${ann.type}`}
                     />
                     {ann.difficult && <AlertTriangle className="w-3.5 h-3.5 inline text-orange-500 shrink-0 ml-0.5" title={t('objectEditor.difficult')}/>}
