@@ -150,6 +150,83 @@ function getCanvasTextColor(hexColor: string) {
   return (red * 299 + green * 587 + blue * 114) / 1000 > 150 ? '#111827' : '#FFFFFF';
 }
 
+interface AnnotationBounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+function getAnnotationBounds(annotation: any): AnnotationBounds | null {
+  const points = [
+    ...(Array.isArray(annotation?.points) ? annotation.points : []),
+    ...(Array.isArray(annotation?.holes) ? annotation.holes.flat() : []),
+  ].filter((point: any) => Number.isFinite(point?.x) && Number.isFinite(point?.y));
+  if (points.length === 0) return null;
+
+  return {
+    left: Math.min(...points.map((point: any) => point.x)),
+    top: Math.min(...points.map((point: any) => point.y)),
+    right: Math.max(...points.map((point: any) => point.x)),
+    bottom: Math.max(...points.map((point: any) => point.y)),
+  };
+}
+
+function rectanglesOverlap(
+  first: { left: number; top: number; right: number; bottom: number },
+  second: { left: number; top: number; right: number; bottom: number },
+) {
+  return first.left < second.right
+    && first.right > second.left
+    && first.top < second.bottom
+    && first.bottom > second.top;
+}
+
+function chooseExternalLabelPosition(
+  shapeBounds: AnnotationBounds,
+  labelWidth: number,
+  labelHeight: number,
+  gap: number,
+  imageWidth?: number,
+  imageHeight?: number,
+) {
+  const candidates = [
+    { left: shapeBounds.left, top: shapeBounds.top - gap - labelHeight },
+    { left: shapeBounds.left, top: shapeBounds.bottom + gap },
+    { left: shapeBounds.right + gap, top: shapeBounds.top },
+    { left: shapeBounds.left - labelWidth - gap, top: shapeBounds.top },
+  ];
+
+  const imageBounds = Number.isFinite(imageWidth) && Number.isFinite(imageHeight)
+    ? { left: 0, top: 0, right: imageWidth as number, bottom: imageHeight as number }
+    : null;
+
+  const scoreCandidate = (candidate: { left: number; top: number }) => {
+    const labelBounds = {
+      left: candidate.left,
+      top: candidate.top,
+      right: candidate.left + labelWidth,
+      bottom: candidate.top + labelHeight,
+    };
+    const overlapsShape = rectanglesOverlap(labelBounds, shapeBounds);
+    let outsideImage = 0;
+    if (imageBounds) {
+      outsideImage = Math.max(0, imageBounds.left - labelBounds.left)
+        + Math.max(0, labelBounds.right - imageBounds.right)
+        + Math.max(0, imageBounds.top - labelBounds.top)
+        + Math.max(0, labelBounds.bottom - imageBounds.bottom);
+    }
+
+    // Avoiding the object is more important than keeping the label inside the
+    // image. If every side is constrained, the least-outside candidate wins.
+    return (overlapsShape ? 1_000_000 : 0) + outsideImage;
+  };
+
+  return candidates.reduce((best, candidate) => (
+    scoreCandidate(candidate) < scoreCandidate(best) ? candidate : best
+  ));
+}
+
 function drawAnnotationLabel(
   ctx: CanvasRenderingContext2D,
   annotation: any,
@@ -213,6 +290,7 @@ function drawAnnotationLabel(
   const attributesBoxHeight = attributeLines.length > 0
     ? attributeLines.length * attributeLineHeight + padY * 2
     : 0;
+  const totalBlockHeight = labelBoxHeight + attributesBoxHeight;
 
   // Keep the label block within the image, matching the reference renderer's
   // edge handling for objects close to the top or right border.
@@ -221,14 +299,30 @@ function drawAnnotationLabel(
     : y - labelFontSize - padY + labelBoxHeight;
   let labelX = x;
   let labelY = y;
-  if (Number.isFinite(imageWidth) && imageWidth !== undefined) {
+  const avoidShapeOverlap = showAttributes && editorSettings?.att_avoid_shape === true;
+  const shapeBounds = avoidShapeOverlap ? getAnnotationBounds(annotation) : null;
+  if (shapeBounds) {
+    const externalPosition = chooseExternalLabelPosition(
+      shapeBounds,
+      labelBoxWidth,
+      totalBlockHeight,
+      6 / zoom,
+      imageWidth,
+      imageHeight,
+    );
+    labelX = externalPosition.left + padX;
+    labelY = externalPosition.top + labelFontSize + padY;
+  }
+  if (!shapeBounds && Number.isFinite(imageWidth) && imageWidth !== undefined) {
     labelX = Math.max(0, Math.min(x, Math.max(0, imageWidth - labelBoxWidth)));
   }
   if (Number.isFinite(imageHeight) && imageHeight !== undefined) {
-    const labelTop = labelY - labelFontSize - padY;
-    if (labelTop < 0) labelY += -labelTop;
-    const blockBottom = labelY + (blockBottomWithoutShift - y);
-    if (blockBottom > imageHeight) labelY -= blockBottom - imageHeight;
+    if (!shapeBounds) {
+      const labelTop = labelY - labelFontSize - padY;
+      if (labelTop < 0) labelY += -labelTop;
+      const blockBottom = labelY + (blockBottomWithoutShift - y);
+      if (blockBottom > imageHeight) labelY -= blockBottom - imageHeight;
+    }
   }
 
   // Match yolo_data_manager: the class gets a colored label box and each

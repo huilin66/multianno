@@ -1187,6 +1187,18 @@ export default function App() {
                       onCheckedChange={(v) => updateEditorSettings({ att_hide_no: v })}
                     />
                   </div>
+                  <div
+                    className={`ml-3 flex items-center justify-between gap-3 rounded-md border-l-2 border-neutral-200 pl-2.5 pr-1.5 py-1 dark:border-neutral-700 ${!attributeDisplayEnabled ? 'opacity-60' : ''}`}
+                    title={t('headerSetting.attAvoidShapeHint')}
+                  >
+                    <Label className="text-xs">{t('headerSetting.attAvoidShape')}</Label>
+                    <Switch
+                      className="scale-90 origin-right"
+                      checked={editorSettings.att_avoid_shape === true}
+                      disabled={!attributeDisplayEnabled}
+                      onCheckedChange={(v) => updateEditorSettings({ att_avoid_shape: v })}
+                    />
+                  </div>
                 </SettingsSection>
 
                 <SettingsSection title={t('headerSetting.groups.data')}>

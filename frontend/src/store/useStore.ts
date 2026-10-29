@@ -191,6 +191,7 @@ export interface EditorSettings {
   fillAnnotationShapes: boolean;
   att_show: boolean;
   att_hide_no: boolean;
+  att_avoid_shape: boolean;
   drawingObjectEditorTemplate: DrawingObjectEditorTemplate;
   drawingObjectEditorVisibleFields: DrawingObjectEditorField[];
   maxViews: number;
@@ -444,6 +445,7 @@ export const useStore = create<AppState>()(
         fillAnnotationShapes: true,
         att_show: false,
         att_hide_no: true,
+        att_avoid_shape: false,
         drawingObjectEditorTemplate: 'standard',
         drawingObjectEditorVisibleFields: [...DRAWING_OBJECT_EDITOR_FIELDS],
         maxViews: 9,

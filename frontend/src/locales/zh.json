@@ -227,6 +227,8 @@
     "drawingObjectEditorScopeHint": "此设置只影响绘制新对象时的悬浮编辑器，右侧面板中的 Object Editor 仍保留完整表单。",
     "attShow": "显示属性",
     "attHideNo": "隐藏无值属性（no/No 等）",
+    "attAvoidShape": "避免遮挡图形",
+    "attAvoidShapeHint": "尽量将属性标签放在图形外部显示。",
     "attShowUnavailable": "加载的标注中没有非空属性值",
     "reloadAll": "全部重新加载",
     "reloadAllNoProject": "当前没有可重新加载的项目标注",
