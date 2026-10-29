@@ -144,7 +144,7 @@ export const saveCurrentAnnotations = async () => {
  * Track ID editing changes the active scene repeatedly, so saving only the
  * current scene is not sufficient when the window is closed or exported.
  */
-export const saveDirtyAnnotations = async () => {
+export const saveDirtyAnnotations = async (onProgress?: AnnotationSaveProgress) => {
   const state = useStore.getState();
   const dirtyStems = getDirtyStems(state);
   if (dirtyStems.length === 0) {
@@ -152,7 +152,7 @@ export const saveDirtyAnnotations = async () => {
     return;
   }
 
-  await saveAnnotationStems(state, dirtyStems);
+  return saveAnnotationStems(state, dirtyStems, onProgress);
 };
 
 /**

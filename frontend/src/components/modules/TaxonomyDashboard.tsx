@@ -16,6 +16,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { OperationProgress } from '../ui/OperationProgress';
 import { getFileContent, getPreviewImageUrl, runTaxonomyJob, type TaxonomyJobOperation, type TaxonomyJobState } from '../../api/client';
+import { saveDirtyAnnotations } from '../../lib/annotationSaveService';
 import { useTranslation } from 'react-i18next';
 import { ATTRIBUTE_COLUMN_PALETTE, TAXONOMY_COLORS } from '../../config/colors';
 import { showDialog, useDialogStore, type DialogOptions } from '../../store/useDialogStore';
@@ -2935,7 +2936,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     }
   };
 
-  const commitNewAttribute = () => {
+  const commitNewAttribute = async () => {
     const name = newAttributeName.trim();
     if (!name) return;
     const newId = `attr-${Date.now()}`;
@@ -2975,6 +2976,41 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setActiveTab('attributes');
     setSelectedAttributeId(newId);
     setIsAddingAttribute(false);
+
+    if (changedStems.size === 0) {
+      useStore.getState().setStatsCacheValid?.(false);
+      return;
+    }
+
+    const operationKey = beginTaxonomyWrite(
+      t('taxonomyDashboard.addingAttributeValues', 'Adding attribute values'),
+      Boolean(editorSettings.autoRefreshStats),
+    );
+    try {
+      await saveDirtyAnnotations((current, total) => {
+        setProcessingProgress((progress) => {
+          if (!progress || progress.operationKey !== operationKey) return progress;
+          return { ...progress, current, total };
+        });
+      });
+      setAnnotationTableReloadToken((current) => current + 1);
+      if (editorSettings.autoRefreshStats) {
+        moveTaxonomyProgressToStatistics();
+        await loadStatistics(true);
+      } else {
+        useStore.getState().setStatsCacheValid?.(false);
+      }
+    } catch (error: any) {
+      queueTaxonomyDialog({
+        type: 'danger',
+        title: t('taxonomyDashboard.addAttributeValuesFailed', 'Failed to save attribute values'),
+        description: error?.message || String(error),
+        confirmText: t('taxonomyDashboard.ok'),
+        hideCancel: true,
+      });
+    } finally {
+      finishTaxonomyWrite();
+    }
   };
 
   const parseAttributeYaml = (text: string) => {
@@ -3985,13 +4021,13 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           value={newAttributeName}
                           onChange={(event) => setNewAttributeName(event.target.value)}
                           onKeyDown={(event) => {
-                            if (event.key === 'Enter') commitNewAttribute();
+                            if (event.key === 'Enter') void commitNewAttribute();
                             if (event.key === 'Escape') setIsAddingAttribute(false);
                           }}
                           placeholder={t('workspace.attributeName', 'Attribute name')}
                           className="h-7 flex-1 text-xs"
                         />
-                        <Button size="sm" className="h-7 px-2 text-[10px] shrink-0" onClick={commitNewAttribute} disabled={!newAttributeName.trim()}>
+                        <Button size="sm" className="h-7 px-2 text-[10px] shrink-0" onClick={() => void commitNewAttribute()} disabled={!newAttributeName.trim()}>
                           <Check className="w-3 h-3" />
                         </Button>
                         <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => setIsAddingAttribute(false)}>
