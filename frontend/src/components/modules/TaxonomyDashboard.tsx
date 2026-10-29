@@ -4702,6 +4702,19 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           .map((option) => String(option))
                           .filter((option) => option.trim()),
                       ));
+                      const attributeDetails = statsData?.global?.attribute_details?.[activeAttribute.name] || {};
+                      const attributeStatisticsReady = statsStatus === 'done'
+                        && Boolean(statsData?.global)
+                        && Object.prototype.hasOwnProperty.call(statsData?.global || {}, 'attribute_details');
+                      const getAttributeValueUsageCount = (value: string) => {
+                        if (!attributeStatisticsReady) return null;
+                        const normalizedValue = String(value || '').trim();
+                        return Object.entries(attributeDetails).reduce((total, [storedValue, count]) => {
+                          const normalizedStoredValue = String(storedValue).trim();
+                          const mappedTarget = attributeValueMerges[normalizedStoredValue] || normalizedStoredValue;
+                          return mappedTarget === normalizedValue ? total + Number(count || 0) : total;
+                        }, 0);
+                      };
                       const mappedEntries = Object.entries(attributeValueMerges).filter(([source, target]) => (
                         sourceOptions.some((option) => option.trim() === source)
                         && currentOptions.some((option) => option.trim() === target)
@@ -4773,17 +4786,33 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                     onChange={e => handleAttributeOptionChange(index, e.target.value, currentOptions, currentDefault)}
                                     className={`h-6 w-24 bg-transparent px-1 text-[10px] font-bold shadow-none focus:border-purple-400 focus:ring-0 ${currentDefault === opt ? 'text-purple-700 dark:text-purple-300' : ''}`}
                                   />
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="icon"
-                                    disabled={isProcessing}
-                                    title={t('taxonomyDashboard.delete', 'Delete')}
-                                    className="h-5 w-5 shrink-0 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
-                                    onClick={() => deleteAttributeValue(opt, sourceOptions, currentOptions, currentDefault)}
-                                  >
-                                    <Trash2 className="h-3 w-3" />
-                                  </Button>
+                                  {(() => {
+                                    const usageCount = getAttributeValueUsageCount(opt);
+                                    const canDelete = usageCount === 0;
+                                    const deleteTitle = usageCount === null
+                                      ? t('taxonomyDashboard.attributeValueDeleteStatisticsPending', 'Load statistics before deleting this value.')
+                                      : canDelete
+                                        ? t('taxonomyDashboard.deleteValue', 'Delete value')
+                                        : t('taxonomyDashboard.attributeValueDeleteDisabled', {
+                                          count: usageCount,
+                                          defaultValue: 'This value is used by {{count}} objects. Use value merge instead.',
+                                        });
+                                    return (
+                                      <span className="inline-flex" title={deleteTitle}>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          disabled={isProcessing || !canDelete}
+                                          aria-label={deleteTitle}
+                                          className="h-5 w-5 shrink-0 text-neutral-400 hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-red-950/30"
+                                          onClick={() => deleteAttributeValue(opt, sourceOptions, currentOptions, currentDefault)}
+                                        >
+                                          <Trash2 className="h-3 w-3" />
+                                        </Button>
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                               ))}
                             </div>
