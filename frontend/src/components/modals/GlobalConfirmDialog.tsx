@@ -3,7 +3,7 @@ import React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { useDialogStore, handleDialogConfirm, handleDialogCancel } from '../../store/useDialogStore';
-import { AlertTriangle, Info, BadgeCheck, AlertOctagon } from 'lucide-react';
+import { AlertTriangle, Info, BadgeCheck, AlertOctagon, Check, X as XIcon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface TypeStyle {
@@ -87,6 +87,10 @@ export function GlobalConfirmDialog() {
       ? t('common.operationFailed')
       : title;
   const resultNote = result?.note;
+  const ResultStatusIcon = type === 'danger' ? XIcon : Check;
+  const resultStatusClass = type === 'danger'
+    ? 'text-red-600 dark:text-red-400'
+    : 'text-primary';
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleDialogCancel()}>
@@ -95,7 +99,9 @@ export function GlobalConfirmDialog() {
         <div className="min-w-0 px-5 py-4 pr-12 sm:px-6 sm:py-4">
           {isResultDialog && result ? (
             <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-2 text-[13px] leading-5">
-              <span className="font-medium text-muted-foreground">{t('common.status')}:</span>
+              <span className="flex items-center" aria-label={t('common.status')}>
+                <ResultStatusIcon className={`size-5 stroke-[2.5] ${resultStatusClass}`} />
+              </span>
               <DialogTitle className="break-words pt-0.5 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
                 {resultTitle}
               </DialogTitle>
