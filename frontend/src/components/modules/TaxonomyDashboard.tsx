@@ -4500,7 +4500,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
                           onClick={() => void executeRenameAttribute()}
                         >
-                          {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+                          {isProcessing && <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />}
                           {t('taxonomyDashboard.confirmRename', 'Rename')}
                         </Button>
                         <Button
@@ -4521,7 +4521,27 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     {attributeValueOptions.reduce((sum, option) => sum + option.objectCount, 0)} {t('taxonomyDashboard.objects', 'objects')}
                   </span>
                 </div>
-                <div className="flex shrink-0 items-center gap-3">
+                <div className="flex min-w-0 flex-1 items-center justify-end gap-3">
+                  <div className="flex min-w-0 max-w-[min(32rem,42vw)] flex-1 items-center gap-1 overflow-x-auto custom-scrollbar">
+                    {attributeValueOptions.map((option) => {
+                      const isSelected = selectedAttributeValueKey === option.value;
+                      return (
+                        <button
+                          key={`attribute-header-value-${option.value}`}
+                          type="button"
+                          onClick={() => handleAttributeValueChange(option.value)}
+                          title={`${option.value} · ${option.sceneCount} ${t('taxonomyDashboard.scenesCount', 'scenes')}`}
+                          className={`shrink-0 rounded-md border px-2 py-1 text-[10px] font-semibold transition-colors ${
+                            isSelected
+                              ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-300'
+                              : 'border-neutral-200 bg-white text-neutral-500 hover:border-blue-200 hover:text-blue-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400 dark:hover:border-blue-800 dark:hover:text-blue-300'
+                          }`}
+                        >
+                          {option.value}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
@@ -4532,6 +4552,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     <Settings className="mr-1.5 h-3.5 w-3.5" />
                     {t('taxonomyDashboard.manageAttributeValues', 'Manage values')}
                   </Button>
+                  <div className="h-7 w-px bg-neutral-300 dark:bg-neutral-700" />
                   {showAttrDeleteConfirm ? (
                     <div className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 p-1.5 dark:border-red-900/50 dark:bg-red-950/30">
                       <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-red-600">
