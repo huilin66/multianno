@@ -3137,6 +3137,45 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setAttributeValueMergeSource(null);
   };
 
+  const deleteAttributeValue = (
+    value: string,
+    sourceOptions: string[],
+    currentOptions: string[],
+    currentDefault: string,
+  ) => {
+    const normalizedValue = String(value || '').trim();
+    if (!normalizedValue) return;
+
+    // If this value is a merge target, restore its sources before removing the
+    // target so the draft never loses an unmapped value silently.
+    const relatedSources = Object.entries(attributeValueMerges)
+      .filter(([, target]) => target === normalizedValue)
+      .map(([source]) => source);
+    const draftOptions = currentOptions.filter((option) => String(option).trim() !== normalizedValue);
+    const restoredOptions = [...draftOptions, ...relatedSources];
+    const nextOptions = sourceOptions.filter((option) => (
+      restoredOptions.some((candidate) => String(candidate).trim() === String(option).trim())
+    ));
+    restoredOptions.forEach((option) => {
+      if (!nextOptions.some((candidate) => String(candidate).trim() === String(option).trim())) {
+        nextOptions.push(option);
+      }
+    });
+
+    setAttributeValueMerges((previous) => Object.fromEntries(
+      Object.entries(previous).filter(([source, target]) => (
+        source !== normalizedValue && target !== normalizedValue
+      )),
+    ));
+    setAttrDraft({
+      options: nextOptions,
+      defaultValue: String(currentDefault).trim() === normalizedValue
+        ? nextOptions[0] || ''
+        : currentDefault,
+    });
+    setAttributeValueMergeSource(null);
+  };
+
   const handleAttributeOptionChange = (
     index: number,
     value: string,
@@ -4701,40 +4740,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                               <h3 className="text-xs font-semibold text-neutral-800 dark:text-neutral-100">
                                 {t('taxonomyDashboard.attributeValueNameSettings', '1. Default value and value name settings')}
                               </h3>
-                              {isValueDirty && (
-                                <div className="flex shrink-0 items-center gap-1">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    disabled={isProcessing}
-                                    className="h-7 bg-blue-600 px-2 text-[9px] font-bold text-white hover:bg-blue-700"
-                                    onClick={() => void executeApplyAttribute()}
-                                  >
-                                    {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-                                    {t('workspace.syncToFiles', 'Confirm')}
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    size="icon"
-                                    variant="ghost"
-                                    disabled={isProcessing}
-                                    className="h-7 w-7 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
-                                    onClick={() => {
-                                      setAttrDraft(null);
-                                      setAttributeValueMerges({});
-                                      setAttributeValueMergeSource(null);
-                                    }}
-                                    title={t('common.cancel')}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
                             </div>
-                            <p className="mt-1 text-[10px] text-neutral-500 dark:text-neutral-400">
-                              {t('taxonomyDashboard.attributeValueNameSettingsDesc', 'Edit value names and choose the default value.')}
-                            </p>
-                            <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-neutral-100 pt-3 dark:border-neutral-800">
+                            <div className="mt-3 flex flex-wrap items-center gap-1.5">
                               {currentOptions.length === 0 && (
                                 <span className="text-[10px] italic text-neutral-400">
                                   {t('workspace.noOptionsDefined', 'No options defined.')}
@@ -4766,9 +4773,50 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                                     onChange={e => handleAttributeOptionChange(index, e.target.value, currentOptions, currentDefault)}
                                     className={`h-6 w-24 bg-transparent px-1 text-[10px] font-bold shadow-none focus:border-purple-400 focus:ring-0 ${currentDefault === opt ? 'text-purple-700 dark:text-purple-300' : ''}`}
                                   />
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    disabled={isProcessing}
+                                    title={t('taxonomyDashboard.delete', 'Delete')}
+                                    className="h-5 w-5 shrink-0 text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/30"
+                                    onClick={() => deleteAttributeValue(opt, sourceOptions, currentOptions, currentDefault)}
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
                                 </div>
                               ))}
+                            </div>
+                            <div className="mt-3 flex items-center justify-between gap-2 border-t border-neutral-100 pt-3 dark:border-neutral-800">
                               {renderAddButton()}
+                              {isValueDirty && (
+                                <div className="flex shrink-0 items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={isProcessing}
+                                    className="h-7 bg-blue-600 px-3 text-[10px] font-bold text-white hover:bg-blue-700"
+                                    onClick={() => void executeApplyAttribute()}
+                                  >
+                                    {isProcessing && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                                    {t('workspace.syncToFiles', 'Confirm')}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="ghost"
+                                    disabled={isProcessing}
+                                    className="h-7 px-2 text-[10px] font-medium text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                                    onClick={() => {
+                                      setAttrDraft(null);
+                                      setAttributeValueMerges({});
+                                      setAttributeValueMergeSource(null);
+                                    }}
+                                  >
+                                    {t('common.cancel')}
+                                  </Button>
+                                </div>
+                              )}
                             </div>
                           </section>
 

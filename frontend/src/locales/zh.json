@@ -1360,7 +1360,6 @@
     "manageAttributeValues": "设置",
     "attributeValueManager": "属性值管理",
     "attributeValueNameSettings": "1. 默认值与属性值名称设置",
-    "attributeValueNameSettingsDesc": "编辑属性值名称并选择默认值。",
     "attributeValueMerge": "2. 合并属性值",
     "attributeValueMergeDesc": "将源属性值拖到目标属性值，或先选择源值再点击目标值。",
     "sourceAttributeValues": "源属性值",

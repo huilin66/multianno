@@ -1360,7 +1360,6 @@
     "manageAttributeValues": "Settings",
     "attributeValueManager": "Attribute value manager",
     "attributeValueNameSettings": "1. Default value and value name settings",
-    "attributeValueNameSettingsDesc": "Edit value names and choose the default value.",
     "attributeValueMerge": "2. Merge attribute values",
     "attributeValueMergeDesc": "Drag a source value to a target value, or select a source and click a target.",
     "sourceAttributeValues": "Source values",
