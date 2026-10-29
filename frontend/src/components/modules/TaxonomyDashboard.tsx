@@ -4492,23 +4492,23 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       placeholder={t('workspace.attributeName', 'Attribute name')}
                     />
                     {attributeRenameValue.trim() !== activeAttribute.name && (
-                      <div className="flex shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 p-1 dark:border-blue-900/50 dark:bg-blue-950/30">
+                      <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 shadow-sm dark:border-blue-900/50 dark:bg-blue-950/30">
                         <Button
                           type="button"
                           size="sm"
                           disabled={isProcessing}
-                          className="h-7 bg-blue-600 px-2 text-[10px] font-semibold text-white hover:bg-blue-700"
+                          className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
                           onClick={() => void executeRenameAttribute()}
                         >
                           {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-                          {t('common.confirm')}
+                          {t('taxonomyDashboard.confirmRename', 'Rename')}
                         </Button>
                         <Button
                           type="button"
                           size="icon"
                           variant="ghost"
                           disabled={isProcessing}
-                          className="h-7 w-7 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                          className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
                           onClick={() => setAttributeRenameValue(activeAttribute.name)}
                           title={t('common.cancel')}
                         >
@@ -4521,16 +4521,56 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     {attributeValueOptions.reduce((sum, option) => sum + option.objectCount, 0)} {t('taxonomyDashboard.objects', 'objects')}
                   </span>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-8 shrink-0 rounded-md border-neutral-200 px-3 text-xs font-semibold dark:border-neutral-700"
-                  onClick={() => setShowAttributeValueManager(true)}
-                >
-                  <Settings className="mr-1.5 h-3.5 w-3.5" />
-                  {t('taxonomyDashboard.manageAttributeValues', 'Manage values')}
-                </Button>
+                <div className="flex shrink-0 items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-md border-neutral-200 px-3 text-xs font-semibold dark:border-neutral-700"
+                    onClick={() => setShowAttributeValueManager(true)}
+                  >
+                    <Settings className="mr-1.5 h-3.5 w-3.5" />
+                    {t('taxonomyDashboard.manageAttributeValues', 'Manage values')}
+                  </Button>
+                  {showAttrDeleteConfirm ? (
+                    <div className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 p-1.5 dark:border-red-900/50 dark:bg-red-950/30">
+                      <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-red-600">
+                        {t('workspace.deleteFromAllFiles', 'Delete from all files?')}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-8 rounded-md bg-red-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-red-700"
+                        onClick={executeDeleteAttribute}
+                        disabled={isProcessing}
+                      >
+                        {t('common.confirm')}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                        onClick={() => setShowAttrDeleteConfirm(false)}
+                        disabled={isProcessing}
+                        title={t('common.cancel')}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="h-8 rounded-md px-3 text-xs font-semibold"
+                      onClick={() => setShowAttrDeleteConfirm(true)}
+                    >
+                      <Trash2 className="mr-1.5 h-4 w-4" />
+                      {t('taxonomyDashboard.delete', 'Delete')}
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -4604,7 +4644,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       );
 
                       return (
-                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
+                        <div className="grid gap-4">
                           <div className="min-w-0">
                             <div className="flex h-7 items-center gap-2">
                               <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
@@ -4734,25 +4774,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                             </div>
                           </div>
 
-                          <div className="shrink-0 xl:justify-self-end">
-                            {showAttrDeleteConfirm ? (
-                              <div className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 p-1 dark:border-red-900/50 dark:bg-red-950/30">
-                                <span className="px-2 text-[10px] font-bold uppercase tracking-wider text-red-600">
-                                  {t('workspace.deleteFromAllFiles', 'Delete from all files?')}
-                                </span>
-                                <Button size="sm" className="h-7 bg-red-600 px-3 text-[10px] font-bold text-white hover:bg-red-700" onClick={executeDeleteAttribute} disabled={isProcessing}>
-                                  {t('common.confirm')}
-                                </Button>
-                                <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-neutral-500" onClick={() => setShowAttrDeleteConfirm(false)} disabled={isProcessing}>
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : (
-                              <Button variant="destructive" size="sm" className="h-8 px-3 font-bold shadow-sm" onClick={() => setShowAttrDeleteConfirm(true)}>
-                                <Trash2 className="mr-2 h-4 w-4" /> {t('workspace.deleteAttribute', 'Delete attribute')}
-                              </Button>
-                            )}
-                          </div>
                         </div>
                       );
                     })()}
