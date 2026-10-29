@@ -2970,10 +2970,12 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
     const state = useStore.getState() as any;
     const changedStems = new Set<string>();
+    let changedAnnotationCount = 0;
     const updatedAnnotations = (state.annotations || []).map((annotation: any) => {
       const attributes = { ...(annotation.attributes || {}) };
       if (!Object.prototype.hasOwnProperty.call(attributes, name)) {
         attributes[name] = defaultValue;
+        changedAnnotationCount += 1;
         if (annotation.stem) changedStems.add(String(annotation.stem));
         return { ...annotation, attributes };
       }
@@ -2997,6 +2999,17 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
     if (changedStems.size === 0) {
       useStore.getState().setStatsCacheValid?.(false);
+      queueTaxonomyDialog({
+        type: 'success',
+        title: t('taxonomyDashboard.addAttributeValuesSuccess', 'Attribute added'),
+        description: t(
+          'taxonomyDashboard.addAttributeValuesNoFilesDesc',
+          'Added attribute "{{name}}" with default value "{{value}}". No annotation files needed updating.',
+          { name, value: defaultValue },
+        ),
+        confirmText: t('taxonomyDashboard.ok', 'OK'),
+        hideCancel: true,
+      });
       return;
     }
 
@@ -3014,6 +3027,22 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       setAnnotationTableReloadToken((current) => current + 1);
       moveTaxonomyProgressToStatistics();
       await loadStatistics(true);
+      queueTaxonomyDialog({
+        type: 'success',
+        title: t('taxonomyDashboard.addAttributeValuesSuccess', 'Attribute added'),
+        description: t(
+          'taxonomyDashboard.addAttributeValuesSuccessDesc',
+          'Added attribute "{{name}}" with default value "{{value}}" to {{annotations}} annotations across {{scenes}} scenes.',
+          {
+            name,
+            value: defaultValue,
+            annotations: changedAnnotationCount,
+            scenes: changedStems.size,
+          },
+        ),
+        confirmText: t('taxonomyDashboard.ok', 'OK'),
+        hideCancel: true,
+      });
     } catch (error: any) {
       queueTaxonomyDialog({
         type: 'danger',
