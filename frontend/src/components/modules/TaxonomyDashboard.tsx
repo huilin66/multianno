@@ -4166,11 +4166,11 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             </div>
 
             {/* 主体：该类别的专属统计 */}
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-3">
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar flex flex-col gap-1.5">
               {statsData?.classes?.[activeClass.name] ? (
                 <>
                   {/* --- 上半部分：类的紧凑视图 --- */}
-                  <div className="flex flex-col gap-3 shrink-0 animate-in fade-in">
+                  <div className="flex flex-col gap-1.5 shrink-0 animate-in fade-in">
                     
                     <div className="w-full flex flex-col">
 
