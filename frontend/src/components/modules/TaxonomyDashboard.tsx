@@ -1379,6 +1379,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   }, []);
   const [newClassName, setNewClassName] = useState('');
   const [isAddingClass, setIsAddingClass] = useState(false);
+  const [newAttributeName, setNewAttributeName] = useState('');
+  const [isAddingAttribute, setIsAddingAttribute] = useState(false);
 
   const [showMergeWithAttr, setShowMergeWithAttr] = useState(false);
   const [mergeTargetDrafts, setMergeTargetDrafts] = useState<MergeTargetDraft[]>([]);
@@ -2924,14 +2926,30 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
 
   const handleAdd = (type: 'classes' | 'attributes') => {
     if (type === 'attributes') {
-      const newId = `attr-${Date.now()}`;
-      addTaxonomyAttribute({ id: newId, name: `new_attribute_${taxonomyAttributes.length + 1}`, type: 'select', options: ['default_val_1'], defaultValue: 'default_val_1', applyToAll: true });
-      setActiveTab('attributes'); setSelectedAttributeId(newId);
+      setNewAttributeName('');
+      setIsAddingAttribute(true);
     } else {
       // 🌟 打开输入模式
       setNewClassName('');
       setIsAddingClass(true);
     }
+  };
+
+  const commitNewAttribute = () => {
+    const name = newAttributeName.trim();
+    if (!name) return;
+    const newId = `attr-${Date.now()}`;
+    addTaxonomyAttribute({
+      id: newId,
+      name,
+      type: 'select',
+      options: ['default_val_1'],
+      defaultValue: 'default_val_1',
+      applyToAll: true,
+    });
+    setActiveTab('attributes');
+    setSelectedAttributeId(newId);
+    setIsAddingAttribute(false);
   };
 
   const parseAttributeYaml = (text: string) => {
@@ -3935,8 +3953,36 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     </div>
                   ))}
                   <div className="flex gap-2 mt-3 mb-1 pr-1">
-                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('attributes')}><Plus className="w-3 h-3 mr-1"/> {t('common.add')}</Button>
-                    <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('attributes'); fileInputRef.current?.click(); }}><Download className="w-3 h-3 mr-1"/> {t('common.import')}</Button>
+                    {isAddingAttribute ? (
+                      <>
+                        <Input
+                          autoFocus
+                          value={newAttributeName}
+                          onChange={(event) => setNewAttributeName(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') commitNewAttribute();
+                            if (event.key === 'Escape') setIsAddingAttribute(false);
+                          }}
+                          placeholder={t('workspace.attributeName', 'Attribute name')}
+                          className="h-7 flex-1 text-xs"
+                        />
+                        <Button size="sm" className="h-7 px-2 text-[10px] shrink-0" onClick={commitNewAttribute} disabled={!newAttributeName.trim()}>
+                          <Check className="w-3 h-3" />
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" onClick={() => setIsAddingAttribute(false)}>
+                          <X className="w-3 h-3" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <Button variant="outline" className="h-7 text-[10px] flex-1 border-blue-200 text-blue-700 hover:bg-blue-50 dark:border-blue-900 dark:text-blue-400 bg-transparent" onClick={() => handleAdd('attributes')}>
+                          <Plus className="w-3 h-3 mr-1"/> {t('common.add')}
+                        </Button>
+                        <Button variant="outline" className="h-7 text-[10px] flex-1 border-neutral-200 text-neutral-700 hover:bg-neutral-50 dark:border-neutral-700 dark:text-neutral-300 bg-transparent" onClick={() => { setActiveTab('attributes'); fileInputRef.current?.click(); }}>
+                          <Download className="w-3 h-3 mr-1"/> {t('common.import')}
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
