@@ -4481,7 +4481,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3 rounded-lg border border-neutral-200 bg-white px-2 py-1.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
                   <span
-                    className="h-8 w-8 shrink-0 rounded-md border border-black/10 shadow-sm"
+                    className="h-8 w-8 shrink-0 rounded-full border border-black/10 shadow-sm"
                     style={{
                       backgroundColor: ATTRIBUTE_COLUMN_PALETTE[
                         Math.max(0, sortedAttributes.findIndex((attribute: any) => attribute.id === activeAttribute.id))
