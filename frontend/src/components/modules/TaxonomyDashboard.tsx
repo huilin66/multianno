@@ -2669,6 +2669,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     const attributeNames = attributeDefinitions.map((attribute) => attribute.name);
 
     try {
+      // Close the editor before starting the write so the shared progress bar
+      // at the bottom of Annotation Manager remains visible.
+      setShowMergeWithAttr(false);
       const safeSaveDirs = getSaveDirs();
       const mergeResult = await runTaxonomyWrite(
         'merge_with_attribute',
@@ -3368,6 +3371,9 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     if (scope === 'merges' && Object.keys(attributeValueMerges).length === 0) return;
     if (scope === 'merges' && attributeValueSettingsDirty) return;
     try {
+      // Close the editor before starting the write so the shared progress bar
+      // at the bottom of Annotation Manager remains visible.
+      setShowAttributeValueManager(false);
       const safeSaveDirs = getSaveDirs();
       const currentPreviewStemBeforeEdit = previewStem ?? restoredPreviewStemRef.current;
       const currentValueBeforeEdit = selectedAttributeValue ?? restoredAttributeValueRef.current;
