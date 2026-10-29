@@ -3,13 +3,14 @@ import React from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { useDialogStore, handleDialogConfirm, handleDialogCancel } from '../../store/useDialogStore';
-import { AlertTriangle, Info, CheckCircle2, AlertOctagon } from 'lucide-react';
+import { AlertTriangle, Info, BadgeCheck, AlertOctagon } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
 interface TypeStyle {
   icon: React.ElementType;
   iconBg: string;
   iconColor: string;
+  accentClass: string;
   btnVariant: 'default' | 'destructive';
   btnClass: string;
 }
@@ -19,20 +20,23 @@ const typeConfig: Record<string, TypeStyle> = {
     icon: Info,
     iconBg: 'bg-blue-100 dark:bg-blue-900/30',
     iconColor: 'text-blue-600 dark:text-blue-400',
+    accentClass: 'bg-primary',
     btnVariant: 'default',
     btnClass: '',
   },
   success: {
-    icon: CheckCircle2,
-    iconBg: 'bg-green-100 dark:bg-green-900/30',
-    iconColor: 'text-green-600 dark:text-green-400',
+    icon: BadgeCheck,
+    iconBg: 'bg-primary/10 dark:bg-primary/20',
+    iconColor: 'text-primary',
+    accentClass: 'bg-primary',
     btnVariant: 'default',
-    btnClass: 'bg-green-600 hover:bg-green-700 text-white',
+    btnClass: 'bg-primary text-primary-foreground hover:bg-primary/90',
   },
   warning: {
     icon: AlertTriangle,
     iconBg: 'bg-amber-100 dark:bg-amber-900/30',
     iconColor: 'text-amber-600 dark:text-amber-400',
+    accentClass: 'bg-amber-500',
     btnVariant: 'default',
     btnClass: 'bg-amber-600 hover:bg-amber-700 text-white',
   },
@@ -40,6 +44,7 @@ const typeConfig: Record<string, TypeStyle> = {
     icon: AlertOctagon,
     iconBg: 'bg-red-100 dark:bg-red-900/30',
     iconColor: 'text-red-600 dark:text-red-400',
+    accentClass: 'bg-red-500',
     btnVariant: 'destructive',
     btnClass: '',
   },
@@ -54,6 +59,7 @@ export function GlobalConfirmDialog() {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleDialogCancel()}>
       <DialogContent className="w-[calc(100%-2rem)] max-w-md gap-0 overflow-hidden rounded-2xl border border-border/80 bg-popover p-0 shadow-2xl sm:max-w-md">
+        <div aria-hidden="true" className={`h-1 w-full ${config.accentClass}`} />
         <div className="min-w-0 px-5 py-5 pr-12 sm:px-6 sm:py-5">
           <div className="flex items-start gap-4">
             <div className={`mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full ring-4 ring-background ${config.iconBg}`}>
