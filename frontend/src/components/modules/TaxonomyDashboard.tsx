@@ -1098,14 +1098,11 @@ const ScenePreviewPanel = ({
   return (
     <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-row overflow-hidden h-[480px]">
       <div ref={sceneListRef} className="w-[30%] min-w-[220px] max-w-[360px] h-full overflow-y-auto p-2 custom-scrollbar border-r border-neutral-100 dark:border-neutral-800 shrink-0">
-        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-neutral-100 bg-white px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-900">
-          <div className="flex items-center gap-2 min-w-0">
-            <Layers className="w-4 h-4 text-blue-500 shrink-0" />
-            <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
-              {t('taxonomyDashboard.scenesInvolved')}
-            </h3>
-          </div>
-          <span className="text-[10px] font-mono bg-neutral-100 dark:bg-neutral-800 px-2 py-0.5 rounded text-neutral-500 shrink-0">
+        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-neutral-100 bg-white px-5 py-4 dark:border-neutral-800 dark:bg-neutral-900">
+          <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
+            {t('taxonomyDashboard.scenesInvolved')}
+          </h3>
+          <span className="shrink-0 rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-neutral-800">
             {sceneStems.length || 0} {t('taxonomyDashboard.files')}
           </span>
         </div>
