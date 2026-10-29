@@ -1,5 +1,6 @@
 import asyncio
 import contextvars
+import hashlib
 import json
 import math
 import os
@@ -62,6 +63,46 @@ def _list_annotation_files(save_dirs: list[str], include_meta: bool = False) -> 
             and (include_meta or not file_name.endswith("_meta.json"))
         )
     return files
+
+
+def _get_statistics_cache_path(save_dirs: list[str]) -> str | None:
+    if not save_dirs:
+        return None
+    first_directory = os.path.abspath(os.path.normpath(save_dirs[0]))
+    return os.path.join(os.path.dirname(first_directory), "stats_cache.json")
+
+
+def _get_annotation_revision(save_dirs: list[str]) -> dict[str, Any]:
+    """Build a cheap revision from annotation file metadata only.
+
+    The revision deliberately does not read JSON contents. It detects normal
+    saves, imports, deletions, and external edits while keeping Annotation
+    Manager startup much cheaper than a statistics scan.
+    """
+
+    entries: list[str] = []
+    seen_paths: set[str] = set()
+    for file_path in _list_annotation_files(save_dirs):
+        normalized_path = os.path.normcase(os.path.abspath(file_path))
+        if normalized_path in seen_paths:
+            continue
+        seen_paths.add(normalized_path)
+        try:
+            file_stat = os.stat(file_path)
+        except OSError:
+            # A file may disappear between directory listing and stat. The
+            # next revision check will observe the resulting file set.
+            continue
+        entries.append(
+            f"{normalized_path}\0{file_stat.st_size}\0{file_stat.st_mtime_ns}"
+        )
+
+    entries.sort()
+    digest = hashlib.sha256("\n".join(entries).encode("utf-8")).hexdigest()
+    return {
+        "value": digest,
+        "file_count": len(entries),
+    }
 
 
 def _taxonomy_job_total(operation: str, save_dirs: list[str]) -> int:
@@ -622,16 +663,27 @@ async def get_project_statistics(req: StatRequest):
         return {"global": {"total_images": 0, "total_objects": 0}, "classes": {}}
 
     # 🌟 1. 缓存路径定义：存在第一个存档目录的上一级（通常是项目根目录）
-    project_root = os.path.dirname(req.save_dirs[0])
-    cache_file = os.path.join(project_root, "stats_cache.json")
+    cache_file = _get_statistics_cache_path(req.save_dirs)
+    annotation_revision = _get_annotation_revision(req.save_dirs)
 
-    # 🌟 2. 缓存拦截：如果不强制刷新，且缓存文件存在，直接秒回！
-    if not req.force_refresh and os.path.exists(cache_file):
+    # 🌟 2. 缓存拦截：只复用来源 revision 一致的缓存。
+    if not req.force_refresh and cache_file and os.path.exists(cache_file):
         try:
             with open(cache_file, "r", encoding="utf-8") as f:
                 result = json.load(f)
-            logger.info("TAXONOMY_STATISTICS_CACHE_HIT path=%s", shorten(cache_file, 1500))
-            return result
+            if result.get("annotation_revision") == annotation_revision["value"]:
+                logger.info(
+                    "TAXONOMY_STATISTICS_CACHE_HIT path=%s revision=%s",
+                    shorten(cache_file, 1500),
+                    annotation_revision["value"],
+                )
+                return result
+            logger.info(
+                "TAXONOMY_STATISTICS_CACHE_STALE path=%s cached_revision=%s current_revision=%s",
+                shorten(cache_file, 1500),
+                result.get("annotation_revision", "missing"),
+                annotation_revision["value"],
+            )
         except Exception as e:
             logger.exception("TAXONOMY_STATISTICS_CACHE_ERROR path=%s error=%s", cache_file, e)
 
@@ -722,6 +774,7 @@ async def get_project_statistics(req: StatRequest):
 
         final_result = {
             "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "annotation_revision": _get_annotation_revision(req.save_dirs)["value"],
             "global": {**empty_stats, "total_images": total_images, "class_counts": {}},
             "classes": {},
             "shapes": {"bbox": {}, "polygon": {}},
@@ -841,6 +894,7 @@ async def get_project_statistics(req: StatRequest):
 
     final_result = {
         "last_updated": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "annotation_revision": _get_annotation_revision(req.save_dirs)["value"],
         "global": global_stats,
         "classes": class_stats,
         "shapes": shape_stats,  # 🌟 把新增的数据传给前端
@@ -860,6 +914,51 @@ async def get_project_statistics(req: StatRequest):
         len(records),
     )
     return final_result
+
+
+@router.post("/cache-status")
+async def get_taxonomy_cache_status(req: StatRequest):
+    """Return a cheap cache/revision comparison for Annotation Manager startup."""
+
+    annotation_revision = _get_annotation_revision(req.save_dirs)
+    cache_file = _get_statistics_cache_path(req.save_dirs)
+    cache_exists = bool(cache_file and os.path.isfile(cache_file))
+    cached_revision: str | None = None
+    cache_last_updated: str | None = None
+
+    if cache_exists and cache_file:
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                cached = json.load(f)
+            if isinstance(cached, dict):
+                cached_revision = cached.get("annotation_revision")
+                cache_last_updated = cached.get("last_updated")
+        except Exception:
+            logger.exception(
+                "TAXONOMY_STATISTICS_CACHE_STATUS_ERROR path=%s",
+                shorten(cache_file, 1500),
+            )
+
+    cache_valid = bool(
+        cache_exists
+        and cached_revision
+        and cached_revision == annotation_revision["value"]
+    )
+    logger.info(
+        "TAXONOMY_CACHE_STATUS files=%d cache_exists=%s cache_valid=%s",
+        annotation_revision["file_count"],
+        cache_exists,
+        cache_valid,
+    )
+    return {
+        "cache_exists": cache_exists,
+        "cache_valid": cache_valid,
+        "cache_path": cache_file,
+        "cache_last_updated": cache_last_updated,
+        "cache_revision": cached_revision,
+        "annotation_revision": annotation_revision["value"],
+        "annotation_file_count": annotation_revision["file_count"],
+    }
 
 
 def _invalidate_statistics_caches(save_dirs: list[str]) -> int:

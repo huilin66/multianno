@@ -15,7 +15,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { OperationProgress } from '../ui/OperationProgress';
-import { getFileContent, getPreviewImageUrl, runTaxonomyJob, type TaxonomyJobOperation, type TaxonomyJobState } from '../../api/client';
+import { fetchProjectStatistics, getFileContent, getPreviewImageUrl, getTaxonomyCacheStatus, runTaxonomyJob, type TaxonomyJobOperation, type TaxonomyJobState } from '../../api/client';
 import { saveDirtyAnnotations } from '../../lib/annotationSaveService';
 import { useTranslation } from 'react-i18next';
 import { ATTRIBUTE_COLUMN_PALETTE, TAXONOMY_COLORS } from '../../config/colors';
@@ -1332,6 +1332,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<TaxonomyProcessingProgress | null>(null);
   const processingOperationKeyRef = useRef(0);
+  const taxonomyInitializationKeyRef = useRef<string | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string>(MERGE_NONE_VALUE);
   const [renameValue, setRenameValue] = useState('');
   const [attributeRenameValue, setAttributeRenameValue] = useState('');
@@ -2807,16 +2808,34 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       description: 'System reserved class for soft-deleted items.',
     });
   }, [taxonomyClasses, addTaxonomyClass]);
-  // 🌟 现在改为：根据用户的全局设置来决定传 true 还是 false
-  useEffect(() => { 
-    if (folders?.length > 0) {
-      // Prepare the Annotation Table snapshot while the manager initializes.
-      // The table reads the already-loaded in-memory annotations, so this does
-      // not trigger another backend JSON scan.
-      setAnnotationTableReloadToken((current) => current + 1);
-      void loadStatistics(editorSettings.autoRefreshStats === true, true);
-    } 
-  }, []);
+  // Use a cheap file-metadata revision check before initializing statistics.
+  // The annotation table itself reads the already-loaded in-memory snapshot,
+  // so its first load remains local and does not trigger a JSON scan.
+  useEffect(() => {
+    const saveDirs = getSaveDirs();
+    if (saveDirs.length === 0) return;
+
+    const initializationKey = saveDirs.join("\n");
+    if (taxonomyInitializationKeyRef.current === initializationKey) return;
+    taxonomyInitializationKeyRef.current = initializationKey;
+
+    setAnnotationTableReloadToken((current) => current + 1);
+
+    const initializeTaxonomyData = async () => {
+      try {
+        const cacheStatus = await getTaxonomyCacheStatus(saveDirs);
+        const needsStatisticsReload = cacheStatus.cache_valid !== true;
+        await loadStatistics(needsStatisticsReload, needsStatisticsReload);
+      } catch (error) {
+        // Keep compatibility with older backends that do not expose the
+        // cache-status endpoint.
+        console.warn('Taxonomy cache status unavailable; rebuilding statistics.', error);
+        await loadStatistics(true, true);
+      }
+    };
+
+    void initializeTaxonomyData();
+  }, [folders, workspacePath]);
 
   useEffect(() => { 
     if (activeClass) { 
@@ -2850,20 +2869,22 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setStatsStatus('loading');
     try {
       const saveDirs = getSaveDirs();
-      const rawData = await runTaxonomyJob(
-        'statistics',
-        { save_dirs: saveDirs, force_refresh: forceRefresh },
-        (job: TaxonomyJobState) => {
-          setProcessingProgress((current) => {
-            if (!current || current.operationKey !== trackedOperationKey) return current;
-            return {
-              ...current,
-              current: job.current,
-              total: job.total,
-            };
-          });
-        },
-      );
+      const rawData = !showProgress && !forceRefresh
+        ? await fetchProjectStatistics(saveDirs, false)
+        : await runTaxonomyJob(
+          'statistics',
+          { save_dirs: saveDirs, force_refresh: forceRefresh },
+          (job: TaxonomyJobState) => {
+            setProcessingProgress((current) => {
+              if (!current || current.operationKey !== trackedOperationKey) return current;
+              return {
+                ...current,
+                current: job.current,
+                total: job.total,
+              };
+            });
+          },
+        );
       if (requestId !== statsRequestIdRef.current) {
         if (progressOperationKey !== null) finishTaxonomyWrite();
         return;

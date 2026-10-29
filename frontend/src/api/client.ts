@@ -252,6 +252,19 @@ export const runTaxonomyJob = async (
 export const fetchProjectStatistics = (saveDirs: string[], forceRefresh = false) =>
   post(`${API_BASE_URL}/taxonomy/statistics`, { save_dirs: saveDirs, force_refresh: forceRefresh });
 
+export interface TaxonomyCacheStatus {
+  cache_exists: boolean;
+  cache_valid: boolean;
+  cache_path?: string | null;
+  cache_last_updated?: string | null;
+  cache_revision?: string | null;
+  annotation_revision: string;
+  annotation_file_count: number;
+}
+
+export const getTaxonomyCacheStatus = (saveDirs: string[]) =>
+  post(`${API_BASE_URL}/taxonomy/cache-status`, { save_dirs: saveDirs }) as Promise<TaxonomyCacheStatus>;
+
 export const exportData = (payload: any, signal?: AbortSignal) =>
   post(`${API_BASE_URL}/exchange/export`, payload, signal);
 
