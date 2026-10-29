@@ -24,7 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, Keyboard, LayoutTemplate, RefreshCw, Wrench, Loader2, Route, Layers, Save, Clock } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, RefreshCw, Wrench, Loader2, Route, Layers, Save, Clock, ArrowRight } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -436,7 +436,7 @@ function DataUpdateSettings({
         <Label className="cursor-pointer text-xs">
           {t('headerSetting.dataUpdateTitle')}
         </Label>
-        <Wrench className="h-4 w-4 shrink-0" />
+        <ArrowRight className="h-4 w-4 shrink-0" />
       </button>
 
       <Dialog
@@ -1164,14 +1164,6 @@ export default function App() {
                       onCheckedChange={(v) => updateIdDisplaySetting('showTrackId', v)}
                     />
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setDrawingObjectEditorModalOpen(true)}
-                    className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
-                  >
-                    <Label className="cursor-pointer text-xs">{t('headerSetting.drawingObjectEditor')}</Label>
-                    <LayoutTemplate className="h-4 w-4 shrink-0" />
-                  </button>
                   <div
                     className={`rounded-md px-1.5 py-1 ${!hasAttributeContent ? 'opacity-60' : ''}`}
                     title={!hasAttributeContent ? t('headerSetting.attShowUnavailable') : undefined}
@@ -1262,11 +1254,19 @@ export default function App() {
                 <SettingsSection title={t('headerSetting.groups.workspace')}>
                   <button
                     type="button"
+                    onClick={() => setDrawingObjectEditorModalOpen(true)}
+                    className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                  >
+                    <Label className="cursor-pointer text-xs">{t('headerSetting.drawingObjectEditor')}</Label>
+                    <ArrowRight className="h-4 w-4 shrink-0" />
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setViewLayoutModalOpen(true)}
                     className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
                   >
                     <Label className="cursor-pointer text-xs">{t('headerSetting.viewLayout')}</Label>
-                    <LayoutTemplate className="h-4 w-4 shrink-0" />
+                    <ArrowRight className="h-4 w-4 shrink-0" />
                   </button>
                   <button
                     type="button"
@@ -1274,7 +1274,7 @@ export default function App() {
                     className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
                   >
                     <Label className="cursor-pointer text-xs">{t('headerSetting.shortcutSetting')}</Label>
-                    <Keyboard className="h-4 w-4 shrink-0" />
+                    <ArrowRight className="h-4 w-4 shrink-0" />
                   </button>
                 </SettingsSection>
 
@@ -1285,7 +1285,7 @@ export default function App() {
                     className="flex w-full items-center justify-between gap-3 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
                   >
                     <Label className="cursor-pointer text-xs">{t('headerSetting.aiSetting')}</Label>
-                    <CloudLightning className="h-4 w-4 shrink-0" />
+                    <ArrowRight className="h-4 w-4 shrink-0" />
                   </button>
                 </SettingsSection>
               </div>

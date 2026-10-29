@@ -189,9 +189,9 @@
   },
   "headerSetting":{
     "groups": {
-      "display": "显示与光标",
-      "annotation": "标注",
-      "data": "数据与统计",
+      "display": "视图显示",
+      "annotation": "标注显示",
+      "data": "数据",
       "update": "数据更新",
       "workspace": "工作区与输入",
       "ai": "AI 助手"
@@ -204,7 +204,7 @@
     "showAnnotationToolLabel": "显示标注工具标签",
     "showGroupId": "显示 Global ID",
     "showTrackId": "显示 Track ID",
-    "drawingObjectEditor": "绘图 Object Editor",
+    "drawingObjectEditor": "Object Editor 设置",
     "drawingObjectEditorHint": "选择创建新对象时使用的编辑器形式。",
     "drawingObjectEditorChooseTemplate": "编辑器模板",
     "drawingObjectEditorStandard": "标准编辑器",

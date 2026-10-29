@@ -189,9 +189,9 @@
   },
   "headerSetting":{
     "groups": {
-      "display": "Display & Cursor",
-      "annotation": "Annotation",
-      "data": "Data & Statistics",
+      "display": "View Display",
+      "annotation": "Annotation Display",
+      "data": "Data",
       "update": "Data Update",
       "workspace": "Workspace & Input",
       "ai": "AI Assistant"
@@ -204,7 +204,7 @@
     "showAnnotationToolLabel": "Show Annotation Tool Label",
     "showGroupId": "Show Global ID",
     "showTrackId": "Show Track ID",
-    "drawingObjectEditor": "Drawing Object Editor",
+    "drawingObjectEditor": "Object Editor Setting",
     "drawingObjectEditorHint": "Choose the form used when creating a new object.",
     "drawingObjectEditorChooseTemplate": "Editor template",
     "drawingObjectEditorStandard": "Standard editor",
