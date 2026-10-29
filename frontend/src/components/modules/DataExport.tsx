@@ -418,6 +418,7 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
 
     const selectedClassNames = exportClasses.filter(c => c.selected).map(c => c.name);
     const allowedShapes = Object.entries(shapeSelection).filter(([, v]) => v).map(([s]) => s);
+    const operationStartTime = new Date().toISOString();
 
     try {
       let overwriteTarget = false;
@@ -494,6 +495,35 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       const mdetExportEnabled =
         format === 'yolo' && taskType === 'object_detection' && includeAttributes;
 
+      const buildExportDetails = (result: any, exportedScenes: number) => {
+        const details = [
+          { label: t('dataExport.result.formatLabel'), value: format.toUpperCase() },
+          { label: t('dataExport.result.modeLabel'), value: exportMode },
+          { label: t('dataExport.result.imagesLabel'), value: `${exportedScenes}/${exportStems.length}` },
+          { label: t('dataExport.result.classesLabel'), value: String(selectedClassNames.length) },
+        ];
+        if (mdetExportEnabled) {
+          details.push({
+            label: t('dataExport.result.attributesLabel'),
+            value: t('dataExport.result.included'),
+          });
+        }
+        const splitInfo = result?.split || {};
+        if (splitInfo.train !== undefined) {
+          details.push({
+            label: t('dataExport.result.splitLabel'),
+            value: `${splitInfo.train}/${splitInfo.val ?? 0}/${splitInfo.test ?? 0}`,
+          });
+        }
+        if (format === 'yolo' && result?.classes_file) {
+          details.push({
+            label: t('dataExport.result.classesFileLabel'),
+            value: String(result.classes_file),
+          });
+        }
+        return details;
+      };
+
       if (exportMode === 'dataset') {
         const result = await exportDataStream({
           source_dirs: [workspacePath],
@@ -523,26 +553,15 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
         if (!signal.aborted) {
           setExportStatus('done');
           const exported = result?.exported ?? exportStems.length;
-          const splitInfo = result?.split || {};
-          const lines = [
-            t('dataExport.result.method', { format: format.toUpperCase() }),
-            t('dataExport.result.mode', { mode: exportMode }),
-            t('dataExport.result.scenes', { count: exported, total: exportStems.length }),
-            t('dataExport.result.classes', { count: selectedClassNames.length }),
-          ];
-          if (mdetExportEnabled) {
-            lines.push(t('dataExport.result.attributes'));
-          }
-          if (splitInfo.train !== undefined) {
-            lines.push(t('dataExport.result.split', { train: splitInfo.train, val: splitInfo.val ?? 0, test: splitInfo.test ?? 0 }));
-          }
-          if (format === 'yolo' && result?.classes_file) {
-            lines.push(t('dataExport.result.classesFile', { path: result.classes_file }));
-          }
           await showDialog({
             type: 'success',
             title: t('dataExport.success'),
-            description: lines.join('\n'),
+            result: {
+              operation: t('dataExport.operationDataset', { format: format.toUpperCase() }),
+              startTime: operationStartTime,
+              endTime: new Date().toISOString(),
+              details: buildExportDetails(result, exported),
+            },
           });
           onClose?.();
         }
@@ -569,26 +588,16 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
         completeExportProgress();
         if (!signal.aborted) {
           setExportStatus('done');
-          const lines = [
-            t('dataExport.result.method', { format: format.toUpperCase() }),
-            t('dataExport.result.mode', { mode: exportMode }),
-            t('dataExport.result.scenes', { count: exportStems.length, total: exportStems.length }),
-            t('dataExport.result.classes', { count: selectedClassNames.length }),
-          ];
-          if (mdetExportEnabled) {
-            lines.push(t('dataExport.result.attributes'));
-          }
           const exported = result?.exported;
-          if (exported !== undefined) {
-            lines[2] = t('dataExport.result.scenes', { count: exported, total: exportStems.length });
-          }
-          if (format === 'yolo' && result?.classes_file) {
-            lines.push(t('dataExport.result.classesFile', { path: result.classes_file }));
-          }
           await showDialog({
             type: 'success',
             title: t('dataExport.success'),
-            description: lines.join('\n'),
+            result: {
+              operation: t('dataExport.operationAnnotation', { format: format.toUpperCase() }),
+              startTime: operationStartTime,
+              endTime: new Date().toISOString(),
+              details: buildExportDetails(result, exported ?? exportStems.length),
+            },
           });
           onClose?.();
         }
@@ -599,7 +608,20 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       await showDialog({
         type: 'danger',
         title: t('common.failed'),
-        description: err.message || t('common.failed'),
+        result: {
+          operation: t(
+            exportMode === 'dataset'
+              ? 'dataExport.operationDataset'
+              : 'dataExport.operationAnnotation',
+            { format: format.toUpperCase() },
+          ),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('dataExport.result.targetLabel'), value: targetDir },
+          ],
+          note: err.message || t('common.failed'),
+        },
         confirmText: t('common.confirm'),
         hideCancel: true,
       });

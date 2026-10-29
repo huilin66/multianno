@@ -3,10 +3,25 @@ import { create } from 'zustand';
 
 export type DialogType = 'info' | 'success' | 'warning' | 'danger';
 
+export interface DialogResultDetail {
+  label: string;
+  value: string;
+}
+
+export interface DialogResult {
+  operation: string;
+  startTime?: string;
+  endTime?: string;
+  durationMs?: number;
+  details?: DialogResultDetail[];
+  note?: string;
+}
+
 export interface DialogOptions {
   title: string;
   description?: string;
   type?: DialogType;
+  result?: DialogResult;
   confirmText?: string;
   cancelText?: string;
   hideCancel?: boolean;
@@ -22,6 +37,7 @@ const defaultOptions: DialogOptions = {
   title: '',
   description: '',
   type: 'info',
+  result: undefined,
   confirmText: '',
   cancelText: '',
   hideCancel: false,
@@ -30,7 +46,7 @@ const defaultOptions: DialogOptions = {
 export const useDialogStore = create<DialogState>((set) => ({
   isOpen: false,
   ...defaultOptions,
-  openDialog: (options) => set({ ...options, isOpen: true }),
+  openDialog: (options) => set({ ...defaultOptions, ...options, isOpen: true }),
   closeDialog: () => set({ isOpen: false }),
 }));
 

@@ -763,6 +763,7 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
       setProjectMetaPath(metaPath);
     }
 
+    const operationStartTime = new Date().toISOString();
     setIsGlobalConfirming(true);
     setProgressStage('preparing');
     setProgressStageIndex(1);
@@ -904,11 +905,18 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
         await showDialog({
           type: 'success',
           title: t('dataPreload.datasetLoadedTitle'),
-          description: t('dataPreload.datasetLoadedDescription', {
-            images: datasetSummary.images,
-            labels: datasetSummary.labels,
-            objects: datasetSummary.objects,
-          }),
+          result: {
+            operation: t(isCreatingProject
+              ? 'dataPreload.operationCreate'
+              : 'dataPreload.operationLoad'),
+            startTime: operationStartTime,
+            endTime: new Date().toISOString(),
+            details: [
+              { label: t('dataPreload.imagesLabel'), value: String(datasetSummary.images) },
+              { label: t('dataPreload.labelsLabel'), value: String(datasetSummary.labels) },
+              { label: t('dataPreload.objectsLabel'), value: String(datasetSummary.objects) },
+            ],
+          },
           confirmText: t('common.confirm'),
           hideCancel: true,
         });

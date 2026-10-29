@@ -1332,6 +1332,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingProgress, setProcessingProgress] = useState<TaxonomyProcessingProgress | null>(null);
   const processingOperationKeyRef = useRef(0);
+  const taxonomyOperationStartTimeRef = useRef<string | null>(null);
+  const taxonomyOperationNameRef = useRef<string | null>(null);
   const taxonomyInitializationKeyRef = useRef<string | null>(null);
   const [mergeTargetId, setMergeTargetId] = useState<string>(MERGE_NONE_VALUE);
   const [renameValue, setRenameValue] = useState('');
@@ -2413,6 +2415,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const beginTaxonomyWrite = (stageName: string, includesStatisticsStage = false) => {
     const operationKey = processingOperationKeyRef.current + 1;
     processingOperationKeyRef.current = operationKey;
+    taxonomyOperationStartTimeRef.current = new Date().toISOString();
+    taxonomyOperationNameRef.current = stageName;
     setProcessingProgress({
       operationKey,
       stageIndex: 1,
@@ -2439,13 +2443,41 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const finishTaxonomyWrite = () => {
     setProcessingProgress(null);
     setIsProcessing(false);
+    taxonomyOperationStartTimeRef.current = null;
+    taxonomyOperationNameRef.current = null;
   };
 
   // Wait for the bottom progress row to be removed before opening the result
   // dialog. Otherwise the dialog can briefly appear over a stale progress
   // layout while React is committing the final operation state.
   const queueTaxonomyDialog = (options: DialogOptions) => {
-    window.setTimeout(() => openDialog(options), 0);
+    const isOperationResult = (options.type === 'success' || options.type === 'danger')
+      && !options.result
+      && taxonomyOperationStartTimeRef.current;
+    const resultOptions: DialogOptions = isOperationResult
+      ? {
+          ...options,
+          result: {
+            operation: taxonomyOperationNameRef.current || options.title,
+            startTime: taxonomyOperationStartTimeRef.current || undefined,
+            endTime: new Date().toISOString(),
+            details: options.type === 'danger'
+              ? []
+              : (options.description || '').split(/\r?\n/).filter(Boolean).map((line) => {
+                  const separatorIndex = line.indexOf(':');
+                  if (separatorIndex > 0 && separatorIndex < 40) {
+                    return {
+                      label: line.slice(0, separatorIndex).trim(),
+                      value: line.slice(separatorIndex + 1).trim(),
+                    };
+                  }
+                  return { label: t('common.result'), value: line };
+                }),
+            note: options.type === 'danger' ? options.description : undefined,
+          },
+        }
+      : options;
+    window.setTimeout(() => openDialog(resultOptions), 0);
   };
 
   const runTaxonomyWrite = async (
@@ -2957,6 +2989,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const commitNewAttribute = async () => {
     const name = newAttributeName.trim();
     if (!name) return;
+    const operationStartTime = new Date().toISOString();
     const newId = `attr-${Date.now()}`;
     const defaultValue = 'none';
     addTaxonomyAttribute({
@@ -3002,11 +3035,17 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       queueTaxonomyDialog({
         type: 'success',
         title: t('taxonomyDashboard.addAttributeValuesSuccess', 'Attribute added'),
-        description: t(
-          'taxonomyDashboard.addAttributeValuesNoFilesDesc',
-          'Added attribute "{{name}}" with default value "{{value}}". No annotation files needed updating.',
-          { name, value: defaultValue },
-        ),
+        result: {
+          operation: t('taxonomyDashboard.addAttributeOperation', 'Add attribute'),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('taxonomyDashboard.attributeDetail'), value: name },
+            { label: t('taxonomyDashboard.defaultValueDetail'), value: defaultValue },
+            { label: t('taxonomyDashboard.scenesDetail'), value: '0' },
+            { label: t('taxonomyDashboard.annotationsDetail'), value: '0' },
+          ],
+        },
         confirmText: t('taxonomyDashboard.ok', 'OK'),
         hideCancel: true,
       });
@@ -3030,16 +3069,17 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       queueTaxonomyDialog({
         type: 'success',
         title: t('taxonomyDashboard.addAttributeValuesSuccess', 'Attribute added'),
-        description: t(
-          'taxonomyDashboard.addAttributeValuesSuccessDesc',
-          'Added attribute "{{name}}" with default value "{{value}}" to {{annotations}} annotations across {{scenes}} scenes.',
-          {
-            name,
-            value: defaultValue,
-            annotations: changedAnnotationCount,
-            scenes: changedStems.size,
-          },
-        ),
+        result: {
+          operation: t('taxonomyDashboard.addAttributeOperation', 'Add attribute'),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('taxonomyDashboard.attributeDetail'), value: name },
+            { label: t('taxonomyDashboard.defaultValueDetail'), value: defaultValue },
+            { label: t('taxonomyDashboard.scenesDetail'), value: String(changedStems.size) },
+            { label: t('taxonomyDashboard.annotationsDetail'), value: String(changedAnnotationCount) },
+          ],
+        },
         confirmText: t('taxonomyDashboard.ok', 'OK'),
         hideCancel: true,
       });
@@ -3047,7 +3087,15 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       queueTaxonomyDialog({
         type: 'danger',
         title: t('taxonomyDashboard.addAttributeValuesFailed', 'Failed to save attribute values'),
-        description: error?.message || String(error),
+        result: {
+          operation: t('taxonomyDashboard.addAttributeOperation', 'Add attribute'),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('taxonomyDashboard.attributeDetail'), value: name },
+          ],
+          note: error?.message || String(error),
+        },
         confirmText: t('taxonomyDashboard.ok'),
         hideCancel: true,
       });

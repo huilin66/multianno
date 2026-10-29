@@ -352,6 +352,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       return;
     }
 
+    const operationStartTime = new Date().toISOString();
     setIsVerifying(true);
     try {
       await updateAIConfig({
@@ -373,7 +374,15 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       await showDialog({
         type: 'success',
         title: t('common.success'),
-        description: t('aiSettings.alertSetAIDone'),
+        result: {
+          operation: t('aiSettings.operationModel'),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('aiSettings.modelLabel'), value: localSettings.model },
+            { label: t('aiSettings.pathLabel'), value: modelPath },
+          ],
+        },
       });
       onClose();
     } catch (error) {
@@ -381,7 +390,15 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       await showDialog({
         type: 'danger',
         title: t('common.error'),
-        description: `${t('aiSettings.alertSetAIFail')}\n\n${message}`,
+        result: {
+          operation: t('aiSettings.operationModel'),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('aiSettings.modelLabel'), value: localSettings.model },
+          ],
+          note: `${t('aiSettings.alertSetAIFail')}\n\n${message}`,
+        },
       });
     } finally {
       setIsVerifying(false);
@@ -401,6 +418,7 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       return;
     }
 
+    const operationStartTime = new Date().toISOString();
     setIsSavingVLM(true);
     try {
       const status = await updateVLMConfig({
@@ -428,7 +446,15 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       await showDialog({
         type: 'success',
         title: t('common.success'),
-        description: t('aiSettings.vlmConfigurationSaved'),
+        result: {
+          operation: t('aiSettings.operationVLM'),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('aiSettings.baseUrlLabel'), value: baseUrl },
+            { label: t('aiSettings.modelLabel'), value: model },
+          ],
+        },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -436,7 +462,16 @@ export function AISettingsModal({ open, onClose }: AISettingsModalProps) {
       await showDialog({
         type: 'danger',
         title: t('common.error'),
-        description: `${t('aiSettings.vlmConfigurationFailed')}\n\n${message}`,
+        result: {
+          operation: t('aiSettings.operationVLM'),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('aiSettings.baseUrlLabel'), value: baseUrl },
+            { label: t('aiSettings.modelLabel'), value: model },
+          ],
+          note: `${t('aiSettings.vlmConfigurationFailed')}\n\n${message}`,
+        },
       });
     } finally {
       setIsSavingVLM(false);

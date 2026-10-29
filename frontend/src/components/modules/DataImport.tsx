@@ -189,6 +189,7 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       return;
     }
 
+    const operationStartTime = new Date().toISOString();
     setIsImporting(true);
     setImportStatus('importing');
     setImportStage('importing');
@@ -312,60 +313,97 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
       const shapeCount = res?.shape_count ?? 0;
       const importedCount = res?.imported_count ?? 0;
       const totalCount = stems.length || 0;
-      const desc = isImageMetaTask
-        ? [
-            t('dataImport.result.method', { format: fmt }),
-            t('dataImport.result.metadataRecords', { count: res?.record_count ?? importedCount }),
-            t('dataImport.result.metadataFiles', {
-              count: res?.files_written ?? ((res?.updated_count ?? 0) + (res?.created_count ?? 0)),
-            }),
-          ].join('\n')
-        : [
-            t('dataImport.result.method', { format: fmt }),
-            t('dataImport.result.shapes', { count: shapeCount }),
-            t('dataImport.result.images', { imported: importedCount, total: totalCount }),
-          ].join('\n');
       const emptyJsonCount = res?.empty_json_count ?? 0;
       const dimensionFallbackCount = res?.dimension_fallback_count ?? 0;
-      const resultLines = [desc];
+      const attributeBboxCount = res?.attribute_bbox_count ?? 0;
+      const attributeDroppedCount = res?.attribute_dropped_count ?? 0;
+      const resultDetails = isImageMetaTask
+        ? [
+            { label: t('dataImport.result.formatLabel'), value: String(fmt) },
+            { label: t('dataImport.result.metadataRecordsLabel'), value: String(res?.record_count ?? importedCount) },
+            {
+              label: t('dataImport.result.metadataFilesLabel'),
+              value: String(res?.files_written ?? ((res?.updated_count ?? 0) + (res?.created_count ?? 0))),
+            },
+          ]
+        : [
+            { label: t('dataImport.result.formatLabel'), value: String(fmt) },
+            { label: t('dataImport.result.imagesLabel'), value: `${importedCount}/${totalCount}` },
+            { label: t('dataImport.result.boxesLabel'), value: String(shapeCount) },
+          ];
       if (emptyJsonCount > 0) {
-        resultLines.push(t('dataImport.result.emptyJson', { count: emptyJsonCount }));
+        resultDetails.push({
+          label: t('dataImport.result.emptyJsonLabel'),
+          value: String(emptyJsonCount),
+        });
       }
       if (dimensionFallbackCount > 0) {
-        resultLines.push(t('dataImport.result.dimensionFallback', { count: dimensionFallbackCount }));
+        resultDetails.push({
+          label: t('dataImport.result.dimensionFallbackLabel'),
+          value: String(dimensionFallbackCount),
+        });
       }
-      const attributeBboxCount = res?.attribute_bbox_count ?? 0;
-      if (attributeBboxCount > 0) {
-        resultLines.push(t('dataImport.result.attributeBboxes', { count: attributeBboxCount }));
-      }
-      const attributeDroppedCount = res?.attribute_dropped_count ?? 0;
       if (attributeDroppedCount > 0) {
-        resultLines.push(t('dataImport.result.attributeDropped', { count: attributeDroppedCount }));
+        resultDetails.push({
+          label: t('dataImport.result.attributeDroppedLabel'),
+          value: String(attributeDroppedCount),
+        });
+      }
+      if (attributeBboxCount > 0) {
+        resultDetails.push({
+          label: t('dataImport.result.attributeBboxesLabel'),
+          value: String(attributeBboxCount),
+        });
       }
       if (importedAttributeDefinitions.length > 0) {
-        resultLines.push(t('dataImport.result.attributesRegistered', {
-          count: importedAttributeDefinitions.length,
-        }));
+        resultDetails.push({
+          label: t('dataImport.result.attributesRegisteredLabel'),
+          value: String(importedAttributeDefinitions.length),
+        });
       }
       if (isImageMetaTask && (res?.metadata_removed_count ?? 0) > 0) {
-        resultLines.push(t('dataImport.result.metadataRemoved', {
-          count: res.metadata_removed_count,
-        }));
+        resultDetails.push({
+          label: t('dataImport.result.metadataRemovedLabel'),
+          value: String(res.metadata_removed_count),
+        });
       }
       if (isImageMetaTask && (res?.invalid_count ?? 0) > 0) {
-        resultLines.push(t('dataImport.result.metadataInvalid', {
-          count: res.invalid_count,
-        }));
+        resultDetails.push({
+          label: t('dataImport.result.metadataInvalidLabel'),
+          value: String(res.invalid_count),
+        });
       }
-      const resultDescription = resultLines.join('\n');
       await showDialog({
         title: t('dataImport.success'),
-        description: resultDescription,
         type: 'success',
+        result: {
+          operation: t(
+            isImageMetaTask ? 'dataImport.operationImageMeta' : 'dataImport.operation',
+            { format: fmt },
+          ),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: resultDetails,
+        },
       });
       onClose?.();
     } catch (err: any) {
       setImportStatus('error');
+      await showDialog({
+        title: t('dataImport.failed'),
+        type: 'danger',
+        result: {
+          operation: t('dataImport.operation', { format: format.toUpperCase() }),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('dataImport.result.sourceLabel'), value: sourceDataPath },
+          ],
+          note: err?.message || t('dataImport.failed'),
+        },
+        confirmText: t('common.confirm'),
+        hideCancel: true,
+      });
       setTimeout(() => setImportStatus('idle'), 3000);
     } finally {
       setIsImporting(false);

@@ -75,6 +75,7 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
     });
     if (!confirmed) return;
 
+    const operationStartTime = new Date().toISOString();
     setIsLoading(true);
     setError('');
     setLoadProgress({ current: 0, total: 0 });
@@ -133,11 +134,16 @@ export function LoadProject({ onClose }: { onClose: () => void }) {
       await showDialog({
         type: 'success',
         title: t('loadProject.datasetLoadedTitle'),
-        description: t('loadProject.datasetLoadedDescription', {
-          images: datasetSummary.images,
-          labels: datasetSummary.labels,
-          objects: datasetSummary.objects,
-        }),
+        result: {
+          operation: t('loadProject.operation'),
+          startTime: operationStartTime,
+          endTime: new Date().toISOString(),
+          details: [
+            { label: t('loadProject.imagesLabel'), value: String(datasetSummary.images) },
+            { label: t('loadProject.labelsLabel'), value: String(datasetSummary.labels) },
+            { label: t('loadProject.objectsLabel'), value: String(datasetSummary.objects) },
+          ],
+        },
         confirmText: t('common.confirm'),
         hideCancel: true,
       });
