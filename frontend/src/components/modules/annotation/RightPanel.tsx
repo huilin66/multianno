@@ -245,6 +245,8 @@ export function RightPanel({
   const [sceneFilterOpen, setSceneFilterOpen] = React.useState(false);
   const [sceneFilterMode, setSceneFilterMode] = React.useState<SceneFilterMode>('all');
   const [sceneFilterRules, setSceneFilterRules] = React.useState<SceneFilterRule[]>([]);
+  const [appliedSceneFilterMode, setAppliedSceneFilterMode] = React.useState<SceneFilterMode>('all');
+  const [appliedSceneFilterRules, setAppliedSceneFilterRules] = React.useState<SceneFilterRule[]>([]);
   const [nmsPanelOpen, setNmsPanelOpen] = React.useState(false);
   const [nmsMode, setNmsMode] = React.useState<'iou' | 'ios'>('ios');
   const [nmsThreshold, setNmsThreshold] = React.useState(80);
@@ -264,16 +266,16 @@ export function RightPanel({
 
   const filteredSceneStems = React.useMemo(() => {
     const query = sceneSearchQuery.trim().toLowerCase();
-    const validRules = sceneFilterRules.filter(isValidSceneFilterRule);
+    const validRules = appliedSceneFilterRules.filter(isValidSceneFilterRule);
     return (stems || []).filter((stem: string) => {
       if (query && !stem.toLowerCase().includes(query)) return false;
       const annotationCount = sceneAnnotationCounts.get(stem) || 0;
       return validRules.every((rule) => matchesSceneFilterRule(stem, annotationCount, rule));
     });
-  }, [sceneAnnotationCounts, sceneFilterRules, sceneSearchQuery, stems]);
+  }, [appliedSceneFilterRules, sceneAnnotationCounts, sceneSearchQuery, stems]);
 
   const sceneFilterHasInvalidRules = sceneFilterRules.some((rule) => !isValidSceneFilterRule(rule));
-  const sceneFilterActive = sceneFilterRules.some(isValidSceneFilterRule);
+  const sceneFilterActive = appliedSceneFilterRules.some(isValidSceneFilterRule);
 
   const handleSceneFilterModeChange = (mode: SceneFilterMode) => {
     setSceneFilterMode(mode);
@@ -308,6 +310,27 @@ export function RightPanel({
   const clearSceneFilters = () => {
     setSceneFilterMode('all');
     setSceneFilterRules([]);
+  };
+
+  const applySceneFilters = () => {
+    if (sceneFilterHasInvalidRules) return;
+    setAppliedSceneFilterMode(sceneFilterMode);
+    setAppliedSceneFilterRules(sceneFilterRules.map((rule) => ({ ...rule })));
+    setSceneFilterOpen(false);
+  };
+
+  const cancelSceneFilters = () => {
+    setSceneFilterMode(appliedSceneFilterMode);
+    setSceneFilterRules(appliedSceneFilterRules.map((rule) => ({ ...rule })));
+    setSceneFilterOpen(false);
+  };
+
+  const handleSceneFilterOpenChange = (open: boolean) => {
+    if (!open) {
+      setSceneFilterMode(appliedSceneFilterMode);
+      setSceneFilterRules(appliedSceneFilterRules.map((rule) => ({ ...rule })));
+    }
+    setSceneFilterOpen(open);
   };
 
   const jumpToScene = (stem: string) => {
@@ -1615,7 +1638,7 @@ export function RightPanel({
                   </button>
                 </div>
               )}
-              <Popover open={sceneFilterOpen} onOpenChange={setSceneFilterOpen}>
+              <Popover open={sceneFilterOpen} onOpenChange={handleSceneFilterOpenChange}>
                 <PopoverTrigger
                   type="button"
                   aria-label={t('rightPanel.filterSceneGroups')}
@@ -1776,15 +1799,32 @@ export function RightPanel({
                     </p>
                   )}
 
-                  <div className="flex justify-end border-t border-neutral-200 pt-2 dark:border-neutral-700">
+                  <div className="flex items-center justify-between border-t border-neutral-200 pt-2 dark:border-neutral-700">
                     <button
                       type="button"
                       onClick={clearSceneFilters}
-                      disabled={!sceneFilterActive && sceneFilterRules.length === 0}
+                      disabled={sceneFilterRules.length === 0}
                       className="h-6 rounded px-2 text-[10px] font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
                     >
                       {t('rightPanel.sceneFilterClear')}
                     </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={cancelSceneFilters}
+                        className="h-7 rounded border border-neutral-200 px-2.5 text-[10px] font-medium text-neutral-600 hover:bg-neutral-100 dark:border-neutral-700 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                      >
+                        {t('rightPanel.sceneFilterCancel')}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={applySceneFilters}
+                        disabled={sceneFilterHasInvalidRules}
+                        className="h-7 rounded bg-blue-600 px-2.5 text-[10px] font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {t('rightPanel.sceneFilterApply')}
+                      </button>
+                    </div>
                   </div>
                 </PopoverContent>
               </Popover>

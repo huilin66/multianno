@@ -1163,6 +1163,8 @@
     "sceneFilterLessThan": "小于",
     "sceneFilterLessOrEqual": "至多",
     "sceneFilterClear": "清除筛选",
+    "sceneFilterCancel": "取消",
+    "sceneFilterApply": "应用",
     "noSceneGroupMatches": "没有匹配结果",
     "noSceneGroups": "暂无场景组",
     "imageAnnotation": "图像标注",

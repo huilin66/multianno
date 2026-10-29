@@ -1163,6 +1163,8 @@
     "sceneFilterLessThan": "Less than",
     "sceneFilterLessOrEqual": "At most",
     "sceneFilterClear": "Clear filters",
+    "sceneFilterCancel": "Cancel",
+    "sceneFilterApply": "Apply",
     "noSceneGroupMatches": "No matching results",
     "noSceneGroups": "No scene groups",
     "imageAnnotation": "Image Annotation",
