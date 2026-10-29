@@ -1,6 +1,6 @@
 // src/components/GlobalConfirmDialog.tsx
 import React from 'react';
-import { Dialog, DialogContent } from '../ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { useDialogStore, handleDialogConfirm, handleDialogCancel } from '../../store/useDialogStore';
 import { AlertTriangle, Info, CheckCircle2, AlertOctagon } from 'lucide-react';
@@ -53,33 +53,35 @@ export function GlobalConfirmDialog() {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && handleDialogCancel()}>
-      <DialogContent className="max-w-sm sm:max-w-sm p-0 border-border overflow-hidden gap-0">
-        <div className="min-w-0 p-5">
+      <DialogContent className="w-[calc(100%-2rem)] max-w-md gap-0 overflow-hidden rounded-2xl border border-border/80 bg-popover p-0 shadow-2xl sm:max-w-md">
+        <div className="min-w-0 px-5 py-5 pr-12 sm:px-6 sm:py-5">
           <div className="flex items-start gap-4">
-            <div className={`p-2.5 rounded-full shrink-0 ${config.iconBg}`}>
-              <Icon className={`w-5 h-5 ${config.iconColor}`} />
+            <div className={`mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full ring-4 ring-background ${config.iconBg}`}>
+              <Icon className={`size-5 ${config.iconColor}`} />
             </div>
             <div className="min-w-0 flex-1 pt-0.5">
-              <h2 className="break-words text-sm font-semibold text-foreground">{title}</h2>
+              <DialogTitle className="break-words text-[15px] font-semibold leading-5 tracking-[-0.01em] text-foreground">
+                {title}
+              </DialogTitle>
               {description && (
-                <p className="mt-1.5 max-w-full select-text text-xs leading-relaxed text-muted-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">
+                <DialogDescription className="mt-2 max-w-none select-text whitespace-pre-wrap text-[13px] leading-5 text-muted-foreground [overflow-wrap:anywhere]">
                   {description}
-                </p>
+                </DialogDescription>
               )}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 px-5 py-3.5 bg-muted/30 border-t border-border">
+        <div className="flex items-center justify-end gap-2 border-t border-border/80 bg-muted/20 px-5 py-3 sm:px-6">
           {!hideCancel && (
-            <Button variant="outline" size="sm" onClick={handleDialogCancel}>
+            <Button variant="outline" size="sm" className="h-8 min-w-[72px] px-3" onClick={handleDialogCancel}>
               {cancelText || t('common.cancel')}
             </Button>
           )}
           <Button
             variant={config.btnVariant}
             size="sm"
-            className={config.btnClass || undefined}
+            className={`h-8 min-w-[72px] px-3 ${config.btnClass || ''}`}
             onClick={handleDialogConfirm}
             autoFocus
           >
