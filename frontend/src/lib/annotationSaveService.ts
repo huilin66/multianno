@@ -5,6 +5,15 @@ import { generateAnnotationPayload } from './annotationUtils';
 type StoreState = ReturnType<typeof useStore.getState>;
 type AnnotationSavePayload = Parameters<typeof saveAnnotation>[0];
 type AnnotationSaveProgress = (current: number, total: number) => void;
+type AnnotationSaveResult = { scenes: number; objects: number };
+type DirtyAnnotationSaveResult = AnnotationSaveResult | undefined;
+
+type DirtySaveTask = {
+  promise: Promise<DirtyAnnotationSaveResult>;
+  listeners: Set<AnnotationSaveProgress>;
+  current: number;
+  total: number;
+};
 
 // 所有标注写入共用一个队列，避免导出读取磁盘时仍有保存请求在路上。
 let pendingSaves: Promise<unknown> = Promise.resolve();
@@ -86,7 +95,7 @@ const saveAnnotationStems = async (
   state: StoreState,
   stems: string[],
   onProgress?: AnnotationSaveProgress,
-) => {
+): Promise<AnnotationSaveResult> => {
   const projectIdentity = getAnnotationProjectIdentity(state);
   const targetStems = Array.from(new Set(stems.filter(Boolean)));
   const payloads = targetStems.map((stem) => ({
@@ -124,19 +133,74 @@ const saveAnnotationStems = async (
   };
 };
 
+// A manual taxonomy write and the one-second autosave debounce can observe the
+// same dirty set. Share one in-flight task instead of enqueueing that set a
+// second time behind itself. Besides avoiding duplicate disk writes, this
+// keeps the progress bar tied to the actual save operation.
+let dirtySaveInFlight: DirtySaveTask | null = null;
+
+const runDirtyAnnotationSave = (
+  onProgress?: AnnotationSaveProgress,
+): Promise<DirtyAnnotationSaveResult> => {
+  if (dirtySaveInFlight) {
+    if (onProgress) {
+      dirtySaveInFlight.listeners.add(onProgress);
+      onProgress(dirtySaveInFlight.current, dirtySaveInFlight.total);
+    }
+    return dirtySaveInFlight.promise;
+  }
+
+  const task = {
+    promise: Promise.resolve(undefined) as Promise<DirtyAnnotationSaveResult>,
+    listeners: new Set<AnnotationSaveProgress>(),
+    current: 0,
+    total: 0,
+  } satisfies DirtySaveTask;
+
+  if (onProgress) task.listeners.add(onProgress);
+
+  const notifyProgress: AnnotationSaveProgress = (current, total) => {
+    task.current = current;
+    task.total = total;
+    task.listeners.forEach((listener) => {
+      try {
+        listener(current, total);
+      } catch {
+        // A progress subscriber must never make the actual save fail.
+      }
+    });
+  };
+
+  task.promise = (async () => {
+    const state = useStore.getState();
+    const dirtyStems = getDirtyStems(state);
+    if (dirtyStems.length === 0) {
+      await waitForPendingAnnotationSaves();
+      return undefined;
+    }
+
+    return saveAnnotationStems(state, dirtyStems, notifyProgress);
+  })();
+
+  dirtySaveInFlight = task;
+  task.promise.then(
+    () => {
+      if (dirtySaveInFlight === task) dirtySaveInFlight = null;
+    },
+    () => {
+      if (dirtySaveInFlight === task) dirtySaveInFlight = null;
+    },
+  );
+
+  return task.promise;
+};
+
 /**
  * Save all dirty scenes. Keep this name for existing toolbar/export callers,
  * but no longer limit a manual save to whichever scene happens to be active.
  */
 export const saveCurrentAnnotations = async () => {
-  const state = useStore.getState();
-  const dirtyStems = getDirtyStems(state);
-  if (dirtyStems.length === 0) {
-    await waitForPendingAnnotationSaves();
-    return;
-  }
-
-  await saveAnnotationStems(state, dirtyStems);
+  await runDirtyAnnotationSave();
 };
 
 /**
@@ -144,16 +208,8 @@ export const saveCurrentAnnotations = async () => {
  * Track ID editing changes the active scene repeatedly, so saving only the
  * current scene is not sufficient when the window is closed or exported.
  */
-export const saveDirtyAnnotations = async (onProgress?: AnnotationSaveProgress) => {
-  const state = useStore.getState();
-  const dirtyStems = getDirtyStems(state);
-  if (dirtyStems.length === 0) {
-    await waitForPendingAnnotationSaves();
-    return;
-  }
-
-  return saveAnnotationStems(state, dirtyStems, onProgress);
-};
+export const saveDirtyAnnotations = (onProgress?: AnnotationSaveProgress) =>
+  runDirtyAnnotationSave(onProgress);
 
 /**
  * Persist the complete in-memory annotation cache.
