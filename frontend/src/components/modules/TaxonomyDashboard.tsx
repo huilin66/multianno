@@ -1081,7 +1081,14 @@ const ScenePreviewPanel = ({
     ).find((element) => (element as HTMLElement).dataset.sceneStem === previewStem) as HTMLElement | undefined;
 
     if (target) {
-      target.scrollIntoView({ behavior: 'auto', block: 'start' });
+      // Scroll only the Scenes Involved container. `scrollIntoView` can also
+      // scroll the outer taxonomy page, which makes the preview/statistics
+      // cards jump whenever an attribute value changes.
+      const container = sceneListRef.current;
+      const containerRect = container.getBoundingClientRect();
+      const targetRect = target.getBoundingClientRect();
+      const nextScrollTop = container.scrollTop + (targetRect.top - containerRect.top);
+      container.scrollTop = Math.max(0, nextScrollTop);
       shouldScrollOnMountRef.current = false;
     }
   }, [previewStem, sceneListKey, sceneSelectionKey]);
