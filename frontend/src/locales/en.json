@@ -838,9 +838,6 @@
     },
     "stepScenes": {
       "title": "Scene Group Selection",
-      "selection": "Select Scene Groups to Export",
-      "selectionHint": "Click to toggle one scene. Hold Shift and click to select a continuous range. This only changes the export scope; project annotations are not modified.",
-      "includeEmpty": "Include empty Scene Groups",
       "selectToCurrent": "Select to current",
       "selectAll": "Select all",
       "selectNonEmpty": "Select non-empty",
