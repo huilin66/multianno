@@ -1378,6 +1378,8 @@
     "scenesCount": "场景",
     "tipDoubleClick": "提示：双击行以打开场景",
     "tipClickPreview": "单击预览，双击打开场景",
+    "browseSection": "查看",
+    "statisticsSection": "统计",
     "preview": "预览",
     "previewFull": "全部",
     "previewSelectScene": "单击上方场景以预览匹配的对象。",

@@ -1378,6 +1378,8 @@
     "scenesCount": "Scenes",
     "tipDoubleClick": "Tip: Double-click a row to open scene",
     "tipClickPreview": "Click to preview, double-click to open scene",
+    "browseSection": "Browse",
+    "statisticsSection": "Statistics",
     "preview": "Preview",
     "previewFull": "Full",
     "previewSelectScene": "Click a scene above to preview matching objects.",
