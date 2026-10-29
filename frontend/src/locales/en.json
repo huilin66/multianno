@@ -835,8 +835,7 @@
       "dataFull": "Export Full Data (annotation + images)",
       "task": "Task Type",
       "format": "Format",
-      "includeUnlabeled": "Export Empty Annotation Results",
-      "includeUnlabeledDesc": "When enabled, keep all scenes and create empty annotation results for scenes without exportable labels (YOLO creates an empty .txt file). When disabled, skip those scenes."
+      "includeUnlabeled": "Export Empty Annotation Results"
     },
     "stepScenes": {
       "title": "Scene Group Selection",

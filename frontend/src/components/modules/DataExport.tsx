@@ -692,24 +692,6 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
               </div>
             </div>
 
-            {(exportMode === 'dataset' || exportMode === 'annotation') && (
-              <div className="flex items-start gap-3 p-3 rounded-lg border bg-muted/20">
-                <Checkbox
-                  checked={includeUnlabeledImages}
-                  onCheckedChange={(checked) => setIncludeUnlabeledImages(Boolean(checked))}
-                  className="mt-0.5"
-                />
-                <div className="space-y-1">
-                  <Label className="text-xs font-bold">
-                    {t('dataExport.stepTask.includeUnlabeled')}
-                  </Label>
-                  <p className="text-[10px] leading-relaxed text-muted-foreground">
-                    {t('dataExport.stepTask.includeUnlabeledDesc')}
-                  </p>
-                </div>
-              </div>
-            )}
-
             <div className="h-px bg-border" />
 
             {/* 2. Task - 卡片选择 */}
@@ -1239,6 +1221,16 @@ export function DataExport({ onClose }: { onClose?: () => void }) {
       case 'shapes':
         return (
           <div className="space-y-5">
+            <div className="flex items-center gap-2 rounded-lg border bg-muted/20 px-3 py-2.5">
+              <Checkbox
+                checked={includeUnlabeledImages}
+                onCheckedChange={(checked) => setIncludeUnlabeledImages(Boolean(checked))}
+              />
+              <Label className="text-xs font-bold">
+                {t('dataExport.stepTask.includeUnlabeled')}
+              </Label>
+            </div>
+
             <div className="grid grid-cols-2 gap-5">
 
               {/* Shape Filter 面板 */}
