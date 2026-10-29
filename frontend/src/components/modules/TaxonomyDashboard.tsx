@@ -2514,7 +2514,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       mergeTaxonomyClassesWithAttributes(merges);
 
       useStore.getState().setStatsCacheValid?.(false);
-      await refreshStatsIfNeeded(true);
+      // Advanced merge creates new attribute definitions and writes several
+      // attribute keys at once. Reload the backend snapshot immediately so
+      // Attribute statistics cannot remain on the pre-merge cache.
+      await loadStatistics(true, true);
       setShowMergeWithAttr(false);
       resetMergeWithAttributeDraft();
       setActiveTab('classes');
