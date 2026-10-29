@@ -1586,6 +1586,7 @@
   "common": {
     "stage": "Stage",
     "eta": "ETA",
+    "status": "Status",
     "operation": "Operation",
     "time": "Time",
     "details": "Details",

@@ -1586,6 +1586,7 @@
   "common": {
     "stage": "阶段",
     "eta": "预计剩余",
+    "status": "状态",
     "operation": "操作",
     "time": "时间",
     "details": "详细结果",
