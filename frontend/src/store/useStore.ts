@@ -354,6 +354,7 @@ export interface AppState {
   }[]) => void;
   addTaxonomyAttribute: (attr: TaxonomyAttribute) => void;
   upsertTaxonomyAttributes: (attrs: Array<Partial<TaxonomyAttribute> & { name: string }>) => void;
+  replaceTaxonomyAttributes: (attrs: Array<Partial<TaxonomyAttribute> & { name: string }>) => void;
   updateTaxonomyAttribute: (id: string, updates: Partial<TaxonomyAttribute>) => void;
   deleteTaxonomyAttribute: (id: string) => void;
   setClassOrder: (order: string[]) => void;
@@ -837,6 +838,51 @@ export const useStore = create<AppState>()(
         return {
           taxonomyAttributes: nextAttributes,
           attributeOrder: nextOrder,
+        };
+      }),
+      replaceTaxonomyAttributes: (attrs) => set((state) => {
+        if (!Array.isArray(attrs)) return state;
+
+        const existingByName = new Map(
+          state.taxonomyAttributes.map((attribute) => [
+            String(attribute.name || '').trim().toLowerCase(),
+            attribute,
+          ]),
+        );
+        const importIdPrefix = `attr-mirror-${Date.now()}`;
+        const nextAttributes: TaxonomyAttribute[] = [];
+
+        attrs.forEach((incoming, index) => {
+          const name = String(incoming.name || '').trim();
+          if (!name || nextAttributes.some((attribute) => attribute.name.toLowerCase() === name.toLowerCase())) {
+            return;
+          }
+
+          const options = Array.from(new Set(
+            (Array.isArray(incoming.options) ? incoming.options : [])
+              .map((option) => String(option).trim())
+              .filter(Boolean),
+          ));
+          const existing = existingByName.get(name.toLowerCase());
+          const defaultValue = incoming.defaultValue !== undefined
+            ? String(incoming.defaultValue)
+            : existing?.defaultValue !== undefined
+              ? String(existing.defaultValue)
+              : options[0] || '';
+
+          nextAttributes.push({
+            id: String(incoming.id || existing?.id || `${importIdPrefix}-${index}`),
+            name,
+            type: incoming.type || existing?.type || 'select',
+            options,
+            defaultValue,
+            applyToAll: incoming.applyToAll ?? existing?.applyToAll ?? true,
+          });
+        });
+
+        return {
+          taxonomyAttributes: nextAttributes,
+          attributeOrder: nextAttributes.map((attribute) => attribute.id),
         };
       }),
       updateTaxonomyAttribute: (id, updates) => set((state) => ({ 

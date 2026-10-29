@@ -874,7 +874,12 @@ export function DataPreload({ onClose, isCreatingProject = false }: DataPreloadP
           ? importResult.attribute_definitions
           : [];
         if (importedAttributeDefinitions.length > 0) {
-          useStore.getState().upsertTaxonomyAttributes(importedAttributeDefinitions);
+          const store = useStore.getState();
+          if (annotationMergeStrategy === 'mirror') {
+            store.replaceTaxonomyAttributes(importedAttributeDefinitions);
+          } else {
+            store.upsertTaxonomyAttributes(importedAttributeDefinitions);
+          }
         }
         setOperationProgress({ current: 1, total: 1 });
         updateOverallProgress(2, totalStages, 1, 1);

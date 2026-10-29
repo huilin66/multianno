@@ -11,10 +11,12 @@ import {
   importDataStream,
   loadProjectMetaFromServer,
   analyzeWorkspaceFolders,
+  saveProjectMeta,
   resolveAttributeConfig,
 } from '../../api/client';
 import { Legend } from '../ui/legend';
 import { loadAllProjectAnnotations } from '../../lib/annotationUtils';
+import { generateProjectMetaConfig } from '../../lib/projectUtils';
 import { SUPPORTED_TASKS, FORMAT_DETAILS, type TaskType } from '../../config/supportedFormats';
 import { showDialog } from '../../store/useDialogStore';
 import { OperationProgress } from '../ui/OperationProgress';
@@ -305,7 +307,20 @@ export function DataImport({ onClose }: { onClose?: () => void }) {
         ? res.attribute_definitions
         : [];
       if (importedAttributeDefinitions.length > 0) {
-        useStore.getState().upsertTaxonomyAttributes(importedAttributeDefinitions);
+        const store = useStore.getState();
+        if (mergeStrategy === 'mirror') {
+          store.replaceTaxonomyAttributes(importedAttributeDefinitions);
+          const projectMetaPath = useStore.getState().projectMetaPath;
+          if (projectMetaPath) {
+            await saveProjectMeta({
+              file_path: projectMetaPath,
+              content: generateProjectMetaConfig(useStore.getState()),
+            });
+            useStore.getState().setMetaLastSavedTime(new Date().toISOString());
+          }
+        } else {
+          store.upsertTaxonomyAttributes(importedAttributeDefinitions);
+        }
       }
 
       setImportStatus('done');
