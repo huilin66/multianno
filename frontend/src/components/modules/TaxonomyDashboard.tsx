@@ -5303,10 +5303,6 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                 <div className="w-full min-w-0 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                   <div className="mb-3 flex items-center justify-between gap-3 border-b border-neutral-100 pb-2 dark:border-neutral-800">
                     <div className="flex min-w-0 items-center gap-2">
-                      <span
-                        className="h-3.5 w-3.5 shrink-0 rounded-sm border border-black/10 shadow-sm"
-                        style={{ backgroundColor: ATTRIBUTE_COLUMN_PALETTE[0] }}
-                      />
                       <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
                         {t('taxonomyDashboard.attributeValuesDistribution', 'Attribute Values Distribution')}
                       </h3>
