@@ -1314,8 +1314,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     setAttributeValueMerges({});
     setPendingValueMerge(null);
     setShowAttrDeleteConfirm(false);
-    if (activeAttribute?.name) setAttributeRenameValue(activeAttribute.name);
-  }, [activeAttribute?.name]);
+  }, []);
   const [newClassName, setNewClassName] = useState('');
   const [isAddingClass, setIsAddingClass] = useState(false);
 
@@ -4466,7 +4465,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
         {activeTab === 'attributes' && activeAttribute && (
           <div className="flex-1 flex flex-col overflow-hidden bg-neutral-50 dark:bg-neutral-950">
             
-            {/* 1. 紧凑标题：属性页只展示属性值，编辑入口放入独立窗口 */}
+            {/* 1. 紧凑标题：名称仍可直接编辑，属性值管理放入独立窗口 */}
             <div className="p-3 border-b border-neutral-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shrink-0 shadow-sm z-10">
               <div className="flex items-center justify-between gap-3">
                 <div className="flex min-w-0 items-center gap-3 rounded-lg border border-neutral-200 bg-white px-2 py-1.5 shadow-sm dark:border-neutral-700 dark:bg-neutral-900">
@@ -4479,11 +4478,45 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       ],
                     }}
                   />
-                  <span
-                    className="h-8 min-w-0 max-w-[min(24rem,45vw)] truncate text-sm font-black leading-8 text-neutral-900 dark:text-neutral-100"
-                  >
-                    {activeAttribute.name}
-                  </span>
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <Input
+                      value={attributeRenameValue}
+                      onChange={(event) => setAttributeRenameValue(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void executeRenameAttribute();
+                      }}
+                      style={{
+                        width: `${Math.min(256, Math.max(112, attributeRenameValue.trim().length * 12 + 24))}px`,
+                      }}
+                      className="h-8 w-auto min-w-[7rem] max-w-64 border-transparent bg-transparent px-2 text-sm font-black shadow-none hover:border-neutral-200 focus:border-blue-500"
+                      placeholder={t('workspace.attributeName', 'Attribute name')}
+                    />
+                    {attributeRenameValue.trim() !== activeAttribute.name && (
+                      <div className="flex shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 p-1 dark:border-blue-900/50 dark:bg-blue-950/30">
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={isProcessing}
+                          className="h-7 bg-blue-600 px-2 text-[10px] font-semibold text-white hover:bg-blue-700"
+                          onClick={() => void executeRenameAttribute()}
+                        >
+                          {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
+                          {t('common.confirm')}
+                        </Button>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          disabled={isProcessing}
+                          className="h-7 w-7 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
+                          onClick={() => setAttributeRenameValue(activeAttribute.name)}
+                          title={t('common.cancel')}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                   <span className="shrink-0 whitespace-nowrap rounded bg-neutral-100 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
                     {attributeValueOptions.reduce((sum, option) => sum + option.objectCount, 0)} {t('taxonomyDashboard.objects', 'objects')}
                   </span>
@@ -4571,47 +4604,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       );
 
                       return (
-                        <div className="grid gap-4 xl:grid-cols-[minmax(180px,0.42fr)_minmax(0,1fr)_auto] xl:items-start">
-                          <div className="min-w-0">
-                            <div className="flex h-7 items-center gap-2">
-                              <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
-                                {t('workspace.attributeName', 'Attribute name')}
-                              </span>
-                              {attributeRenameValue.trim() !== activeAttribute.name && (
-                                <div className="flex shrink-0 items-center gap-1 rounded-lg border border-blue-200 bg-blue-50 p-1 dark:border-blue-900/50 dark:bg-blue-950/30">
-                                  <Button
-                                    size="sm"
-                                    disabled={isProcessing}
-                                    className="h-6 bg-blue-600 px-2 text-[9px] font-black text-white shadow-sm hover:bg-blue-700"
-                                    onClick={() => void executeRenameAttribute()}
-                                  >
-                                    {isProcessing ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <Check className="mr-1 h-3 w-3" />}
-                                    {t('common.confirm')}
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    disabled={isProcessing}
-                                    className="h-6 w-6 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
-                                    onClick={() => setAttributeRenameValue(activeAttribute.name)}
-                                    title={t('common.cancel')}
-                                  >
-                                    <X className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              )}
-                            </div>
-                            <Input
-                              value={attributeRenameValue}
-                              onChange={e => setAttributeRenameValue(e.target.value)}
-                              onKeyDown={e => {
-                                if (e.key === 'Enter') void executeRenameAttribute();
-                              }}
-                              className="mt-2 h-8 min-w-0 border-transparent bg-transparent px-1 text-base font-black shadow-none hover:border-neutral-200 focus:border-blue-500"
-                              placeholder={t('workspace.attributeName', 'Attribute name')}
-                            />
-                          </div>
-
+                        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
                           <div className="min-w-0">
                             <div className="flex h-7 items-center gap-2">
                               <span className="text-[10px] font-black uppercase tracking-widest text-neutral-400">
