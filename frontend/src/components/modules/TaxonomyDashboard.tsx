@@ -4555,8 +4555,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     className="h-8 rounded-md border-neutral-200 px-3 text-xs font-semibold dark:border-neutral-700"
                     onClick={() => setShowAttributeValueManager(true)}
                   >
-                    <Settings className="mr-1.5 h-3.5 w-3.5" />
-                    {t('taxonomyDashboard.manageAttributeValues', 'Manage values')}
+                    {t('taxonomyDashboard.manageAttributeValues', 'Settings')}
                   </Button>
                   <div className="h-7 w-px bg-neutral-300 dark:bg-neutral-700" />
                   {showAttrDeleteConfirm ? (
