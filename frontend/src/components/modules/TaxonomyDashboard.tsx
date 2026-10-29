@@ -1087,9 +1087,7 @@ const ScenePreviewPanel = ({
       const container = sceneListRef.current;
       const containerRect = container.getBoundingClientRect();
       const targetRect = target.getBoundingClientRect();
-      const headerElement = container.firstElementChild as HTMLElement | null;
-      const headerHeight = headerElement?.getBoundingClientRect().height || 0;
-      const nextScrollTop = container.scrollTop + (targetRect.top - containerRect.top) - headerHeight - 4;
+      const nextScrollTop = container.scrollTop + (targetRect.top - containerRect.top) - 4;
       container.scrollTop = Math.max(0, nextScrollTop);
       shouldScrollOnMountRef.current = false;
     }
@@ -1097,8 +1095,8 @@ const ScenePreviewPanel = ({
 
   return (
     <div className="bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-800 rounded-xl shadow-sm flex flex-row overflow-hidden h-[480px]">
-      <div ref={sceneListRef} className="w-[30%] min-w-[220px] max-w-[360px] h-full overflow-y-auto p-2 custom-scrollbar border-r border-neutral-100 dark:border-neutral-800 shrink-0">
-        <div className="sticky top-0 z-10 flex shrink-0 items-center justify-between border-b border-neutral-100 bg-white px-5 py-4 dark:border-neutral-800 dark:bg-neutral-900">
+      <div className="flex h-full w-[30%] min-w-[220px] max-w-[360px] shrink-0 flex-col border-r border-neutral-100 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex shrink-0 items-center justify-between border-b border-neutral-100 px-5 py-4 dark:border-neutral-800">
           <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
             {t('taxonomyDashboard.scenesInvolved')}
           </h3>
@@ -1107,7 +1105,8 @@ const ScenePreviewPanel = ({
           </span>
         </div>
 
-        <div className="flex flex-col gap-1">
+        <div ref={sceneListRef} className="min-h-0 flex-1 overflow-y-auto p-2 custom-scrollbar">
+          <div className="flex flex-col gap-1">
           {sceneStems.map((stem) => {
             const isSelected = previewStem === stem;
             const objectCount = previewCounts[stem];
@@ -1144,6 +1143,7 @@ const ScenePreviewPanel = ({
               {t('taxonomyDashboard.noScenesForAttributeValue', 'No scenes found for this attribute value.')}
             </div>
           )}
+          </div>
         </div>
       </div>
 
