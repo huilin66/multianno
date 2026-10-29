@@ -1301,6 +1301,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [mergeTargetId, setMergeTargetId] = useState<string>(MERGE_NONE_VALUE);
   const [renameValue, setRenameValue] = useState('');
   const [attributeRenameValue, setAttributeRenameValue] = useState('');
+  const [isRenamingClass, setIsRenamingClass] = useState(false);
+  const [isRenamingAttribute, setIsRenamingAttribute] = useState(false);
   const [showClassDeleteConfirm, setShowClassDeleteConfirm] = useState(false);
   const initRef = useRef(false);
   const activeClass = taxonomyClasses.find((c: any) => c.id === selectedClassId);
@@ -3197,6 +3199,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       return;
     }
 
+    setIsRenamingAttribute(true);
     try {
       const result = await runTaxonomyWrite(
         'rename_attribute',
@@ -3247,6 +3250,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
       });
     } finally {
       finishTaxonomyWrite();
+      setIsRenamingAttribute(false);
     }
   };
 
@@ -4182,7 +4186,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                           alert(t('taxonomyDashboard.renameConfirmHint'));
                         } 
                       }}
-                    disabled={activeClass.name.toLowerCase() === 'background'} 
+                    disabled={activeClass.name.toLowerCase() === 'background' || isRenamingClass}
                     style={{
                       width: `${Math.min(256, Math.max(112, renameValue.trim().length * 12 + 24))}px`,
                     }}
@@ -4194,7 +4198,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     placeholder={t('workspace.class') || 'Class Name'}
                   />
                   {/* 当名字发生变化时，在右侧滑出胶囊样式的确认框 */}
-                    {renameValue.trim() !== activeClass.name && (
+                    {renameValue.trim() !== activeClass.name && !isRenamingClass && (
                       <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-950/30 p-1.5 rounded-lg border border-blue-200 shadow-sm animate-in slide-in-from-left-2 shrink-0">
                         <Button
                           size="sm"
@@ -4205,6 +4209,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                             if (!newName) return;
                             
                             const oldName = activeClass.name;
+                            setIsRenamingClass(true);
                             try {
                               const safeSaveDirs = getSaveDirs();
                               const result = await runTaxonomyWrite(
@@ -4245,6 +4250,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                               setRenameValue(oldName);
                             } finally {
                               finishTaxonomyWrite();
+                              setIsRenamingClass(false);
                             }
                           }}
                         >
@@ -4258,7 +4264,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         <Button
                           size="sm"
                           variant="ghost"
-                          disabled={isProcessing}
+                          disabled={isProcessing || isRenamingClass}
                           className="h-7 w-7 p-0 text-neutral-500 hover:bg-neutral-200 dark:hover:bg-neutral-800"
                           onClick={() => setRenameValue(activeClass.name)} // 取消并恢复原名
                         >
@@ -4736,18 +4742,19 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                       onKeyDown={(event) => {
                         if (event.key === 'Enter') void executeRenameAttribute();
                       }}
+                      disabled={isRenamingAttribute}
                       style={{
                         width: `${Math.min(256, Math.max(112, attributeRenameValue.trim().length * 12 + 24))}px`,
                       }}
                       className="h-8 w-auto min-w-[7rem] max-w-64 border-transparent bg-transparent px-2 text-sm font-black shadow-none hover:border-neutral-200 focus:border-blue-500"
                       placeholder={t('workspace.attributeName', 'Attribute name')}
                     />
-                    {attributeRenameValue.trim() !== activeAttribute.name && (
+                    {attributeRenameValue.trim() !== activeAttribute.name && !isRenamingAttribute && (
                       <div className="flex shrink-0 items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-1.5 shadow-sm dark:border-blue-900/50 dark:bg-blue-950/30">
                         <Button
                           type="button"
                           size="sm"
-                          disabled={isProcessing}
+                          disabled={isProcessing || isRenamingAttribute}
                           className="h-8 rounded-md bg-blue-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-blue-700"
                           onClick={() => void executeRenameAttribute()}
                         >
