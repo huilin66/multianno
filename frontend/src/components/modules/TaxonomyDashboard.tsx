@@ -4818,8 +4818,8 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             )}
 
             {/* 2. 主体区 */}
-            <div className="flex-1 overflow-y-auto p-4 custom-scrollbar flex flex-col gap-3">
-              <div className="flex flex-col gap-3 items-stretch animate-in fade-in">
+            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar flex flex-col gap-1.5">
+              <div className="flex flex-col gap-1.5 items-stretch animate-in fade-in">
                 <div className="w-full min-w-0 shrink-0">
                   <ScenePreviewPanel
                     sceneStems={attributeSceneStems}
@@ -4844,7 +4844,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                   />
                 </div>
 
-                <div className="w-full min-w-0 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                <div className="w-full min-w-0 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                   <div className="mb-3 flex items-center justify-between gap-3 border-b border-neutral-100 pb-2 dark:border-neutral-800">
                     <div className="flex min-w-0 items-center gap-2">
                       <span
