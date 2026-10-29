@@ -159,15 +159,21 @@ const TaxonomySectionHeader = ({
     type="button"
     onClick={onToggle}
     aria-expanded={expanded}
-    className="flex w-full items-center justify-between rounded-lg border border-neutral-200 bg-white px-3 py-2 text-left transition-colors hover:bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900 dark:hover:bg-neutral-800"
+    className={`flex w-full items-center justify-between border-b border-l-[3px] px-2 py-2 text-left transition-colors ${
+      expanded
+        ? 'border-b-neutral-200 border-l-blue-500 bg-blue-50/60 hover:bg-blue-100/70 dark:border-b-neutral-800 dark:border-l-blue-400 dark:bg-blue-950/30 dark:hover:bg-blue-900/40'
+        : 'border-b-neutral-200 border-l-neutral-300 bg-neutral-100/80 hover:bg-neutral-200/80 dark:border-b-neutral-800 dark:border-l-neutral-700 dark:bg-neutral-900/70 dark:hover:bg-neutral-800/80'
+    }`}
   >
-    <span className="text-xs font-black uppercase tracking-widest text-neutral-700 dark:text-neutral-200">
+    <span className={`text-xs font-black uppercase tracking-widest ${
+      expanded ? 'text-blue-700 dark:text-blue-300' : 'text-neutral-700 dark:text-neutral-200'
+    }`}>
       {title}
     </span>
     {expanded ? (
-      <ChevronDown className="h-4 w-4 text-neutral-400" />
+      <ChevronDown className="h-4 w-4 text-blue-600 dark:text-blue-300" />
     ) : (
-      <ChevronRight className="h-4 w-4 text-neutral-400" />
+      <ChevronRight className="h-4 w-4 text-neutral-400 dark:text-neutral-500" />
     )}
   </button>
 );
@@ -1314,7 +1320,7 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
   const [selectedAttributeId, setSelectedAttributeId] = useState<string | null>(null);
   const [selectedAttributeValue, setSelectedAttributeValue] = useState<string | null>(null);
   const [expanded, setExpanded] = useState({ taxonomy: true, classes: true, attributes: true });
-  const [detailSectionsExpanded, setDetailSectionsExpanded] = useState({ browse: true, statistics: true });
+  const [detailSectionsExpanded, setDetailSectionsExpanded] = useState({ browse: true, statistics: false });
   const [statsStatus, setStatsStatus] = useState<'idle' | 'loading' | 'done'>('idle');
   const [statsData, setStatsData] = useState<any>(null); 
   const statsRequestIdRef = useRef(0);
@@ -4449,14 +4455,15 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                 <>
                   {/* --- 上半部分：类的紧凑视图 --- */}
                   <div className="flex flex-col gap-1.5 shrink-0 animate-in fade-in">
-                    <TaxonomySectionHeader
-                      title={t('taxonomyDashboard.browseSection', 'Browse')}
-                      expanded={detailSectionsExpanded.browse}
-                      onToggle={() => setDetailSectionsExpanded((previous) => ({ ...previous, browse: !previous.browse }))}
-                    />
+                    <div className="order-2 w-full">
+                      <TaxonomySectionHeader
+                        title={t('taxonomyDashboard.browseSection', 'Browse')}
+                        expanded={detailSectionsExpanded.browse}
+                        onToggle={() => setDetailSectionsExpanded((previous) => ({ ...previous, browse: !previous.browse }))}
+                      />
 
-                    {detailSectionsExpanded.browse && (
-                    <div className="w-full flex flex-col">
+                      {detailSectionsExpanded.browse && (
+                      <div className="w-full flex flex-col pt-1">
 
                       
                       {/* Scenes Involved + read-only preview */}
@@ -4613,17 +4620,20 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
           </div>
         </div>
 
-                    )}
+                      )}
+                    </div>
 
-                    <TaxonomySectionHeader
-                      title={t('taxonomyDashboard.statisticsSection', 'Statistics')}
-                      expanded={detailSectionsExpanded.statistics}
-                      onToggle={() => setDetailSectionsExpanded((previous) => ({ ...previous, statistics: !previous.statistics }))}
-                    />
+                    <div className="order-1 w-full">
+                      <TaxonomySectionHeader
+                        title={t('taxonomyDashboard.statisticsSection', 'Statistics')}
+                        expanded={detailSectionsExpanded.statistics}
+                        onToggle={() => setDetailSectionsExpanded((previous) => ({ ...previous, statistics: !previous.statistics }))}
+                      />
 
-                    {/* 右侧：内容展示区 */}
-                    {detailSectionsExpanded.statistics && (
-                    <div className="w-full overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
+                      {/* 右侧：内容展示区 */}
+                      {detailSectionsExpanded.statistics && (
+                      <div className="w-full pt-1">
+                      <div className="w-full overflow-hidden rounded-xl border border-neutral-200 bg-white dark:border-neutral-800 dark:bg-neutral-900">
                       <div className="flex min-h-[420px] overflow-hidden">
                         <div className="w-44 shrink-0 border-r border-neutral-200 bg-neutral-50/50 p-3 dark:border-neutral-800 dark:bg-neutral-950/20">
                           <h4 className="mb-3 px-2 text-sm font-black uppercase tracking-wider text-neutral-800 dark:text-neutral-100">
@@ -4745,8 +4755,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                         </div>
                       </div>
                     </div>
+                    </div>
                     )}
 
+                    </div>
                   </div>
                 </>
               ) : (
@@ -5318,14 +5330,15 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
             {/* 2. 主体区 */}
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar flex flex-col gap-1.5">
               <div className="flex flex-col gap-1.5 items-stretch animate-in fade-in">
-                <TaxonomySectionHeader
-                  title={t('taxonomyDashboard.browseSection', 'Browse')}
-                  expanded={detailSectionsExpanded.browse}
-                  onToggle={() => setDetailSectionsExpanded((previous) => ({ ...previous, browse: !previous.browse }))}
-                />
+                <div className="order-2 w-full">
+                  <TaxonomySectionHeader
+                    title={t('taxonomyDashboard.browseSection', 'Browse')}
+                    expanded={detailSectionsExpanded.browse}
+                    onToggle={() => setDetailSectionsExpanded((previous) => ({ ...previous, browse: !previous.browse }))}
+                  />
 
-                {detailSectionsExpanded.browse && (
-                <div className="w-full min-w-0 shrink-0">
+                  {detailSectionsExpanded.browse && (
+                  <div className="w-full min-w-0 shrink-0 pt-1">
                   <ScenePreviewPanel
                     sceneStems={attributeSceneStems}
                     sceneSelectionKey={previewFilterKey}
@@ -5348,16 +5361,19 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     color={previewColor}
                   />
                 </div>
-                )}
+                  )}
+                </div>
 
-                <TaxonomySectionHeader
-                  title={t('taxonomyDashboard.statisticsSection', 'Statistics')}
-                  expanded={detailSectionsExpanded.statistics}
-                  onToggle={() => setDetailSectionsExpanded((previous) => ({ ...previous, statistics: !previous.statistics }))}
-                />
+                <div className="order-1 w-full">
+                  <TaxonomySectionHeader
+                    title={t('taxonomyDashboard.statisticsSection', 'Statistics')}
+                    expanded={detailSectionsExpanded.statistics}
+                    onToggle={() => setDetailSectionsExpanded((previous) => ({ ...previous, statistics: !previous.statistics }))}
+                  />
 
-                {detailSectionsExpanded.statistics && (
-                <div className="w-full min-w-0 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
+                  {detailSectionsExpanded.statistics && (
+                  <div className="w-full pt-1">
+                  <div className="w-full min-w-0 rounded-xl border border-neutral-200 bg-white p-3 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
                   <div className="mb-3 flex items-center justify-between gap-3 border-b border-neutral-100 pb-2 dark:border-neutral-800">
                     <div className="flex min-w-0 items-center gap-2">
                       <h3 className="text-[11px] font-black uppercase tracking-widest text-neutral-600 dark:text-neutral-300">
@@ -5382,8 +5398,10 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
                     selectedRowLabel={selectedAttributeValueKey}
                   />
                 </div>
+                </div>
                 )}
-             </div>
+                </div>
+              </div>
 
             </div>
           </div>
