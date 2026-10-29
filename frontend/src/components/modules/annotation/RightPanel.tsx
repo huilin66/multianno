@@ -5,11 +5,12 @@ import { Label } from '../../ui/label';
 import { Input } from '../../ui/input';
 import { Button } from '../../ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '../../ui/popover';
 import { 
   Database, ChevronRight, Layers, Maximize, Minimize, Crop, Edit3,
   Eye, Square, AlertTriangle, Trash2, Image as ImageIcon, Frame,
   Hexagon, CircleDot, Activity, Circle, Diamond, Box, Pencil, Cloud, 
-  Tag, Type, Hash, EyeOff, ListPlus, ListX, Check, X, MapPin, Copy, RefreshCw, ExternalLink, Search, Route
+  Tag, Type, Hash, EyeOff, ListPlus, ListX, Check, X, MapPin, Copy, RefreshCw, ExternalLink, Search, Route, Filter, Plus
 } from 'lucide-react';
 import { Slider } from '../../ui/slider';
 import { COLOR_MAPS } from '../../../config/colors';
@@ -52,6 +53,55 @@ interface SectionHeaderProps {
   badge?: React.ReactNode;
   colorClass?: string;
   actionNode?: React.ReactNode;
+}
+
+type SceneFilterMode = 'all' | 'with_annotations' | 'empty' | 'custom';
+type SceneFilterField = 'scene_group' | 'annotation_count';
+type SceneFilterOperator = 'equals' | 'not_equals' | 'contains' | 'greater_than' | 'greater_or_equal' | 'less_than' | 'less_or_equal';
+
+interface SceneFilterRule {
+  id: string;
+  field: SceneFilterField;
+  operator: SceneFilterOperator;
+  value: string;
+}
+
+function createSceneFilterRule(): SceneFilterRule {
+  return {
+    id: `scene-filter-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    field: 'annotation_count',
+    operator: 'greater_than',
+    value: '0',
+  };
+}
+
+function isValidSceneFilterRule(rule: SceneFilterRule): boolean {
+  if (!rule.value.trim()) return false;
+  if (rule.field === 'annotation_count') return Number.isFinite(Number(rule.value));
+  return true;
+}
+
+function matchesSceneFilterRule(stem: string, annotationCount: number, rule: SceneFilterRule): boolean {
+  if (!isValidSceneFilterRule(rule)) return true;
+
+  if (rule.field === 'scene_group') {
+    const actual = stem.toLowerCase();
+    const expected = rule.value.trim().toLowerCase();
+    if (rule.operator === 'equals') return actual === expected;
+    if (rule.operator === 'not_equals') return actual !== expected;
+    return actual.includes(expected);
+  }
+
+  const expected = Number(rule.value);
+  switch (rule.operator) {
+    case 'equals': return annotationCount === expected;
+    case 'not_equals': return annotationCount !== expected;
+    case 'greater_than': return annotationCount > expected;
+    case 'greater_or_equal': return annotationCount >= expected;
+    case 'less_than': return annotationCount < expected;
+    case 'less_or_equal': return annotationCount <= expected;
+    default: return true;
+  }
 }
 
 function SectionHeader({
@@ -192,6 +242,9 @@ export function RightPanel({
   const [sceneSearchOpen, setSceneSearchOpen] = React.useState(false);
   const [sceneSearchInput, setSceneSearchInput] = React.useState('');
   const [sceneSearchQuery, setSceneSearchQuery] = React.useState('');
+  const [sceneFilterOpen, setSceneFilterOpen] = React.useState(false);
+  const [sceneFilterMode, setSceneFilterMode] = React.useState<SceneFilterMode>('all');
+  const [sceneFilterRules, setSceneFilterRules] = React.useState<SceneFilterRule[]>([]);
   const [nmsPanelOpen, setNmsPanelOpen] = React.useState(false);
   const [nmsMode, setNmsMode] = React.useState<'iou' | 'ios'>('ios');
   const [nmsThreshold, setNmsThreshold] = React.useState(80);
@@ -199,11 +252,63 @@ export function RightPanel({
   const [nmsGroups, setNmsGroups] = React.useState<Record<string, { groupName: string, isMaster: boolean }>>({});
   const [hasScanned, setHasScanned] = React.useState(false);
   const [showHiddenObjects, setShowHiddenObjects] = React.useState(true);
+  const sceneAnnotationCounts = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    (stems || []).forEach((stem: string) => counts.set(stem, 0));
+    (annotations || []).forEach((annotation: any) => {
+      if (!counts.has(annotation.stem)) return;
+      counts.set(annotation.stem, (counts.get(annotation.stem) || 0) + 1);
+    });
+    return counts;
+  }, [annotations, stems]);
+
   const filteredSceneStems = React.useMemo(() => {
     const query = sceneSearchQuery.trim().toLowerCase();
-    if (!query) return stems;
-    return stems.filter((stem: string) => stem.toLowerCase().includes(query));
-  }, [sceneSearchQuery, stems]);
+    const validRules = sceneFilterRules.filter(isValidSceneFilterRule);
+    return (stems || []).filter((stem: string) => {
+      if (query && !stem.toLowerCase().includes(query)) return false;
+      const annotationCount = sceneAnnotationCounts.get(stem) || 0;
+      return validRules.every((rule) => matchesSceneFilterRule(stem, annotationCount, rule));
+    });
+  }, [sceneAnnotationCounts, sceneFilterRules, sceneSearchQuery, stems]);
+
+  const sceneFilterHasInvalidRules = sceneFilterRules.some((rule) => !isValidSceneFilterRule(rule));
+  const sceneFilterActive = sceneFilterRules.some(isValidSceneFilterRule);
+
+  const handleSceneFilterModeChange = (mode: SceneFilterMode) => {
+    setSceneFilterMode(mode);
+    if (mode === 'all' || mode === 'custom') {
+      if (mode === 'all') setSceneFilterRules([]);
+      return;
+    }
+
+    setSceneFilterRules([{
+      id: `scene-filter-${Date.now()}`,
+      field: 'annotation_count',
+      operator: mode === 'empty' ? 'equals' : 'greater_than',
+      value: '0',
+    }]);
+  };
+
+  const addSceneFilterRule = () => {
+    setSceneFilterMode('custom');
+    setSceneFilterRules((rules) => [...rules, createSceneFilterRule()]);
+  };
+
+  const updateSceneFilterRule = (id: string, updates: Partial<SceneFilterRule>) => {
+    setSceneFilterMode('custom');
+    setSceneFilterRules((rules) => rules.map((rule) => rule.id === id ? { ...rule, ...updates } : rule));
+  };
+
+  const removeSceneFilterRule = (id: string) => {
+    setSceneFilterMode('custom');
+    setSceneFilterRules((rules) => rules.filter((rule) => rule.id !== id));
+  };
+
+  const clearSceneFilters = () => {
+    setSceneFilterMode('all');
+    setSceneFilterRules([]);
+  };
 
   const jumpToScene = (stem: string) => {
     setCurrentStem(stem);
@@ -1510,6 +1615,179 @@ export function RightPanel({
                   </button>
                 </div>
               )}
+              <Popover open={sceneFilterOpen} onOpenChange={setSceneFilterOpen}>
+                <PopoverTrigger
+                  type="button"
+                  aria-label={t('rightPanel.filterSceneGroups')}
+                  title={t('rightPanel.filterSceneGroups')}
+                  className={`relative flex h-6 w-6 items-center justify-center rounded hover:bg-white/80 dark:hover:bg-neutral-900 ${
+                    sceneFilterActive
+                      ? 'text-blue-600 dark:text-blue-300'
+                      : 'text-neutral-500 hover:text-blue-600 dark:hover:text-blue-300'
+                  }`}
+                >
+                  <Filter className="h-3.5 w-3.5" />
+                  {sceneFilterActive && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-blue-600 dark:bg-blue-300" />}
+                </PopoverTrigger>
+                <PopoverContent
+                  align="end"
+                  side="bottom"
+                  className="w-[320px] max-w-[calc(100vw-1rem)] space-y-2.5 border-neutral-200 bg-white p-3 dark:border-neutral-700 dark:bg-neutral-900"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-neutral-800 dark:text-neutral-100">
+                      {t('rightPanel.sceneFilterTitle')}
+                    </span>
+                    <span className="font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
+                      {filteredSceneStems.length}/{(stems || []).length}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                      {t('rightPanel.sceneFilterQuick')}
+                    </Label>
+                    <Select value={sceneFilterMode} onValueChange={(value: any) => handleSceneFilterModeChange(value as SceneFilterMode)}>
+                      <SelectTrigger className="h-7 w-full text-[10px]">
+                        <SelectValue>
+                          {sceneFilterMode === 'all'
+                            ? t('rightPanel.sceneFilterAll')
+                            : sceneFilterMode === 'with_annotations'
+                              ? t('rightPanel.sceneFilterWithAnnotations')
+                              : sceneFilterMode === 'empty'
+                                ? t('rightPanel.sceneFilterEmpty')
+                                : t('rightPanel.sceneFilterCustom')}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">{t('rightPanel.sceneFilterAll')}</SelectItem>
+                        <SelectItem value="with_annotations">{t('rightPanel.sceneFilterWithAnnotations')}</SelectItem>
+                        <SelectItem value="empty">{t('rightPanel.sceneFilterEmpty')}</SelectItem>
+                        <SelectItem value="custom">{t('rightPanel.sceneFilterCustom')}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-0.5">
+                    <span className="text-[10px] font-semibold text-neutral-600 dark:text-neutral-300">
+                      {t('rightPanel.sceneFilterConditions')}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={addSceneFilterRule}
+                      className="inline-flex h-6 items-center gap-1 rounded border border-blue-200 px-1.5 text-[10px] font-medium text-blue-600 hover:bg-blue-50 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-950/40"
+                    >
+                      <Plus className="h-3 w-3" />
+                      {t('rightPanel.sceneFilterAddCondition')}
+                    </button>
+                  </div>
+
+                  {sceneFilterRules.length === 0 ? (
+                    <p className="rounded border border-dashed border-neutral-200 px-2 py-2 text-[10px] text-neutral-500 dark:border-neutral-700 dark:text-neutral-400">
+                      {t('rightPanel.sceneFilterEmptyCondition')}
+                    </p>
+                  ) : (
+                    <div className="max-h-44 space-y-1.5 overflow-y-auto pr-0.5 custom-scrollbar">
+                      {sceneFilterRules.map((rule) => {
+                        const isNameField = rule.field === 'scene_group';
+                        return (
+                          <div key={rule.id} className="space-y-1.5 rounded-md border border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-700 dark:bg-neutral-800/60">
+                            <div className="flex items-center gap-1.5">
+                              <Select
+                                value={rule.field}
+                                onValueChange={(value: any) => updateSceneFilterRule(rule.id, {
+                                  field: value as SceneFilterField,
+                                  operator: value === 'scene_group' ? 'contains' : 'greater_than',
+                                  value: '',
+                                })}
+                              >
+                                <SelectTrigger className="h-7 min-w-0 flex-1 text-[10px]"><SelectValue>{isNameField ? t('rightPanel.sceneFilterSceneGroup') : t('rightPanel.sceneFilterAnnotationCount')}</SelectValue></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="scene_group">{t('rightPanel.sceneFilterSceneGroup')}</SelectItem>
+                                  <SelectItem value="annotation_count">{t('rightPanel.sceneFilterAnnotationCount')}</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <button
+                                type="button"
+                                onClick={() => removeSceneFilterRule(rule.id)}
+                                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-neutral-400 hover:bg-red-50 hover:text-red-500 dark:hover:bg-red-950/30"
+                                title={t('rightPanel.sceneFilterRemoveCondition')}
+                                aria-label={t('rightPanel.sceneFilterRemoveCondition')}
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <Select
+                                value={rule.operator}
+                                onValueChange={(value: any) => updateSceneFilterRule(rule.id, { operator: value as SceneFilterOperator })}
+                              >
+                                <SelectTrigger className="h-7 min-w-0 flex-1 text-[10px]"><SelectValue>
+                                  {rule.operator === 'contains'
+                                    ? t('rightPanel.sceneFilterContains')
+                                    : rule.operator === 'equals'
+                                      ? t('rightPanel.sceneFilterEquals')
+                                      : rule.operator === 'not_equals'
+                                        ? t('rightPanel.sceneFilterNotEquals')
+                                        : rule.operator === 'greater_than'
+                                          ? t('rightPanel.sceneFilterGreaterThan')
+                                          : rule.operator === 'greater_or_equal'
+                                            ? t('rightPanel.sceneFilterGreaterOrEqual')
+                                            : rule.operator === 'less_than'
+                                              ? t('rightPanel.sceneFilterLessThan')
+                                              : t('rightPanel.sceneFilterLessOrEqual')}
+                                </SelectValue></SelectTrigger>
+                                <SelectContent>
+                                  {isNameField ? (
+                                    <>
+                                      <SelectItem value="contains">{t('rightPanel.sceneFilterContains')}</SelectItem>
+                                      <SelectItem value="equals">{t('rightPanel.sceneFilterEquals')}</SelectItem>
+                                      <SelectItem value="not_equals">{t('rightPanel.sceneFilterNotEquals')}</SelectItem>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <SelectItem value="equals">{t('rightPanel.sceneFilterEquals')}</SelectItem>
+                                      <SelectItem value="not_equals">{t('rightPanel.sceneFilterNotEquals')}</SelectItem>
+                                      <SelectItem value="greater_than">{t('rightPanel.sceneFilterGreaterThan')}</SelectItem>
+                                      <SelectItem value="greater_or_equal">{t('rightPanel.sceneFilterGreaterOrEqual')}</SelectItem>
+                                      <SelectItem value="less_than">{t('rightPanel.sceneFilterLessThan')}</SelectItem>
+                                      <SelectItem value="less_or_equal">{t('rightPanel.sceneFilterLessOrEqual')}</SelectItem>
+                                    </>
+                                  )}
+                                </SelectContent>
+                              </Select>
+                              <Input
+                                type={isNameField ? 'text' : 'number'}
+                                value={rule.value}
+                                onChange={(event) => updateSceneFilterRule(rule.id, { value: event.target.value })}
+                                placeholder={t('rightPanel.sceneFilterValue')}
+                                className="h-7 min-w-0 flex-1 px-2 text-[10px]"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {sceneFilterHasInvalidRules && (
+                    <p className="text-[10px] text-amber-600 dark:text-amber-300">
+                      {t('rightPanel.sceneFilterInvalid')}
+                    </p>
+                  )}
+
+                  <div className="flex justify-end border-t border-neutral-200 pt-2 dark:border-neutral-700">
+                    <button
+                      type="button"
+                      onClick={clearSceneFilters}
+                      disabled={!sceneFilterActive && sceneFilterRules.length === 0}
+                      className="h-6 rounded px-2 text-[10px] font-medium text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+                    >
+                      {t('rightPanel.sceneFilterClear')}
+                    </button>
+                  </div>
+                </PopoverContent>
+              </Popover>
               <button
                 type="button"
                 aria-label={t('menu.sceneGroupManager')}
@@ -1553,7 +1831,7 @@ export function RightPanel({
             })}
             {filteredSceneStems.length === 0 && (
               <div className="py-4 text-center text-[10px] text-neutral-400">
-                {sceneSearchQuery.trim()
+                {sceneSearchQuery.trim() || sceneFilterActive || sceneFilterRules.length > 0
                   ? t('rightPanel.noSceneGroupMatches')
                   : t('rightPanel.noSceneGroups')}
               </div>
