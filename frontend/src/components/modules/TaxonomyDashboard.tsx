@@ -2939,14 +2939,39 @@ export function TaxonomyDashboard({ onClose, onCacheTimestampChange }: TaxonomyD
     const name = newAttributeName.trim();
     if (!name) return;
     const newId = `attr-${Date.now()}`;
+    const defaultValue = 'none';
     addTaxonomyAttribute({
       id: newId,
       name,
       type: 'select',
-      options: ['default_val_1'],
-      defaultValue: 'default_val_1',
+      options: [defaultValue],
+      defaultValue,
       applyToAll: true,
     });
+
+    const state = useStore.getState() as any;
+    const changedStems = new Set<string>();
+    const updatedAnnotations = (state.annotations || []).map((annotation: any) => {
+      const attributes = { ...(annotation.attributes || {}) };
+      if (!Object.prototype.hasOwnProperty.call(attributes, name)) {
+        attributes[name] = defaultValue;
+        if (annotation.stem) changedStems.add(String(annotation.stem));
+        return { ...annotation, attributes };
+      }
+      return annotation;
+    });
+    if (changedStems.size > 0) {
+      useStore.setState({
+        annotations: updatedAnnotations,
+        isAnnotationDirty: true,
+        dirtyAnnotationStems: Array.from(new Set([
+          ...(state.dirtyAnnotationStems || []),
+          ...changedStems,
+        ])),
+      });
+      useStore.getState().setStatsCacheValid?.(false);
+    }
+
     setActiveTab('attributes');
     setSelectedAttributeId(newId);
     setIsAddingAttribute(false);
