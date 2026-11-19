@@ -638,7 +638,7 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, attribu
       <Filter className="size-3.5" />
       {query.children.length > 0 && <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-primary" />}
     </PopoverTrigger>
-    <PopoverContent align="end" onClick={event => event.stopPropagation()} className="w-[min(760px,calc(100vw-1rem))] max-h-[min(78vh,var(--available-height))] overflow-y-auto p-3.5">
+    <PopoverContent align="end" onClick={event => event.stopPropagation()} className="w-[min(640px,calc(100vw-1rem))] max-h-[min(78vh,var(--available-height))] overflow-y-auto p-3.5">
       <div className="flex items-center justify-between gap-2">
         <PopoverTitle>{t('sceneQuery.title')}</PopoverTitle>
         <span className="rounded-full bg-muted px-2 py-1 text-xs font-mono">{matched}/{total}</span>
