@@ -657,7 +657,12 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
       ? Number(left) - Number(right)
       : left.localeCompare(right));
     const maxValues = 60;
-    return { values: sorted.slice(0, maxValues), tooMany: sorted.length > maxValues, total: sorted.length };
+    const showAllValues = assistantField.id === 'name';
+    return {
+      values: showAllValues ? sorted : sorted.slice(0, maxValues),
+      tooMany: !showAllValues && sorted.length > maxValues,
+      total: sorted.length,
+    };
   }, [assistantField, attributes, objects, stems]);
 
   const quickQueries = useMemo(() => [
@@ -783,33 +788,34 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">
-        <div className="flex min-h-[122px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
+        <div className="flex h-[140px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
           <div className="border-b px-2 py-1 text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.quick')}</div>
-          <div className="flex flex-1 flex-col gap-1 p-1.5">
+          <div className="min-h-0 flex-1 overflow-y-auto p-1 custom-scrollbar">
             {quickQueries.map(item => (
-              <Button key={item.key} size="sm" variant={selectedQuickKey === item.key || activeQuick?.key === item.key ? 'default' : 'outline'}
-                className="h-8 justify-start truncate text-xs" onClick={() => {
+              <button key={item.key} type="button"
+                className={`mb-0.5 block w-full truncate rounded px-1.5 py-1.5 text-left text-[10px] transition-colors last:mb-0 ${selectedQuickKey === item.key || activeQuick?.key === item.key ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                onClick={() => {
                   setSelectedQuickKey(item.key);
                   setSelectedHistoryStatement(null);
                 }} onDoubleClick={() => updateStatement(item.statement)}>
                 {t(`rightPanel.${item.key}`)}
-              </Button>
+              </button>
             ))}
           </div>
           {renderQueryPreview(selectedQuick?.statement ?? null)}
         </div>
-        <div className="flex min-h-[122px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
+        <div className="flex h-[140px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
           <div className="border-b px-2 py-1 text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.history')}</div>
-          <div className="min-h-0 flex-1 overflow-y-auto p-1.5 custom-scrollbar">
+          <div className="min-h-0 flex-1 overflow-y-auto p-1 custom-scrollbar">
             {historyQueries.length > 0 ? historyQueries.map(item => (
-              <Button key={item} size="sm" variant={selectedHistoryStatement === item ? 'default' : 'outline'}
-                className="mb-1 h-8 w-full justify-start truncate font-mono text-[10px] last:mb-0" title={item}
+              <button key={item} type="button"
+                className={`mb-0.5 block w-full truncate rounded px-1.5 py-1.5 text-left text-[10px] transition-colors last:mb-0 ${selectedHistoryStatement === item ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground hover:bg-muted'}`} title={item}
                 onClick={() => {
                   setSelectedHistoryStatement(item);
                   setSelectedQuickKey(null);
                 }} onDoubleClick={() => updateStatement(item)}>
                 {item}
-              </Button>
+              </button>
             )) : (
               <span className="block px-1 py-2 text-[10px] text-muted-foreground">—</span>
             )}
@@ -820,9 +826,9 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
 
       <div className="space-y-1.5">
         <div className="grid grid-cols-2 gap-1.5">
-          <div className="min-w-0 overflow-hidden rounded-md border bg-muted/20">
+          <div className="flex h-[140px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
             <div className="border-b px-2 py-1 text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.fieldList')}</div>
-            <div className="h-28 overflow-y-auto p-1 custom-scrollbar">
+            <div className="min-h-0 flex-1 overflow-y-auto p-1 custom-scrollbar">
               {fields.map(field => (
                 <button
                   key={field.id}
@@ -837,9 +843,9 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
               ))}
             </div>
           </div>
-          <div className="min-w-0 overflow-hidden rounded-md border bg-muted/20">
+          <div className="flex h-[140px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
             <div className="border-b px-2 py-1 text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.valueList')}</div>
-            <div className="h-28 overflow-y-auto p-1 custom-scrollbar">
+            <div className="min-h-0 flex-1 overflow-y-auto p-1 custom-scrollbar">
               {assistantValues.tooMany ? (
                 <div className="px-1.5 py-2 text-[10px] text-muted-foreground">
                   {t('sceneQuery.tooManyValues', { count: assistantValues.total })}
@@ -848,6 +854,7 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
                 <button
                   key={value}
                   type="button"
+                  title={value}
                   onDoubleClick={() => insertAssistantValue(value)}
                   className="block w-full truncate rounded px-1.5 py-1 text-left text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
