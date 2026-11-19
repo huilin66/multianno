@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, CheckCircle2, Filter, Plus, Save, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Filter, Save, X } from 'lucide-react';
 import type { Annotation } from '../../../store/useStore';
 import {
   getAnnotationAttributeEntries,
@@ -37,6 +37,24 @@ const makeId = (prefix: string) => (
 
 const isGroup = (node: QueryNode): node is QueryGroup => 'children' in node;
 const isConstant = (node: QueryNode): node is Constant => 'kind' in node && node.kind === 'constant';
+const isObjectRule = (node: QueryNode): node is Rule => (
+  !isGroup(node)
+  && !isConstant(node)
+  && (node.field.startsWith('attr:') || OBJECT_FIELDS.has(node.field))
+);
+
+const isObjectExpression = (node: QueryNode) => (
+  isObjectRule(node) || (isGroup(node) && node.scope === 'object')
+);
+
+function normalizeSceneNode(node: QueryNode): QueryNode {
+  if (!isGroup(node) || node.scope === 'object') return node;
+  const children = node.children.map(normalizeSceneNode);
+  if (children.length > 0 && children.every(isObjectExpression)) {
+    return { ...node, scope: 'object', children, quantifier: node.quantifier ?? 'any' };
+  }
+  return { ...node, children };
+}
 
 function cloneEmptyQuery(): QueryGroup {
   return { ...EMPTY_QUERY, children: [] };
@@ -110,7 +128,12 @@ export function matchesQuery(
 ): boolean {
   function evaluate(node: QueryNode, object?: Annotation): boolean {
     if (isConstant(node)) return node.value;
-    if (!isGroup(node)) return evaluateRule(node, stem, objects, object, taxonomyAttributes);
+    if (!isGroup(node)) {
+      if (isObjectRule(node) && !object) {
+        return objects.some(item => evaluateRule(node, stem, objects, item, taxonomyAttributes));
+      }
+      return evaluateRule(node, stem, objects, object, taxonomyAttributes);
+    }
 
     const evaluateChildren = (currentObject?: Annotation) => {
       return node.join === 'all'
@@ -457,9 +480,6 @@ class QueryParser {
 
   private assertScope(field: string, scope: Scope, position: number) {
     if (field.startsWith('attr:') || OBJECT_FIELDS.has(field)) {
-      if (scope !== 'object') {
-        throw new QueryParseError('Object fields must be wrapped in ANY_OBJECT(...)', position);
-      }
       return;
     }
     if (SCENE_FIELDS.has(field) && scope !== 'scene') {
@@ -509,7 +529,7 @@ export function parseQuery(statement: string): { query: QueryGroup; error: strin
   const source = statement.trim();
   if (!source || source.toUpperCase() === 'TRUE') return { query: cloneEmptyQuery(), error: null };
   try {
-    const query = new QueryParser(tokenize(source)).parse();
+    const query = normalizeSceneNode(new QueryParser(tokenize(source)).parse()) as QueryGroup;
     return { query, error: validateNode(query, true) };
   } catch (error) {
     return {
@@ -582,10 +602,7 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
   const [statement, setStatement] = useState(() => queryToStatement(query));
   const [saved, setSaved] = useState<{ name: string; statement: string }[]>([]);
   const [name, setName] = useState('');
-  const [builderFieldId, setBuilderFieldId] = useState('count');
-  const [builderOperator, setBuilderOperator] = useState('eq');
-  const [builderValue, setBuilderValue] = useState('');
-  const [builderJoin, setBuilderJoin] = useState<'AND' | 'OR'>('AND');
+  const [assistantFieldId, setAssistantFieldId] = useState('count');
 
   const fields = useMemo<QueryField[]>(() => [
     { id: 'count', label: t('rightPanel.sceneFilterAnnotationCount'), scope: 'scene', numeric: true },
@@ -603,51 +620,45 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
     })),
   ], [attributes, classes, objects, t]);
 
-  const builderField = fields.find(field => field.id === builderFieldId) ?? fields[0];
-  const builderOperators = builderField?.numeric
+  const assistantField = fields.find(field => field.id === assistantFieldId) ?? fields[0];
+  const assistantOperators = assistantField?.numeric
     ? ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'range', 'in']
-    : builderField?.options
+    : assistantField?.options
       ? ['eq', 'ne', 'in', 'missing', 'present']
       : ['eq', 'ne', 'contains', 'prefix', 'in', 'missing', 'present'];
 
-  const resetBuilderForField = (fieldId: string) => {
-    const nextField = fields.find(field => field.id === fieldId);
-    const nextOptions = nextField?.options ?? [];
-    setBuilderFieldId(fieldId);
-    setBuilderOperator(nextField?.numeric ? 'eq' : 'eq');
-    setBuilderValue(nextOptions[0] ?? '');
-  };
-
-  const builderCondition = useMemo(() => {
-    if (!builderField) return null;
-    const needsValue = !['missing', 'present'].includes(builderOperator);
-    if (needsValue && !builderValue.trim()) return null;
-    const fieldName = builderField.id.startsWith('attr:')
-      ? `ATTRIBUTE(${quote(builderField.id.slice(5))})`
-      : ({ count: 'COUNT', name: 'NAME', class: 'CLASS', shape: 'SHAPE', track: 'TRACK_ID', group: 'GROUP_ID', text: 'TEXT' } as Record<string, string>)[builderField.id];
-    if (!fieldName) return null;
-    const wrap = (expression: string) => builderField.scope === 'object' ? `ANY_OBJECT(${expression})` : expression;
-    if (builderOperator === 'missing') return wrap(`${fieldName} IS NULL`);
-    if (builderOperator === 'present') return wrap(`${fieldName} IS NOT NULL`);
-    if (builderOperator === 'contains') return wrap(`${fieldName} LIKE ${quote(`%${builderValue.trim()}%`)}`);
-    if (builderOperator === 'prefix') return wrap(`${fieldName} LIKE ${quote(`${builderValue.trim()}%`)}`);
-    if (builderOperator === 'in') {
-      const values = builderValue.split(',').map(value => value.trim()).filter(Boolean);
-      if (!values.length) return null;
-      return wrap(`${fieldName} IN (${values.map(value => builderField.numeric ? value : quote(value)).join(', ')})`);
+  const assistantValues = useMemo(() => {
+    if (!assistantField) return { values: [], tooMany: false, total: 0 };
+    const values = new Set<string>();
+    const add = (value: unknown) => {
+      const text = String(value ?? '').trim();
+      if (text) values.add(text);
+    };
+    assistantField.options?.forEach(add);
+    if (assistantField.id === 'count') stems.forEach(stem => add(objects.get(stem)?.length ?? 0));
+    else if (assistantField.id === 'name') stems.forEach(add);
+    else {
+      for (const annotationList of objects.values()) {
+        for (const annotation of annotationList) {
+          if (assistantField.id === 'class') add(annotation.label);
+          else if (assistantField.id === 'shape') add(annotation.type);
+          else if (assistantField.id === 'track') add(annotation.track_id);
+          else if (assistantField.id === 'group') add(annotation.group_id);
+          else if (assistantField.id === 'text') add(annotation.text);
+          else if (assistantField.id.startsWith('attr:')) {
+            getAnnotationAttributeEntries(annotation, false, attributes)
+              .filter(([attributeName]) => attributeName.trim().toLowerCase() === assistantField.id.slice(5).toLowerCase())
+              .forEach(([, value]) => add(value));
+          }
+        }
+      }
     }
-    if (builderOperator === 'range') {
-      const [min, max] = builderValue.split(',').map(value => value.trim());
-      if (!min || !max) return null;
-      return wrap(`${fieldName} BETWEEN ${min} AND ${max}`);
-    }
-    const operators: Record<string, string> = { eq: '=', ne: '<>', gt: '>', gte: '>=', lt: '<=', lte: '<' };
-    const formattedValue = builderField.numeric || ['gt', 'gte', 'lt', 'lte'].includes(builderOperator)
-      ? builderValue.trim()
-      : quote(builderValue.trim());
-    const expression = `${fieldName} ${operators[builderOperator] ?? '='} ${formattedValue}`;
-    return wrap(expression);
-  }, [builderField, builderOperator, builderValue]);
+    const sorted = Array.from(values).sort((left, right) => assistantField.numeric
+      ? Number(left) - Number(right)
+      : left.localeCompare(right));
+    const maxValues = 60;
+    return { values: sorted.slice(0, maxValues), tooMany: sorted.length > maxValues, total: sorted.length };
+  }, [assistantField, attributes, objects, stems]);
 
   const quickQueries = useMemo(() => [
     { key: 'sceneFilterAll', statement: 'TRUE' },
@@ -667,15 +678,47 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
     requestAnimationFrame(() => statementRef.current?.focus());
   };
 
-  const addBuilderCondition = () => {
-    if (!builderCondition) return;
-    const current = statement.trim();
-    const next = !current || current.toUpperCase() === 'TRUE'
-      ? builderCondition
-      : `${current} ${builderJoin} ${builderCondition}`;
+  const insertAtCursor = (text: string) => {
+    const textarea = statementRef.current;
+    const isEmptyStatement = statement.trim().toUpperCase() === 'TRUE';
+    const start = isEmptyStatement ? 0 : (textarea?.selectionStart ?? statement.length);
+    const end = isEmptyStatement ? statement.length : (textarea?.selectionEnd ?? start);
+    const next = `${statement.slice(0, start)}${text}${statement.slice(end)}`;
     setStatement(next);
-    if (!['missing', 'present'].includes(builderOperator)) setBuilderValue('');
-    requestAnimationFrame(() => statementRef.current?.focus());
+    requestAnimationFrame(() => {
+      textarea?.focus();
+      const cursor = start + text.length;
+      textarea?.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  const insertAssistantField = (field: QueryField) => {
+    const token = field.id.startsWith('attr:')
+      ? `ATTRIBUTE(${quote(field.id.slice(5))})`
+      : ({ count: 'COUNT', name: 'NAME', class: 'CLASS', shape: 'SHAPE', track: 'TRACK_ID', group: 'GROUP_ID', text: 'TEXT' } as Record<string, string>)[field.id];
+    if (token) insertAtCursor(`${token} `);
+  };
+
+  const insertAssistantValue = (value: string) => {
+    insertAtCursor(assistantField?.numeric ? `${value} ` : `${quote(value)} `);
+  };
+
+  const insertAssistantOperator = (operator: string) => {
+    const tokens: Record<string, string> = {
+      eq: '= ',
+      ne: '<> ',
+      gt: '> ',
+      gte: '>= ',
+      lt: '< ',
+      lte: '<= ',
+      range: 'BETWEEN ',
+      in: 'IN ',
+      missing: 'IS NULL ',
+      present: 'IS NOT NULL ',
+      contains: 'LIKE ',
+      prefix: 'LIKE ',
+    };
+    insertAtCursor(tokens[operator] ?? '');
   };
 
   const handleApply = () => {
@@ -705,12 +748,11 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold">{t('sceneQuery.quick')}</span>
-          <span className="text-[10px] text-muted-foreground">{t('sceneQuery.quickHint')}</span>
         </div>
         <div className="grid grid-cols-3 gap-1.5">
           {quickQueries.map(item => (
             <Button key={item.key} size="sm" variant={activeQuick?.key === item.key ? 'default' : 'outline'}
-              className="h-8 text-xs" title={item.statement} onClick={() => updateStatement(item.statement)}>
+              className="h-8 text-xs" onClick={() => updateStatement(item.statement)}>
               {t(`rightPanel.${item.key}`)}
             </Button>
           ))}
@@ -718,10 +760,63 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
       </div>
 
       <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <label htmlFor="scene-group-query-statement" className="text-xs font-semibold">{t('sceneQuery.statement')}</label>
-          <span className="text-[10px] text-muted-foreground">{t('sceneQuery.statementHint')}</span>
+        <div className="grid grid-cols-2 gap-1.5">
+          <div className="min-w-0 overflow-hidden rounded-md border bg-muted/20">
+            <div className="border-b px-2 py-1 text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.fieldList')}</div>
+            <div className="h-28 overflow-y-auto p-1 custom-scrollbar">
+              {fields.map(field => (
+                <button
+                  key={field.id}
+                  type="button"
+                  aria-label={field.label}
+                  onClick={() => setAssistantFieldId(field.id)}
+                  onDoubleClick={() => insertAssistantField(field)}
+                  className={`block w-full truncate rounded px-1.5 py-1 text-left text-[10px] transition-colors ${assistantField?.id === field.id ? 'bg-primary/10 font-semibold text-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                >
+                  {field.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="min-w-0 overflow-hidden rounded-md border bg-muted/20">
+            <div className="border-b px-2 py-1 text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.valueList')}</div>
+            <div className="h-28 overflow-y-auto p-1 custom-scrollbar">
+              {assistantValues.tooMany ? (
+                <div className="px-1.5 py-2 text-[10px] text-muted-foreground">
+                  {t('sceneQuery.tooManyValues', { count: assistantValues.total })}
+                </div>
+              ) : assistantValues.values.length > 0 ? assistantValues.values.map(value => (
+                <button
+                  key={value}
+                  type="button"
+                  onDoubleClick={() => insertAssistantValue(value)}
+                  className="block w-full truncate rounded px-1.5 py-1 text-left text-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {value}
+                </button>
+              )) : (
+                <div className="px-1.5 py-2 text-[10px] text-muted-foreground">—</div>
+              )}
+            </div>
+          </div>
         </div>
+        <div className="flex flex-nowrap gap-1 overflow-x-auto rounded-md border bg-muted/20 p-1 custom-scrollbar">
+          {assistantOperators.map(operator => (
+            <button
+              key={operator}
+              type="button"
+              aria-label={t(`sceneQuery.builderOps.${operator}`)}
+              onClick={() => insertAssistantOperator(operator)}
+              className="h-7 shrink-0 rounded px-2 text-[10px] font-semibold text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
+            >
+              {t(`sceneQuery.builderOps.${operator}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <label htmlFor="scene-group-query-statement" className="text-xs font-semibold">{t('sceneQuery.statement')}</label>
         <textarea
           id="scene-group-query-statement"
           ref={statementRef}
@@ -732,66 +827,6 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
           placeholder={t('sceneQuery.statementPlaceholder')}
           className={`min-h-24 w-full resize-y rounded-md border bg-background px-2.5 py-2 font-mono text-xs leading-5 outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 ${parsed.error ? 'border-destructive/70' : 'border-input'}`}
         />
-        <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
-          <span>{t('sceneQuery.fields')}</span>
-          <code className="rounded bg-muted px-1 py-0.5">COUNT</code>
-          <code className="rounded bg-muted px-1 py-0.5">NAME</code>
-          <code className="rounded bg-muted px-1 py-0.5">ANY_OBJECT(...)</code>
-          <code className="rounded bg-muted px-1 py-0.5">ATTRIBUTE('name')</code>
-        </div>
-      </div>
-
-      <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold">{t('sceneQuery.builder')}</span>
-          <span className="text-[10px] text-muted-foreground">{t('sceneQuery.builderHint')}</span>
-        </div>
-        <div className="grid grid-cols-[1.15fr_0.85fr] gap-1.5">
-          <select aria-label={t('sceneQuery.builderField')} value={builderField?.id ?? ''}
-            onChange={event => resetBuilderForField(event.target.value)}
-            className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs">
-            {fields.map(field => <option key={field.id} value={field.id}>{field.label}</option>)}
-          </select>
-          <select aria-label={t('sceneQuery.builderOperator')} value={builderOperator}
-            onChange={event => setBuilderOperator(event.target.value)}
-            className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs">
-            {builderOperators.map(operator => <option key={operator} value={operator}>{t(`sceneQuery.builderOps.${operator}`)}</option>)}
-          </select>
-        </div>
-        <div className="flex items-center gap-1.5">
-          {['missing', 'present'].includes(builderOperator) ? (
-            <div className="flex h-8 min-w-0 flex-1 items-center rounded-md border border-dashed border-input px-2 text-[10px] text-muted-foreground">
-              {t('sceneQuery.noValueRequired')}
-            </div>
-          ) : builderField?.options && builderField.options.length > 0 ? (
-            builderOperator === 'in' ? (
-              <select multiple aria-label={t('sceneQuery.builderValue')} value={builderValue.split(',').map(value => value.trim()).filter(Boolean)}
-                onChange={event => setBuilderValue(Array.from(event.currentTarget.selectedOptions).map((option: HTMLOptionElement) => option.value).join(', '))}
-                className="h-16 min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs">
-                {builderField.options.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-            ) : (
-              <select aria-label={t('sceneQuery.builderValue')} value={builderValue}
-                onChange={event => setBuilderValue(event.target.value)}
-                className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs">
-                <option value="">{t('sceneQuery.selectValue')}</option>
-                {builderField.options.map(option => <option key={option} value={option}>{option}</option>)}
-              </select>
-            )
-          ) : (
-            <Input aria-label={t('sceneQuery.builderValue')} value={builderValue} onChange={event => setBuilderValue(event.target.value)}
-              placeholder={t(builderOperator === 'range' ? 'sceneQuery.rangeHint' : 'sceneQuery.valuePlaceholder')}
-              className="h-8 min-w-0 flex-1 text-xs" />
-          )}
-          <select aria-label={t('sceneQuery.builderJoin')} value={builderJoin} onChange={event => setBuilderJoin(event.target.value as 'AND' | 'OR')}
-            className="h-8 w-16 shrink-0 rounded-md border border-input bg-background px-1.5 text-[10px] font-semibold">
-            <option value="AND">AND</option>
-            <option value="OR">OR</option>
-          </select>
-          <Button size="sm" variant="outline" className="h-8 shrink-0 px-2" disabled={!builderCondition} onClick={addBuilderCondition}>
-            <Plus className="size-3.5" />{t('sceneQuery.addClause')}
-          </Button>
-        </div>
       </div>
 
       {saved.length > 0 && <div className="space-y-1.5">
