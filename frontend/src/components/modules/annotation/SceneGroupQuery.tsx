@@ -1,13 +1,12 @@
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertCircle, CheckCircle2, Filter, Save, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Filter, RotateCcw } from 'lucide-react';
 import type { Annotation } from '../../../store/useStore';
 import {
   getAnnotationAttributeEntries,
   type AnnotationAttributeDefinition,
 } from '../../../lib/annotationAttributeUtils';
 import { Button } from '../../ui/button';
-import { Input } from '../../ui/input';
 import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from '../../ui/popover';
 
 type Rule = { id: string; field: string; op: string; value: string };
@@ -600,8 +599,9 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
   const statementRef = useRef<HTMLTextAreaElement>(null);
   const [open, setOpen] = useState(false);
   const [statement, setStatement] = useState(() => queryToStatement(query));
-  const [saved, setSaved] = useState<{ name: string; statement: string }[]>([]);
-  const [name, setName] = useState('');
+  const [historyQueries, setHistoryQueries] = useState<string[]>([]);
+  const [selectedQuickKey, setSelectedQuickKey] = useState<string | null>(null);
+  const [selectedHistoryStatement, setSelectedHistoryStatement] = useState<string | null>(null);
   const [assistantFieldId, setAssistantFieldId] = useState('count');
 
   const fields = useMemo<QueryField[]>(() => [
@@ -661,7 +661,6 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
   }, [assistantField, attributes, objects, stems]);
 
   const quickQueries = useMemo(() => [
-    { key: 'sceneFilterAll', statement: 'TRUE' },
     { key: 'sceneFilterWithAnnotations', statement: 'COUNT > 0' },
     { key: 'sceneFilterEmpty', statement: 'COUNT = 0' },
   ], []);
@@ -672,6 +671,37 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
   }, [attributes, objects, parsed, stems]);
   const normalizedStatement = statement.trim().replace(/\s+/g, ' ').toUpperCase();
   const activeQuick = quickQueries.find(item => item.statement === normalizedStatement);
+
+  const previewQuery = (candidate: string) => {
+    const candidateParsed = parseQuery(candidate);
+    if (candidateParsed.error) return { count: null, error: candidateParsed.error };
+    return {
+      count: stems.filter(stem => matchesQuery(candidateParsed.query, stem, objects.get(stem) ?? [], attributes)).length,
+      error: null,
+    };
+  };
+
+  const selectedQuick = quickQueries.find(item => item.key === selectedQuickKey);
+  const renderQueryPreview = (candidate: string | null) => {
+    if (!candidate) {
+      return <div className="min-h-9 border-t px-2 py-1.5 text-[10px] text-muted-foreground">—</div>;
+    }
+    const result = previewQuery(candidate);
+    return (
+      <div className="min-h-9 border-t px-2 py-1.5 text-[10px]">
+        {result.error ? (
+          <span className="block truncate text-destructive">{t('sceneQuery.parseError', { message: result.error })}</span>
+        ) : (
+          <>
+            <span className="block font-semibold text-emerald-600 dark:text-emerald-400">
+              {t('sceneQuery.preview', { count: result.count ?? 0 })}
+            </span>
+            <span className="block truncate font-mono text-muted-foreground" title={candidate}>{candidate}</span>
+          </>
+        )}
+      </div>
+    );
+  };
 
   const updateStatement = (next: string) => {
     setStatement(next);
@@ -723,6 +753,13 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
 
   const handleApply = () => {
     if (parsed.error) return;
+    const appliedStatement = statement.trim() || 'TRUE';
+    if (appliedStatement.toUpperCase() !== 'TRUE') {
+      setHistoryQueries(current => [
+        appliedStatement,
+        ...current.filter(item => item !== appliedStatement),
+      ].slice(0, 8));
+    }
     onApply(parsed.query);
     setOpen(false);
   };
@@ -730,7 +767,8 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
   return <Popover open={open} onOpenChange={next => {
     if (next) {
       setStatement(queryToStatement(query));
-      setName('');
+      setSelectedQuickKey(null);
+      setSelectedHistoryStatement(null);
     }
     setOpen(next);
   }}>
@@ -740,22 +778,43 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
       {query.children.length > 0 && <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-primary" />}
     </PopoverTrigger>
     <PopoverContent align="end" onClick={event => event.stopPropagation()} className="w-[min(400px,calc(100vw-1rem))] max-h-[min(78vh,var(--available-height))] overflow-y-auto p-3.5">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center gap-2">
         <PopoverTitle>{t('sceneQuery.title')}</PopoverTitle>
-        <span className="rounded-full bg-muted px-2 py-1 text-xs font-mono">{matched}/{total}</span>
       </div>
 
-      <div className="space-y-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-xs font-semibold">{t('sceneQuery.quick')}</span>
+      <div className="grid grid-cols-2 gap-1.5">
+        <div className="flex min-h-[122px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
+          <div className="border-b px-2 py-1 text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.quick')}</div>
+          <div className="flex flex-1 flex-col gap-1 p-1.5">
+            {quickQueries.map(item => (
+              <Button key={item.key} size="sm" variant={selectedQuickKey === item.key || activeQuick?.key === item.key ? 'default' : 'outline'}
+                className="h-8 justify-start truncate text-xs" onClick={() => {
+                  setSelectedQuickKey(item.key);
+                  setSelectedHistoryStatement(null);
+                }} onDoubleClick={() => updateStatement(item.statement)}>
+                {t(`rightPanel.${item.key}`)}
+              </Button>
+            ))}
+          </div>
+          {renderQueryPreview(selectedQuick?.statement ?? null)}
         </div>
-        <div className="grid grid-cols-3 gap-1.5">
-          {quickQueries.map(item => (
-            <Button key={item.key} size="sm" variant={activeQuick?.key === item.key ? 'default' : 'outline'}
-              className="h-8 text-xs" onClick={() => updateStatement(item.statement)}>
-              {t(`rightPanel.${item.key}`)}
-            </Button>
-          ))}
+        <div className="flex min-h-[122px] min-w-0 flex-col overflow-hidden rounded-md border bg-muted/20">
+          <div className="border-b px-2 py-1 text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.history')}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-1.5 custom-scrollbar">
+            {historyQueries.length > 0 ? historyQueries.map(item => (
+              <Button key={item} size="sm" variant={selectedHistoryStatement === item ? 'default' : 'outline'}
+                className="mb-1 h-8 w-full justify-start truncate font-mono text-[10px] last:mb-0" title={item}
+                onClick={() => {
+                  setSelectedHistoryStatement(item);
+                  setSelectedQuickKey(null);
+                }} onDoubleClick={() => updateStatement(item)}>
+                {item}
+              </Button>
+            )) : (
+              <span className="block px-1 py-2 text-[10px] text-muted-foreground">—</span>
+            )}
+          </div>
+          {renderQueryPreview(selectedHistoryStatement)}
         </div>
       </div>
 
@@ -829,13 +888,6 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
         />
       </div>
 
-      {saved.length > 0 && <div className="space-y-1.5">
-        <span className="text-[10px] font-semibold text-muted-foreground">{t('sceneQuery.saved')}</span>
-        <div className="flex flex-wrap gap-1.5">
-          {saved.map(item => <Button key={item.name} size="sm" variant="outline" className="h-7 text-xs" onClick={() => updateStatement(item.statement)}>{item.name}</Button>)}
-        </div>
-      </div>}
-
       <div className="flex items-center justify-between gap-2 text-xs">
         {parsed.error ? (
           <span aria-live="polite" className="flex min-w-0 items-center gap-1.5 text-destructive">
@@ -852,18 +904,12 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, classes
       </div>
 
       <div className="sticky bottom-0 z-10 space-y-2 border-t bg-popover pt-2">
-        <div className="flex min-w-0 gap-1.5">
-          <Input value={name} onChange={event => setName(event.target.value)} className="h-8 min-w-0 flex-1 text-xs"
-            aria-label={t('sceneQuery.name')} placeholder={t('sceneQuery.name')} />
-          <Button size="sm" variant="outline" className="h-8" disabled={!name.trim() || Boolean(parsed.error)}
-            onClick={() => {
-              const title = name.trim();
-              setSaved(current => [...current.filter(item => item.name !== title), { name: title, statement: statement.trim() || 'TRUE' }]);
-              setName('');
-            }}><Save className="size-3.5" />{t('sceneQuery.save')}</Button>
-        </div>
         <div className="flex items-center justify-between gap-2">
-          <Button size="sm" variant="ghost" className="h-8 px-1.5" onClick={() => updateStatement('TRUE')}><X className="size-3.5" />{t('rightPanel.sceneFilterClear')}</Button>
+          <Button size="sm" variant="ghost" className="h-8 px-1.5" onClick={() => {
+            updateStatement('TRUE');
+            setSelectedQuickKey(null);
+            setSelectedHistoryStatement(null);
+          }}><RotateCcw className="size-3.5" />{t('rightPanel.sceneFilterReset')}</Button>
           <div className="flex gap-1.5">
             <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(false)}>{t('rightPanel.sceneFilterCancel')}</Button>
             <Button size="sm" className="h-8" disabled={Boolean(parsed.error)} onClick={handleApply}>{t('rightPanel.sceneFilterApply')}</Button>
