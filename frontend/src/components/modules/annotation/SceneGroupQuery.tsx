@@ -559,7 +559,9 @@ export function queryToStatement(query: QueryGroup): string {
 interface QueryField {
   id: string;
   label: string;
-  template: string;
+  scope: Scope;
+  options?: string[];
+  numeric?: boolean;
 }
 
 interface Props {
@@ -568,31 +570,84 @@ interface Props {
   total: number;
   matched: number;
   objects: ReadonlyMap<string, readonly Annotation[]>;
+  classes: { name: string }[];
   attributes: { name: string; options?: string[] }[];
   onApply: (query: QueryGroup) => void;
 }
 
-export function SceneGroupQuery({ query, stems, total, matched, objects, attributes, onApply }: Props) {
+export function SceneGroupQuery({ query, stems, total, matched, objects, classes, attributes, onApply }: Props) {
   const { t } = useTranslation();
   const statementRef = useRef<HTMLTextAreaElement>(null);
   const [open, setOpen] = useState(false);
   const [statement, setStatement] = useState(() => queryToStatement(query));
   const [saved, setSaved] = useState<{ name: string; statement: string }[]>([]);
   const [name, setName] = useState('');
-  const [template, setTemplate] = useState('COUNT > 0');
+  const [builderFieldId, setBuilderFieldId] = useState('count');
+  const [builderOperator, setBuilderOperator] = useState('eq');
+  const [builderValue, setBuilderValue] = useState('');
+  const [builderJoin, setBuilderJoin] = useState<'AND' | 'OR'>('AND');
 
   const fields = useMemo<QueryField[]>(() => [
-    { id: 'count', label: t('rightPanel.sceneFilterAnnotationCount'), template: 'COUNT > 0' },
-    { id: 'name', label: t('rightPanel.sceneFilterSceneGroup'), template: "NAME LIKE '%%'" },
-    { id: 'class', label: t('sceneQuery.class'), template: "ANY_OBJECT(CLASS = '')" },
-    { id: 'shape', label: t('sceneQuery.shape'), template: "ANY_OBJECT(SHAPE = '')" },
-    { id: 'track', label: 'Track ID', template: "ANY_OBJECT(TRACK_ID = '')" },
+    { id: 'count', label: t('rightPanel.sceneFilterAnnotationCount'), scope: 'scene', numeric: true },
+    { id: 'name', label: t('rightPanel.sceneFilterSceneGroup'), scope: 'scene' },
+    { id: 'class', label: t('sceneQuery.class'), scope: 'object', options: classes.map(item => item.name) },
+    { id: 'shape', label: t('sceneQuery.shape'), scope: 'object', options: [...new Set(Array.from(objects.values()).flatMap(items => items.map(item => item.type)))] },
+    { id: 'track', label: 'Track ID', scope: 'object' },
+    { id: 'group', label: 'Group ID', scope: 'object' },
+    { id: 'text', label: 'Text', scope: 'object' },
     ...attributes.map(attribute => ({
       id: `attr:${attribute.name}`,
       label: attribute.name,
-      template: `ANY_OBJECT(ATTRIBUTE(${quote(attribute.name)} = ''))`,
+      scope: 'object' as Scope,
+      options: attribute.options,
     })),
-  ], [attributes, t]);
+  ], [attributes, classes, objects, t]);
+
+  const builderField = fields.find(field => field.id === builderFieldId) ?? fields[0];
+  const builderOperators = builderField?.numeric
+    ? ['eq', 'ne', 'gt', 'gte', 'lt', 'lte', 'range', 'in']
+    : builderField?.options
+      ? ['eq', 'ne', 'in', 'missing', 'present']
+      : ['eq', 'ne', 'contains', 'prefix', 'in', 'missing', 'present'];
+
+  const resetBuilderForField = (fieldId: string) => {
+    const nextField = fields.find(field => field.id === fieldId);
+    const nextOptions = nextField?.options ?? [];
+    setBuilderFieldId(fieldId);
+    setBuilderOperator(nextField?.numeric ? 'eq' : 'eq');
+    setBuilderValue(nextOptions[0] ?? '');
+  };
+
+  const builderCondition = useMemo(() => {
+    if (!builderField) return null;
+    const needsValue = !['missing', 'present'].includes(builderOperator);
+    if (needsValue && !builderValue.trim()) return null;
+    const fieldName = builderField.id.startsWith('attr:')
+      ? `ATTRIBUTE(${quote(builderField.id.slice(5))})`
+      : ({ count: 'COUNT', name: 'NAME', class: 'CLASS', shape: 'SHAPE', track: 'TRACK_ID', group: 'GROUP_ID', text: 'TEXT' } as Record<string, string>)[builderField.id];
+    if (!fieldName) return null;
+    const wrap = (expression: string) => builderField.scope === 'object' ? `ANY_OBJECT(${expression})` : expression;
+    if (builderOperator === 'missing') return wrap(`${fieldName} IS NULL`);
+    if (builderOperator === 'present') return wrap(`${fieldName} IS NOT NULL`);
+    if (builderOperator === 'contains') return wrap(`${fieldName} LIKE ${quote(`%${builderValue.trim()}%`)}`);
+    if (builderOperator === 'prefix') return wrap(`${fieldName} LIKE ${quote(`${builderValue.trim()}%`)}`);
+    if (builderOperator === 'in') {
+      const values = builderValue.split(',').map(value => value.trim()).filter(Boolean);
+      if (!values.length) return null;
+      return wrap(`${fieldName} IN (${values.map(value => builderField.numeric ? value : quote(value)).join(', ')})`);
+    }
+    if (builderOperator === 'range') {
+      const [min, max] = builderValue.split(',').map(value => value.trim());
+      if (!min || !max) return null;
+      return wrap(`${fieldName} BETWEEN ${min} AND ${max}`);
+    }
+    const operators: Record<string, string> = { eq: '=', ne: '<>', gt: '>', gte: '>=', lt: '<=', lte: '<' };
+    const formattedValue = builderField.numeric || ['gt', 'gte', 'lt', 'lte'].includes(builderOperator)
+      ? builderValue.trim()
+      : quote(builderValue.trim());
+    const expression = `${fieldName} ${operators[builderOperator] ?? '='} ${formattedValue}`;
+    return wrap(expression);
+  }, [builderField, builderOperator, builderValue]);
 
   const quickQueries = useMemo(() => [
     { key: 'sceneFilterAll', statement: 'TRUE' },
@@ -612,12 +667,15 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, attribu
     requestAnimationFrame(() => statementRef.current?.focus());
   };
 
-  const insertTemplate = () => {
+  const addBuilderCondition = () => {
+    if (!builderCondition) return;
     const current = statement.trim();
     const next = !current || current.toUpperCase() === 'TRUE'
-      ? template
-      : `${current} AND ${template}`;
-    updateStatement(next);
+      ? builderCondition
+      : `${current} ${builderJoin} ${builderCondition}`;
+    setStatement(next);
+    if (!['missing', 'present'].includes(builderOperator)) setBuilderValue('');
+    requestAnimationFrame(() => statementRef.current?.focus());
   };
 
   const handleApply = () => {
@@ -683,14 +741,57 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, attribu
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5 border-y py-2">
-        <select aria-label={t('sceneQuery.insertTemplate')} value={template} onChange={event => setTemplate(event.target.value)}
-          className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs">
-          {fields.map(field => <option key={field.id} value={field.template}>{field.label}</option>)}
-        </select>
-        <Button size="sm" variant="outline" className="h-8" onClick={insertTemplate}>
-          <Plus className="size-3.5" />{t('sceneQuery.insert')}
-        </Button>
+      <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-semibold">{t('sceneQuery.builder')}</span>
+          <span className="text-[10px] text-muted-foreground">{t('sceneQuery.builderHint')}</span>
+        </div>
+        <div className="grid grid-cols-[1.15fr_0.85fr] gap-1.5">
+          <select aria-label={t('sceneQuery.builderField')} value={builderField?.id ?? ''}
+            onChange={event => resetBuilderForField(event.target.value)}
+            className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs">
+            {fields.map(field => <option key={field.id} value={field.id}>{field.label}</option>)}
+          </select>
+          <select aria-label={t('sceneQuery.builderOperator')} value={builderOperator}
+            onChange={event => setBuilderOperator(event.target.value)}
+            className="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-xs">
+            {builderOperators.map(operator => <option key={operator} value={operator}>{t(`sceneQuery.builderOps.${operator}`)}</option>)}
+          </select>
+        </div>
+        <div className="flex items-center gap-1.5">
+          {['missing', 'present'].includes(builderOperator) ? (
+            <div className="flex h-8 min-w-0 flex-1 items-center rounded-md border border-dashed border-input px-2 text-[10px] text-muted-foreground">
+              {t('sceneQuery.noValueRequired')}
+            </div>
+          ) : builderField?.options && builderField.options.length > 0 ? (
+            builderOperator === 'in' ? (
+              <select multiple aria-label={t('sceneQuery.builderValue')} value={builderValue.split(',').map(value => value.trim()).filter(Boolean)}
+                onChange={event => setBuilderValue(Array.from(event.currentTarget.selectedOptions).map((option: HTMLOptionElement) => option.value).join(', '))}
+                className="h-16 min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs">
+                {builderField.options.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+            ) : (
+              <select aria-label={t('sceneQuery.builderValue')} value={builderValue}
+                onChange={event => setBuilderValue(event.target.value)}
+                className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs">
+                <option value="">{t('sceneQuery.selectValue')}</option>
+                {builderField.options.map(option => <option key={option} value={option}>{option}</option>)}
+              </select>
+            )
+          ) : (
+            <Input aria-label={t('sceneQuery.builderValue')} value={builderValue} onChange={event => setBuilderValue(event.target.value)}
+              placeholder={t(builderOperator === 'range' ? 'sceneQuery.rangeHint' : 'sceneQuery.valuePlaceholder')}
+              className="h-8 min-w-0 flex-1 text-xs" />
+          )}
+          <select aria-label={t('sceneQuery.builderJoin')} value={builderJoin} onChange={event => setBuilderJoin(event.target.value as 'AND' | 'OR')}
+            className="h-8 w-16 shrink-0 rounded-md border border-input bg-background px-1.5 text-[10px] font-semibold">
+            <option value="AND">AND</option>
+            <option value="OR">OR</option>
+          </select>
+          <Button size="sm" variant="outline" className="h-8 shrink-0 px-2" disabled={!builderCondition} onClick={addBuilderCondition}>
+            <Plus className="size-3.5" />{t('sceneQuery.addClause')}
+          </Button>
+        </div>
       </div>
 
       {saved.length > 0 && <div className="space-y-1.5">
@@ -715,9 +816,9 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, attribu
         <span className="shrink-0 text-muted-foreground">{t('sceneQuery.applied', { count: matched, total })}</span>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-2">
-        <div className="flex min-w-0 flex-1 gap-1.5">
-          <Input value={name} onChange={event => setName(event.target.value)} className="h-8 min-w-0 max-w-48 text-xs"
+      <div className="sticky bottom-0 z-10 space-y-2 border-t bg-popover pt-2">
+        <div className="flex min-w-0 gap-1.5">
+          <Input value={name} onChange={event => setName(event.target.value)} className="h-8 min-w-0 flex-1 text-xs"
             aria-label={t('sceneQuery.name')} placeholder={t('sceneQuery.name')} />
           <Button size="sm" variant="outline" className="h-8" disabled={!name.trim() || Boolean(parsed.error)}
             onClick={() => {
@@ -726,10 +827,12 @@ export function SceneGroupQuery({ query, stems, total, matched, objects, attribu
               setName('');
             }}><Save className="size-3.5" />{t('sceneQuery.save')}</Button>
         </div>
-        <div className="flex gap-1.5">
-          <Button size="sm" variant="ghost" className="h-8" onClick={() => updateStatement('TRUE')}><X className="size-3.5" />{t('rightPanel.sceneFilterClear')}</Button>
-          <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(false)}>{t('rightPanel.sceneFilterCancel')}</Button>
-          <Button size="sm" className="h-8" disabled={Boolean(parsed.error)} onClick={handleApply}>{t('rightPanel.sceneFilterApply')}</Button>
+        <div className="flex items-center justify-between gap-2">
+          <Button size="sm" variant="ghost" className="h-8 px-1.5" onClick={() => updateStatement('TRUE')}><X className="size-3.5" />{t('rightPanel.sceneFilterClear')}</Button>
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="outline" className="h-8" onClick={() => setOpen(false)}>{t('rightPanel.sceneFilterCancel')}</Button>
+            <Button size="sm" className="h-8" disabled={Boolean(parsed.error)} onClick={handleApply}>{t('rightPanel.sceneFilterApply')}</Button>
+          </div>
         </div>
       </div>
     </PopoverContent>

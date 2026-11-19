@@ -1137,6 +1137,16 @@
     "fields": "Fields:",
     "insertTemplate": "Insert a query template",
     "insert": "Insert",
+    "builder": "Build a condition",
+    "builderHint": "Choose a field, operator and value",
+    "builderField": "Field",
+    "builderOperator": "Operator",
+    "builderValue": "Value",
+    "builderJoin": "Join",
+    "addClause": "Add",
+    "noValueRequired": "No value required",
+    "selectValue": "Select value",
+    "valuePlaceholder": "Enter value",
     "saved": "Saved shortcuts",
     "valid": "Valid query",
     "parseError": "Invalid query: {{message}}",
@@ -1169,6 +1179,20 @@
       "present": "Is not empty",
       "contains": "Contains",
       "prefix": "Starts with"
+    },
+    "builderOps": {
+      "eq": "=",
+      "ne": "<>",
+      "gt": ">",
+      "gte": ">=",
+      "lt": "<",
+      "lte": "<=",
+      "range": "BETWEEN",
+      "in": "IN",
+      "missing": "IS NULL",
+      "present": "IS NOT NULL",
+      "contains": "CONTAINS",
+      "prefix": "STARTS WITH"
     }
   },
   "rightPanel": {

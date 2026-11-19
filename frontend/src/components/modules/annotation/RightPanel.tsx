@@ -1538,6 +1538,7 @@ export function RightPanel({
                 total={stems.length}
                 matched={filteredSceneStems.length}
                 objects={sceneObjects}
+                classes={sortedClasses}
                 attributes={taxonomyAttributes}
                 onApply={(query) => {
                   setSceneQuery(query);
