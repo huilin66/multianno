@@ -1237,6 +1237,7 @@
     "sceneFilterReset": "重置",
     "sceneFilterCancel": "取消",
     "sceneFilterApply": "应用",
+    "sceneFilterCountHint": "筛选后的场景组：{{count}}",
     "noSceneGroupMatches": "没有匹配结果",
     "noSceneGroups": "暂无场景组",
     "imageAnnotation": "图像标注",

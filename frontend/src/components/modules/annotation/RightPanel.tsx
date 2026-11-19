@@ -221,6 +221,21 @@ export function RightPanel({
     [searchedStems, sceneQuery, sceneObjects, taxonomyAttributes],
   );
   const sceneFilterActive = sceneQuery.children.length > 0;
+  const sceneSubsetActive = sceneFilterActive || Boolean(sceneSearchQuery.trim());
+  const sceneGroupBadge = (
+    <span
+      className="inline-flex items-center gap-1"
+      title={sceneSubsetActive ? t('rightPanel.sceneFilterCountHint', { count: filteredSceneStems.length }) : undefined}
+    >
+      <span>{currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}</span>
+      {sceneSubsetActive && (
+        <>
+          <span className="opacity-40">·</span>
+          <span>{filteredSceneStems.length}</span>
+        </>
+      )}
+    </span>
+  );
 
   const jumpToScene = (stem: string) => {
     setCurrentStem(stem);
@@ -1483,7 +1498,7 @@ export function RightPanel({
         <SectionHeader 
           title={t('workspace.scenegroup')} icon={ImageIcon} 
           isExpanded={expanded.scenes} onToggle={() => toggleSection('scenes')} 
-          badge={currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}
+          badge={sceneGroupBadge}
           actionNode={(
             <div className="flex items-center gap-0.5">
               {!sceneSearchOpen ? (
