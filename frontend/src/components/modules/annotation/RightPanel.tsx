@@ -222,18 +222,20 @@ export function RightPanel({
   );
   const sceneFilterActive = sceneQuery.children.length > 0;
   const sceneSubsetActive = sceneFilterActive || Boolean(sceneSearchQuery.trim());
+  const sceneGlobalPosition = currentStem ? stems.indexOf(currentStem) + 1 : 0;
+  const sceneFilteredPosition = currentStem ? filteredSceneStems.indexOf(currentStem) + 1 : 0;
   const sceneGroupBadge = (
     <span
       className="inline-flex items-center gap-1"
       title={sceneSubsetActive ? t('rightPanel.sceneFilterCountHint', { count: filteredSceneStems.length }) : undefined}
     >
-      <span>{currentStem ? `${stems.indexOf(currentStem) + 1}/${stems.length}` : `0/${stems.length}`}</span>
-      {sceneSubsetActive && (
+      {sceneSubsetActive ? (
         <>
+          <span className="opacity-40">{sceneGlobalPosition}/{stems.length}</span>
           <span className="opacity-40">·</span>
-          <span>{filteredSceneStems.length}</span>
+          <span>{sceneFilteredPosition}/{filteredSceneStems.length}</span>
         </>
-      )}
+      ) : <span>{sceneGlobalPosition}/{stems.length}</span>}
     </span>
   );
 
