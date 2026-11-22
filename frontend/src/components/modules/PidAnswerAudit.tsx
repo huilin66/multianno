@@ -427,6 +427,15 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
     () => (video ? video.images.reduce((total, entry) => total + entry.questions.length, 0) : 0),
     [video],
   );
+  const stateCounts = useMemo(() => {
+    let box = 0, absent = 0, cannot = 0;
+    for (const answer of Object.values(answers) as Answer[]) {
+      if (answer.state === 'box') box += 1;
+      else if (answer.state === 'absent') absent += 1;
+      else if (answer.state === 'cannot_tell') cannot += 1;
+    }
+    return { box, absent, cannot };
+  }, [answers]);
 
   const boxStyle = (box: number[], strong: boolean, selected: boolean, interactive: boolean): React.CSSProperties => ({
     left: box[0],
@@ -551,14 +560,14 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                   key={profile.name}
                   onClick={() => setPreview(profile)}
                   title={t('pidAudit.viewProfile', '点击看大图')}
-                  className="flex w-[64px] flex-col items-center gap-1 rounded-md border border-neutral-200 bg-white p-1 transition-colors hover:border-sky-400 dark:border-neutral-700 dark:bg-neutral-900"
+                  className="flex w-[80px] flex-col items-center gap-1 rounded-md border border-neutral-200 bg-white p-1.5 transition-colors hover:border-sky-400 dark:border-neutral-700 dark:bg-neutral-900"
                 >
                   <img
                     src={`${MEDIA_BASE}${profile.url}`}
                     alt={profile.name}
-                    className="h-10 w-10 rounded-full object-cover"
+                    className="h-14 w-14 rounded-full object-cover"
                   />
-                  <span className="w-full truncate text-center text-[10px]">{profile.name}</span>
+                  <span className="w-full truncate text-center text-[11px]">{profile.name}</span>
                 </button>
               ))}
               {video && (video.profiles?.length ?? 0) === 0 && (
@@ -668,40 +677,9 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
               {showAllBoxes ? '仅当前标签' : '显示全部候选'}
             </Button>
           </div>
-        </div>
-
-        {/* column 3: image switcher (top) and questions (bottom) */}
-        <div className="flex w-[340px] min-w-[300px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
-          <div className="shrink-0 border-b border-neutral-200 p-2 dark:border-neutral-800">
-            <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-              <span>{t('pidAudit.images', '图像')}</span>
-              <span className="font-mono text-[10px]">{video?.images.length ?? 0}</span>
-            </div>
-            <div className="max-h-[200px] overflow-auto">
-              {video?.images.map(entry => {
-                const done = entry.questions.filter(item => (answers[item.question_id]?.state ?? 'unset') !== 'unset').length;
-                const current = entry.bg_path === imagePath;
-                return (
-                  <button
-                    key={entry.bg_path}
-                    onClick={() => setImagePath(entry.bg_path)}
-                    className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs ${
-                      current ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200'
-                        : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                    }`}
-                  >
-                    <span className="truncate">{entry.bg_path.split('/').pop()}</span>
-                    <span className="ml-2 shrink-0 font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
-                      {done}/{entry.questions.length}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
 
           {/* questions of this image */}
-          <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex h-[42%] min-h-[180px] shrink-0 flex-col border-t border-neutral-200 dark:border-neutral-800">
             <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
               <span className="font-mono">{imagePath.split('/').pop()}</span>
               <span>·</span>
@@ -807,6 +785,60 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                 )}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* column 3: image switcher */}
+        <div className="flex w-[220px] min-w-[200px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
+          <div className="flex min-h-0 flex-1 flex-col border-neutral-200 p-2 dark:border-neutral-800">
+            <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+              <span>{t('pidAudit.images', '图像')}</span>
+              <span className="font-mono text-[10px]">{video?.images.length ?? 0}</span>
+            </div>
+            <div className="min-h-0 flex-1 overflow-auto">
+              {video?.images.map(entry => {
+                const done = entry.questions.filter(item => (answers[item.question_id]?.state ?? 'unset') !== 'unset').length;
+                const current = entry.bg_path === imagePath;
+                return (
+                  <button
+                    key={entry.bg_path}
+                    onClick={() => setImagePath(entry.bg_path)}
+                    className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs ${
+                      current ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200'
+                        : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                    }`}
+                  >
+                    <span className="truncate">{entry.bg_path.split('/').pop()}</span>
+                    <span className="ml-2 shrink-0 font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
+                      {done}/{entry.questions.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="shrink-0 border-t border-neutral-200 p-2 text-[11px] dark:border-neutral-800">
+            <div className="mb-1 font-medium text-neutral-500 dark:text-neutral-400">
+              {t('pidAudit.progress', '进度')}
+            </div>
+            <div className="mb-1 text-neutral-700 dark:text-neutral-300">
+              {stateCounts.box + stateCounts.absent + stateCounts.cannot} / {videoTotal}
+            </div>
+            <div className="flex flex-col gap-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded-sm bg-emerald-400" />
+                {t('pidAudit.box', '框')} {stateCounts.box}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded-sm bg-neutral-400" />
+                {t('pidAudit.absent', '不可见')} {stateCounts.absent}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="inline-block h-2 w-2 rounded-sm bg-amber-400" />
+                {t('pidAudit.cannotTell', '无法判断')} {stateCounts.cannot}
+              </span>
+            </div>
           </div>
         </div>
       </div>
