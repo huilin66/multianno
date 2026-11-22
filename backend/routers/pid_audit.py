@@ -148,10 +148,21 @@ def dataset() -> dict:
                 "label": labels.get((directory.name, question_id))
                 or question.get("object", ""),
             })
+        profiles_dir = directory / "profiles"
+        profiles = []
+        if profiles_dir.is_dir():
+            for item in sorted(profiles_dir.iterdir()):
+                if item.is_file() and item.suffix.lower() in _IMAGE_SUFFIXES:
+                    profiles.append({
+                        "name": item.stem,
+                        "url": f"/api/pid_audit/media?path={directory.name}/profiles/{item.name}",
+                    })
+
         videos.append({
             "video_id": directory.name,
             "video_url": f"/api/pid_audit/media?path={directory.name}/{video_file.name}",
             "video_name": video_file.name,
+            "profiles": profiles,
             "images": [
                 {
                     "bg_path": bg_path,

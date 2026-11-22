@@ -27,6 +27,7 @@ import {
   ChevronRight,
   SkipBack,
   SkipForward,
+  Users,
 } from 'lucide-react';
 
 type AnswerState = 'box' | 'absent' | 'cannot_tell';
@@ -49,9 +50,15 @@ interface ImageEntry {
   questions: Question[];
 }
 
+interface ProfileEntry {
+  name: string;
+  url: string;
+}
+
 interface VideoEntry {
   video_id: string;
   video_url: string;
+  profiles: ProfileEntry[];
   images: ImageEntry[];
 }
 
@@ -109,6 +116,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [evidenceTs, setEvidenceTs] = useState<number | null>(null);
   const [showAllBoxes, setShowAllBoxes] = useState(false);
+  const [preview, setPreview] = useState<ProfileEntry | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -451,7 +459,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+    <div className="relative flex h-full min-h-0 flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       {/* toolbar */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
         <span className="font-semibold">{t('pidAudit.title', 'PID 答案标注')}</span>
@@ -482,7 +490,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
 
       <div className="flex min-h-0 flex-1">
         {/* video side */}
-        <div className="flex w-[30%] min-w-[300px] shrink-0 flex-col gap-2 border-r border-neutral-200 p-2 dark:border-neutral-800">
+        <div className="flex w-[24%] min-w-[280px] max-w-[380px] shrink-0 flex-col gap-2 border-r border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900/40">
           <select
             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
             value={videoId}
@@ -501,7 +509,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
             ref={videoRef}
             src={`${MEDIA_BASE}${video?.video_url ?? ''}`}
             controls
-            className="w-full rounded bg-black"
+            className="max-h-[40vh] w-full rounded bg-black object-contain"
             onTimeUpdate={event => setEvidenceTs(Number(event.currentTarget.currentTime.toFixed(1)))}
           />
 
@@ -531,7 +539,65 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
             </select>
           </div>
 
-          <p className="text-[11px] leading-4 text-neutral-500 dark:text-neutral-400">
+          <div className="mt-1">
+            <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
+              <Users className="h-3.5 w-3.5" />
+              {t('pidAudit.people', '人物')}
+              <span className="font-mono text-[10px]">{video?.profiles?.length ?? 0}</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {(video?.profiles ?? []).map(profile => (
+                <button
+                  key={profile.name}
+                  onClick={() => setPreview(profile)}
+                  title={t('pidAudit.viewProfile', '点击看大图')}
+                  className="flex w-[64px] flex-col items-center gap-1 rounded-md border border-neutral-200 bg-white p-1 transition-colors hover:border-sky-400 dark:border-neutral-700 dark:bg-neutral-900"
+                >
+                  <img
+                    src={`${MEDIA_BASE}${profile.url}`}
+                    alt={profile.name}
+                    className="h-10 w-10 rounded-full object-cover"
+                  />
+                  <span className="w-full truncate text-center text-[10px]">{profile.name}</span>
+                </button>
+              ))}
+              {video && (video.profiles?.length ?? 0) === 0 && (
+                <span className="text-[11px] text-neutral-400">{t('pidAudit.noProfiles', '无 profile 图片')}</span>
+              )}
+            </div>
+          </div>
+
+          {activeQuestion && (
+            <div className="rounded-md border border-neutral-200 bg-white p-2 text-[11px] dark:border-neutral-700 dark:bg-neutral-900">
+              <div className="mb-1 font-medium text-neutral-500 dark:text-neutral-400">
+                {t('pidAudit.current', '当前题目')}
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-[10px] text-neutral-500">{activeQuestion.question_id}</span>
+                <span className="font-medium">{activeQuestion.speaker}</span>
+                <span className={`ml-auto rounded px-1.5 py-0.5 text-[10px] ${
+                  activeAnswer.state === 'box'
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    : activeAnswer.state === 'absent'
+                      ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'
+                      : activeAnswer.state === 'cannot_tell'
+                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                        : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
+                }`}>
+                  {STATE_LABEL[activeAnswer.state]}
+                </span>
+              </div>
+              <div className="mt-1 truncate" title={activeQuestion.text}>{activeQuestion.text}</div>
+              <div className="mt-1 flex items-center gap-2 text-[10px] text-neutral-500 dark:text-neutral-400">
+                <span>{t('pidAudit.labelColon', '标签：')}{activeQuestion.label}</span>
+                {activeAnswer.evidence_ts != null && (
+                  <span className="font-mono">t={activeAnswer.evidence_ts}s</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          <p className="mt-auto text-[11px] leading-4 text-neutral-500 dark:text-neutral-400">
             {t('pidAudit.blindHint', '盲标：本窗口不显示管线已选的答案。数字键选候选，A=不可见，X=无法判断，Z=撤销。')}
           </p>
         </div>
@@ -590,6 +656,9 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                 });
               })}
             </div>
+            <span className="absolute bottom-2 left-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white">
+              {Math.round(view.scale * 100)}%
+            </span>
             <Button
               size="sm"
               variant="ghost"
@@ -602,7 +671,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* column 3: image switcher (top) and questions (bottom) */}
-        <div className="flex w-[380px] min-w-[320px] shrink-0 flex-col border-l border-neutral-200 dark:border-neutral-800">
+        <div className="flex w-[400px] min-w-[320px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
           <div className="shrink-0 border-b border-neutral-200 p-2 dark:border-neutral-800">
             <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
               <span>{t('pidAudit.images', '图像')}</span>
@@ -741,6 +810,25 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
+
+      {preview && (
+        <div
+          className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 p-6"
+          onClick={() => setPreview(null)}
+        >
+          <div
+            className="rounded-lg bg-white p-3 shadow-xl dark:bg-neutral-900"
+            onClick={event => event.stopPropagation()}
+          >
+            <img
+              src={`${MEDIA_BASE}${preview.url}`}
+              alt={preview.name}
+              className="max-h-[68vh] max-w-[68vw] rounded object-contain"
+            />
+            <div className="mt-2 text-center text-sm font-medium">{preview.name}</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
