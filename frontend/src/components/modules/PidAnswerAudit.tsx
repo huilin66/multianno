@@ -490,7 +490,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
 
       <div className="flex min-h-0 flex-1">
         {/* video side */}
-        <div className="flex w-[24%] min-w-[280px] max-w-[380px] shrink-0 flex-col gap-2 border-r border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900/40">
+        <div className="flex w-[38%] min-w-[380px] max-w-[640px] shrink-0 flex-col gap-2 border-r border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900/40">
           <select
             className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
             value={videoId}
@@ -509,7 +509,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
             ref={videoRef}
             src={`${MEDIA_BASE}${video?.video_url ?? ''}`}
             controls
-            className="max-h-[40vh] w-full rounded bg-black object-contain"
+            className="max-h-[55vh] w-full rounded bg-black object-contain"
             onTimeUpdate={event => setEvidenceTs(Number(event.currentTarget.currentTime.toFixed(1)))}
           />
 
@@ -603,7 +603,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* image side */}
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-[360px] flex-1 flex-col">
           <div
             ref={stageRef}
             className="relative min-h-0 flex-1 cursor-grab overflow-hidden bg-neutral-100 dark:bg-neutral-900"
@@ -671,7 +671,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
         </div>
 
         {/* column 3: image switcher (top) and questions (bottom) */}
-        <div className="flex w-[400px] min-w-[320px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
+        <div className="flex w-[340px] min-w-[300px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
           <div className="shrink-0 border-b border-neutral-200 p-2 dark:border-neutral-800">
             <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
               <span>{t('pidAudit.images', '图像')}</span>
@@ -725,7 +725,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[10px] text-neutral-500">{question.question_id}</span>
                       <span className="font-medium">{question.speaker}</span>
-                      <span className="truncate">{question.text}</span>
+                      <span className="line-clamp-2 flex-1 leading-snug">{question.text}</span>
                       <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
                         answer.state === 'box'
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
