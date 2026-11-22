@@ -16,6 +16,7 @@
     "annotationManager": "Annotation Manager",
     "sceneGroupManager": "Scene Group Manager",
     "trackIdAnnotation": "Track ID Annotation",
+    "pidAudit": "PID Answer Audit",
     "localVisualization": "Local Visualization"
   },
   "trackIdWindow": {

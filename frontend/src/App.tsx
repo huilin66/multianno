@@ -11,7 +11,8 @@ import {
   TaxonomyDashboard,
   SceneGroupManager,
   DataExport,
-  DataImport
+  DataImport,
+  PidAnswerAudit
 } from './components/Modules';
 import { Button } from '@/components/ui/button';
 import {
@@ -24,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, RefreshCw, Wrench, Loader2, Route, Layers, Save, Clock, ArrowRight } from 'lucide-react';
+import { Menu, Settings, Airplay, CloudLightning, Tag, Download, FolderDown, FolderCog, Folders, Database, FolderPlus, Upload, Sun, Moon, Tags, RefreshCw, Wrench, Loader2, Route, Layers, Save, Clock, ArrowRight, Target } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from './components/ui/popover';
 import { Label } from './components/ui/label';
 import { Switch } from './components/ui/switch';
@@ -958,6 +959,9 @@ export default function App() {
                 <DropdownMenuItem onClick={() => setTrackIdWindowOpen(true)}>
                   <Route className="w-4 h-4 mr-2" /> {t('menu.trackIdAnnotation')}
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveModule('pid_audit')}>
+                  <Target className="w-4 h-4 mr-2" /> {t('menu.pidAudit')}
+                </DropdownMenuItem>
               </DropdownMenuGroup>
 
               <DropdownMenuSeparator />
@@ -1387,6 +1391,20 @@ export default function App() {
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
             <ViewExtentCheck onClose={() => setActiveModule('workspace')} />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={activeModule === 'pid_audit'}
+        onOpenChange={(open) => !open && setActiveModule('workspace')}
+      >
+        <DialogContent className="max-w-[96vw] sm:max-w-[96vw] w-[96vw] h-[92vh] flex flex-col p-0 border-border overflow-hidden">
+          <DialogHeader className="p-4 border-b shrink-0">
+            <DialogTitle>{t('menu.pidAudit')}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-grow overflow-hidden relative">
+            <PidAnswerAudit onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>

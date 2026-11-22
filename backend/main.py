@@ -22,7 +22,7 @@ load_project_env()
 configure_logging()
 logger = get_logger("http")
 
-from routers import ai, annotation, exchange, filesystem, project, taxonomy, track_id, vis, vlm
+from routers import ai, annotation, exchange, filesystem, pid_audit, project, taxonomy, track_id, vis, vlm
 
 app = FastAPI(title="MultiAnno Backend")
 
@@ -182,6 +182,7 @@ app.include_router(vlm.router)
 app.include_router(track_id.router)
 app.include_router(vis.router)
 app.include_router(exchange.router)
+app.include_router(pid_audit.router)
 
 
 if __name__ == "__main__":

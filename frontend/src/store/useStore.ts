@@ -243,7 +243,7 @@ export const DEFAULT_SHORTCUTS_SETTINGS: Record<string, ShortcutSetting> = {
   save: {key:'s',ctrl: true},
 }
 
-type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy' | 'scene_group_manager' | 'exchange_import' | 'exchange_export' | 'local_visualization';
+type ActiveModule = 'workspace' | 'preload' | 'extent' | 'export' | 'meta' | 'createproject' | 'loadproject' | 'taxonomy' | 'scene_group_manager' | 'exchange_import' | 'exchange_export' | 'local_visualization' | 'pid_audit';
 
 export interface AppState {
   // project

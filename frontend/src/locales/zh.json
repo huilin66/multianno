@@ -16,6 +16,7 @@
     "annotationManager": "标注管理器",
     "sceneGroupManager": "场景组管理器",
     "trackIdAnnotation": "Track ID 标注",
+    "pidAudit": "PID 答案标注",
     "localVisualization": "本地可视化"
   },
   "trackIdWindow": {

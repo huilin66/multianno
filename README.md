@@ -23,6 +23,9 @@ MultiAnno supports bounding boxes, polygons, points, line segments, ellipses, ci
 ### AI-Assisted Annotation
 Integrated with the Segment Anything Model (SAM 3). It supports generating polygons and masks via point and box prompts, reducing the need for manual outlining and improving annotation efficiency.
 
+### Question-Dataset Answer Audit
+A dedicated audit window for question-answer datasets: the evidence video on the left, the test image and its question list on the right. Each question gets exactly one answer box, selected among pre-computed candidate boxes, with three explicit states (box / object not visible / cannot decide), keyboard-first operation, zoom and pan, autosave and an export in the submission-shaped JSON format. The window is blind by design - it never shows a model prediction - and keeps its own storage, separate from project and annotation data.
+
 ### Modular User Interface
 Built with React, MultiAnno provides a clean and modular user interface. It includes Dark/Light theme switching and a consolidated right panel for tools and properties, designed to keep the main workspace clear for annotation tasks.
 
