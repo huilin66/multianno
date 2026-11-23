@@ -34,8 +34,6 @@
   },
   "pidAudit": {
     "close": "Close",
-    "title": "Cross-view Object Association",
-    "imageProgress": "{{videoAnswered}}/{{videoTotal}} · {{answered}}/{{questions}} this image",
     "saved": "Saved",
     "saving": "Saving…",
     "saveFailed": "Save failed",

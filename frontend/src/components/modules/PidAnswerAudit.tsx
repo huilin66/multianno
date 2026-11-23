@@ -72,8 +72,25 @@ interface Answer {
   source?: 'candidate' | 'manual' | null;
 }
 
+interface AnswerProgress {
+  box: number;
+  absent: number;
+  cannot: number;
+}
+
 const EMPTY_ANSWER: Answer = { state: 'unset', bbox: null, confidence: null, evidence_ts: null, source: null };
+const EMPTY_PROGRESS: AnswerProgress = { box: 0, absent: 0, cannot: 0 };
 const MEDIA_BASE = API_BASE_URL.replace(/\/api$/, '');
+
+const countAnswerProgress = (items: Record<string, Answer>): AnswerProgress => {
+  const counts = { ...EMPTY_PROGRESS };
+  for (const answer of Object.values(items)) {
+    if (answer.state === 'box') counts.box += 1;
+    else if (answer.state === 'absent') counts.absent += 1;
+    else if (answer.state === 'cannot_tell') counts.cannot += 1;
+  }
+  return counts;
+};
 
 const get = async (path: string) => {
   const response = await fetch(`${API_BASE_URL}${path}`);
@@ -121,6 +138,7 @@ export function PidAnswerAudit({
   const [imagePath, setImagePath] = useState('');
   const [candidates, setCandidates] = useState<Record<string, Candidate[]>>({});
   const [answers, setAnswers] = useState<Record<string, Answer>>({});
+  const [annotationProgress, setAnnotationProgress] = useState<Record<string, AnswerProgress>>({});
   const [activeQuestionId, setActiveQuestionId] = useState('');
   const [view, setView] = useState({ scale: 1, x: 0, y: 0 });
   const [imageSize, setImageSize] = useState({ width: 1, height: 1 });
@@ -164,9 +182,25 @@ export function PidAnswerAudit({
   useEffect(() => {
     const rootQuery = dataRoot ? `?root=${encodeURIComponent(dataRoot)}` : '';
     get(`/pid_audit/dataset${rootQuery}`)
-      .then(payload => {
+      .then(async payload => {
         const list: VideoEntry[] = payload.videos ?? [];
         setVideos(list);
+        setAnnotationProgress({});
+
+        const progressEntries = await Promise.all(list.map(async item => {
+          try {
+            const saved = await get(`/pid_audit/annotations?video=${encodeURIComponent(item.video_id)}`);
+            const restored: Record<string, Answer> = {};
+            for (const answer of saved.answers ?? []) {
+              restored[answer.question_id] = { state: answer.state ?? 'unset', bbox: null, confidence: null, evidence_ts: null };
+            }
+            return [item.video_id, countAnswerProgress(restored)] as const;
+          } catch {
+            return [item.video_id, EMPTY_PROGRESS] as const;
+          }
+        }));
+        setAnnotationProgress(Object.fromEntries(progressEntries));
+
         if (list.length) {
           const first = list[0];
           setVideoId(first.video_id);
@@ -535,26 +569,30 @@ export function PidAnswerAudit({
   };
 
   // ---------------------------------------------------------------- rendering
-  const answeredCount = questions.filter(item => (answers[item.question_id]?.state ?? 'unset') !== 'unset').length;
-  const videoAnswered = useMemo(() => {
-    if (!video) return 0;
-    return video.images.reduce((total, entry) => (
-      total + entry.questions.filter(item => (answers[item.question_id]?.state ?? 'unset') !== 'unset').length
-    ), 0);
-  }, [video, answers]);
-  const videoTotal = useMemo(
-    () => (video ? video.images.reduce((total, entry) => total + entry.questions.length, 0) : 0),
-    [video],
-  );
   const stateCounts = useMemo(() => {
-    let box = 0, absent = 0, cannot = 0;
-    for (const answer of Object.values(answers) as Answer[]) {
-      if (answer.state === 'box') box += 1;
-      else if (answer.state === 'absent') absent += 1;
-      else if (answer.state === 'cannot_tell') cannot += 1;
-    }
-    return { box, absent, cannot };
+    return countAnswerProgress(answers);
   }, [answers]);
+  const allTotal = useMemo(
+    () => videos.reduce((total, item) => total + item.images.reduce((count, entry) => count + entry.questions.length, 0), 0),
+    [videos],
+  );
+  const overallStateCounts = useMemo(() => {
+    const totals = (Object.values(annotationProgress) as AnswerProgress[]).reduce(
+      (current, counts) => ({
+        box: current.box + counts.box,
+        absent: current.absent + counts.absent,
+        cannot: current.cannot + counts.cannot,
+      }),
+      { ...EMPTY_PROGRESS },
+    );
+    const persistedCurrent = annotationProgress[videoId] ?? EMPTY_PROGRESS;
+    return {
+      box: totals.box - persistedCurrent.box + stateCounts.box,
+      absent: totals.absent - persistedCurrent.absent + stateCounts.absent,
+      cannot: totals.cannot - persistedCurrent.cannot + stateCounts.cannot,
+    };
+  }, [annotationProgress, stateCounts, videoId]);
+  const allAnswered = overallStateCounts.box + overallStateCounts.absent + overallStateCounts.cannot;
 
   const isActiveBox = (box: number[]) =>
     activeAnswer.state === 'box'
@@ -595,50 +633,21 @@ export function PidAnswerAudit({
     <div className="relative flex h-full min-h-0 flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       {/* toolbar */}
       <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-neutral-200 px-2 py-0.5 text-[11px] dark:border-neutral-800">
-        <span className="shrink-0 font-semibold">{t('pidAudit.title', 'Cross-view Object Association')}</span>
-        {dataRoot && (
-          <>
-            <span className="shrink-0 text-[10px] font-medium text-neutral-400 dark:text-neutral-500">
-              {t('otherAnnotation.dataRoot', 'Data root')}:
-            </span>
-            <span className="max-w-[min(36vw,28rem)] truncate rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400" title={dataRoot}>
-              {dataRoot}
-            </span>
-            {onChangeRoot && (
-              <Button size="xs" variant="outline" className="h-6 shrink-0 px-2 text-[10px]" onClick={onChangeRoot}>
-                {t('otherAnnotation.changeRoot', 'Change root')}
-              </Button>
-            )}
-          </>
+        <span className="shrink-0 font-semibold">{t('otherAnnotation.crossViewObjectAssociation')}</span>
+        <span className="shrink-0 font-mono font-semibold text-neutral-700 dark:text-neutral-200">
+          {allAnswered}/{allTotal}
+        </span>
+        {onChangeRoot && (
+          <Button
+            size="xs"
+            variant="outline"
+            className="ml-auto h-6 shrink-0 px-2 text-[10px]"
+            onClick={onChangeRoot}
+            title={dataRoot}
+          >
+            {t('otherAnnotation.changeRoot', 'Change root')}
+          </Button>
         )}
-        <span className="text-neutral-500 dark:text-neutral-400">
-          {t('pidAudit.imageProgress', {
-            videoAnswered,
-            videoTotal,
-            answered: answeredCount,
-            questions: questions.length,
-          })}
-        </span>
-        <span className={`ml-1 rounded px-1.5 py-0.5 ${
-          status === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-            : status === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-              : status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-                : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
-        }`}>
-          {status === 'saved' ? t('pidAudit.saved', 'Saved') : status === 'saving' ? t('pidAudit.saving', 'Saving…')
-            : status === 'error' ? t('pidAudit.saveFailed', 'Save failed') : t('pidAudit.idle', 'No changes')}
-        </span>
-        <span className="ml-auto flex items-center gap-1">
-          <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={undo} title={t('pidAudit.undo', 'Undo (Z)')}><RotateCcw className="h-3.5 w-3.5" /></Button>
-          <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={fitView} title={t('pidAudit.fitView', 'Fit view')}><Maximize className="h-3.5 w-3.5" /></Button>
-          <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={() => void persist(answers)} title={t('pidAudit.save', 'Save')}>
-            <Save className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={() => void download()} title={t('pidAudit.export', 'Export owned_gt.json')}>
-            <Download className="h-3.5 w-3.5" />
-          </Button>
-          <Button size="xs" variant="secondary" className="h-6 px-2 text-[10px]" onClick={onClose}>{t('pidAudit.close', 'Close')}</Button>
-        </span>
       </div>
 
       <div className="flex min-h-0 flex-1">
@@ -911,6 +920,26 @@ export function PidAnswerAudit({
             <Button size="sm" variant="ghost" onClick={() => setShowAllBoxes(value => !value)}>
               {showAllBoxes ? t('pidAudit.showCurrentOnly', 'Current label only') : t('pidAudit.showAllCandidates', 'Show all candidates')}
             </Button>
+            <span className="mx-1 h-4 w-px bg-neutral-300 dark:bg-neutral-700" />
+            <span className={`rounded px-1.5 py-0.5 text-[10px] ${
+              status === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                : status === 'saving' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                  : status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
+                    : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
+            }`}>
+              {status === 'saved' ? t('pidAudit.saved', 'Saved') : status === 'saving' ? t('pidAudit.saving', 'Saving…')
+                : status === 'error' ? t('pidAudit.saveFailed', 'Save failed') : t('pidAudit.idle', 'No changes')}
+            </span>
+            <span className="ml-auto flex items-center gap-1">
+              <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={undo} title={t('pidAudit.undo', 'Undo (Z)')}><RotateCcw className="h-3.5 w-3.5" /></Button>
+              <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={fitView} title={t('pidAudit.fitView', 'Fit view')}><Maximize className="h-3.5 w-3.5" /></Button>
+              <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={() => void persist(answers)} title={t('pidAudit.save', 'Save')}>
+                <Save className="h-3.5 w-3.5" />
+              </Button>
+              <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={() => void download()} title={t('pidAudit.export', 'Export owned_gt.json')}>
+                <Download className="h-3.5 w-3.5" />
+              </Button>
+            </span>
           </div>
 
           {/* questions of this image */}
@@ -1003,20 +1032,20 @@ export function PidAnswerAudit({
               {t('pidAudit.progress', 'Progress')}
             </div>
             <div className="mb-1 text-neutral-700 dark:text-neutral-300">
-              {stateCounts.box + stateCounts.absent + stateCounts.cannot} / {videoTotal}
+              {allAnswered} / {allTotal}
             </div>
             <div className="flex flex-col gap-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-emerald-400" />
-                {t('pidAudit.box', 'Box')} {stateCounts.box}
+                {t('pidAudit.box', 'Box')} {overallStateCounts.box}
               </span>
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-neutral-400" />
-                {t('pidAudit.absent', 'Not visible')} {stateCounts.absent}
+                {t('pidAudit.absent', 'Not visible')} {overallStateCounts.absent}
               </span>
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-amber-400" />
-                {t('pidAudit.cannotTell', 'Cannot tell')} {stateCounts.cannot}
+                {t('pidAudit.cannotTell', 'Cannot tell')} {overallStateCounts.cannot}
               </span>
             </div>
           </div>

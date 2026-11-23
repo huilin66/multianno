@@ -34,8 +34,6 @@
   },
   "pidAudit": {
     "close": "关闭",
-    "title": "Cross-view Object Association",
-    "imageProgress": "{{videoAnswered}}/{{videoTotal}} · {{answered}}/{{questions}} 本图",
     "saved": "已保存",
     "saving": "保存中…",
     "saveFailed": "保存失败",
