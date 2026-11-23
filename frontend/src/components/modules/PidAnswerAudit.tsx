@@ -706,34 +706,26 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                   );
                 });
               })}
-              {/* answered boxes of this image: drawn answers have no candidate behind them */}
-              {questions.map(question => {
-                const answer = answers[question.question_id];
-                if (!answer || answer.state !== 'box' || !answer.bbox) return null;
-                const box = answer.bbox as number[];
-                const active = question.question_id === activeQuestion?.question_id;
-                const shownByCandidate = active && (candidates[activeLabel] ?? []).some(
-                  candidate => candidate.box.every((value, index) => Math.abs(value - box[index]) < 3),
-                );
-                if (shownByCandidate) return null;
-                return (
+              {/* the active question's answer, drawn even when no candidate matches it */}
+              {activeQuestion && activeAnswer.state === 'box' && activeAnswer.bbox
+                && !(candidates[activeLabel] ?? []).some(candidate => candidate.box.every(
+                  (value, index) => Math.abs(value - (activeAnswer.bbox as number[])[index]) < 3,
+                ))
+                && (
                   <div
-                    key={`answer-${question.question_id}`}
                     className="absolute border-solid"
                     style={{
-                      left: box[0],
-                      top: box[1],
-                      width: Math.max(2, box[2] - box[0]),
-                      height: Math.max(2, box[3] - box[1]),
+                      left: (activeAnswer.bbox as number[])[0],
+                      top: (activeAnswer.bbox as number[])[1],
+                      width: Math.max(2, (activeAnswer.bbox as number[])[2] - (activeAnswer.bbox as number[])[0]),
+                      height: Math.max(2, (activeAnswer.bbox as number[])[3] - (activeAnswer.bbox as number[])[1]),
                       borderColor: '#ef4444',
-                      borderWidth: (active ? 3 : 1.5) / view.scale,
-                      background: active ? 'rgba(239,68,68,0.12)' : 'transparent',
-                      opacity: active ? 1 : 0.45,
+                      borderWidth: 3 / view.scale,
+                      background: 'rgba(239,68,68,0.12)',
                       pointerEvents: 'none',
                     }}
                   />
-                );
-              })}
+                )}
               {drawRect && (
                 <div
                   className="absolute border-2 border-dashed border-red-500 bg-red-400/10"
