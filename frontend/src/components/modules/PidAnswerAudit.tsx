@@ -627,14 +627,14 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                   key={profile.name}
                   onClick={() => setPreview(profile)}
                   title={t('pidAudit.viewProfile', '点击看大图')}
-                  className="flex w-[80px] flex-col items-center gap-1 rounded-md border border-neutral-200 bg-white p-1.5 transition-colors hover:border-sky-400 dark:border-neutral-700 dark:bg-neutral-900"
+                  className="flex w-[104px] flex-col items-center gap-1.5 rounded-md border border-neutral-200 bg-white p-2 transition-colors hover:border-sky-400 dark:border-neutral-700 dark:bg-neutral-900"
                 >
                   <img
                     src={`${MEDIA_BASE}${profile.url}`}
                     alt={profile.name}
-                    className="h-14 w-14 rounded-full object-cover"
+                    className="h-20 w-20 rounded-full object-cover"
                   />
-                  <span className="w-full truncate text-center text-[11px]">{profile.name}</span>
+                  <span className="w-full truncate text-center text-xs">{profile.name}</span>
                 </button>
               ))}
               {video && (video.profiles?.length ?? 0) === 0 && (
@@ -642,41 +642,6 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
               )}
             </div>
           </div>
-
-          {activeQuestion && (
-            <div className="rounded-md border border-neutral-200 bg-white p-2 text-[11px] dark:border-neutral-700 dark:bg-neutral-900">
-              <div className="mb-1 font-medium text-neutral-500 dark:text-neutral-400">
-                {t('pidAudit.current', '当前题目')}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-[10px] text-neutral-500">{activeQuestion.question_id}</span>
-                <span className="font-medium">{activeQuestion.speaker}</span>
-                <span className={`ml-auto rounded px-1.5 py-0.5 text-[10px] ${
-                  activeAnswer.state === 'box'
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                    : activeAnswer.state === 'absent'
-                      ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'
-                      : activeAnswer.state === 'cannot_tell'
-                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                        : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
-                }`}>
-                  {STATE_LABEL[activeAnswer.state]}
-                </span>
-              </div>
-              <div className="mt-1 truncate" title={activeQuestion.text}>{activeQuestion.text}</div>
-              <div className="mt-1 flex items-center gap-2 text-[10px] text-neutral-500 dark:text-neutral-400">
-                <span>{t('pidAudit.labelColon', '标签：')}{activeQuestion.label}</span>
-                {activeAnswer.source === 'manual' && (
-                  <span className="rounded bg-orange-100 px-1 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
-                    {t('pidAudit.manual', '手动')}
-                  </span>
-                )}
-                {activeAnswer.evidence_ts != null && (
-                  <span className="font-mono">t={activeAnswer.evidence_ts}s</span>
-                )}
-              </div>
-            </div>
-          )}
 
           <p className="mt-auto text-[11px] leading-4 text-neutral-500 dark:text-neutral-400">
             {t('pidAudit.blindHint', '盲标：本窗口不显示管线已选的答案。数字键选候选，A=不可见，X=无法判断，Z=撤销。')}
