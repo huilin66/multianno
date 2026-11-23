@@ -103,7 +103,7 @@ const post = async (path: string, body: unknown) => {
   return response.json();
 };
 
-export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
+export function PidAnswerAudit({ onClose, dataRoot }: { onClose: () => void; dataRoot?: string }) {
   const { t } = useTranslation();
 
   const [videos, setVideos] = useState<VideoEntry[]>([]);
@@ -154,7 +154,8 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
 
   // ---------------------------------------------------------------- loading
   useEffect(() => {
-    get('/pid_audit/dataset')
+    const rootQuery = dataRoot ? `?root=${encodeURIComponent(dataRoot)}` : '';
+    get(`/pid_audit/dataset${rootQuery}`)
       .then(payload => {
         const list: VideoEntry[] = payload.videos ?? [];
         setVideos(list);
@@ -166,7 +167,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
       })
       .catch((reason: Error) => setError(reason.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [dataRoot]);
 
   // answers for the selected video
   useEffect(() => {
@@ -566,7 +567,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center text-neutral-500 dark:text-neutral-400">
-        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> {t('pidAudit.loading', '正在加载 PID 数据集…')}
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> {t('otherAnnotation.loading', 'Loading annotation data…')}
       </div>
     );
   }
@@ -575,7 +576,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
       <div className="flex h-full flex-col items-center justify-center gap-3 text-neutral-600 dark:text-neutral-300">
         <p className="text-sm">{error}</p>
         <p className="text-xs text-neutral-500">
-          {t('pidAudit.hint', '请确认后端已启动，且 PID_DATA_ROOT / PID_OUTPUT_DIR 指向 PID 数据。')}
+          {t('otherAnnotation.loadHint', 'Check the selected data root and make sure the backend is running.')}
         </p>
         <Button variant="secondary" onClick={onClose}>{t('pidAudit.close', '关闭')}</Button>
       </div>
@@ -586,7 +587,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
     <div className="relative flex h-full min-h-0 flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       {/* toolbar */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
-        <span className="font-semibold">{t('pidAudit.title', 'PID 答案标注')}</span>
+        <span className="font-semibold">{t('pidAudit.title', 'Cross-view Object Association')}</span>
         <span className="text-neutral-500 dark:text-neutral-400">
           {videoAnswered}/{videoTotal} · {answeredCount}/{questions.length} 本图
         </span>

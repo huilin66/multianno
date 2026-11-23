@@ -30,6 +30,7 @@ import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Body, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse
@@ -55,8 +56,8 @@ _VIDEO_MEDIA_TYPES = {
 
 
 # ----------------------------------------------------------------- utilities
-def _data_root() -> Path:
-    return Path(os.environ.get("PID_DATA_ROOT", DEFAULT_DATA_ROOT)).expanduser()
+def _data_root(override: str | None = None) -> Path:
+    return Path(override or os.environ.get("PID_DATA_ROOT", DEFAULT_DATA_ROOT)).expanduser()
 
 
 def _output_dir() -> Path:
@@ -114,11 +115,17 @@ def _candidate_index() -> dict[tuple[str, str], dict[str, list[dict]]]:
 
 # -------------------------------------------------------------------- routes
 @router.get("/dataset")
-def dataset() -> dict:
+def dataset(root_override: str | None = Query(default=None, alias="root")) -> dict:
     """Videos, their test images and the questions asked about each image."""
-    root = _data_root()
+    root = _data_root(root_override)
     if not root.is_dir():
-        raise HTTPException(status_code=404, detail=f"PID_DATA_ROOT not found: {root}")
+        raise HTTPException(status_code=404, detail=f"Annotation data root not found: {root}")
+
+    encoded_root = quote(str(root), safe="")
+
+    def media_url(relative: str, version: int | None = None) -> str:
+        url = f"/api/pid_audit/media?path={quote(relative, safe='')}&root={encoded_root}"
+        return f"{url}&v={version}" if version is not None else url
 
     parsed = _read_json(_output_dir() / "predictions" / "parsed.json", {"dataset": []})
     labels: dict[tuple[str, str], str] = {}
@@ -158,7 +165,7 @@ def dataset() -> dict:
                 if item.is_file() and item.suffix.lower() in _IMAGE_SUFFIXES:
                     profiles.append({
                         "name": item.stem,
-                        "url": f"/api/pid_audit/media?path={directory.name}/profiles/{item.name}",
+                        "url": media_url(f"{directory.name}/profiles/{item.name}"),
                     })
 
         # The URL carries the file mtime: without it a browser keeps a cached
@@ -166,16 +173,16 @@ def dataset() -> dict:
         # transcoded proxy (same URL, max-age=86400).
         videos.append({
             "video_id": directory.name,
-            "video_url": (
-                f"/api/pid_audit/media?path={directory.name}/{video_file.name}"
-                f"&v={int(video_file.stat().st_mtime)}"
+            "video_url": media_url(
+                f"{directory.name}/{video_file.name}",
+                int(video_file.stat().st_mtime),
             ),
             "video_name": video_file.name,
             "profiles": profiles,
             "images": [
                 {
                     "bg_path": bg_path,
-                    "image_url": f"/api/pid_audit/media?path={directory.name}/{bg_path}",
+                    "image_url": media_url(f"{directory.name}/{bg_path}"),
                     "questions": items,
                 }
                 for bg_path, items in sorted(images.items())
@@ -212,8 +219,8 @@ def candidates(
     return {"video": video, "image": image, "labels": labels}
 
 
-def _safe_media_path(relative: str) -> Path:
-    root = _data_root().resolve()
+def _safe_media_path(relative: str, root_override: str | None = None) -> Path:
+    root = _data_root(root_override).resolve()
     target = (root / relative).resolve()
     if root != target and root not in target.parents:
         raise HTTPException(status_code=400, detail="path escapes PID_DATA_ROOT")
@@ -334,8 +341,8 @@ def _video_response(path: Path) -> FileResponse:
 
 
 @router.get("/media")
-def media(path: str = Query(...)):
-    target = _safe_media_path(path)
+def media(path: str = Query(...), root_override: str | None = Query(default=None, alias="root")):
+    target = _safe_media_path(path, root_override)
     if target.suffix.lower() in _IMAGE_SUFFIXES:
         return FileResponse(target)
     return _video_response(target)

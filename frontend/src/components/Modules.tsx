@@ -4,6 +4,7 @@ import { CreateProject} from './modals/CreateProject';
 import { LoadProject} from './modals/LoadProject';
 import { SyncAnnotation } from './modules/SyncAnnotation';
 import { PidAnswerAudit } from './modules/PidAnswerAudit';
+import { OtherAnnotation } from './modules/OtherAnnotation';
 import { DataPreload } from './modules/DataPreload';
 import { ViewExtentCheck } from './modules/ViewExtentCheck';
 import { ProjectMetaDashboard } from './modules/ProjectMetaDashboard';
@@ -17,6 +18,7 @@ export {
   CreateProject,
   SyncAnnotation,
   PidAnswerAudit,
+  OtherAnnotation,
   DataPreload,
   ViewExtentCheck,
   ProjectMetaDashboard,

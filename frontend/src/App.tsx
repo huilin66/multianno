@@ -12,7 +12,7 @@ import {
   SceneGroupManager,
   DataExport,
   DataImport,
-  PidAnswerAudit
+  OtherAnnotation
 } from './components/Modules';
 import { Button } from '@/components/ui/button';
 import {
@@ -1404,7 +1404,7 @@ export default function App() {
             <DialogTitle>{t('menu.pidAudit')}</DialogTitle>
           </DialogHeader>
           <div className="flex-grow overflow-hidden relative">
-            <PidAnswerAudit onClose={() => setActiveModule('workspace')} />
+            <OtherAnnotation onClose={() => setActiveModule('workspace')} />
           </div>
         </DialogContent>
       </Dialog>

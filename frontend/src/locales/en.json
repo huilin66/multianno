@@ -16,8 +16,18 @@
     "annotationManager": "Annotation Manager",
     "sceneGroupManager": "Scene Group Manager",
     "trackIdAnnotation": "Track ID Annotation",
-    "pidAudit": "PID Answer Audit",
+    "pidAudit": "OtherAnnotation",
     "localVisualization": "Local Visualization"
+  },
+  "otherAnnotation": {
+    "tools": "Annotation tools",
+    "crossViewObjectAssociation": "Cross-view Object Association",
+    "dataRoot": "Data root",
+    "chooseRoot": "Choose folder root",
+    "changeRoot": "Change root",
+    "selectRootDescription": "Choose the root folder of the annotation data before opening this tool.",
+    "loading": "Loading annotation data…",
+    "loadHint": "Check the selected data root and make sure the backend is running."
   },
   "trackIdWindow": {
     "title": "Track ID Annotation",
