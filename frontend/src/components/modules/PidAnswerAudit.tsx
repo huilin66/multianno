@@ -21,6 +21,8 @@ import {
   Image as ImageIcon,
   ListChecks,
   Maximize,
+  Pause,
+  Play,
   RotateCcw,
   Save,
   Download,
@@ -197,6 +199,7 @@ export function PidAnswerAudit({
   const [imageSize, setImageSize] = useState({ width: 1, height: 1 });
   const [status, setStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [evidenceTs, setEvidenceTs] = useState<number | null>(null);
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
   const [showAllBoxes, setShowAllBoxes] = useState(false);
   const [preview, setPreview] = useState<ProfileEntry | null>(null);
   const [mode, setMode] = useState<'select' | 'draw'>('select');
@@ -228,6 +231,9 @@ export function PidAnswerAudit({
   const dirtyRef = useRef(false);
 
   const video = useMemo(() => videos.find(item => item.video_id === videoId), [videos, videoId]);
+  const currentVideoIndex = useMemo(() => videos.findIndex(item => item.video_id === videoId), [videos, videoId]);
+  const canGoPreviousVideo = currentVideoIndex > 0;
+  const canGoNextVideo = currentVideoIndex >= 0 && currentVideoIndex < videos.length - 1;
   const image = useMemo(
     () => video?.images.find(item => item.bg_path === imagePath),
     [video, imagePath],
@@ -619,6 +625,22 @@ export function PidAnswerAudit({
     element.currentTime = Math.max(0, element.currentTime + seconds);
     setEvidenceTs(Number(element.currentTime.toFixed(1)));
   };
+
+  const changeVideo = useCallback((offset: number) => {
+    const next = videos[currentVideoIndex + offset];
+    if (!next) return;
+    setVideoId(next.video_id);
+    setImagePath(next.images[0]?.bg_path ?? '');
+    setEvidenceTs(null);
+    setIsVideoPlaying(false);
+  }, [currentVideoIndex, videos]);
+
+  const toggleVideoPlayback = useCallback(() => {
+    const element = videoRef.current;
+    if (!element) return;
+    if (element.paused) void element.play();
+    else element.pause();
+  }, []);
 
   const download = async () => {
     const payload = await get('/pid_audit/export');
@@ -1034,15 +1056,21 @@ export function PidAnswerAudit({
                     preload="auto"
                     playsInline
                     onTimeUpdate={event => setEvidenceTs(Number(event.currentTarget.currentTime.toFixed(1)))}
+                    onPlay={() => setIsVideoPlaying(true)}
+                    onPause={() => setIsVideoPlaying(false)}
+                    onEnded={() => setIsVideoPlaying(false)}
                   />
 
                   <div className="flex items-center justify-between gap-1 text-xs">
                     <span className="font-mono text-neutral-500 dark:text-neutral-400">t={evidenceTs ?? 0}s</span>
                     <span className="flex items-center gap-0.5">
-                      <Button size="sm" variant="ghost" onClick={() => step(-1)} title={t('pidAudit.stepBackOne', 'Back 1 second')}><SkipBack className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => step(-0.2)} title={t('pidAudit.stepBackPointTwo', 'Back 0.2 seconds')}><ChevronLeft className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => step(0.2)} title={t('pidAudit.stepForwardPointTwo', 'Forward 0.2 seconds')}><ChevronRight className="h-4 w-4" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => step(1)} title={t('pidAudit.stepForwardOne', 'Forward 1 second')}><SkipForward className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" disabled={!canGoPreviousVideo} onClick={() => changeVideo(-1)} title={t('pidAudit.previousVideo', 'Previous video')}><SkipBack className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => step(-1)} title={t('pidAudit.stepBackOne', 'Back 1 second')}><ChevronLeft className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" onClick={toggleVideoPlayback} title={isVideoPlaying ? t('pidAudit.pause', 'Pause') : t('pidAudit.play', 'Play')}>
+                        {isVideoPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => step(1)} title={t('pidAudit.stepForwardOne', 'Forward 1 second')}><ChevronRight className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" disabled={!canGoNextVideo} onClick={() => changeVideo(1)} title={t('pidAudit.nextVideo', 'Next video')}><SkipForward className="h-4 w-4" /></Button>
                     </span>
                     <select
                       className="rounded border border-neutral-300 bg-white px-1 py-0.5 dark:border-neutral-700 dark:bg-neutral-900"
@@ -1055,6 +1083,9 @@ export function PidAnswerAudit({
                       <option value="0.5">0.5×</option>
                       <option value="1">1×</option>
                       <option value="2">2×</option>
+                      <option value="3">3×</option>
+                      <option value="5">5×</option>
+                      <option value="10">10×</option>
                     </select>
                   </div>
                 </div>
