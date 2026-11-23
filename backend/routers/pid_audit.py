@@ -24,6 +24,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -210,6 +213,93 @@ def _safe_media_path(relative: str) -> Path:
     return target
 
 
+_PROXY_LOCK = threading.Lock()
+_PROXY_NEEDED: dict[tuple[str, float], bool] = {}
+
+
+def _needs_proxy(path: Path) -> bool:
+    """HEVC inside a QuickTime container cannot be decoded by Chromium.
+
+    The iPhone recordings here are ``ftypqt`` + ``hvc1``; Edge/Chrome show
+    "cannot load" for them. Checked once per (file, mtime).
+    """
+    try:
+        key = (str(path), path.stat().st_mtime)
+    except OSError:
+        return False
+    cached = _PROXY_NEEDED.get(key)
+    if cached is not None:
+        return cached
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(16)
+        needs = header[4:12].startswith(b"ftypqt")
+    except OSError:
+        needs = False
+    _PROXY_NEEDED[key] = needs
+    return needs
+
+
+def _proxy_dir() -> Path:
+    directory = _state_dir() / "proxies"
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory
+
+
+def _proxy_path(path: Path) -> Path:
+    stat = path.stat()
+    name = f"{path.parent.name}_{path.stem}_{stat.st_size}_{int(stat.st_mtime)}.mp4"
+    return _proxy_dir() / name
+
+
+def _ffmpeg_binary() -> str | None:
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:  # pragma: no cover - optional dependency
+        return None
+
+
+def _ensure_proxy(path: Path) -> Path | None:
+    """Transcode a browser-hostile video to 720p H.264 once, then reuse it."""
+    try:
+        target = _proxy_path(path)
+    except OSError:
+        return None
+    if target.is_file() and target.stat().st_size > 0:
+        return target
+    binary = _ffmpeg_binary()
+    if not binary:
+        return None
+    with _PROXY_LOCK:
+        if target.is_file() and target.stat().st_size > 0:
+            return target
+        temp = target.with_name(target.stem + ".part.mp4")
+        command = [
+            binary, "-y", "-loglevel", "error",
+            "-i", str(path),
+            "-vf", "scale=-2:720",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "27",
+            "-c:a", "aac", "-b:a", "96k",
+            "-movflags", "+faststart",
+            str(temp),
+        ]
+        try:
+            result = subprocess.run(command, capture_output=True, timeout=1800)
+        except (OSError, subprocess.TimeoutExpired):
+            temp.unlink(missing_ok=True)
+            return None
+        if result.returncode != 0 or not temp.is_file():
+            temp.unlink(missing_ok=True)
+            return None
+        temp.replace(target)
+    return target
+
+
 def _video_response(path: Path) -> FileResponse:
     """Starlette's FileResponse handles Range/If-Range/ETag itself.
 
@@ -218,6 +308,14 @@ def _video_response(path: Path) -> FileResponse:
     player showed its buffering spinner. FileResponse streams the requested
     range and answers If-Range with a fresh 206 instead.
     """
+    if _needs_proxy(path):
+        proxy = _ensure_proxy(path)
+        if proxy is not None:
+            return FileResponse(
+                proxy,
+                media_type="video/mp4",
+                headers={"Cache-Control": "public, max-age=86400"},
+            )
     media_type = _VIDEO_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
     return FileResponse(
         path,
