@@ -14,11 +14,15 @@ import { useTranslation } from 'react-i18next';
 import { API_BASE_URL } from '../../api/client';
 import { Button } from '../ui/button';
 import {
-  Check,
   CircleSlash,
+  ChevronDown,
   EyeOff,
   HelpCircle,
+  Image as ImageIcon,
+  ListChecks,
   Maximize,
+  Pin,
+  PinOff,
   RotateCcw,
   Save,
   Download,
@@ -28,6 +32,7 @@ import {
   SkipBack,
   SkipForward,
   Square,
+  Video,
   Users,
 } from 'lucide-react';
 
@@ -92,6 +97,70 @@ const countAnswerProgress = (items: Record<string, Answer>): AnswerProgress => {
   return counts;
 };
 
+type ReferenceCardKey = 'video' | 'profiles' | 'images' | 'questions';
+
+interface ReferenceCardState {
+  open: boolean;
+  pinned: boolean;
+}
+
+interface ReferenceCardProps {
+  title: React.ReactNode;
+  icon: React.ReactNode;
+  count?: React.ReactNode;
+  state: ReferenceCardState;
+  onToggle: () => void;
+  onTogglePin: () => void;
+  children: React.ReactNode;
+}
+
+function ReferenceCard({ title, icon, count, state, onToggle, onTogglePin, children }: ReferenceCardProps) {
+  const expanded = state.pinned || state.open;
+
+  return (
+    <section className="overflow-hidden rounded-md border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+      <div className="flex items-center border-b border-neutral-200 dark:border-neutral-800">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left text-xs font-semibold"
+          onClick={() => {
+            if (!state.pinned) onToggle();
+          }}
+          aria-expanded={expanded}
+        >
+          <span className="text-neutral-500 dark:text-neutral-400">{icon}</span>
+          <span className="truncate">{title}</span>
+          {count !== undefined && (
+            <span className="ml-auto shrink-0 font-mono text-[10px] font-normal text-neutral-500 dark:text-neutral-400">
+              {count}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          className={`rounded p-1 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 ${state.pinned ? 'text-sky-600 dark:text-sky-400' : 'text-neutral-400 dark:text-neutral-500'}`}
+          onClick={onTogglePin}
+          title={state.pinned ? 'Unpin card' : 'Pin card'}
+          aria-label={state.pinned ? 'Unpin card' : 'Pin card'}
+        >
+          {state.pinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
+        </button>
+        <button
+          type="button"
+          className="rounded p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-default disabled:opacity-40 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          onClick={onToggle}
+          disabled={state.pinned}
+          title={expanded ? 'Collapse card' : 'Expand card'}
+          aria-label={expanded ? 'Collapse card' : 'Expand card'}
+        >
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+        </button>
+      </div>
+      {expanded && <div className="p-2">{children}</div>}
+    </section>
+  );
+}
+
 const get = async (path: string) => {
   const response = await fetch(`${API_BASE_URL}${path}`);
   if (!response.ok) {
@@ -148,6 +217,12 @@ export function PidAnswerAudit({
   const [preview, setPreview] = useState<ProfileEntry | null>(null);
   const [mode, setMode] = useState<'select' | 'draw'>('select');
   const [drawRect, setDrawRect] = useState<number[] | null>(null);
+  const [referenceCards, setReferenceCards] = useState<Record<ReferenceCardKey, ReferenceCardState>>({
+    video: { open: true, pinned: true },
+    profiles: { open: true, pinned: false },
+    images: { open: true, pinned: false },
+    questions: { open: true, pinned: false },
+  });
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const questionPositionRef = useRef<{ videoId: string; index: number } | null>(null);
@@ -594,6 +669,27 @@ export function PidAnswerAudit({
   }, [annotationProgress, stateCounts, videoId]);
   const allAnswered = overallStateCounts.box + overallStateCounts.absent + overallStateCounts.cannot;
 
+  const toggleReferenceCard = useCallback((key: ReferenceCardKey) => {
+    setReferenceCards(previous => ({
+      ...previous,
+      [key]: { ...previous[key], open: !previous[key].open },
+    }));
+  }, []);
+
+  const toggleReferencePin = useCallback((key: ReferenceCardKey) => {
+    setReferenceCards(previous => {
+      const nextPinned = !previous[key].pinned;
+      return {
+        ...previous,
+        [key]: {
+          ...previous[key],
+          pinned: nextPinned,
+          open: nextPinned ? true : previous[key].open,
+        },
+      };
+    });
+  }, []);
+
   const isActiveBox = (box: number[]) =>
     activeAnswer.state === 'box'
     && !!activeAnswer.bbox
@@ -651,89 +747,10 @@ export function PidAnswerAudit({
       </div>
 
       <div className="flex min-h-0 flex-1">
-        {/* video side */}
-        <div className="flex w-[38%] min-w-[380px] max-w-[640px] shrink-0 flex-col gap-2 border-r border-neutral-200 bg-neutral-50 p-2 dark:border-neutral-800 dark:bg-neutral-900/40">
-          <select
-            className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
-            value={videoId}
-            onChange={event => {
-              const next = videos.find(item => item.video_id === event.target.value);
-              setVideoId(event.target.value);
-              setImagePath(next?.images[0]?.bg_path ?? '');
-            }}
-          >
-            {videos.map(item => (
-              <option key={item.video_id} value={item.video_id}>{item.video_id}</option>
-            ))}
-          </select>
-
-          <video
-            ref={videoRef}
-            src={`${MEDIA_BASE}${video?.video_url ?? ''}`}
-            controls
-            className="max-h-[55vh] w-full rounded bg-black object-contain"
-            preload="auto"
-            playsInline
-            onTimeUpdate={event => setEvidenceTs(Number(event.currentTarget.currentTime.toFixed(1)))}
-          />
-
-          <div className="flex items-center justify-between gap-1 text-xs">
-            <span className="font-mono text-neutral-500 dark:text-neutral-400">t={evidenceTs ?? 0}s</span>
-            <span className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => step(-1)} title={t('pidAudit.stepBackOne', 'Back 1 second')}><SkipBack className="h-4 w-4" /></Button>
-              <Button size="sm" variant="ghost" onClick={() => step(-0.2)} title={t('pidAudit.stepBackPointTwo', 'Back 0.2 seconds')}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => step(0.2)} title={t('pidAudit.stepForwardPointTwo', 'Forward 0.2 seconds')}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => step(1)} title={t('pidAudit.stepForwardOne', 'Forward 1 second')}><SkipForward className="h-4 w-4" /></Button>
-            </span>
-            <select
-              className="rounded border border-neutral-300 bg-white px-1 py-0.5 dark:border-neutral-700 dark:bg-neutral-900"
-              defaultValue="1"
-              onChange={event => {
-                if (videoRef.current) videoRef.current.playbackRate = Number(event.target.value);
-              }}
-            >
-              <option value="0.25">0.25×</option>
-              <option value="0.5">0.5×</option>
-              <option value="1">1×</option>
-              <option value="2">2×</option>
-            </select>
-          </div>
-
-          <div className="mt-1">
-            <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-              <Users className="h-3.5 w-3.5" />
-              {t('pidAudit.people', 'Profiles')}
-              <span className="font-mono text-[10px]">{video?.profiles?.length ?? 0}</span>
-            </div>
-            <div className="flex flex-wrap gap-1.5">
-              {(video?.profiles ?? []).map(profile => (
-                <button
-                  key={profile.name}
-                  onClick={() => setPreview(profile)}
-                  title={t('pidAudit.viewProfile', 'Click to preview')}
-                  className="flex w-[104px] flex-col items-center gap-1.5 rounded-md border border-neutral-200 bg-white p-2 transition-colors hover:border-sky-400 dark:border-neutral-700 dark:bg-neutral-900"
-                >
-                  <img
-                    src={`${MEDIA_BASE}${profile.url}`}
-                    alt={profile.name}
-                    className="h-20 w-20 rounded-full object-cover"
-                  />
-                  <span className="w-full truncate text-center text-xs">{profile.name}</span>
-                </button>
-              ))}
-              {video && (video.profiles?.length ?? 0) === 0 && (
-                <span className="text-[11px] text-neutral-400">{t('pidAudit.noProfiles', 'No profile images')}</span>
-              )}
-            </div>
-          </div>
-        </div>
-
+        {/* annotation area: image and annotation controls only */}
+        <section className="flex min-w-0 flex-1 flex-col bg-neutral-100 dark:bg-neutral-900">
         {/* image side */}
-        <div className="flex min-w-[360px] flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col">
           <div
             ref={bindStage}
             className={`relative min-h-0 flex-1 overflow-hidden bg-neutral-100 dark:bg-neutral-900 ${mode === 'draw' ? 'cursor-crosshair' : 'cursor-grab'}`}
@@ -942,114 +959,195 @@ export function PidAnswerAudit({
             </span>
           </div>
 
-          {/* questions of this image */}
-          <div className="flex shrink-0 flex-col border-t border-neutral-200 dark:border-neutral-800">
-            <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-              <span className="font-mono">{imagePath.split('/').pop()}</span>
-              <span>·</span>
-              <span>{t('pidAudit.questionCount', { count: questions.length })}</span>
-            </div>
-            <div className="h-[186px] overflow-auto p-2">
-            <div className="flex flex-col gap-1">
-              {questions.map((question, position) => {
-                const answer = answers[question.question_id] ?? EMPTY_ANSWER;
-                const current = question.question_id === activeQuestion?.question_id;
-                return (
-                  <div
-                    key={question.question_id}
-                    onClick={() => setActiveQuestionId(question.question_id)}
-                    className={`cursor-pointer rounded border px-2 py-1 text-xs ${
-                      current
-                        ? 'border-sky-400 bg-sky-50 dark:border-sky-600 dark:bg-sky-950/40'
-                        : 'border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] text-neutral-500">{question.question_id}</span>
-                      <span className="font-medium">{question.speaker}</span>
-                      <span className="line-clamp-2 flex-1 leading-snug">{question.text}</span>
-                      <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
-                        answer.state === 'box'
-                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
-                          : answer.state === 'absent'
-                            ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'
-                            : answer.state === 'cannot_tell'
-                              ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
-                              : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
-                      }`}>
-                        {stateLabels[answer.state]}
-                      </span>
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-1">
-                      <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{t('pidAudit.label', 'Label')}: {question.label}</span>
-                      {answer.state === 'box' && answer.bbox && (
-                        <span className="font-mono text-[10px] text-neutral-500">
-                          [{answer.bbox.join(', ')}]
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            </div>
-
           </div>
-        </div>
+        </section>
 
-        {/* column 3: image switcher */}
-        <div className="flex w-[220px] min-w-[200px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
-          <div className="flex min-h-0 flex-1 flex-col border-neutral-200 p-2 dark:border-neutral-800">
-            <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-              <span>{t('pidAudit.images', 'Images')}</span>
-              <span className="font-mono text-[10px]">{video?.images.length ?? 0}</span>
+        {/* reference area: context cards that can be collapsed or pinned */}
+        <aside className="flex w-[340px] min-w-[280px] max-w-[380px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
+          <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-2.5 py-1.5 dark:border-neutral-800">
+            <span className="text-xs font-semibold">{t('pidAudit.reference', 'Reference')}</span>
+            <span className="font-mono text-[10px] text-neutral-500 dark:text-neutral-400">{video?.video_id ?? '—'}</span>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-auto p-2">
+            <div className="mb-2 rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-[11px] shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-neutral-600 dark:text-neutral-300">{t('pidAudit.progress', 'Progress')}</span>
+                <span className="font-mono font-semibold text-neutral-800 dark:text-neutral-100">{allAnswered} / {allTotal}</span>
+              </div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">
+                <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-emerald-400" />{t('pidAudit.box', 'Box')} {overallStateCounts.box}</span>
+                <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-neutral-400" />{t('pidAudit.absent', 'Not visible')} {overallStateCounts.absent}</span>
+                <span><span className="mr-1 inline-block h-2 w-2 rounded-sm bg-amber-400" />{t('pidAudit.cannotTell', 'Cannot tell')} {overallStateCounts.cannot}</span>
+              </div>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto">
-              {video?.images.map(entry => {
-                const done = entry.questions.filter(item => (answers[item.question_id]?.state ?? 'unset') !== 'unset').length;
-                const current = entry.bg_path === imagePath;
-                return (
-                  <button
-                    key={entry.bg_path}
-                    onClick={() => setImagePath(entry.bg_path)}
-                    className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs ${
-                      current ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200'
-                        : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
-                    }`}
+
+            <div className="flex flex-col gap-2">
+              <ReferenceCard
+                title={t('pidAudit.video', 'Video')}
+                icon={<Video className="h-3.5 w-3.5" />}
+                state={referenceCards.video}
+                onToggle={() => toggleReferenceCard('video')}
+                onTogglePin={() => toggleReferencePin('video')}
+              >
+                <div className="space-y-2">
+                  <select
+                    className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                    value={videoId}
+                    onChange={event => {
+                      const next = videos.find(item => item.video_id === event.target.value);
+                      setVideoId(event.target.value);
+                      setImagePath(next?.images[0]?.bg_path ?? '');
+                    }}
                   >
-                    <span className="truncate">{entry.bg_path.split('/').pop()}</span>
-                    <span className="ml-2 shrink-0 font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
-                      {done}/{entry.questions.length}
+                    {videos.map(item => (
+                      <option key={item.video_id} value={item.video_id}>{item.video_id}</option>
+                    ))}
+                  </select>
+
+                  <video
+                    ref={videoRef}
+                    src={`${MEDIA_BASE}${video?.video_url ?? ''}`}
+                    controls
+                    className="max-h-[28vh] w-full rounded bg-black object-contain"
+                    preload="auto"
+                    playsInline
+                    onTimeUpdate={event => setEvidenceTs(Number(event.currentTarget.currentTime.toFixed(1)))}
+                  />
+
+                  <div className="flex items-center justify-between gap-1 text-xs">
+                    <span className="font-mono text-neutral-500 dark:text-neutral-400">t={evidenceTs ?? 0}s</span>
+                    <span className="flex items-center gap-0.5">
+                      <Button size="sm" variant="ghost" onClick={() => step(-1)} title={t('pidAudit.stepBackOne', 'Back 1 second')}><SkipBack className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => step(-0.2)} title={t('pidAudit.stepBackPointTwo', 'Back 0.2 seconds')}><ChevronLeft className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => step(0.2)} title={t('pidAudit.stepForwardPointTwo', 'Forward 0.2 seconds')}><ChevronRight className="h-4 w-4" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => step(1)} title={t('pidAudit.stepForwardOne', 'Forward 1 second')}><SkipForward className="h-4 w-4" /></Button>
                     </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+                    <select
+                      className="rounded border border-neutral-300 bg-white px-1 py-0.5 dark:border-neutral-700 dark:bg-neutral-900"
+                      defaultValue="1"
+                      onChange={event => {
+                        if (videoRef.current) videoRef.current.playbackRate = Number(event.target.value);
+                      }}
+                    >
+                      <option value="0.25">0.25×</option>
+                      <option value="0.5">0.5×</option>
+                      <option value="1">1×</option>
+                      <option value="2">2×</option>
+                    </select>
+                  </div>
+                </div>
+              </ReferenceCard>
 
-          <div className="shrink-0 border-t border-neutral-200 p-2 text-[11px] dark:border-neutral-800">
-            <div className="mb-1 font-medium text-neutral-500 dark:text-neutral-400">
-              {t('pidAudit.progress', 'Progress')}
-            </div>
-            <div className="mb-1 text-neutral-700 dark:text-neutral-300">
-              {allAnswered} / {allTotal}
-            </div>
-            <div className="flex flex-col gap-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-sm bg-emerald-400" />
-                {t('pidAudit.box', 'Box')} {overallStateCounts.box}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-sm bg-neutral-400" />
-                {t('pidAudit.absent', 'Not visible')} {overallStateCounts.absent}
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="inline-block h-2 w-2 rounded-sm bg-amber-400" />
-                {t('pidAudit.cannotTell', 'Cannot tell')} {overallStateCounts.cannot}
-              </span>
+              <ReferenceCard
+                title={t('pidAudit.people', 'Profiles')}
+                icon={<Users className="h-3.5 w-3.5" />}
+                count={video?.profiles?.length ?? 0}
+                state={referenceCards.profiles}
+                onToggle={() => toggleReferenceCard('profiles')}
+                onTogglePin={() => toggleReferencePin('profiles')}
+              >
+                <div className="grid grid-cols-2 gap-1.5">
+                  {(video?.profiles ?? []).map(profile => (
+                    <button
+                      type="button"
+                      key={profile.name}
+                      onClick={() => setPreview(profile)}
+                      title={t('pidAudit.viewProfile', 'Click to preview')}
+                      className="flex min-w-0 flex-col items-center gap-1 rounded-md border border-neutral-200 bg-white p-1.5 transition-colors hover:border-sky-400 dark:border-neutral-700 dark:bg-neutral-900"
+                    >
+                      <img src={`${MEDIA_BASE}${profile.url}`} alt={profile.name} className="h-16 w-16 rounded-full object-cover" />
+                      <span className="w-full truncate text-center text-[11px]">{profile.name}</span>
+                    </button>
+                  ))}
+                  {video && (video.profiles?.length ?? 0) === 0 && (
+                    <span className="text-[11px] text-neutral-400">{t('pidAudit.noProfiles', 'No profile images')}</span>
+                  )}
+                </div>
+              </ReferenceCard>
+
+              <ReferenceCard
+                title={t('pidAudit.images', 'Images')}
+                icon={<ImageIcon className="h-3.5 w-3.5" />}
+                count={video?.images.length ?? 0}
+                state={referenceCards.images}
+                onToggle={() => toggleReferenceCard('images')}
+                onTogglePin={() => toggleReferencePin('images')}
+              >
+                <div className="max-h-[210px] space-y-0.5 overflow-auto">
+                  {video?.images.map(entry => {
+                    const done = entry.questions.filter(item => (answers[item.question_id]?.state ?? 'unset') !== 'unset').length;
+                    const current = entry.bg_path === imagePath;
+                    return (
+                      <button
+                        type="button"
+                        key={entry.bg_path}
+                        onClick={() => setImagePath(entry.bg_path)}
+                        className={`flex w-full items-center justify-between rounded px-2 py-1 text-left text-xs ${
+                          current ? 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-200' : 'hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                        }`}
+                      >
+                        <span className="truncate">{entry.bg_path.split('/').pop()}</span>
+                        <span className="ml-2 shrink-0 font-mono text-[10px] text-neutral-500 dark:text-neutral-400">{done}/{entry.questions.length}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </ReferenceCard>
+
+              <ReferenceCard
+                title={t('pidAudit.questions', 'Questions')}
+                icon={<ListChecks className="h-3.5 w-3.5" />}
+                count={questions.length}
+                state={referenceCards.questions}
+                onToggle={() => toggleReferenceCard('questions')}
+                onTogglePin={() => toggleReferencePin('questions')}
+              >
+                <div className="mb-1 truncate font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
+                  {imagePath.split('/').pop()} · {t('pidAudit.questionCount', { count: questions.length })}
+                </div>
+                <div className="max-h-[300px] space-y-1 overflow-auto pr-0.5">
+                  {questions.map(question => {
+                    const answer = answers[question.question_id] ?? EMPTY_ANSWER;
+                    const current = question.question_id === activeQuestion?.question_id;
+                    return (
+                      <div
+                        key={question.question_id}
+                        onClick={() => setActiveQuestionId(question.question_id)}
+                        className={`cursor-pointer rounded border px-2 py-1 text-xs ${
+                          current ? 'border-sky-400 bg-sky-50 dark:border-sky-600 dark:bg-sky-950/40' : 'border-transparent hover:bg-neutral-100 dark:hover:bg-neutral-800'
+                        }`}
+                      >
+                        <div className="flex items-start gap-1.5">
+                          <span className="font-mono text-[10px] text-neutral-500">{question.question_id}</span>
+                          <span className="font-medium">{question.speaker}</span>
+                          <span className="line-clamp-2 min-w-0 flex-1 leading-snug">{question.text}</span>
+                          <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${
+                            answer.state === 'box'
+                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                              : answer.state === 'absent'
+                                ? 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200'
+                                : answer.state === 'cannot_tell'
+                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
+                                  : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
+                          }`}>
+                            {stateLabels[answer.state]}
+                          </span>
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1">
+                          <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{t('pidAudit.label', 'Label')}: {question.label}</span>
+                          {answer.state === 'box' && answer.bbox && (
+                            <span className="font-mono text-[10px] text-neutral-500">[{answer.bbox.join(', ')}]</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ReferenceCard>
             </div>
           </div>
-        </div>
+        </aside>
       </div>
 
       {preview && (
