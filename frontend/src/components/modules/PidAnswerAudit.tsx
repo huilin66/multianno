@@ -34,6 +34,7 @@ import {
   Square,
   Video,
   Users,
+  GripHorizontal,
 } from 'lucide-react';
 
 type AnswerState = 'box' | 'absent' | 'cannot_tell';
@@ -88,6 +89,8 @@ const EMPTY_PROGRESS: AnswerProgress = { box: 0, absent: 0, cannot: 0 };
 const MEDIA_BASE = API_BASE_URL.replace(/\/api$/, '');
 const REFERENCE_MIN_WIDTH = 280;
 const REFERENCE_DEFAULT_WIDTH = 340;
+const REFERENCE_CARD_MIN_HEIGHT = 84;
+const REFERENCE_CARD_MAX_HEIGHT = 640;
 
 const normalizeBboxes = (rawBboxes: unknown, legacyBbox?: unknown): number[][] => {
   const raw = Array.isArray(rawBboxes)
@@ -135,13 +138,29 @@ interface ReferenceCardProps {
   icon: React.ReactNode;
   count?: React.ReactNode;
   state: ReferenceCardState;
+  height?: number;
+  resizeLabel?: string;
   onToggle: () => void;
+  onResizeStart?: (event: React.PointerEvent<HTMLDivElement>) => void;
   children: React.ReactNode;
 }
 
-function ReferenceCard({ title, icon, count, state, onToggle, children }: ReferenceCardProps) {
+function ReferenceCard({
+  title,
+  icon,
+  count,
+  state,
+  height,
+  resizeLabel = 'Resize card',
+  onToggle,
+  onResizeStart,
+  children,
+}: ReferenceCardProps) {
   return (
-    <section className="overflow-hidden rounded-md border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
+    <section
+      className="relative flex min-h-0 flex-col overflow-hidden rounded-md border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950"
+      style={state.open && height ? { height } : undefined}
+    >
       <div className="flex items-center border-b border-neutral-200 dark:border-neutral-800">
         <button
           type="button"
@@ -167,7 +186,22 @@ function ReferenceCard({ title, icon, count, state, onToggle, children }: Refere
           <ChevronDown className={`h-3.5 w-3.5 transition-transform ${state.open ? 'rotate-180' : ''}`} />
         </button>
       </div>
-      {state.open && <div className="p-2">{children}</div>}
+      {state.open && <div className="min-h-0 flex-1 overflow-auto p-2">{children}</div>}
+      {state.open && onResizeStart && (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label={resizeLabel}
+          aria-valuemin={REFERENCE_CARD_MIN_HEIGHT}
+          aria-valuemax={REFERENCE_CARD_MAX_HEIGHT}
+          aria-valuenow={height}
+          title={resizeLabel}
+          onPointerDown={onResizeStart}
+          className="group absolute inset-x-0 bottom-0 z-10 flex h-2 cursor-row-resize items-center justify-center bg-transparent"
+        >
+          <GripHorizontal className="h-3.5 w-8 text-neutral-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-neutral-700" />
+        </div>
+      )}
     </section>
   );
 }
@@ -231,6 +265,8 @@ export function PidAnswerAudit({
   const [drawRect, setDrawRect] = useState<number[] | null>(null);
   const [referenceWidth, setReferenceWidth] = useState(REFERENCE_DEFAULT_WIDTH);
   const [isReferenceResizing, setIsReferenceResizing] = useState(false);
+  const [referenceCardHeights, setReferenceCardHeights] = useState<Partial<Record<ReferenceCardKey, number>>>({});
+  const [resizingReferenceCard, setResizingReferenceCard] = useState<ReferenceCardKey | null>(null);
   const [referenceCards, setReferenceCards] = useState<Record<ReferenceCardKey, ReferenceCardState>>({
     video: { open: true },
     profiles: { open: true },
@@ -243,6 +279,7 @@ export function PidAnswerAudit({
   const stageRef = useRef<HTMLDivElement | null>(null);
   const layoutRef = useRef<HTMLDivElement | null>(null);
   const referenceResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
+  const referenceCardResizeRef = useRef<{ key: ReferenceCardKey; startY: number; startHeight: number } | null>(null);
   const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
   const bindStage = useCallback((node: HTMLDivElement | null) => {
     stageRef.current = node;
@@ -728,6 +765,19 @@ export function PidAnswerAudit({
     event.currentTarget.setPointerCapture(event.pointerId);
   }, [referenceWidth]);
 
+  const startReferenceCardResize = useCallback((key: ReferenceCardKey, event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const card = event.currentTarget.parentElement;
+    const startHeight = card?.getBoundingClientRect().height ?? REFERENCE_CARD_MIN_HEIGHT;
+    referenceCardResizeRef.current = { key, startY: event.clientY, startHeight };
+    setReferenceCardHeights(previous => (
+      previous[key] ? previous : { ...previous, [key]: Math.round(startHeight) }
+    ));
+    setResizingReferenceCard(key);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, []);
+
   useEffect(() => {
     if (!isReferenceResizing) return undefined;
 
@@ -751,6 +801,36 @@ export function PidAnswerAudit({
       window.removeEventListener('pointerup', handleUp);
     };
   }, [isReferenceResizing]);
+
+  useEffect(() => {
+    if (!resizingReferenceCard) return undefined;
+
+    const handleMove = (event: PointerEvent) => {
+      const start = referenceCardResizeRef.current;
+      if (!start) return;
+      const panelHeight = layoutRef.current?.getBoundingClientRect().height ?? window.innerHeight;
+      const maxHeight = Math.min(
+        REFERENCE_CARD_MAX_HEIGHT,
+        Math.max(REFERENCE_CARD_MIN_HEIGHT, Math.round(panelHeight * 0.85)),
+      );
+      const nextHeight = Math.min(
+        maxHeight,
+        Math.max(REFERENCE_CARD_MIN_HEIGHT, start.startHeight + event.clientY - start.startY),
+      );
+      setReferenceCardHeights(previous => ({ ...previous, [start.key]: Math.round(nextHeight) }));
+    };
+    const handleUp = () => {
+      referenceCardResizeRef.current = null;
+      setResizingReferenceCard(null);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+  }, [resizingReferenceCard]);
 
   const isActiveBox = (box: number[]) =>
     activeAnswer.state === 'box'
@@ -1064,7 +1144,10 @@ export function PidAnswerAudit({
                 title={t('pidAudit.video', 'Video')}
                 icon={<Video className="h-3.5 w-3.5" />}
                 state={referenceCards.video}
+                height={referenceCardHeights.video}
+                resizeLabel={t('pidAudit.resizeCard', 'Resize card')}
                 onToggle={() => toggleReferenceCard('video')}
+                onResizeStart={event => startReferenceCardResize('video', event)}
               >
                 <div className="space-y-2">
                   <select
@@ -1129,7 +1212,10 @@ export function PidAnswerAudit({
                 icon={<Users className="h-3.5 w-3.5" />}
                 count={video?.profiles?.length ?? 0}
                 state={referenceCards.profiles}
+                height={referenceCardHeights.profiles}
+                resizeLabel={t('pidAudit.resizeCard', 'Resize card')}
                 onToggle={() => toggleReferenceCard('profiles')}
+                onResizeStart={event => startReferenceCardResize('profiles', event)}
               >
                 <div className="grid grid-cols-2 gap-1.5">
                   {(video?.profiles ?? []).map(profile => (
@@ -1155,9 +1241,12 @@ export function PidAnswerAudit({
                 icon={<ImageIcon className="h-3.5 w-3.5" />}
                 count={video?.images.length ?? 0}
                 state={referenceCards.images}
+                height={referenceCardHeights.images}
+                resizeLabel={t('pidAudit.resizeCard', 'Resize card')}
                 onToggle={() => toggleReferenceCard('images')}
+                onResizeStart={event => startReferenceCardResize('images', event)}
               >
-                <div className="max-h-[210px] space-y-0.5 overflow-auto">
+                <div className="space-y-0.5">
                   {video?.images.map(entry => {
                     const done = entry.questions.filter(item => (answers[item.question_id]?.state ?? 'unset') !== 'unset').length;
                     const current = entry.bg_path === imagePath;
@@ -1183,12 +1272,15 @@ export function PidAnswerAudit({
                 icon={<ListChecks className="h-3.5 w-3.5" />}
                 count={questions.length}
                 state={referenceCards.questions}
+                height={referenceCardHeights.questions}
+                resizeLabel={t('pidAudit.resizeCard', 'Resize card')}
                 onToggle={() => toggleReferenceCard('questions')}
+                onResizeStart={event => startReferenceCardResize('questions', event)}
               >
                 <div className="mb-1 truncate font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
                   {imagePath.split('/').pop()} · {t('pidAudit.questionCount', { count: questions.length })}
                 </div>
-                <div className="max-h-[300px] space-y-1 overflow-auto pr-0.5">
+                <div className="space-y-1 pr-0.5">
                   {questions.map(question => {
                     const answer = answers[question.question_id] ?? EMPTY_ANSWER;
                     const current = question.question_id === activeQuestion?.question_id;
