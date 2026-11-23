@@ -92,23 +92,21 @@ export function OtherAnnotation({ onClose }: { onClose: () => void }) {
           </button>
         ) : (
           <aside className="relative flex h-full w-64 flex-col border-r border-border bg-muted/20">
-            <div className="flex justify-end border-b border-border px-2 py-2">
-              <button
-                type="button"
-                onClick={() => setSidebarCollapsed(true)}
-                className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                title={t('otherAnnotation.collapseTools', 'Collapse annotation tools')}
-                aria-label={t('otherAnnotation.collapseTools', 'Collapse annotation tools')}
-              >
-                <ChevronLeft className="size-4" />
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(true)}
+              className="absolute right-2 top-2 z-10 flex size-6 items-center justify-center rounded-md bg-muted/70 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={t('otherAnnotation.collapseTools', 'Collapse annotation tools')}
+              aria-label={t('otherAnnotation.collapseTools', 'Collapse annotation tools')}
+            >
+              <ChevronLeft className="size-4" />
+            </button>
 
             <div className="flex-1 p-2">
               <button
                 type="button"
                 onClick={() => setActiveTool(CROSS_VIEW_TOOL)}
-                className={`flex w-full items-center rounded-md px-3 py-2 text-left text-xs transition-colors ${
+                className={`flex w-full items-center rounded-md px-3 py-2 pr-10 text-left text-xs transition-colors ${
                   activeTool === CROSS_VIEW_TOOL
                     ? 'bg-primary/10 font-semibold text-primary'
                     : 'text-muted-foreground hover:bg-muted hover:text-foreground'
