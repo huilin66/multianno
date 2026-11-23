@@ -594,18 +594,18 @@ export function PidAnswerAudit({
   return (
     <div className="relative flex h-full min-h-0 flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       {/* toolbar */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
+      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-neutral-200 px-2 py-0.5 text-[11px] dark:border-neutral-800">
         <span className="shrink-0 font-semibold">{t('pidAudit.title', 'Cross-view Object Association')}</span>
         {dataRoot && (
           <>
             <span className="shrink-0 text-[10px] font-medium text-neutral-400 dark:text-neutral-500">
               {t('otherAnnotation.dataRoot', 'Data root')}:
             </span>
-            <span className="max-w-[min(36vw,28rem)] truncate rounded bg-neutral-100 px-2 py-1 font-mono text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400" title={dataRoot}>
+            <span className="max-w-[min(36vw,28rem)] truncate rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400" title={dataRoot}>
               {dataRoot}
             </span>
             {onChangeRoot && (
-              <Button size="sm" variant="outline" className="h-7 shrink-0 px-2 text-[11px]" onClick={onChangeRoot}>
+              <Button size="xs" variant="outline" className="h-6 shrink-0 px-2 text-[10px]" onClick={onChangeRoot}>
                 {t('otherAnnotation.changeRoot', 'Change root')}
               </Button>
             )}
@@ -629,15 +629,15 @@ export function PidAnswerAudit({
             : status === 'error' ? t('pidAudit.saveFailed', 'Save failed') : t('pidAudit.idle', 'No changes')}
         </span>
         <span className="ml-auto flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={undo} title={t('pidAudit.undo', 'Undo (Z)')}><RotateCcw className="h-4 w-4" /></Button>
-          <Button size="sm" variant="ghost" onClick={fitView} title={t('pidAudit.fitView', 'Fit view')}><Maximize className="h-4 w-4" /></Button>
-          <Button size="sm" variant="ghost" onClick={() => void persist(answers)} title={t('pidAudit.save', 'Save')}>
-            <Save className="h-4 w-4" />
+          <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={undo} title={t('pidAudit.undo', 'Undo (Z)')}><RotateCcw className="h-3.5 w-3.5" /></Button>
+          <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={fitView} title={t('pidAudit.fitView', 'Fit view')}><Maximize className="h-3.5 w-3.5" /></Button>
+          <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={() => void persist(answers)} title={t('pidAudit.save', 'Save')}>
+            <Save className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => void download()} title={t('pidAudit.export', 'Export owned_gt.json')}>
-            <Download className="h-4 w-4" />
+          <Button size="icon-xs" variant="ghost" className="h-6 w-6 p-0" onClick={() => void download()} title={t('pidAudit.export', 'Export owned_gt.json')}>
+            <Download className="h-3.5 w-3.5" />
           </Button>
-          <Button size="sm" variant="secondary" onClick={onClose}>{t('pidAudit.close', 'Close')}</Button>
+          <Button size="xs" variant="secondary" className="h-6 px-2 text-[10px]" onClick={onClose}>{t('pidAudit.close', 'Close')}</Button>
         </span>
       </div>
 

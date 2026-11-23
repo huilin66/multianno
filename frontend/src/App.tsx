@@ -1399,7 +1399,7 @@ export default function App() {
         open={activeModule === 'pid_audit'}
         onOpenChange={(open) => !open && setActiveModule('workspace')}
       >
-        <DialogContent className="max-w-[96vw] sm:max-w-[96vw] w-[96vw] h-[92vh] flex flex-col p-0 border-border overflow-hidden">
+        <DialogContent className="max-w-[96vw] sm:max-w-[96vw] w-[96vw] h-[92vh] flex flex-col gap-0 p-0 border-border overflow-hidden">
           <DialogHeader className="p-4 border-b shrink-0">
             <DialogTitle>{t('menu.pidAudit')}</DialogTitle>
           </DialogHeader>
