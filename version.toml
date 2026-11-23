@@ -1,8 +1,8 @@
 [project]
 name = "MultiAnno"
-version = "2.8.0"
+version = "2.9.0"
 version_scheme = "semver"
-release_date = "2026-11-22"
+release_date = "2026-11-23"
 
 [compatibility]
 # Project-data format version. This is independent from the application version.

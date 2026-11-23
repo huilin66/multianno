@@ -16,7 +16,7 @@
     "annotationManager": "标注管理器",
     "sceneGroupManager": "场景组管理器",
     "trackIdAnnotation": "Track ID 标注",
-    "pidAudit": "OtherAnnotation",
+    "pidAudit": "Other Annotation",
     "localVisualization": "本地可视化"
   },
   "otherAnnotation": {
@@ -27,6 +27,8 @@
     "dataRoot": "数据根目录",
     "chooseRoot": "选择文件夹根目录",
     "changeRoot": "更换根目录",
+    "rootPlaceholder": "输入或点击设置标注数据根目录 ...",
+    "recentRoots": "最近数据根目录",
     "selectRootDescription": "请先选择标注数据的根目录，然后再打开此工具。",
     "loading": "正在加载标注数据…",
     "loadHint": "请检查所选数据根目录，并确认后端服务已启动。"

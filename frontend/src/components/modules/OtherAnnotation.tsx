@@ -1,25 +1,80 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, FolderOpen } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FolderSearch, History } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { PidAnswerAudit } from './PidAnswerAudit';
 
 type AnnotationTool = 'cross-view-association';
 
 const CROSS_VIEW_TOOL: AnnotationTool = 'cross-view-association';
+const RECENT_ROOTS_KEY = 'multiAnno_recentAnnotationRoots';
+const MAX_RECENT_ROOTS = 3;
+
+const normalizeRoot = (path: string) => path.trim().replace(/[\\/]+$/, '').toLowerCase();
+
+const rootName = (path: string) => {
+  const normalized = path.replace(/[\\/]+$/, '');
+  return normalized.split(/[\\/]/).pop() || normalized;
+};
+
+const readRecentRoots = () => {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(RECENT_ROOTS_KEY) || '[]');
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      .slice(0, MAX_RECENT_ROOTS);
+  } catch {
+    return [];
+  }
+};
 
 export function OtherAnnotation({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [activeTool, setActiveTool] = useState<AnnotationTool>(CROSS_VIEW_TOOL);
   const [dataRoot, setDataRoot] = useState('');
+  const [selectedRoot, setSelectedRoot] = useState('');
+  const [recentRoots, setRecentRoots] = useState<string[]>([]);
   const [folderExplorerOpen, setFolderExplorerOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
+  useEffect(() => {
+    setRecentRoots(readRecentRoots());
+  }, []);
+
+  const rememberRoot = (path: string) => {
+    const next = [
+      path,
+      ...recentRoots.filter(item => normalizeRoot(item) !== normalizeRoot(path)),
+    ].slice(0, MAX_RECENT_ROOTS);
+    setRecentRoots(next);
+    try {
+      localStorage.setItem(RECENT_ROOTS_KEY, JSON.stringify(next));
+    } catch {
+      // Recent roots are only a convenience; loading should continue if storage is unavailable.
+    }
+  };
+
   const handleFolderConfirm = (paths: string[]) => {
     const selectedPath = paths[0]?.trim();
-    if (selectedPath) setDataRoot(selectedPath);
+    if (selectedPath) {
+      setSelectedRoot(selectedPath);
+      if (dataRoot) {
+        setDataRoot(selectedPath);
+        rememberRoot(selectedPath);
+      }
+    }
     setFolderExplorerOpen(false);
+  };
+
+  const handleRootConfirm = () => {
+    const root = selectedRoot.trim();
+    if (!root) return;
+    setDataRoot(root);
+    rememberRoot(root);
   };
 
   return (
@@ -79,31 +134,80 @@ export function OtherAnnotation({ onClose }: { onClose: () => void }) {
             />
           </div>
         ) : (
-          <div className="flex h-full items-center justify-center overflow-y-auto p-6">
-            <div className="w-full max-w-xl rounded-xl border border-border bg-card p-6 shadow-sm">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2 text-primary">
-                  <FolderOpen className="size-5" />
-                </div>
-                <div className="min-w-0">
-                  <h2 className="text-base font-semibold">
-                    {t('otherAnnotation.crossViewObjectAssociation')}
-                  </h2>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    {t('otherAnnotation.selectRootDescription')}
-                  </p>
+          <div className="flex h-full min-h-0 flex-col p-5 pt-3">
+            <div className="flex-1 space-y-5 overflow-y-auto">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  {t('otherAnnotation.dataRoot')}
+                </Label>
+                <div className="relative">
+                  <Input
+                    value={selectedRoot}
+                    onChange={event => setSelectedRoot(event.target.value)}
+                    placeholder={t('otherAnnotation.rootPlaceholder')}
+                    className="h-9 pr-9 font-mono text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFolderExplorerOpen(true)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground transition-colors hover:text-foreground"
+                    title={t('otherAnnotation.chooseRoot')}
+                    aria-label={t('otherAnnotation.chooseRoot')}
+                  >
+                    <FolderSearch size={14} />
+                  </button>
                 </div>
               </div>
 
-              <div className="mt-6 rounded-lg border border-dashed border-border bg-muted/20 p-4">
-                <div className="mb-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t('otherAnnotation.dataRoot')}
+              {recentRoots.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5">
+                    <History className="size-3.5 text-muted-foreground" />
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                      {t('otherAnnotation.recentRoots')}
+                    </Label>
+                  </div>
+                  <div className="max-h-36 space-y-1.5 overflow-y-auto pr-1">
+                    {recentRoots.map((root, index) => {
+                      const isSelected = normalizeRoot(selectedRoot) === normalizeRoot(root);
+                      return (
+                        <button
+                          key={`${root}-${index}`}
+                          type="button"
+                          onClick={() => setSelectedRoot(root)}
+                          className={`flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left transition-colors ${
+                            isSelected
+                              ? 'border-primary bg-primary/5'
+                              : 'border-border hover:bg-muted/60'
+                          }`}
+                          title={root}
+                        >
+                          <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-[10px] font-semibold text-muted-foreground">
+                            {index + 1}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-xs font-medium text-foreground">{rootName(root)}</span>
+                            <span className="block truncate font-mono text-[10px] text-muted-foreground">{root}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <Button className="w-full" onClick={() => setFolderExplorerOpen(true)}>
-                  <FolderOpen className="mr-2 size-4" />
-                  {t('otherAnnotation.chooseRoot')}
-                </Button>
-              </div>
+              )}
+
+              <p className="text-xs leading-5 text-muted-foreground">
+                {t('otherAnnotation.selectRootDescription')}
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-border pt-3">
+              <Button variant="outline" size="sm" onClick={onClose}>
+                {t('common.cancel')}
+              </Button>
+              <Button size="sm" onClick={handleRootConfirm} disabled={!selectedRoot.trim()}>
+                {t('common.confirm')}
+              </Button>
             </div>
           </div>
         )}
