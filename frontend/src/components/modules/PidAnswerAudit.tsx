@@ -84,6 +84,8 @@ interface AnswerProgress {
 const EMPTY_ANSWER: Answer = { state: 'unset', bbox: null, confidence: null, evidence_ts: null, source: null };
 const EMPTY_PROGRESS: AnswerProgress = { box: 0, absent: 0, cannot: 0 };
 const MEDIA_BASE = API_BASE_URL.replace(/\/api$/, '');
+const REFERENCE_MIN_WIDTH = 280;
+const REFERENCE_DEFAULT_WIDTH = 340;
 
 const countAnswerProgress = (items: Record<string, Answer>): AnswerProgress => {
   const counts = { ...EMPTY_PROGRESS };
@@ -199,6 +201,8 @@ export function PidAnswerAudit({
   const [preview, setPreview] = useState<ProfileEntry | null>(null);
   const [mode, setMode] = useState<'select' | 'draw'>('select');
   const [drawRect, setDrawRect] = useState<number[] | null>(null);
+  const [referenceWidth, setReferenceWidth] = useState(REFERENCE_DEFAULT_WIDTH);
+  const [isReferenceResizing, setIsReferenceResizing] = useState(false);
   const [referenceCards, setReferenceCards] = useState<Record<ReferenceCardKey, ReferenceCardState>>({
     video: { open: true },
     profiles: { open: true },
@@ -209,6 +213,8 @@ export function PidAnswerAudit({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const questionPositionRef = useRef<{ videoId: string; index: number } | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const layoutRef = useRef<HTMLDivElement | null>(null);
+  const referenceResizeRef = useRef<{ startX: number; startWidth: number } | null>(null);
   const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
   const bindStage = useCallback((node: HTMLDivElement | null) => {
     stageRef.current = node;
@@ -658,6 +664,37 @@ export function PidAnswerAudit({
     }));
   }, []);
 
+  const startReferenceResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    referenceResizeRef.current = { startX: event.clientX, startWidth: referenceWidth };
+    setIsReferenceResizing(true);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }, [referenceWidth]);
+
+  useEffect(() => {
+    if (!isReferenceResizing) return undefined;
+
+    const handleMove = (event: PointerEvent) => {
+      const start = referenceResizeRef.current;
+      const layoutWidth = layoutRef.current?.getBoundingClientRect().width ?? window.innerWidth;
+      if (!start) return;
+      const maxWidth = Math.max(REFERENCE_MIN_WIDTH, layoutWidth * 0.5);
+      const nextWidth = start.startWidth - (event.clientX - start.startX);
+      setReferenceWidth(Math.min(maxWidth, Math.max(REFERENCE_MIN_WIDTH, nextWidth)));
+    };
+    const handleUp = () => {
+      referenceResizeRef.current = null;
+      setIsReferenceResizing(false);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+  }, [isReferenceResizing]);
+
   const isActiveBox = (box: number[]) =>
     activeAnswer.state === 'box'
     && !!activeAnswer.bbox
@@ -714,7 +751,7 @@ export function PidAnswerAudit({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div ref={layoutRef} className="flex min-h-0 flex-1">
         {/* annotation area: image and annotation controls only */}
         <section className="flex min-w-0 flex-1 flex-col bg-neutral-100 dark:bg-neutral-900">
         {/* image side */}
@@ -930,8 +967,25 @@ export function PidAnswerAudit({
           </div>
         </section>
 
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-valuemin={REFERENCE_MIN_WIDTH}
+          aria-valuemax={Math.max(REFERENCE_MIN_WIDTH, Math.round((layoutRef.current?.getBoundingClientRect().width ?? 0) * 0.5))}
+          aria-valuenow={Math.round(referenceWidth)}
+          tabIndex={0}
+          onPointerDown={startReferenceResize}
+          className={`group relative z-10 w-1.5 shrink-0 cursor-col-resize bg-transparent transition-colors hover:bg-sky-200 dark:hover:bg-sky-900 ${isReferenceResizing ? 'bg-sky-300 dark:bg-sky-800' : ''}`}
+          title="Drag to resize reference area"
+        >
+          <span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-neutral-200 group-hover:bg-sky-500 dark:bg-neutral-800 dark:group-hover:bg-sky-400" />
+        </div>
+
         {/* reference area: context cards that can be expanded or collapsed independently */}
-        <aside className="flex w-[340px] min-w-[280px] max-w-[380px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
+        <aside
+          className="flex min-w-0 shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40"
+          style={{ width: referenceWidth, minWidth: REFERENCE_MIN_WIDTH }}
+        >
           <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-2.5 py-1.5 dark:border-neutral-800">
             <span className="text-xs font-semibold">{t('pidAudit.reference', 'Reference')}</span>
             <span className="font-mono text-[10px] text-neutral-500 dark:text-neutral-400">{video?.video_id ?? '—'}</span>
