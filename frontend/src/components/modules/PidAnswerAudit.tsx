@@ -74,18 +74,12 @@ interface Answer {
 
 const EMPTY_ANSWER: Answer = { state: 'unset', bbox: null, confidence: null, evidence_ts: null, source: null };
 const MEDIA_BASE = API_BASE_URL.replace(/\/api$/, '');
-const STATE_LABEL: Record<AnswerState | 'unset', string> = {
-  box: '已标注',
-  absent: '不可见',
-  cannot_tell: '无法判断',
-  unset: '未标注',
-};
 
 const get = async (path: string) => {
   const response = await fetch(`${API_BASE_URL}${path}`);
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
-    throw new Error(detail.detail || `请求失败 (${response.status})`);
+    throw new Error(detail.detail || `Request failed (${response.status})`);
   }
   return response.json();
 };
@@ -98,7 +92,7 @@ const post = async (path: string, body: unknown) => {
   });
   if (!response.ok) {
     const detail = await response.json().catch(() => ({}));
-    throw new Error(detail.detail || `请求失败 (${response.status})`);
+    throw new Error(detail.detail || `Request failed (${response.status})`);
   }
   return response.json();
 };
@@ -113,6 +107,12 @@ export function PidAnswerAudit({
   dataRoot?: string;
 }) {
   const { t } = useTranslation();
+  const stateLabels: Record<AnswerState | 'unset', string> = {
+    box: t('pidAudit.labeled', 'Labeled'),
+    absent: t('pidAudit.absent', 'Not visible'),
+    cannot_tell: t('pidAudit.cannotTell', 'Cannot tell'),
+    unset: t('pidAudit.unset', 'Unanswered'),
+  };
 
   const [videos, setVideos] = useState<VideoEntry[]>([]);
   const [loading, setLoading] = useState(true);
@@ -586,7 +586,7 @@ export function PidAnswerAudit({
         <p className="text-xs text-neutral-500">
           {t('otherAnnotation.loadHint', 'Check the selected data root and make sure the backend is running.')}
         </p>
-        <Button variant="secondary" onClick={onClose}>{t('pidAudit.close', '关闭')}</Button>
+        <Button variant="secondary" onClick={onClose}>{t('pidAudit.close', 'Close')}</Button>
       </div>
     );
   }
@@ -612,7 +612,12 @@ export function PidAnswerAudit({
           </>
         )}
         <span className="text-neutral-500 dark:text-neutral-400">
-          {videoAnswered}/{videoTotal} · {answeredCount}/{questions.length} 本图
+          {t('pidAudit.imageProgress', {
+            videoAnswered,
+            videoTotal,
+            answered: answeredCount,
+            questions: questions.length,
+          })}
         </span>
         <span className={`ml-1 rounded px-1.5 py-0.5 ${
           status === 'saved' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
@@ -620,19 +625,19 @@ export function PidAnswerAudit({
               : status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300'
                 : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
         }`}>
-          {status === 'saved' ? t('pidAudit.saved', '已保存') : status === 'saving' ? t('pidAudit.saving', '保存中…')
-            : status === 'error' ? t('pidAudit.saveFailed', '保存失败') : t('pidAudit.idle', '未改动')}
+          {status === 'saved' ? t('pidAudit.saved', 'Saved') : status === 'saving' ? t('pidAudit.saving', 'Saving…')
+            : status === 'error' ? t('pidAudit.saveFailed', 'Save failed') : t('pidAudit.idle', 'No changes')}
         </span>
         <span className="ml-auto flex items-center gap-1">
-          <Button size="sm" variant="ghost" onClick={undo} title="撤销 (Z)"><RotateCcw className="h-4 w-4" /></Button>
-          <Button size="sm" variant="ghost" onClick={fitView} title="适应窗口"><Maximize className="h-4 w-4" /></Button>
-          <Button size="sm" variant="ghost" onClick={() => void persist(answers)} title="保存">
+          <Button size="sm" variant="ghost" onClick={undo} title={t('pidAudit.undo', 'Undo (Z)')}><RotateCcw className="h-4 w-4" /></Button>
+          <Button size="sm" variant="ghost" onClick={fitView} title={t('pidAudit.fitView', 'Fit view')}><Maximize className="h-4 w-4" /></Button>
+          <Button size="sm" variant="ghost" onClick={() => void persist(answers)} title={t('pidAudit.save', 'Save')}>
             <Save className="h-4 w-4" />
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => void download()} title="导出 owned_gt.json">
+          <Button size="sm" variant="ghost" onClick={() => void download()} title={t('pidAudit.export', 'Export owned_gt.json')}>
             <Download className="h-4 w-4" />
           </Button>
-          <Button size="sm" variant="secondary" onClick={onClose}>{t('pidAudit.close', '关闭')}</Button>
+          <Button size="sm" variant="secondary" onClick={onClose}>{t('pidAudit.close', 'Close')}</Button>
         </span>
       </div>
 
@@ -666,14 +671,14 @@ export function PidAnswerAudit({
           <div className="flex items-center justify-between gap-1 text-xs">
             <span className="font-mono text-neutral-500 dark:text-neutral-400">t={evidenceTs ?? 0}s</span>
             <span className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={() => step(-1)} title="后退 1 秒"><SkipBack className="h-4 w-4" /></Button>
-              <Button size="sm" variant="ghost" onClick={() => step(-0.2)} title="后退 0.2 秒">
+              <Button size="sm" variant="ghost" onClick={() => step(-1)} title={t('pidAudit.stepBackOne', 'Back 1 second')}><SkipBack className="h-4 w-4" /></Button>
+              <Button size="sm" variant="ghost" onClick={() => step(-0.2)} title={t('pidAudit.stepBackPointTwo', 'Back 0.2 seconds')}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => step(0.2)} title="前进 0.2 秒">
+              <Button size="sm" variant="ghost" onClick={() => step(0.2)} title={t('pidAudit.stepForwardPointTwo', 'Forward 0.2 seconds')}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
-              <Button size="sm" variant="ghost" onClick={() => step(1)} title="前进 1 秒"><SkipForward className="h-4 w-4" /></Button>
+              <Button size="sm" variant="ghost" onClick={() => step(1)} title={t('pidAudit.stepForwardOne', 'Forward 1 second')}><SkipForward className="h-4 w-4" /></Button>
             </span>
             <select
               className="rounded border border-neutral-300 bg-white px-1 py-0.5 dark:border-neutral-700 dark:bg-neutral-900"
@@ -692,7 +697,7 @@ export function PidAnswerAudit({
           <div className="mt-1">
             <div className="mb-1 flex items-center gap-1 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
               <Users className="h-3.5 w-3.5" />
-              {t('pidAudit.people', '人物')}
+              {t('pidAudit.people', 'Profiles')}
               <span className="font-mono text-[10px]">{video?.profiles?.length ?? 0}</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
@@ -700,7 +705,7 @@ export function PidAnswerAudit({
                 <button
                   key={profile.name}
                   onClick={() => setPreview(profile)}
-                  title={t('pidAudit.viewProfile', '点击看大图')}
+                  title={t('pidAudit.viewProfile', 'Click to preview')}
                   className="flex w-[104px] flex-col items-center gap-1.5 rounded-md border border-neutral-200 bg-white p-2 transition-colors hover:border-sky-400 dark:border-neutral-700 dark:bg-neutral-900"
                 >
                   <img
@@ -712,14 +717,10 @@ export function PidAnswerAudit({
                 </button>
               ))}
               {video && (video.profiles?.length ?? 0) === 0 && (
-                <span className="text-[11px] text-neutral-400">{t('pidAudit.noProfiles', '无 profile 图片')}</span>
+                <span className="text-[11px] text-neutral-400">{t('pidAudit.noProfiles', 'No profile images')}</span>
               )}
             </div>
           </div>
-
-          <p className="mt-auto text-[11px] leading-4 text-neutral-500 dark:text-neutral-400">
-            {t('pidAudit.blindHint', '盲标：本窗口不显示管线已选的答案。数字键选候选，A=不可见，X=无法判断，Z=撤销，回车=下一题。')}
-          </p>
         </div>
 
         {/* image side */}
@@ -826,7 +827,7 @@ export function PidAnswerAudit({
                 type="button"
                 className="rounded bg-black/55 px-2 py-0.5 text-sm font-semibold leading-none text-white hover:bg-black/75"
                 onClick={() => zoomCenter(0.8)}
-                title={t('pidAudit.zoomOut', '缩小 (-)')}
+                title={t('pidAudit.zoomOut', 'Zoom out (-)')}
               >
                 −
               </button>
@@ -837,7 +838,7 @@ export function PidAnswerAudit({
                 type="button"
                 className="rounded bg-black/55 px-2 py-0.5 text-sm font-semibold leading-none text-white hover:bg-black/75"
                 onClick={() => zoomCenter(1.25)}
-                title={t('pidAudit.zoomIn', '放大 (+)')}
+                title={t('pidAudit.zoomIn', 'Zoom in (+)')}
               >
                 +
               </button>
@@ -845,9 +846,9 @@ export function PidAnswerAudit({
                 type="button"
                 className="rounded bg-black/55 px-2 py-0.5 text-[11px] leading-none text-white hover:bg-black/75"
                 onClick={fitView}
-                title={t('pidAudit.fit', '适应窗口 (0)')}
+                title={t('pidAudit.fit', 'Fit view (0)')}
               >
-                适应
+                {t('pidAudit.fitShort', 'Fit')}
               </button>
             </div>
           </div>
@@ -855,11 +856,11 @@ export function PidAnswerAudit({
           {/* answer toolbar: candidates, states and tools, right under the image */}
           <div className="flex shrink-0 flex-wrap items-center gap-1 border-t border-neutral-200 bg-neutral-50 px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-900/40">
             <span className="mr-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-              {t('pidAudit.candidates', '候选')} {activeQuestion?.label ?? '-'}：
+              {t('pidAudit.candidates', 'Candidates')} {activeQuestion?.label ?? '-'}:
             </span>
             {activeQuestion && activeCandidates.length === 0 && (
               <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                {t('pidAudit.noCandidates', '该标签在本图没有候选：点「画框」手动标，或标「不可见」')}
+                {t('pidAudit.noCandidates', 'No candidates for this label. Draw a box manually or mark it as not visible.')}
               </span>
             )}
             {activeQuestion && activeCandidates.map((candidate, position) => (
@@ -880,7 +881,7 @@ export function PidAnswerAudit({
               onClick={() => activeQuestion && answerQuestion(activeQuestion.question_id, { state: 'absent', bbox: null, confidence: 1, evidence_ts: null })}
               title="A"
             >
-              <EyeOff className="mr-1 h-3.5 w-3.5" />{t('pidAudit.absent', '不可见')}
+              <EyeOff className="mr-1 h-3.5 w-3.5" />{t('pidAudit.absent', 'Not visible')}
             </Button>
             <Button
               size="sm"
@@ -888,27 +889,27 @@ export function PidAnswerAudit({
               onClick={() => activeQuestion && answerQuestion(activeQuestion.question_id, { state: 'cannot_tell', bbox: null, confidence: 1, evidence_ts: null })}
               title="X"
             >
-              <HelpCircle className="mr-1 h-3.5 w-3.5" />{t('pidAudit.cannotTell', '无法判断')}
+              <HelpCircle className="mr-1 h-3.5 w-3.5" />{t('pidAudit.cannotTell', 'Cannot tell')}
             </Button>
             <Button
               size="sm"
               variant="ghost"
               onClick={() => activeQuestion && commit(activeQuestion.question_id, { ...EMPTY_ANSWER })}
-              title="清空"
+              title={t('pidAudit.clear', 'Clear')}
             >
-              <CircleSlash className="mr-1 h-3.5 w-3.5" />{t('pidAudit.clear', '清空')}
+              <CircleSlash className="mr-1 h-3.5 w-3.5" />{t('pidAudit.clear', 'Clear')}
             </Button>
             <span className="mx-1 h-4 w-px bg-neutral-300 dark:bg-neutral-700" />
             <Button
               size="sm"
               variant={mode === 'draw' ? 'default' : 'outline'}
               onClick={() => setMode(value => (value === 'draw' ? 'select' : 'draw'))}
-              title={t('pidAudit.drawHint', '画框 (D)：候选都不对时手动画一个')}
+              title={t('pidAudit.drawHint', 'Draw a box (D) when candidates are not suitable')}
             >
-              <Square className="mr-1 h-3.5 w-3.5" />{t('pidAudit.draw', '画框')}
+              <Square className="mr-1 h-3.5 w-3.5" />{t('pidAudit.draw', 'Draw box')}
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setShowAllBoxes(value => !value)}>
-              {showAllBoxes ? '仅当前标签' : '显示全部候选'}
+              {showAllBoxes ? t('pidAudit.showCurrentOnly', 'Current label only') : t('pidAudit.showAllCandidates', 'Show all candidates')}
             </Button>
           </div>
 
@@ -917,7 +918,7 @@ export function PidAnswerAudit({
             <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
               <span className="font-mono">{imagePath.split('/').pop()}</span>
               <span>·</span>
-              <span>{questions.length} 题</span>
+              <span>{t('pidAudit.questionCount', { count: questions.length })}</span>
             </div>
             <div className="h-[186px] overflow-auto p-2">
             <div className="flex flex-col gap-1">
@@ -947,11 +948,11 @@ export function PidAnswerAudit({
                               ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300'
                               : 'bg-neutral-100 text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400'
                       }`}>
-                        {STATE_LABEL[answer.state]}
+                        {stateLabels[answer.state]}
                       </span>
                     </div>
                     <div className="mt-0.5 flex items-center gap-1">
-                      <span className="text-[10px] text-neutral-500 dark:text-neutral-400">标签：{question.label}</span>
+                      <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{t('pidAudit.label', 'Label')}: {question.label}</span>
                       {answer.state === 'box' && answer.bbox && (
                         <span className="font-mono text-[10px] text-neutral-500">
                           [{answer.bbox.join(', ')}]
@@ -971,7 +972,7 @@ export function PidAnswerAudit({
         <div className="flex w-[220px] min-w-[200px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
           <div className="flex min-h-0 flex-1 flex-col border-neutral-200 p-2 dark:border-neutral-800">
             <div className="mb-1 flex items-center gap-2 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">
-              <span>{t('pidAudit.images', '图像')}</span>
+              <span>{t('pidAudit.images', 'Images')}</span>
               <span className="font-mono text-[10px]">{video?.images.length ?? 0}</span>
             </div>
             <div className="min-h-0 flex-1 overflow-auto">
@@ -999,7 +1000,7 @@ export function PidAnswerAudit({
 
           <div className="shrink-0 border-t border-neutral-200 p-2 text-[11px] dark:border-neutral-800">
             <div className="mb-1 font-medium text-neutral-500 dark:text-neutral-400">
-              {t('pidAudit.progress', '进度')}
+              {t('pidAudit.progress', 'Progress')}
             </div>
             <div className="mb-1 text-neutral-700 dark:text-neutral-300">
               {stateCounts.box + stateCounts.absent + stateCounts.cannot} / {videoTotal}
@@ -1007,15 +1008,15 @@ export function PidAnswerAudit({
             <div className="flex flex-col gap-0.5 text-[10px] text-neutral-500 dark:text-neutral-400">
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-emerald-400" />
-                {t('pidAudit.box', '框')} {stateCounts.box}
+                {t('pidAudit.box', 'Box')} {stateCounts.box}
               </span>
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-neutral-400" />
-                {t('pidAudit.absent', '不可见')} {stateCounts.absent}
+                {t('pidAudit.absent', 'Not visible')} {stateCounts.absent}
               </span>
               <span className="flex items-center gap-1">
                 <span className="inline-block h-2 w-2 rounded-sm bg-amber-400" />
-                {t('pidAudit.cannotTell', '无法判断')} {stateCounts.cannot}
+                {t('pidAudit.cannotTell', 'Cannot tell')} {stateCounts.cannot}
               </span>
             </div>
           </div>
