@@ -81,15 +81,17 @@ export function OtherAnnotation({ onClose }: { onClose: () => void }) {
     <div className="flex h-full min-h-0 bg-background text-foreground">
       <div className={`relative shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? 'w-7' : 'w-64'}`}>
         {sidebarCollapsed ? (
-          <button
-            type="button"
-            onClick={() => setSidebarCollapsed(false)}
-            className="flex h-full w-7 items-center justify-center border-r border-border bg-muted/20 transition-colors hover:bg-muted"
-            title={t('otherAnnotation.expandTools', 'Expand annotation tools')}
-            aria-label={t('otherAnnotation.expandTools', 'Expand annotation tools')}
-          >
-            <ChevronRight className="size-4 text-muted-foreground" />
-          </button>
+          <div className="relative h-full w-7 border-r border-border bg-muted/20">
+            <button
+              type="button"
+              onClick={() => setSidebarCollapsed(false)}
+              className="absolute left-0 top-2 flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              title={t('otherAnnotation.expandTools', 'Expand annotation tools')}
+              aria-label={t('otherAnnotation.expandTools', 'Expand annotation tools')}
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
         ) : (
           <aside className="relative flex h-full w-64 flex-col border-r border-border bg-muted/20">
             <button
