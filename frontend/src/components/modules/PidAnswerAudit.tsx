@@ -21,8 +21,6 @@ import {
   Image as ImageIcon,
   ListChecks,
   Maximize,
-  Pin,
-  PinOff,
   RotateCcw,
   Save,
   Download,
@@ -101,7 +99,6 @@ type ReferenceCardKey = 'video' | 'profiles' | 'images' | 'questions';
 
 interface ReferenceCardState {
   open: boolean;
-  pinned: boolean;
 }
 
 interface ReferenceCardProps {
@@ -110,23 +107,18 @@ interface ReferenceCardProps {
   count?: React.ReactNode;
   state: ReferenceCardState;
   onToggle: () => void;
-  onTogglePin: () => void;
   children: React.ReactNode;
 }
 
-function ReferenceCard({ title, icon, count, state, onToggle, onTogglePin, children }: ReferenceCardProps) {
-  const expanded = state.pinned || state.open;
-
+function ReferenceCard({ title, icon, count, state, onToggle, children }: ReferenceCardProps) {
   return (
     <section className="overflow-hidden rounded-md border border-neutral-200 bg-white shadow-sm dark:border-neutral-800 dark:bg-neutral-950">
       <div className="flex items-center border-b border-neutral-200 dark:border-neutral-800">
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left text-xs font-semibold"
-          onClick={() => {
-            if (!state.pinned) onToggle();
-          }}
-          aria-expanded={expanded}
+          onClick={onToggle}
+          aria-expanded={state.open}
         >
           <span className="text-neutral-500 dark:text-neutral-400">{icon}</span>
           <span className="truncate">{title}</span>
@@ -138,25 +130,15 @@ function ReferenceCard({ title, icon, count, state, onToggle, onTogglePin, child
         </button>
         <button
           type="button"
-          className={`rounded p-1 transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800 ${state.pinned ? 'text-sky-600 dark:text-sky-400' : 'text-neutral-400 dark:text-neutral-500'}`}
-          onClick={onTogglePin}
-          title={state.pinned ? 'Unpin card' : 'Pin card'}
-          aria-label={state.pinned ? 'Unpin card' : 'Pin card'}
-        >
-          {state.pinned ? <Pin className="h-3.5 w-3.5" /> : <PinOff className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          type="button"
-          className="rounded p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 disabled:cursor-default disabled:opacity-40 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          className="rounded p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:text-neutral-500 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
           onClick={onToggle}
-          disabled={state.pinned}
-          title={expanded ? 'Collapse card' : 'Expand card'}
-          aria-label={expanded ? 'Collapse card' : 'Expand card'}
+          title={state.open ? 'Collapse card' : 'Expand card'}
+          aria-label={state.open ? 'Collapse card' : 'Expand card'}
         >
-          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${state.open ? 'rotate-180' : ''}`} />
         </button>
       </div>
-      {expanded && <div className="p-2">{children}</div>}
+      {state.open && <div className="p-2">{children}</div>}
     </section>
   );
 }
@@ -218,10 +200,10 @@ export function PidAnswerAudit({
   const [mode, setMode] = useState<'select' | 'draw'>('select');
   const [drawRect, setDrawRect] = useState<number[] | null>(null);
   const [referenceCards, setReferenceCards] = useState<Record<ReferenceCardKey, ReferenceCardState>>({
-    video: { open: true, pinned: true },
-    profiles: { open: true, pinned: false },
-    images: { open: true, pinned: false },
-    questions: { open: true, pinned: false },
+    video: { open: true },
+    profiles: { open: true },
+    images: { open: true },
+    questions: { open: true },
   });
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -676,20 +658,6 @@ export function PidAnswerAudit({
     }));
   }, []);
 
-  const toggleReferencePin = useCallback((key: ReferenceCardKey) => {
-    setReferenceCards(previous => {
-      const nextPinned = !previous[key].pinned;
-      return {
-        ...previous,
-        [key]: {
-          ...previous[key],
-          pinned: nextPinned,
-          open: nextPinned ? true : previous[key].open,
-        },
-      };
-    });
-  }, []);
-
   const isActiveBox = (box: number[]) =>
     activeAnswer.state === 'box'
     && !!activeAnswer.bbox
@@ -962,7 +930,7 @@ export function PidAnswerAudit({
           </div>
         </section>
 
-        {/* reference area: context cards that can be collapsed or pinned */}
+        {/* reference area: context cards that can be expanded or collapsed independently */}
         <aside className="flex w-[340px] min-w-[280px] max-w-[380px] shrink-0 flex-col border-l border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-900/40">
           <div className="flex shrink-0 items-center justify-between border-b border-neutral-200 px-2.5 py-1.5 dark:border-neutral-800">
             <span className="text-xs font-semibold">{t('pidAudit.reference', 'Reference')}</span>
@@ -988,7 +956,6 @@ export function PidAnswerAudit({
                 icon={<Video className="h-3.5 w-3.5" />}
                 state={referenceCards.video}
                 onToggle={() => toggleReferenceCard('video')}
-                onTogglePin={() => toggleReferencePin('video')}
               >
                 <div className="space-y-2">
                   <select
@@ -1045,7 +1012,6 @@ export function PidAnswerAudit({
                 count={video?.profiles?.length ?? 0}
                 state={referenceCards.profiles}
                 onToggle={() => toggleReferenceCard('profiles')}
-                onTogglePin={() => toggleReferencePin('profiles')}
               >
                 <div className="grid grid-cols-2 gap-1.5">
                   {(video?.profiles ?? []).map(profile => (
@@ -1072,7 +1038,6 @@ export function PidAnswerAudit({
                 count={video?.images.length ?? 0}
                 state={referenceCards.images}
                 onToggle={() => toggleReferenceCard('images')}
-                onTogglePin={() => toggleReferencePin('images')}
               >
                 <div className="max-h-[210px] space-y-0.5 overflow-auto">
                   {video?.images.map(entry => {
@@ -1101,7 +1066,6 @@ export function PidAnswerAudit({
                 count={questions.length}
                 state={referenceCards.questions}
                 onToggle={() => toggleReferenceCard('questions')}
-                onTogglePin={() => toggleReferencePin('questions')}
               >
                 <div className="mb-1 truncate font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
                   {imagePath.split('/').pop()} · {t('pidAudit.questionCount', { count: questions.length })}
