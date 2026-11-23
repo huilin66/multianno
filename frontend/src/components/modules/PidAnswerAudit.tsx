@@ -186,7 +186,7 @@ function ReferenceCard({
           <ChevronDown className={`h-3.5 w-3.5 transition-transform ${state.open ? 'rotate-180' : ''}`} />
         </button>
       </div>
-      {state.open && <div className="min-h-0 flex-1 overflow-auto p-2">{children}</div>}
+      {state.open && <div className="flex min-h-0 flex-1 flex-col overflow-auto p-2">{children}</div>}
       {state.open && onResizeStart && (
         <div
           role="separator"
@@ -197,9 +197,9 @@ function ReferenceCard({
           aria-valuenow={height}
           title={resizeLabel}
           onPointerDown={onResizeStart}
-          className="group absolute inset-x-0 bottom-0 z-10 flex h-2 cursor-row-resize items-center justify-center bg-transparent"
+          className="group absolute inset-x-0 bottom-0 z-10 flex h-3 cursor-row-resize touch-none select-none items-center justify-center border-t border-neutral-200/80 bg-white/85 hover:bg-sky-50 dark:border-neutral-800/80 dark:bg-neutral-950/85 dark:hover:bg-sky-950/40"
         >
-          <GripHorizontal className="h-3.5 w-8 text-neutral-300 opacity-0 transition-opacity group-hover:opacity-100 dark:text-neutral-700" />
+          <GripHorizontal className="h-3.5 w-10 text-neutral-400 transition-colors group-hover:text-sky-500 dark:text-neutral-600 dark:group-hover:text-sky-400" />
         </div>
       )}
     </section>
@@ -1149,7 +1149,7 @@ export function PidAnswerAudit({
                 onToggle={() => toggleReferenceCard('video')}
                 onResizeStart={event => startReferenceCardResize('video', event)}
               >
-                <div className="space-y-2">
+                <div className={referenceCardHeights.video ? 'flex h-full min-h-0 flex-col gap-2' : 'space-y-2'}>
                   <select
                     className="w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-700 dark:bg-neutral-900"
                     value={videoId}
@@ -1168,7 +1168,9 @@ export function PidAnswerAudit({
                     ref={videoRef}
                     src={`${MEDIA_BASE}${video?.video_url ?? ''}`}
                     controls
-                    className="max-h-[28vh] w-full rounded bg-black object-contain"
+                    className={referenceCardHeights.video
+                      ? 'min-h-0 w-full flex-1 rounded bg-black object-contain'
+                      : 'max-h-[28vh] w-full rounded bg-black object-contain'}
                     preload="auto"
                     playsInline
                     onTimeUpdate={event => setEvidenceTs(Number(event.currentTarget.currentTime.toFixed(1)))}
