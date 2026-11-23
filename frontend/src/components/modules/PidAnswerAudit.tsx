@@ -124,6 +124,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
   const [drawRect, setDrawRect] = useState<number[] | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const questionPositionRef = useRef<{ videoId: string; index: number } | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
   const bindStage = useCallback((node: HTMLDivElement | null) => {
@@ -206,16 +207,29 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
     setView({ scale: 1, x: 0, y: 0 });
   }, [videoId, imagePath]);
 
-  // first unanswered question of the image
+  // first unanswered question of the image, otherwise the same position as on
+  // the previous image (the question set repeats across a video's images)
   useEffect(() => {
     if (!questions.length) {
       setActiveQuestionId('');
       return;
     }
-    const unanswered = questions.find(item => (answers[item.question_id]?.state ?? 'unset') === 'unset');
     const stillHere = questions.some(item => item.question_id === activeQuestionId);
-    if (!stillHere) setActiveQuestionId((unanswered ?? questions[0]).question_id);
-  }, [questions, answers, activeQuestionId]);
+    if (stillHere) return;
+    const remembered = questionPositionRef.current;
+    if (remembered && remembered.videoId === videoId && questions[remembered.index]) {
+      setActiveQuestionId(questions[remembered.index].question_id);
+      return;
+    }
+    const unanswered = questions.find(item => (answers[item.question_id]?.state ?? 'unset') === 'unset');
+    setActiveQuestionId((unanswered ?? questions[0]).question_id);
+  }, [questions, answers, activeQuestionId, videoId]);
+
+  useEffect(() => {
+    if (!videoId) return;
+    const index = questions.findIndex(item => item.question_id === activeQuestionId);
+    if (index >= 0) questionPositionRef.current = { videoId, index };
+  }, [questions, activeQuestionId, videoId]);
 
   // ---------------------------------------------------------------- saving
   const persist = useCallback(async (current: Record<string, Answer>) => {
