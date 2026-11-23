@@ -161,9 +161,15 @@ def dataset() -> dict:
                         "url": f"/api/pid_audit/media?path={directory.name}/profiles/{item.name}",
                     })
 
+        # The URL carries the file mtime: without it a browser keeps a cached
+        # copy of the original bytes even after the server switched to the
+        # transcoded proxy (same URL, max-age=86400).
         videos.append({
             "video_id": directory.name,
-            "video_url": f"/api/pid_audit/media?path={directory.name}/{video_file.name}",
+            "video_url": (
+                f"/api/pid_audit/media?path={directory.name}/{video_file.name}"
+                f"&v={int(video_file.stat().st_mtime)}"
+            ),
             "video_name": video_file.name,
             "profiles": profiles,
             "images": [
@@ -176,11 +182,14 @@ def dataset() -> dict:
             ],
         })
 
-    return {
-        "data_root": str(root).replace("\\", "/"),
-        "output_dir": str(_output_dir()).replace("\\", "/"),
-        "videos": videos,
-    }
+    return JSONResponse(
+        content={
+            "data_root": str(root).replace("\\", "/"),
+            "output_dir": str(_output_dir()).replace("\\", "/"),
+            "videos": videos,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @router.get("/candidates")
