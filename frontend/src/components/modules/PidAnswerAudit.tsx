@@ -125,6 +125,11 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const [stageEl, setStageEl] = useState<HTMLDivElement | null>(null);
+  const bindStage = useCallback((node: HTMLDivElement | null) => {
+    stageRef.current = node;
+    setStageEl(node);
+  }, []);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
   const drawRef = useRef<{ x: number; y: number } | null>(null);
   const historyRef = useRef<Record<string, Answer>[]>([]);
@@ -278,7 +283,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
   // Native listener: React's onWheel is passive, which would let the page
   // scroll instead of zooming the image.
   useEffect(() => {
-    const stage = stageRef.current;
+    const stage = stageEl;
     if (!stage) return;
     const handler = (event: WheelEvent) => {
       event.preventDefault();
@@ -297,7 +302,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
     };
     stage.addEventListener('wheel', handler, { passive: false });
     return () => stage.removeEventListener('wheel', handler);
-  }, []);
+  }, [stageEl]);
 
   const toImagePoint = useCallback((event: React.PointerEvent) => {
     const stage = stageRef.current;
@@ -384,6 +389,20 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
     });
   }, [imageSize]);
 
+  const zoomAt = useCallback((factor: number, px: number, py: number) => {
+    setView(previous => {
+      const scale = Math.min(8, Math.max(0.15, previous.scale * factor));
+      const ratio = scale / previous.scale;
+      return { scale, x: px - (px - previous.x) * ratio, y: py - (py - previous.y) * ratio };
+    });
+  }, []);
+
+  const zoomCenter = useCallback((factor: number) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    zoomAt(factor, stage.clientWidth / 2, stage.clientHeight / 2);
+  }, [zoomAt]);
+
   useEffect(() => {
     if (imageSize.width > 1) fitView();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -394,6 +413,21 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName)) return;
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        zoomCenter(1.25);
+        return;
+      }
+      if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        zoomCenter(0.8);
+        return;
+      }
+      if (event.key === '0') {
+        event.preventDefault();
+        fitView();
+        return;
+      }
       if (!activeQuestion) return;
 
       if (/^[1-9]$/.test(event.key)) {
@@ -653,9 +687,16 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
         {/* image side */}
         <div className="flex min-w-[360px] flex-1 flex-col">
           <div
-            ref={stageRef}
+            ref={bindStage}
             className={`relative min-h-0 flex-1 overflow-hidden bg-neutral-100 dark:bg-neutral-900 ${mode === 'draw' ? 'cursor-crosshair' : 'cursor-grab'}`}
             onPointerDown={onPointerDown}
+            onDoubleClick={event => {
+              if (mode !== 'select') return;
+              const stage = stageRef.current;
+              if (!stage) return;
+              const rect = stage.getBoundingClientRect();
+              zoomAt(1.6, event.clientX - rect.left, event.clientY - rect.top);
+            }}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
@@ -739,9 +780,38 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                 />
               )}
             </div>
-            <span className="absolute bottom-2 left-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white">
-              {Math.round(view.scale * 100)}%
-            </span>
+            <div
+              className="absolute bottom-2 left-2 flex items-center gap-1"
+              onPointerDown={event => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="rounded bg-black/55 px-2 py-0.5 text-sm font-semibold leading-none text-white hover:bg-black/75"
+                onClick={() => zoomCenter(0.8)}
+                title={t('pidAudit.zoomOut', '缩小 (-)')}
+              >
+                −
+              </button>
+              <span className="min-w-[48px] rounded bg-black/55 px-1.5 py-0.5 text-center font-mono text-[11px] text-white">
+                {Math.round(view.scale * 100)}%
+              </span>
+              <button
+                type="button"
+                className="rounded bg-black/55 px-2 py-0.5 text-sm font-semibold leading-none text-white hover:bg-black/75"
+                onClick={() => zoomCenter(1.25)}
+                title={t('pidAudit.zoomIn', '放大 (+)')}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="rounded bg-black/55 px-2 py-0.5 text-[11px] leading-none text-white hover:bg-black/75"
+                onClick={fitView}
+                title={t('pidAudit.fit', '适应窗口 (0)')}
+              >
+                适应
+              </button>
+            </div>
           </div>
 
           {/* answer toolbar: candidates, states and tools, right under the image */}
