@@ -68,6 +68,7 @@
     "showAllCandidates": "显示全部候选",
     "questionCount": "{{count}} 题",
     "questions": "问题",
+    "boxCount": "{{count}} 个框",
     "label": "标签",
     "labeled": "已标注",
     "unset": "未标注",

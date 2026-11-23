@@ -1,7 +1,7 @@
 """PID answer audit: annotate one answer box per question, blind.
 
 The PID dataset is not a MultiAnno project: its unit is a question
-(``question_id`` -> one box), not a track over views. This router therefore
+(``question_id`` -> one or more boxes), not a track over views. This router therefore
 keeps its own storage under ``<PID_OUTPUT_DIR>/pid_audit`` and never touches
 the project / annotation tables.
 
@@ -353,10 +353,41 @@ def _annotation_path(video_id: str) -> Path:
     return _state_dir() / f"{safe}.json"
 
 
+def _normalise_bboxes(raw_bboxes: Any, legacy_bbox: Any = None) -> list[list[int]]:
+    """Read the new multi-box field and the legacy single-box field."""
+    if isinstance(raw_bboxes, list):
+        # Accept a flat four-value list as a tolerant single-box variant too.
+        raw = (
+            [raw_bboxes]
+            if len(raw_bboxes) >= 4
+            and all(not isinstance(value, (list, tuple, dict)) for value in raw_bboxes)
+            else raw_bboxes
+        )
+    else:
+        raw = [legacy_bbox] if isinstance(legacy_bbox, list) else []
+    cleaned: list[list[int]] = []
+    for box in raw:
+        if not isinstance(box, (list, tuple)) or len(box) < 4:
+            continue
+        try:
+            values = [int(round(float(value))) for value in box[:4]]
+        except (TypeError, ValueError):
+            continue
+        cleaned.append(values)
+    return cleaned
+
+
 @router.get("/annotations")
 def annotations(video: str = Query(...)) -> dict:
     payload = _read_json(_annotation_path(video), {})
-    return {"video_id": video, "answers": payload.get("answers", [])}
+    answers = []
+    for answer in payload.get("answers", []):
+        if not isinstance(answer, dict):
+            continue
+        normalized = dict(answer)
+        normalized["bboxes"] = _normalise_bboxes(answer.get("bboxes"), answer.get("bbox"))
+        answers.append(normalized)
+    return {"video_id": video, "answers": answers}
 
 
 @router.post("/save")
@@ -374,15 +405,15 @@ def save(body: dict = Body(...)) -> dict:
         if not question_id:
             continue
         state = answer.get("state") or "unset"
-        bbox = answer.get("bbox")
-        if state == "box" and isinstance(bbox, (list, tuple)) and len(bbox) >= 4:
-            bbox = [int(round(float(value))) for value in bbox[:4]]
-        else:
-            bbox = None
+        bboxes = _normalise_bboxes(answer.get("bboxes"), answer.get("bbox"))
+        if state != "box":
+            bboxes = []
+        elif not bboxes:
+            state = "unset"
         cleaned.append({
             "question_id": question_id,
             "state": state,
-            "bbox": bbox,
+            "bboxes": bboxes,
             "confidence": answer.get("confidence"),
             "evidence_ts": answer.get("evidence_ts"),
             "source": answer.get("source"),
@@ -402,7 +433,7 @@ def save(body: dict = Body(...)) -> dict:
 
 @router.get("/export")
 def export() -> JSONResponse:
-    """Submission-shaped answers (one box per question) from all saved files."""
+    """Submission-shaped answers (one or more boxes per question) from all saved files."""
     dataset = []
     for file in sorted(_state_dir().glob("*.json")):
         payload = _read_json(file, {})
@@ -414,7 +445,7 @@ def export() -> JSONResponse:
             "answers": [
                 {
                     "question_id": answer.get("question_id"),
-                    "bboxes": [answer["bbox"]] if answer.get("bbox") else [],
+                    "bboxes": _normalise_bboxes(answer.get("bboxes"), answer.get("bbox")),
                 }
                 for answer in payload.get("answers", [])
             ],

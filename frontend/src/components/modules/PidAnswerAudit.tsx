@@ -1,8 +1,8 @@
 // src/components/modules/PidAnswerAudit.tsx
 //
 // PID answer audit window: left the evidence video, right one test image with
-// its questions. One answer per question, chosen blind among the SAM 3
-// candidates already computed for that image by the PID repo.
+// its questions. One answer per question can contain one or more boxes,
+// chosen blind among the SAM 3 candidates already computed by the PID repo.
 //
 // This module is self-contained on purpose: it never touches the project
 // store, the annotation tables or the taxonomy, so it cannot affect any
@@ -70,10 +70,10 @@ interface VideoEntry {
 
 interface Answer {
   state: AnswerState | 'unset';
-  bbox: number[] | null;
+  bboxes: number[][];
   confidence: number | null;
   evidence_ts: number | null;
-  /** Where the box came from: a pre-computed candidate or a hand-drawn one. */
+  /** Where the boxes came from: pre-computed candidates or a hand-drawn box. */
   source?: 'candidate' | 'manual' | null;
 }
 
@@ -83,11 +83,36 @@ interface AnswerProgress {
   cannot: number;
 }
 
-const EMPTY_ANSWER: Answer = { state: 'unset', bbox: null, confidence: null, evidence_ts: null, source: null };
+const EMPTY_ANSWER: Answer = { state: 'unset', bboxes: [], confidence: null, evidence_ts: null, source: null };
 const EMPTY_PROGRESS: AnswerProgress = { box: 0, absent: 0, cannot: 0 };
 const MEDIA_BASE = API_BASE_URL.replace(/\/api$/, '');
 const REFERENCE_MIN_WIDTH = 280;
 const REFERENCE_DEFAULT_WIDTH = 340;
+
+const normalizeBboxes = (rawBboxes: unknown, legacyBbox?: unknown): number[][] => {
+  const raw = Array.isArray(rawBboxes)
+    ? (rawBboxes.length >= 4 && rawBboxes.every(value => typeof value === 'number' || typeof value === 'string')
+      ? [rawBboxes]
+      : rawBboxes)
+    : Array.isArray(legacyBbox)
+      ? [legacyBbox]
+      : [];
+  return raw.flatMap(box => {
+    if (!Array.isArray(box) || box.length < 4) return [];
+    const values = box.slice(0, 4).map(Number);
+    return values.every(Number.isFinite) ? [values] : [];
+  });
+};
+
+const getAnswerBboxes = (answer: { bboxes?: unknown; bbox?: unknown } | null | undefined) => (
+  normalizeBboxes(answer?.bboxes, answer?.bbox)
+);
+
+const boxesMatch = (first: number[], second: number[], tolerance = 3) => (
+  first.length >= 4
+  && second.length >= 4
+  && first.slice(0, 4).every((value, index) => Math.abs(value - second[index]) < tolerance)
+);
 
 const countAnswerProgress = (items: Record<string, Answer>): AnswerProgress => {
   const counts = { ...EMPTY_PROGRESS };
@@ -261,7 +286,7 @@ export function PidAnswerAudit({
             const saved = await get(`/pid_audit/annotations?video=${encodeURIComponent(item.video_id)}`);
             const restored: Record<string, Answer> = {};
             for (const answer of saved.answers ?? []) {
-              restored[answer.question_id] = { state: answer.state ?? 'unset', bbox: null, confidence: null, evidence_ts: null };
+              restored[answer.question_id] = { state: answer.state ?? 'unset', bboxes: [], confidence: null, evidence_ts: null };
             }
             return [item.video_id, countAnswerProgress(restored)] as const;
           } catch {
@@ -294,7 +319,7 @@ export function PidAnswerAudit({
         for (const item of payload.answers ?? []) {
           restored[item.question_id] = {
             state: item.state ?? 'unset',
-            bbox: item.bbox ?? null,
+            bboxes: normalizeBboxes(item.bboxes, item.bbox),
             confidence: item.confidence ?? null,
             evidence_ts: item.evidence_ts ?? null,
             source: item.source ?? null,
@@ -352,7 +377,7 @@ export function PidAnswerAudit({
       .map(([questionId, answer]) => ({
         question_id: questionId,
         state: answer.state,
-        bbox: answer.state === 'box' ? answer.bbox : null,
+        bboxes: answer.state === 'box' ? getAnswerBboxes(answer) : [],
         confidence: answer.confidence,
         evidence_ts: answer.evidence_ts,
         source: answer.source ?? null,
@@ -397,14 +422,20 @@ export function PidAnswerAudit({
   // ------------------------------------------------------------- interaction
   const selectCandidate = useCallback((candidate: Candidate) => {
     if (!activeQuestion) return;
+    const current = answers[activeQuestion.question_id] ?? EMPTY_ANSWER;
+    const currentBboxes = getAnswerBboxes(current);
+    const alreadySelected = currentBboxes.some(box => boxesMatch(box, candidate.box));
+    const nextBboxes = alreadySelected
+      ? currentBboxes.filter(box => !boxesMatch(box, candidate.box))
+      : [...currentBboxes, candidate.box];
     answerQuestion(activeQuestion.question_id, {
-      state: 'box',
-      bbox: candidate.box,
+      state: nextBboxes.length ? 'box' : 'unset',
+      bboxes: nextBboxes,
       confidence: 1,
       evidence_ts: null,
-      source: 'candidate',
+      source: nextBboxes.length ? 'candidate' : null,
     });
-  }, [activeQuestion, answerQuestion]);
+  }, [activeQuestion, answers, answerQuestion]);
 
   // Native listener: React's onWheel is passive, which would let the page
   // scroll instead of zooming the image.
@@ -489,9 +520,13 @@ export function PidAnswerAudit({
       if (activeQuestion && rect) {
         const [x1, y1, x2, y2] = rect;
         if (x2 - x1 >= 4 && y2 - y1 >= 4) {
+          const current = answers[activeQuestion.question_id] ?? EMPTY_ANSWER;
           answerQuestion(activeQuestion.question_id, {
             state: 'box',
-            bbox: [Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)],
+            bboxes: [
+              ...getAnswerBboxes(current),
+              [Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)],
+            ],
             confidence: 1,
             evidence_ts: null,
             source: 'manual',
@@ -501,7 +536,7 @@ export function PidAnswerAudit({
       return;
     }
     dragRef.current = null;
-  }, [mode, drawRect, activeQuestion, answerQuestion]);
+  }, [mode, drawRect, activeQuestion, answers, answerQuestion]);
 
   const fitView = useCallback(() => {
     const stage = stageRef.current;
@@ -567,11 +602,11 @@ export function PidAnswerAudit({
       switch (event.key.toLowerCase()) {
         case 'a':
           event.preventDefault();
-          answerQuestion(activeQuestion.question_id, { state: 'absent', bbox: null, confidence: 1, evidence_ts: null });
+          answerQuestion(activeQuestion.question_id, { state: 'absent', bboxes: [], confidence: 1, evidence_ts: null });
           break;
         case 'x':
           event.preventDefault();
-          answerQuestion(activeQuestion.question_id, { state: 'cannot_tell', bbox: null, confidence: 1, evidence_ts: null });
+          answerQuestion(activeQuestion.question_id, { state: 'cannot_tell', bboxes: [], confidence: 1, evidence_ts: null });
           break;
         case 'z':
           event.preventDefault();
@@ -719,8 +754,7 @@ export function PidAnswerAudit({
 
   const isActiveBox = (box: number[]) =>
     activeAnswer.state === 'box'
-    && !!activeAnswer.bbox
-    && box.every((value, index) => Math.abs(value - (activeAnswer.bbox as number[])[index]) < 3);
+    && getAnswerBboxes(activeAnswer).some(selectedBox => boxesMatch(box, selectedBox));
 
   const boxStyle = (box: number[], strong: boolean, selected: boolean, interactive: boolean): React.CSSProperties => ({
     left: box[0],
@@ -816,8 +850,7 @@ export function PidAnswerAudit({
                 const items: Candidate[] = candidates[label] ?? [];
                 return items.map(candidate => {
                   const selected = activeAnswer.state === 'box'
-                    && activeAnswer.bbox
-                    && candidate.box.every((value, index) => Math.abs(value - (activeAnswer.bbox as number[])[index]) < 3);
+                    && getAnswerBboxes(activeAnswer).some(selectedBox => boxesMatch(candidate.box, selectedBox));
                   return (
                     <div
                       key={`${label}-${candidate.index}`}
@@ -839,26 +872,26 @@ export function PidAnswerAudit({
                   );
                 });
               })}
-              {/* the active question's answer, drawn even when no candidate matches it */}
-              {activeQuestion && activeAnswer.state === 'box' && activeAnswer.bbox
-                && !(candidates[activeLabel] ?? []).some(candidate => candidate.box.every(
-                  (value, index) => Math.abs(value - (activeAnswer.bbox as number[])[index]) < 3,
-                ))
-                && (
-                  <div
-                    className="absolute border-solid"
-                    style={{
-                      left: (activeAnswer.bbox as number[])[0],
-                      top: (activeAnswer.bbox as number[])[1],
-                      width: Math.max(2, (activeAnswer.bbox as number[])[2] - (activeAnswer.bbox as number[])[0]),
-                      height: Math.max(2, (activeAnswer.bbox as number[])[3] - (activeAnswer.bbox as number[])[1]),
-                      borderColor: '#ef4444',
-                      borderWidth: 3 / view.scale,
-                      background: 'rgba(239,68,68,0.12)',
-                      pointerEvents: 'none',
-                    }}
-                  />
-                )}
+              {/* manually drawn answer boxes, rendered even when no candidate matches them */}
+              {activeQuestion && activeAnswer.state === 'box'
+                && getAnswerBboxes(activeAnswer)
+                  .filter(answerBox => !(candidates[activeLabel] ?? []).some(candidate => boxesMatch(candidate.box, answerBox)))
+                  .map((answerBox, index) => (
+                    <div
+                      key={`answer-box-${index}`}
+                      className="absolute border-solid"
+                      style={{
+                        left: answerBox[0],
+                        top: answerBox[1],
+                        width: Math.max(2, answerBox[2] - answerBox[0]),
+                        height: Math.max(2, answerBox[3] - answerBox[1]),
+                        borderColor: '#ef4444',
+                        borderWidth: 3 / view.scale,
+                        background: 'rgba(239,68,68,0.12)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  ))}
               {drawRect && (
                 <div
                   className="absolute border-2 border-dashed border-red-500 bg-red-400/10"
@@ -931,7 +964,7 @@ export function PidAnswerAudit({
             <Button
               size="sm"
               variant={activeAnswer.state === 'absent' ? 'default' : 'outline'}
-              onClick={() => activeQuestion && answerQuestion(activeQuestion.question_id, { state: 'absent', bbox: null, confidence: 1, evidence_ts: null })}
+              onClick={() => activeQuestion && answerQuestion(activeQuestion.question_id, { state: 'absent', bboxes: [], confidence: 1, evidence_ts: null })}
               title="A"
             >
               <EyeOff className="mr-1 h-3.5 w-3.5" />{t('pidAudit.absent', 'Not visible')}
@@ -939,7 +972,7 @@ export function PidAnswerAudit({
             <Button
               size="sm"
               variant={activeAnswer.state === 'cannot_tell' ? 'default' : 'outline'}
-              onClick={() => activeQuestion && answerQuestion(activeQuestion.question_id, { state: 'cannot_tell', bbox: null, confidence: 1, evidence_ts: null })}
+              onClick={() => activeQuestion && answerQuestion(activeQuestion.question_id, { state: 'cannot_tell', bboxes: [], confidence: 1, evidence_ts: null })}
               title="X"
             >
               <HelpCircle className="mr-1 h-3.5 w-3.5" />{t('pidAudit.cannotTell', 'Cannot tell')}
@@ -1185,8 +1218,10 @@ export function PidAnswerAudit({
                         </div>
                         <div className="mt-0.5 flex items-center gap-1">
                           <span className="text-[10px] text-neutral-500 dark:text-neutral-400">{t('pidAudit.label', 'Label')}: {question.label}</span>
-                          {answer.state === 'box' && answer.bbox && (
-                            <span className="font-mono text-[10px] text-neutral-500">[{answer.bbox.join(', ')}]</span>
+                          {answer.state === 'box' && getAnswerBboxes(answer).length > 0 && (
+                            <span className="font-mono text-[10px] text-neutral-500">
+                              {t('pidAudit.boxCount', { count: getAnswerBboxes(answer).length })}
+                            </span>
                           )}
                         </div>
                       </div>

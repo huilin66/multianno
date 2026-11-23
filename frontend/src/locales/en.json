@@ -68,6 +68,7 @@
     "showAllCandidates": "Show all candidates",
     "questionCount": "{{count}} questions",
     "questions": "Questions",
+    "boxCount": "{{count}} boxes",
     "label": "Label",
     "labeled": "Labeled",
     "unset": "Unanswered",
