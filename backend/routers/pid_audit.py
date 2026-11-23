@@ -28,8 +28,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Body, Header, HTTPException, Query
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi.responses import FileResponse, JSONResponse
 
 router = APIRouter(prefix="/api/pid_audit", tags=["PidAudit"])
 
@@ -210,57 +210,28 @@ def _safe_media_path(relative: str) -> Path:
     return target
 
 
-def _range_stream(path: Path, range_header: str | None):
-    size = path.stat().st_size
+def _video_response(path: Path) -> FileResponse:
+    """Starlette's FileResponse handles Range/If-Range/ETag itself.
+
+    The previous hand-rolled 1 MiB generator held one connection open for the
+    whole 300 MB file, so the browser's seek requests queued behind it and the
+    player showed its buffering spinner. FileResponse streams the requested
+    range and answers If-Range with a fresh 206 instead.
+    """
     media_type = _VIDEO_MEDIA_TYPES.get(path.suffix.lower(), "application/octet-stream")
-    if not range_header:
-        return FileResponse(path, media_type=media_type)
-
-    match = re.match(r"bytes=(\d*)-(\d*)", range_header.strip())
-    if not match:
-        raise HTTPException(status_code=416, detail="bad Range header")
-    start_text, end_text = match.groups()
-    if start_text:
-        start = int(start_text)
-        end = int(end_text) if end_text else size - 1
-    else:  # suffix range: last N bytes
-        length = int(end_text or 0)
-        start = max(0, size - length)
-        end = size - 1
-    if start >= size or end < start:
-        raise HTTPException(status_code=416, detail="range not satisfiable")
-    end = min(end, size - 1)
-    length = end - start + 1
-
-    def chunks():
-        with path.open("rb") as handle:
-            handle.seek(start)
-            remaining = length
-            while remaining > 0:
-                block = handle.read(min(1024 * 1024, remaining))
-                if not block:
-                    break
-                remaining -= len(block)
-                yield block
-
-    return StreamingResponse(
-        chunks(),
-        status_code=206,
+    return FileResponse(
+        path,
         media_type=media_type,
-        headers={
-            "Content-Range": f"bytes {start}-{end}/{size}",
-            "Accept-Ranges": "bytes",
-            "Content-Length": str(length),
-        },
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 
 @router.get("/media")
-def media(path: str = Query(...), range_header: str | None = Header(None, alias="range")):
+def media(path: str = Query(...)):
     target = _safe_media_path(path)
     if target.suffix.lower() in _IMAGE_SUFFIXES:
         return FileResponse(target)
-    return _range_stream(target, range_header)
+    return _video_response(target)
 
 
 def _annotation_path(video_id: str) -> Path:

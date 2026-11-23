@@ -586,6 +586,8 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
             src={`${MEDIA_BASE}${video?.video_url ?? ''}`}
             controls
             className="max-h-[55vh] w-full rounded bg-black object-contain"
+            preload="auto"
+            playsInline
             onTimeUpdate={event => setEvidenceTs(Number(event.currentTarget.currentTime.toFixed(1)))}
           />
 
