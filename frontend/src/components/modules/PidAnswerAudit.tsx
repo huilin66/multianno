@@ -27,6 +27,7 @@ import {
   ChevronRight,
   SkipBack,
   SkipForward,
+  Square,
   Users,
 } from 'lucide-react';
 
@@ -67,9 +68,11 @@ interface Answer {
   bbox: number[] | null;
   confidence: number | null;
   evidence_ts: number | null;
+  /** Where the box came from: a pre-computed candidate or a hand-drawn one. */
+  source?: 'candidate' | 'manual' | null;
 }
 
-const EMPTY_ANSWER: Answer = { state: 'unset', bbox: null, confidence: null, evidence_ts: null };
+const EMPTY_ANSWER: Answer = { state: 'unset', bbox: null, confidence: null, evidence_ts: null, source: null };
 const MEDIA_BASE = API_BASE_URL.replace(/\/api$/, '');
 const STATE_LABEL: Record<AnswerState | 'unset', string> = {
   box: '已标注',
@@ -117,10 +120,13 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
   const [evidenceTs, setEvidenceTs] = useState<number | null>(null);
   const [showAllBoxes, setShowAllBoxes] = useState(false);
   const [preview, setPreview] = useState<ProfileEntry | null>(null);
+  const [mode, setMode] = useState<'select' | 'draw'>('select');
+  const [drawRect, setDrawRect] = useState<number[] | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; moved: boolean } | null>(null);
+  const drawRef = useRef<{ x: number; y: number } | null>(null);
   const historyRef = useRef<Record<string, Answer>[]>([]);
   const loadedVideoRef = useRef('');
   const hydratedRef = useRef(false);
@@ -173,6 +179,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
             bbox: item.bbox ?? null,
             confidence: item.confidence ?? null,
             evidence_ts: item.evidence_ts ?? null,
+            source: item.source ?? null,
           };
         }
         setAnswers(restored);
@@ -217,6 +224,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
         bbox: answer.state === 'box' ? answer.bbox : null,
         confidence: answer.confidence,
         evidence_ts: answer.evidence_ts,
+        source: answer.source ?? null,
       }));
     try {
       await post('/pid_audit/save', { video_id: videoId, answers: payload });
@@ -268,6 +276,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
       bbox: candidate.box,
       confidence: 1,
       evidence_ts: null,
+      source: 'candidate',
     });
   }, [activeQuestion, answerQuestion]);
 
@@ -295,9 +304,27 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
     return () => stage.removeEventListener('wheel', handler);
   }, []);
 
+  const toImagePoint = useCallback((event: React.PointerEvent) => {
+    const stage = stageRef.current;
+    if (!stage) return { x: 0, y: 0 };
+    const rect = stage.getBoundingClientRect();
+    const x = (event.clientX - rect.left - view.x) / view.scale;
+    const y = (event.clientY - rect.top - view.y) / view.scale;
+    return {
+      x: Math.max(0, Math.min(imageSize.width, x)),
+      y: Math.max(0, Math.min(imageSize.height, y)),
+    };
+  }, [view, imageSize]);
+
   const onPointerDown = useCallback((event: React.PointerEvent) => {
     if (event.button !== 0 && event.button !== 1) return;
     event.currentTarget.setPointerCapture(event.pointerId);
+    if (mode === 'draw' && event.button === 0) {
+      const point = toImagePoint(event);
+      drawRef.current = point;
+      setDrawRect([point.x, point.y, point.x, point.y]);
+      return;
+    }
     dragRef.current = {
       startX: event.clientX,
       startY: event.clientY,
@@ -305,20 +332,50 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
       originY: view.y,
       moved: false,
     };
-  }, [view]);
+  }, [view, mode, toImagePoint]);
 
   const onPointerMove = useCallback((event: React.PointerEvent) => {
+    if (mode === 'draw' && drawRef.current) {
+      const point = toImagePoint(event);
+      const start = drawRef.current;
+      setDrawRect([
+        Math.min(start.x, point.x),
+        Math.min(start.y, point.y),
+        Math.max(start.x, point.x),
+        Math.max(start.y, point.y),
+      ]);
+      return;
+    }
     const drag = dragRef.current;
     if (!drag) return;
     const dx = event.clientX - drag.startX;
     const dy = event.clientY - drag.startY;
     if (!drag.moved && Math.hypot(dx, dy) > 4) drag.moved = true;
     if (drag.moved) setView(previous => ({ ...previous, x: drag.originX + dx, y: drag.originY + dy }));
-  }, []);
+  }, [mode, toImagePoint]);
 
   const onPointerUp = useCallback(() => {
+    if (mode === 'draw' && drawRef.current) {
+      const rect = drawRect;
+      drawRef.current = null;
+      setDrawRect(null);
+      setMode('select');
+      if (activeQuestion && rect) {
+        const [x1, y1, x2, y2] = rect;
+        if (x2 - x1 >= 4 && y2 - y1 >= 4) {
+          answerQuestion(activeQuestion.question_id, {
+            state: 'box',
+            bbox: [Math.round(x1), Math.round(y1), Math.round(x2), Math.round(y2)],
+            confidence: 1,
+            evidence_ts: null,
+            source: 'manual',
+          });
+        }
+      }
+      return;
+    }
     dragRef.current = null;
-  }, []);
+  }, [mode, drawRect, activeQuestion, answerQuestion]);
 
   const fitView = useCallback(() => {
     const stage = stageRef.current;
@@ -364,6 +421,16 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
         case 'z':
           event.preventDefault();
           undo();
+          break;
+        case 'd':
+          event.preventDefault();
+          setMode(value => (value === 'draw' ? 'select' : 'draw'));
+          break;
+        case 'escape':
+          event.preventDefault();
+          drawRef.current = null;
+          setDrawRect(null);
+          setMode('select');
           break;
         case 'enter': {
           event.preventDefault();
@@ -599,6 +666,11 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
               <div className="mt-1 truncate" title={activeQuestion.text}>{activeQuestion.text}</div>
               <div className="mt-1 flex items-center gap-2 text-[10px] text-neutral-500 dark:text-neutral-400">
                 <span>{t('pidAudit.labelColon', '标签：')}{activeQuestion.label}</span>
+                {activeAnswer.source === 'manual' && (
+                  <span className="rounded bg-orange-100 px-1 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300">
+                    {t('pidAudit.manual', '手动')}
+                  </span>
+                )}
                 {activeAnswer.evidence_ts != null && (
                   <span className="font-mono">t={activeAnswer.evidence_ts}s</span>
                 )}
@@ -615,7 +687,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
         <div className="flex min-w-[360px] flex-1 flex-col">
           <div
             ref={stageRef}
-            className="relative min-h-0 flex-1 cursor-grab overflow-hidden bg-neutral-100 dark:bg-neutral-900"
+            className={`relative min-h-0 flex-1 overflow-hidden bg-neutral-100 dark:bg-neutral-900 ${mode === 'draw' ? 'cursor-crosshair' : 'cursor-grab'}`}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -650,7 +722,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                     <div
                       key={`${label}-${candidate.index}`}
                       className="absolute border-solid"
-                      style={boxStyle(candidate.box, strong, Boolean(selected), label === activeLabel)}
+                      style={boxStyle(candidate.box, strong, Boolean(selected), label === activeLabel && mode === 'select')}
                       onPointerDown={event => event.stopPropagation()}
                       onClick={event => {
                         event.stopPropagation();
@@ -664,18 +736,42 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                   );
                 });
               })}
+              {drawRect && (
+                <div
+                  className="absolute border-2 border-dashed border-orange-400 bg-orange-300/10"
+                  style={{
+                    left: drawRect[0],
+                    top: drawRect[1],
+                    width: Math.max(1, drawRect[2] - drawRect[0]),
+                    height: Math.max(1, drawRect[3] - drawRect[1]),
+                    pointerEvents: 'none',
+                  }}
+                />
+              )}
             </div>
             <span className="absolute bottom-2 left-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white">
               {Math.round(view.scale * 100)}%
             </span>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="absolute bottom-2 right-2 text-[11px]"
-              onClick={() => setShowAllBoxes(value => !value)}
-            >
-              {showAllBoxes ? '仅当前标签' : '显示全部候选'}
-            </Button>
+            <div className="absolute bottom-2 right-2 flex items-center gap-1">
+              <Button
+                size="sm"
+                variant={mode === 'draw' ? 'default' : 'ghost'}
+                className="text-[11px]"
+                onClick={() => setMode(value => (value === 'draw' ? 'select' : 'draw'))}
+                title={t('pidAudit.drawHint', '画框 (D)：候选都不对时手动画一个')}
+              >
+                <Square className="mr-1 h-3.5 w-3.5" />
+                {t('pidAudit.draw', '画框')}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-[11px]"
+                onClick={() => setShowAllBoxes(value => !value)}
+              >
+                {showAllBoxes ? '仅当前标签' : '显示全部候选'}
+              </Button>
+            </div>
           </div>
 
           {/* questions of this image */}
@@ -738,7 +834,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                 </span>
                 {activeCandidates.length === 0 && (
                   <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                    {t('pidAudit.noCandidates', '该标签在本图没有候选，请标「不可见」或换图核对')}
+                    {t('pidAudit.noCandidates', '该标签在本图没有候选：点「画框」手动标，或标「不可见」')}
                   </span>
                 )}
                 {activeCandidates.map((candidate, position) => (

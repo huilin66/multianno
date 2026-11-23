@@ -300,6 +300,7 @@ def save(body: dict = Body(...)) -> dict:
             "bbox": bbox,
             "confidence": answer.get("confidence"),
             "evidence_ts": answer.get("evidence_ts"),
+            "source": answer.get("source"),
             "note": answer.get("note"),
         })
 
