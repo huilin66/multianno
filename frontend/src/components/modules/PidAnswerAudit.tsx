@@ -253,12 +253,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
   const answerQuestion = useCallback((questionId: string, answer: Answer) => {
     const stamp = videoRef.current ? Number(videoRef.current.currentTime.toFixed(1)) : null;
     commit(questionId, { ...answer, evidence_ts: answer.state === 'box' ? stamp : null });
-    const position = questions.findIndex(item => item.question_id === questionId);
-    const next = questions.slice(position + 1).find(
-      item => (answers[item.question_id]?.state ?? 'unset') === 'unset',
-    ) ?? questions[position + 1];
-    if (next) setActiveQuestionId(next.question_id);
-  }, [commit, questions, answers]);
+  }, [commit]);
 
   const undo = useCallback(() => {
     const previous = historyRef.current.pop();
@@ -504,14 +499,19 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
     return { box, absent, cannot };
   }, [answers]);
 
+  const isActiveBox = (box: number[]) =>
+    activeAnswer.state === 'box'
+    && !!activeAnswer.bbox
+    && box.every((value, index) => Math.abs(value - (activeAnswer.bbox as number[])[index]) < 3);
+
   const boxStyle = (box: number[], strong: boolean, selected: boolean, interactive: boolean): React.CSSProperties => ({
     left: box[0],
     top: box[1],
     width: Math.max(2, box[2] - box[0]),
     height: Math.max(2, box[3] - box[1]),
-    borderColor: selected ? '#f59e0b' : strong ? '#38bdf8' : 'rgba(148,163,184,0.55)',
-    borderWidth: selected ? 3 : strong ? 2 : 1,
-    background: selected ? 'rgba(245,158,11,0.16)' : strong ? 'rgba(56,189,248,0.08)' : 'transparent',
+    borderColor: selected ? '#ef4444' : strong ? '#6b7280' : 'rgba(148,163,184,0.5)',
+    borderWidth: (selected ? 3 : strong ? 2 : 1) / view.scale,
+    background: selected ? 'rgba(239,68,68,0.12)' : strong ? 'rgba(107,114,128,0.08)' : 'transparent',
     pointerEvents: interactive ? 'auto' : 'none',
   });
 
@@ -644,7 +644,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
           </div>
 
           <p className="mt-auto text-[11px] leading-4 text-neutral-500 dark:text-neutral-400">
-            {t('pidAudit.blindHint', '盲标：本窗口不显示管线已选的答案。数字键选候选，A=不可见，X=无法判断，Z=撤销。')}
+            {t('pidAudit.blindHint', '盲标：本窗口不显示管线已选的答案。数字键选候选，A=不可见，X=无法判断，Z=撤销，回车=下一题。')}
           </p>
         </div>
 
@@ -694,7 +694,10 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
                         selectCandidate(candidate);
                       }}
                     >
-                      <span className="absolute -top-5 left-0 rounded bg-black/70 px-1 text-[10px] font-mono text-white">
+                      <span
+                        className="absolute left-0 rounded bg-neutral-800/90 px-1.5 py-0.5 font-mono text-[13px] font-semibold leading-none text-white"
+                        style={{ top: -24 / view.scale, transform: `scale(${1 / view.scale})`, transformOrigin: 'top left' }}
+                      >
                         {candidate.index + 1}
                       </span>
                     </div>
@@ -703,7 +706,7 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
               })}
               {drawRect && (
                 <div
-                  className="absolute border-2 border-dashed border-orange-400 bg-orange-300/10"
+                  className="absolute border-2 border-dashed border-red-500 bg-red-400/10"
                   style={{
                     left: drawRect[0],
                     top: drawRect[1],
@@ -717,36 +720,76 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
             <span className="absolute bottom-2 left-2 rounded bg-black/50 px-1.5 py-0.5 font-mono text-[10px] text-white">
               {Math.round(view.scale * 100)}%
             </span>
-            <div className="absolute bottom-2 right-2 flex items-center gap-1">
+          </div>
+
+          {/* answer toolbar: candidates, states and tools, right under the image */}
+          <div className="flex shrink-0 flex-wrap items-center gap-1 border-t border-neutral-200 bg-neutral-50 px-2 py-1.5 dark:border-neutral-800 dark:bg-neutral-900/40">
+            <span className="mr-1 text-[11px] text-neutral-500 dark:text-neutral-400">
+              {t('pidAudit.candidates', '候选')} {activeQuestion?.label ?? '-'}：
+            </span>
+            {activeQuestion && activeCandidates.length === 0 && (
+              <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                {t('pidAudit.noCandidates', '该标签在本图没有候选：点「画框」手动标，或标「不可见」')}
+              </span>
+            )}
+            {activeQuestion && activeCandidates.map((candidate, position) => (
               <Button
+                key={candidate.index}
                 size="sm"
-                variant={mode === 'draw' ? 'default' : 'ghost'}
-                className="text-[11px]"
-                onClick={() => setMode(value => (value === 'draw' ? 'select' : 'draw'))}
-                title={t('pidAudit.drawHint', '画框 (D)：候选都不对时手动画一个')}
+                variant={isActiveBox(candidate.box) ? 'default' : 'outline'}
+                onClick={() => selectCandidate(candidate)}
+                title={candidate.box.join(', ')}
               >
-                <Square className="mr-1 h-3.5 w-3.5" />
-                {t('pidAudit.draw', '画框')}
+                {position + 1}
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="text-[11px]"
-                onClick={() => setShowAllBoxes(value => !value)}
-              >
-                {showAllBoxes ? '仅当前标签' : '显示全部候选'}
-              </Button>
-            </div>
+            ))}
+            <span className="mx-1 h-4 w-px bg-neutral-300 dark:bg-neutral-700" />
+            <Button
+              size="sm"
+              variant={activeAnswer.state === 'absent' ? 'default' : 'outline'}
+              onClick={() => activeQuestion && answerQuestion(activeQuestion.question_id, { state: 'absent', bbox: null, confidence: 1, evidence_ts: null })}
+              title="A"
+            >
+              <EyeOff className="mr-1 h-3.5 w-3.5" />{t('pidAudit.absent', '不可见')}
+            </Button>
+            <Button
+              size="sm"
+              variant={activeAnswer.state === 'cannot_tell' ? 'default' : 'outline'}
+              onClick={() => activeQuestion && answerQuestion(activeQuestion.question_id, { state: 'cannot_tell', bbox: null, confidence: 1, evidence_ts: null })}
+              title="X"
+            >
+              <HelpCircle className="mr-1 h-3.5 w-3.5" />{t('pidAudit.cannotTell', '无法判断')}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => activeQuestion && commit(activeQuestion.question_id, { ...EMPTY_ANSWER })}
+              title="清空"
+            >
+              <CircleSlash className="mr-1 h-3.5 w-3.5" />{t('pidAudit.clear', '清空')}
+            </Button>
+            <span className="mx-1 h-4 w-px bg-neutral-300 dark:bg-neutral-700" />
+            <Button
+              size="sm"
+              variant={mode === 'draw' ? 'default' : 'outline'}
+              onClick={() => setMode(value => (value === 'draw' ? 'select' : 'draw'))}
+              title={t('pidAudit.drawHint', '画框 (D)：候选都不对时手动画一个')}
+            >
+              <Square className="mr-1 h-3.5 w-3.5" />{t('pidAudit.draw', '画框')}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setShowAllBoxes(value => !value)}>
+              {showAllBoxes ? '仅当前标签' : '显示全部候选'}
+            </Button>
           </div>
 
           {/* questions of this image */}
-          <div className="flex h-[42%] min-h-[180px] shrink-0 flex-col border-t border-neutral-200 dark:border-neutral-800">
+          <div className="flex shrink-0 flex-col border-t border-neutral-200 dark:border-neutral-800">
             <div className="flex shrink-0 items-center gap-2 border-b border-neutral-200 px-2 py-1 text-[11px] text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
               <span className="font-mono">{imagePath.split('/').pop()}</span>
               <span>·</span>
               <span>{questions.length} 题</span>
             </div>
-            <div className="min-h-0 flex-1 overflow-auto p-2">
+            <div className="h-[186px] overflow-auto p-2">
             <div className="flex flex-col gap-1">
               {questions.map((question, position) => {
                 const answer = answers[question.question_id] ?? EMPTY_ANSWER;
@@ -791,61 +834,6 @@ export function PidAnswerAudit({ onClose }: { onClose: () => void }) {
             </div>
             </div>
 
-            {/* answer controls for the active question (pinned) */}
-            {activeQuestion && (
-              <div className="flex shrink-0 flex-wrap items-center gap-1 border-t border-neutral-200 p-2 dark:border-neutral-800">
-                <span className="mr-1 text-[11px] text-neutral-500 dark:text-neutral-400">
-                  {t('pidAudit.candidates', '候选')} {activeLabel}：
-                </span>
-                {activeCandidates.length === 0 && (
-                  <span className="text-[11px] text-amber-600 dark:text-amber-400">
-                    {t('pidAudit.noCandidates', '该标签在本图没有候选：点「画框」手动标，或标「不可见」')}
-                  </span>
-                )}
-                {activeCandidates.map((candidate, position) => (
-                  <Button
-                    key={candidate.index}
-                    size="sm"
-                    variant={activeAnswer.bbox
-                      && candidate.box.every((value, index) => Math.abs(value - (activeAnswer.bbox as number[])[index]) < 3)
-                      ? 'default' : 'outline'}
-                    onClick={() => selectCandidate(candidate)}
-                    title={candidate.box.join(', ')}
-                  >
-                    {position + 1}
-                  </Button>
-                ))}
-                <Button
-                  size="sm"
-                  variant={activeAnswer.state === 'absent' ? 'default' : 'outline'}
-                  onClick={() => answerQuestion(activeQuestion.question_id, { state: 'absent', bbox: null, confidence: 1, evidence_ts: null })}
-                  title="A"
-                >
-                  <EyeOff className="mr-1 h-3.5 w-3.5" />{t('pidAudit.absent', '不可见')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant={activeAnswer.state === 'cannot_tell' ? 'default' : 'outline'}
-                  onClick={() => answerQuestion(activeQuestion.question_id, { state: 'cannot_tell', bbox: null, confidence: 1, evidence_ts: null })}
-                  title="X"
-                >
-                  <HelpCircle className="mr-1 h-3.5 w-3.5" />{t('pidAudit.cannotTell', '无法判断')}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => commit(activeQuestion.question_id, { ...EMPTY_ANSWER })}
-                  title="清空"
-                >
-                  <CircleSlash className="mr-1 h-3.5 w-3.5" />{t('pidAudit.clear', '清空')}
-                </Button>
-                {(activeAnswer.state === 'box' || activeAnswer.state === 'absent') && (
-                  <span className="ml-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-                    <Check className="mr-0.5 inline h-3.5 w-3.5" />{STATE_LABEL[activeAnswer.state]}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         </div>
 
