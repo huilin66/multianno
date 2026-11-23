@@ -29,7 +29,6 @@
     "changeRoot": "Change root",
     "rootPlaceholder": "Enter or click to set annotation data root ...",
     "recentRoots": "Recent data roots",
-    "selectRootDescription": "Choose the root folder of the annotation data before opening this tool.",
     "loading": "Loading annotation data…",
     "loadHint": "Check the selected data root and make sure the backend is running."
   },

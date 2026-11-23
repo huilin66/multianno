@@ -92,10 +92,7 @@ export function OtherAnnotation({ onClose }: { onClose: () => void }) {
           </button>
         ) : (
           <aside className="relative flex h-full w-64 flex-col border-r border-border bg-muted/20">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="text-sm font-semibold text-foreground">
-                {t('otherAnnotation.tools')}
-              </div>
+            <div className="flex justify-end border-b border-border px-2 py-2">
               <button
                 type="button"
                 onClick={() => setSidebarCollapsed(true)}
@@ -196,9 +193,6 @@ export function OtherAnnotation({ onClose }: { onClose: () => void }) {
                 </div>
               )}
 
-              <p className="text-xs leading-5 text-muted-foreground">
-                {t('otherAnnotation.selectRootDescription')}
-              </p>
             </div>
 
             <div className="flex items-center justify-end gap-3 border-t border-border pt-3">
