@@ -22,6 +22,8 @@
   "otherAnnotation": {
     "tools": "Annotation tools",
     "crossViewObjectAssociation": "Cross-view Object Association",
+    "expandTools": "Expand annotation tools",
+    "collapseTools": "Collapse annotation tools",
     "dataRoot": "Data root",
     "chooseRoot": "Choose folder root",
     "changeRoot": "Change root",

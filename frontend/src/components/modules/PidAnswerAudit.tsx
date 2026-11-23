@@ -103,7 +103,15 @@ const post = async (path: string, body: unknown) => {
   return response.json();
 };
 
-export function PidAnswerAudit({ onClose, dataRoot }: { onClose: () => void; dataRoot?: string }) {
+export function PidAnswerAudit({
+  onClose,
+  onChangeRoot,
+  dataRoot,
+}: {
+  onClose: () => void;
+  onChangeRoot?: () => void;
+  dataRoot?: string;
+}) {
   const { t } = useTranslation();
 
   const [videos, setVideos] = useState<VideoEntry[]>([]);
@@ -587,7 +595,22 @@ export function PidAnswerAudit({ onClose, dataRoot }: { onClose: () => void; dat
     <div className="relative flex h-full min-h-0 flex-col bg-white text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       {/* toolbar */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
-        <span className="font-semibold">{t('pidAudit.title', 'Cross-view Object Association')}</span>
+        <span className="shrink-0 font-semibold">{t('pidAudit.title', 'Cross-view Object Association')}</span>
+        {dataRoot && (
+          <>
+            <span className="shrink-0 text-[10px] font-medium text-neutral-400 dark:text-neutral-500">
+              {t('otherAnnotation.dataRoot', 'Data root')}:
+            </span>
+            <span className="max-w-[min(36vw,28rem)] truncate rounded bg-neutral-100 px-2 py-1 font-mono text-[10px] text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400" title={dataRoot}>
+              {dataRoot}
+            </span>
+            {onChangeRoot && (
+              <Button size="sm" variant="outline" className="h-7 shrink-0 px-2 text-[11px]" onClick={onChangeRoot}>
+                {t('otherAnnotation.changeRoot', 'Change root')}
+              </Button>
+            )}
+          </>
+        )}
         <span className="text-neutral-500 dark:text-neutral-400">
           {videoAnswered}/{videoTotal} · {answeredCount}/{questions.length} 本图
         </span>

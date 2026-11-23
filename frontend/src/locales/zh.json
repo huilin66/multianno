@@ -22,6 +22,8 @@
   "otherAnnotation": {
     "tools": "标注工具",
     "crossViewObjectAssociation": "Cross-view Object Association",
+    "expandTools": "展开标注工具",
+    "collapseTools": "收起标注工具",
     "dataRoot": "数据根目录",
     "chooseRoot": "选择文件夹根目录",
     "changeRoot": "更换根目录",

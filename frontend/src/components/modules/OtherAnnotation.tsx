@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Link2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FolderOpen } from 'lucide-react';
 import { Button } from '../ui/button';
 import { FileExplorerDialog } from '../modals/FileExplorerDialog';
 import { PidAnswerAudit } from './PidAnswerAudit';
@@ -14,6 +14,7 @@ export function OtherAnnotation({ onClose }: { onClose: () => void }) {
   const [activeTool, setActiveTool] = useState<AnnotationTool>(CROSS_VIEW_TOOL);
   const [dataRoot, setDataRoot] = useState('');
   const [folderExplorerOpen, setFolderExplorerOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const handleFolderConfirm = (paths: string[]) => {
     const selectedPath = paths[0]?.trim();
@@ -23,53 +24,59 @@ export function OtherAnnotation({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 bg-background text-foreground">
-      <aside className="flex w-64 shrink-0 flex-col border-r border-border bg-muted/20">
-        <div className="border-b border-border px-4 py-3">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            {t('otherAnnotation.tools')}
-          </div>
-        </div>
-
-        <div className="flex-1 p-2">
+      <div className={`relative shrink-0 transition-[width] duration-200 ${sidebarCollapsed ? 'w-7' : 'w-64'}`}>
+        {sidebarCollapsed ? (
           <button
             type="button"
-            onClick={() => setActiveTool(CROSS_VIEW_TOOL)}
-            className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs transition-colors ${
-              activeTool === CROSS_VIEW_TOOL
-                ? 'bg-primary/10 font-semibold text-primary'
-                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
-            }`}
+            onClick={() => setSidebarCollapsed(false)}
+            className="flex h-full w-7 items-center justify-center border-r border-border bg-muted/20 transition-colors hover:bg-muted"
+            title={t('otherAnnotation.expandTools', 'Expand annotation tools')}
+            aria-label={t('otherAnnotation.expandTools', 'Expand annotation tools')}
           >
-            <Link2 className="size-4 shrink-0" />
-            <span className="leading-4">{t('otherAnnotation.crossViewObjectAssociation')}</span>
+            <ChevronRight className="size-4 text-muted-foreground" />
           </button>
-        </div>
+        ) : (
+          <aside className="relative flex h-full w-64 flex-col border-r border-border bg-muted/20">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div className="text-sm font-semibold text-foreground">
+                {t('otherAnnotation.tools')}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSidebarCollapsed(true)}
+                className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                title={t('otherAnnotation.collapseTools', 'Collapse annotation tools')}
+                aria-label={t('otherAnnotation.collapseTools', 'Collapse annotation tools')}
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+            </div>
 
-        {dataRoot && (
-          <div className="border-t border-border p-3">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {t('otherAnnotation.dataRoot')}
+            <div className="flex-1 p-2">
+              <button
+                type="button"
+                onClick={() => setActiveTool(CROSS_VIEW_TOOL)}
+                className={`flex w-full items-center rounded-md px-3 py-2 text-left text-xs transition-colors ${
+                  activeTool === CROSS_VIEW_TOOL
+                    ? 'bg-primary/10 font-semibold text-primary'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                <span className="leading-4">{t('otherAnnotation.crossViewObjectAssociation')}</span>
+              </button>
             </div>
-            <div className="truncate font-mono text-[10px] text-muted-foreground" title={dataRoot}>
-              {dataRoot}
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="mt-2 h-7 w-full text-[10px]"
-              onClick={() => setFolderExplorerOpen(true)}
-            >
-              <FolderOpen className="mr-1.5 size-3.5" />
-              {t('otherAnnotation.changeRoot')}
-            </Button>
-          </div>
+          </aside>
         )}
-      </aside>
+      </div>
 
       <main className="min-w-0 flex-1 overflow-hidden">
         {dataRoot && activeTool === CROSS_VIEW_TOOL ? (
           <div key={dataRoot} className="h-full min-h-0">
-            <PidAnswerAudit dataRoot={dataRoot} onClose={onClose} />
+            <PidAnswerAudit
+              dataRoot={dataRoot}
+              onChangeRoot={() => setFolderExplorerOpen(true)}
+              onClose={onClose}
+            />
           </div>
         ) : (
           <div className="flex h-full items-center justify-center overflow-y-auto p-6">
